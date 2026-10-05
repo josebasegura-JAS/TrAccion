@@ -7,8 +7,8 @@ import { ipcMain } from 'electron';
 import { openExcelWorkbook } from '../documentOpener.js';
 import { buildTicketRestaurantLoadWorkbook, type TicketRestaurantLoadRow } from '../ticketRestaurantLoadWorkbook.js';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
+import { validateConditionalJsonRecord, validateConditionalJsonRecordBatch } from './ipcHelpers.js';
 import {
-  getSqliteStatus,
   loadTicketRestauranteCalendarRecordsSnapshot,
   loadTicketRestaurantePersonRecordsSnapshot,
   loadTicketRestauranteAbsenceRecordsSnapshot,
@@ -32,81 +32,26 @@ export function registerTicketRestauranteIpc(): void {
     ),
   );
   ipcMain.handle('ticket-restaurante-calendars:save-record-if-unchanged', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de calendario de Ticket Restaurante inválido.',
-      };
-    }
+    const record = validateConditionalJsonRecord(payload, 'Payload de calendario de Ticket Restaurante inválido.');
+    if (!record.ok) return record.result;
 
-    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.value !== 'string' ||
-      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
-    ) {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de calendario de Ticket Restaurante inválido.',
-      };
-    }
-
-    const id = candidate.id;
-    const value = candidate.value;
-    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === 'string'
-      ? candidate.expectedUpdatedAt
-      : null;
     return enqueueSqliteIpc('ticket-restaurante-calendars:save-record-if-unchanged', () =>
       saveTicketRestauranteCalendarRecordIfUnchanged({
-        id,
-        value,
-        expectedUpdatedAt,
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
       }),
     );
   });
   ipcMain.handle('ticket-restaurante-calendars:save-records-if-unchanged', (_event, payload: unknown) => {
-    const invalidPayloadResult = {
-      ok: false,
-      status: getSqliteStatus(),
-      results: [],
-      message: 'Payload de lote de calendarios de Ticket Restaurante inválido.',
-    };
-
-    if (!payload || typeof payload !== 'object') {
-      return invalidPayloadResult;
-    }
-
-    const candidate = payload as { records?: unknown };
-    if (!Array.isArray(candidate.records)) {
-      return invalidPayloadResult;
-    }
-
-    const records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> = [];
-    for (const item of candidate.records) {
-      if (!item || typeof item !== 'object') {
-        return invalidPayloadResult;
-      }
-      const recordCandidate = item as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-      if (
-        typeof recordCandidate.id !== 'string' ||
-        typeof recordCandidate.value !== 'string' ||
-        (typeof recordCandidate.expectedUpdatedAt !== 'string' && recordCandidate.expectedUpdatedAt !== null)
-      ) {
-        return invalidPayloadResult;
-      }
-      records.push({
-        id: recordCandidate.id,
-        value: recordCandidate.value,
-        expectedUpdatedAt: recordCandidate.expectedUpdatedAt,
-      });
-    }
+    const batch = validateConditionalJsonRecordBatch(
+      payload,
+      'Payload de lote de calendarios de Ticket Restaurante inválido.',
+    );
+    if (!batch.ok) return batch.result;
 
     return enqueueSqliteIpc('ticket-restaurante-calendars:save-records-if-unchanged', () =>
-      saveTicketRestauranteCalendarRecordsIfUnchanged(records),
+      saveTicketRestauranteCalendarRecordsIfUnchanged(batch.records),
     );
   });
   ipcMain.handle('ticket-restaurante-people:load-records', () =>
@@ -115,81 +60,26 @@ export function registerTicketRestauranteIpc(): void {
     ),
   );
   ipcMain.handle('ticket-restaurante-people:save-record-if-unchanged', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de persona de Ticket Restaurante inválido.',
-      };
-    }
+    const record = validateConditionalJsonRecord(payload, 'Payload de persona de Ticket Restaurante inválido.');
+    if (!record.ok) return record.result;
 
-    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.value !== 'string' ||
-      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
-    ) {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de persona de Ticket Restaurante inválido.',
-      };
-    }
-
-    const id = candidate.id;
-    const value = candidate.value;
-    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === 'string'
-      ? candidate.expectedUpdatedAt
-      : null;
     return enqueueSqliteIpc('ticket-restaurante-people:save-record-if-unchanged', () =>
       saveTicketRestaurantePersonRecordIfUnchanged({
-        id,
-        value,
-        expectedUpdatedAt,
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
       }),
     );
   });
   ipcMain.handle('ticket-restaurante-people:save-records-if-unchanged', (_event, payload: unknown) => {
-    const invalidPayloadResult = {
-      ok: false,
-      status: getSqliteStatus(),
-      results: [],
-      message: 'Payload de lote de personas de Ticket Restaurante inválido.',
-    };
-
-    if (!payload || typeof payload !== 'object') {
-      return invalidPayloadResult;
-    }
-
-    const candidate = payload as { records?: unknown };
-    if (!Array.isArray(candidate.records)) {
-      return invalidPayloadResult;
-    }
-
-    const records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> = [];
-    for (const item of candidate.records) {
-      if (!item || typeof item !== 'object') {
-        return invalidPayloadResult;
-      }
-      const recordCandidate = item as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-      if (
-        typeof recordCandidate.id !== 'string' ||
-        typeof recordCandidate.value !== 'string' ||
-        (typeof recordCandidate.expectedUpdatedAt !== 'string' && recordCandidate.expectedUpdatedAt !== null)
-      ) {
-        return invalidPayloadResult;
-      }
-      records.push({
-        id: recordCandidate.id,
-        value: recordCandidate.value,
-        expectedUpdatedAt: recordCandidate.expectedUpdatedAt,
-      });
-    }
+    const batch = validateConditionalJsonRecordBatch(
+      payload,
+      'Payload de lote de personas de Ticket Restaurante inválido.',
+    );
+    if (!batch.ok) return batch.result;
 
     return enqueueSqliteIpc('ticket-restaurante-people:save-records-if-unchanged', () =>
-      saveTicketRestaurantePersonRecordsIfUnchanged(records),
+      saveTicketRestaurantePersonRecordsIfUnchanged(batch.records),
     );
   });
   ipcMain.handle('ticket-restaurante-absences:load-records', () =>
@@ -198,81 +88,26 @@ export function registerTicketRestauranteIpc(): void {
     ),
   );
   ipcMain.handle('ticket-restaurante-absences:save-record-if-unchanged', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de ausencia de Ticket Restaurante inválido.',
-      };
-    }
+    const record = validateConditionalJsonRecord(payload, 'Payload de ausencia de Ticket Restaurante inválido.');
+    if (!record.ok) return record.result;
 
-    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.value !== 'string' ||
-      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
-    ) {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de ausencia de Ticket Restaurante inválido.',
-      };
-    }
-
-    const id = candidate.id;
-    const value = candidate.value;
-    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === 'string'
-      ? candidate.expectedUpdatedAt
-      : null;
     return enqueueSqliteIpc('ticket-restaurante-absences:save-record-if-unchanged', () =>
       saveTicketRestauranteAbsenceRecordIfUnchanged({
-        id,
-        value,
-        expectedUpdatedAt,
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
       }),
     );
   });
   ipcMain.handle('ticket-restaurante-absences:save-records-if-unchanged', (_event, payload: unknown) => {
-    const invalidPayloadResult = {
-      ok: false,
-      status: getSqliteStatus(),
-      results: [],
-      message: 'Payload de lote de ausencias de Ticket Restaurante inválido.',
-    };
-
-    if (!payload || typeof payload !== 'object') {
-      return invalidPayloadResult;
-    }
-
-    const candidate = payload as { records?: unknown };
-    if (!Array.isArray(candidate.records)) {
-      return invalidPayloadResult;
-    }
-
-    const records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> = [];
-    for (const item of candidate.records) {
-      if (!item || typeof item !== 'object') {
-        return invalidPayloadResult;
-      }
-      const recordCandidate = item as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-      if (
-        typeof recordCandidate.id !== 'string' ||
-        typeof recordCandidate.value !== 'string' ||
-        (typeof recordCandidate.expectedUpdatedAt !== 'string' && recordCandidate.expectedUpdatedAt !== null)
-      ) {
-        return invalidPayloadResult;
-      }
-      records.push({
-        id: recordCandidate.id,
-        value: recordCandidate.value,
-        expectedUpdatedAt: recordCandidate.expectedUpdatedAt,
-      });
-    }
+    const batch = validateConditionalJsonRecordBatch(
+      payload,
+      'Payload de lote de ausencias de Ticket Restaurante inválido.',
+    );
+    if (!batch.ok) return batch.result;
 
     return enqueueSqliteIpc('ticket-restaurante-absences:save-records-if-unchanged', () =>
-      saveTicketRestauranteAbsenceRecordsIfUnchanged(records),
+      saveTicketRestauranteAbsenceRecordsIfUnchanged(batch.records),
     );
   });
   ipcMain.handle('ticket-restaurante-manutenciones:load-records', () =>
@@ -281,81 +116,26 @@ export function registerTicketRestauranteIpc(): void {
     ),
   );
   ipcMain.handle('ticket-restaurante-manutenciones:save-record-if-unchanged', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de manutención de Ticket Restaurante inválido.',
-      };
-    }
+    const record = validateConditionalJsonRecord(payload, 'Payload de manutención de Ticket Restaurante inválido.');
+    if (!record.ok) return record.result;
 
-    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.value !== 'string' ||
-      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
-    ) {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de manutención de Ticket Restaurante inválido.',
-      };
-    }
-
-    const id = candidate.id;
-    const value = candidate.value;
-    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === 'string'
-      ? candidate.expectedUpdatedAt
-      : null;
     return enqueueSqliteIpc('ticket-restaurante-manutenciones:save-record-if-unchanged', () =>
       saveTicketRestauranteManutencionRecordIfUnchanged({
-        id,
-        value,
-        expectedUpdatedAt,
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
       }),
     );
   });
   ipcMain.handle('ticket-restaurante-manutenciones:save-records-if-unchanged', (_event, payload: unknown) => {
-    const invalidPayloadResult = {
-      ok: false,
-      status: getSqliteStatus(),
-      results: [],
-      message: 'Payload de lote de manutenciones de Ticket Restaurante inválido.',
-    };
-
-    if (!payload || typeof payload !== 'object') {
-      return invalidPayloadResult;
-    }
-
-    const candidate = payload as { records?: unknown };
-    if (!Array.isArray(candidate.records)) {
-      return invalidPayloadResult;
-    }
-
-    const records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> = [];
-    for (const item of candidate.records) {
-      if (!item || typeof item !== 'object') {
-        return invalidPayloadResult;
-      }
-      const recordCandidate = item as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-      if (
-        typeof recordCandidate.id !== 'string' ||
-        typeof recordCandidate.value !== 'string' ||
-        (typeof recordCandidate.expectedUpdatedAt !== 'string' && recordCandidate.expectedUpdatedAt !== null)
-      ) {
-        return invalidPayloadResult;
-      }
-      records.push({
-        id: recordCandidate.id,
-        value: recordCandidate.value,
-        expectedUpdatedAt: recordCandidate.expectedUpdatedAt,
-      });
-    }
+    const batch = validateConditionalJsonRecordBatch(
+      payload,
+      'Payload de lote de manutenciones de Ticket Restaurante inválido.',
+    );
+    if (!batch.ok) return batch.result;
 
     return enqueueSqliteIpc('ticket-restaurante-manutenciones:save-records-if-unchanged', () =>
-      saveTicketRestauranteManutencionRecordsIfUnchanged(records),
+      saveTicketRestauranteManutencionRecordsIfUnchanged(batch.records),
     );
   });
   ipcMain.handle('ticket-restaurante-config:load-records', () =>
@@ -364,39 +144,17 @@ export function registerTicketRestauranteIpc(): void {
     ),
   );
   ipcMain.handle('ticket-restaurante-config:save-record-if-unchanged', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de configuración de Ticket Restaurante inválido.',
-      };
-    }
+    const record = validateConditionalJsonRecord(
+      payload,
+      'Payload de configuración de Ticket Restaurante inválido.',
+    );
+    if (!record.ok) return record.result;
 
-    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.value !== 'string' ||
-      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
-    ) {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de configuración de Ticket Restaurante inválido.',
-      };
-    }
-
-    const id = candidate.id;
-    const value = candidate.value;
-    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === 'string'
-      ? candidate.expectedUpdatedAt
-      : null;
     return enqueueSqliteIpc('ticket-restaurante-config:save-record-if-unchanged', () =>
       saveTicketRestauranteConfigRecordIfUnchanged({
-        id,
-        value,
-        expectedUpdatedAt,
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
       }),
     );
   });
