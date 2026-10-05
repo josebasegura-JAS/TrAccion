@@ -69,7 +69,11 @@ export function PageHeader({
     }
 
     return createPortal(
-      <div className="pointer-events-none fixed bottom-5 right-5 z-[80]" aria-label={`${title}: estado`}>
+      <div
+        aria-label={`${title}: estado`}
+        className="pointer-events-none fixed bottom-5 right-5 z-[80]"
+        data-page-header-status="true"
+      >
         {status}
       </div>,
       document.body,
@@ -77,7 +81,10 @@ export function PageHeader({
   }
 
   return (
-    <div className={cx('mb-2 flex flex-wrap items-center justify-between gap-2', className)}>
+    <div
+      className={cx('mb-2 flex flex-wrap items-center justify-between gap-2', className)}
+      data-page-header-actions="true"
+    >
       <h2 className="sr-only">{title}</h2>
       {status ? <div className="flex min-w-0 flex-wrap items-center gap-2">{status}</div> : null}
       <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">{actions}</div>

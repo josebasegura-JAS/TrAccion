@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { ActionButton } from './ActionButton';
 
@@ -7,6 +8,8 @@ interface FloatingSaveActionProps {
   pendingLabel?: string;
   buttonLabel?: string;
   savingLabel?: string;
+  /** Evita duplicar una acción de guardado flotante si la pantalla ya tiene una toolbar de acciones visible. */
+  suppressWhenPageHeaderHasActions?: boolean;
   onSave: () => void | Promise<unknown>;
 }
 
@@ -16,22 +19,44 @@ export function FloatingSaveAction({
   pendingLabel = 'Cambios pendientes',
   buttonLabel = 'Guardar cambios',
   savingLabel = 'Guardando…',
+  suppressWhenPageHeaderHasActions = true,
   onSave,
 }: FloatingSaveActionProps) {
-  if (!visible) return null;
+  const [pageHasHeaderActions, setPageHasHeaderActions] = useState(false);
+
+  useEffect(() => {
+    if (!suppressWhenPageHeaderHasActions || typeof document === 'undefined') {
+      setPageHasHeaderActions(false);
+      return undefined;
+    }
+
+    const refresh = () => {
+      setPageHasHeaderActions(Boolean(document.querySelector('[data-page-header-actions="true"]')));
+    };
+
+    refresh();
+
+    const observer = new MutationObserver(refresh);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [suppressWhenPageHeaderHasActions]);
+
+  if (!visible || pageHasHeaderActions) return null;
 
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-2xl border border-emerald-400/30 bg-[#0b1725]/95 p-2 shadow-[0_18px_45px_rgba(2,6,23,0.5)] backdrop-blur"
+      className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-xl border border-metro-border bg-[#0b1725]/95 p-2 shadow-[0_14px_38px_rgba(2,6,23,0.42)] backdrop-blur"
     >
-      <span className="hidden px-2 text-xs font-semibold text-emerald-200 sm:inline">
+      <span className="hidden px-2 text-xs font-semibold text-metro-muted sm:inline">
         {saving ? savingLabel : pendingLabel}
       </span>
       <ActionButton
         disabled={saving}
         icon={Save}
         iconOnly={false}
+        loading={saving}
         onClick={() => void onSave()}
         size="sm"
         variant="save"
