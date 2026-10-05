@@ -8,9 +8,13 @@ import type { OpenDialogOptions } from 'electron';
 import { readFile } from 'node:fs/promises';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { openTeletrabajoWord } from '../documentOpener.js';
-import { assertDocxPath, validateJsonRecordPayload } from './ipcHelpers.js';
 import {
-  getSqliteStatus,
+  assertDocxPath,
+  validateConditionalJsonRecord,
+  validateConditionalJsonRecordBatch,
+  validateJsonRecordPayload,
+} from './ipcHelpers.js';
+import {
   loadTeletrabajoRecordsSnapshot,
   loadTeletrabajoPuestoRecordsSnapshot,
   loadTeletrabajoGrupoCoberturaRecordsSnapshot,
@@ -26,9 +30,7 @@ export function registerTeletrabajoIpc(): void {
   );
   ipcMain.handle('teletrabajo-puestos:save-record-if-unchanged', (_event, payload: unknown) => {
     const record = validateJsonRecordPayload(payload, 'Payload de puesto teletrabajable inválido.');
-    if (!record.ok) {
-      return record.result;
-    }
+    if (!record.ok) return record.result;
 
     return enqueueSqliteIpc('teletrabajo-puestos:save-record-if-unchanged', () =>
       saveTeletrabajoPuestoRecordIfUnchanged({
@@ -45,9 +47,7 @@ export function registerTeletrabajoIpc(): void {
   );
   ipcMain.handle('teletrabajo-grupos-cobertura:save-record-if-unchanged', (_event, payload: unknown) => {
     const record = validateJsonRecordPayload(payload, 'Payload de grupo de cobertura inválido.');
-    if (!record.ok) {
-      return record.result;
-    }
+    if (!record.ok) return record.result;
 
     return enqueueSqliteIpc('teletrabajo-grupos-cobertura:save-record-if-unchanged', () =>
       saveTeletrabajoGrupoCoberturaRecordIfUnchanged({
@@ -61,79 +61,26 @@ export function registerTeletrabajoIpc(): void {
     enqueueSqliteIpc('teletrabajo:load-records', () => loadTeletrabajoRecordsSnapshot()),
   );
   ipcMain.handle('teletrabajo:save-record-if-unchanged', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de solicitud de Teletrabajo inválido.',
-      };
-    }
+    const record = validateConditionalJsonRecord(payload, 'Payload de solicitud de Teletrabajo inválido.');
+    if (!record.ok) return record.result;
 
-    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.value !== 'string' ||
-      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
-    ) {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de solicitud de Teletrabajo inválido.',
-      };
-    }
-
-    const id = candidate.id;
-    const value = candidate.value;
-    const expectedUpdatedAt = candidate.expectedUpdatedAt;
     return enqueueSqliteIpc('teletrabajo:save-record-if-unchanged', () =>
       saveTeletrabajoRecordIfUnchanged({
-        id,
-        value,
-        expectedUpdatedAt,
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
       }),
     );
   });
   ipcMain.handle('teletrabajo:save-records-if-unchanged', (_event, payload: unknown) => {
-    const invalidPayloadResult = {
-      ok: false,
-      status: getSqliteStatus(),
-      results: [],
-      message: 'Payload de lote de solicitudes de Teletrabajo inválido.',
-    };
-
-    if (!payload || typeof payload !== 'object') {
-      return invalidPayloadResult;
-    }
-
-    const candidate = payload as { records?: unknown };
-    if (!Array.isArray(candidate.records)) {
-      return invalidPayloadResult;
-    }
-
-    const records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> = [];
-    for (const item of candidate.records) {
-      if (!item || typeof item !== 'object') {
-        return invalidPayloadResult;
-      }
-      const recordCandidate = item as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-      if (
-        typeof recordCandidate.id !== 'string' ||
-        typeof recordCandidate.value !== 'string' ||
-        (typeof recordCandidate.expectedUpdatedAt !== 'string' && recordCandidate.expectedUpdatedAt !== null)
-      ) {
-        return invalidPayloadResult;
-      }
-      records.push({
-        id: recordCandidate.id,
-        value: recordCandidate.value,
-        expectedUpdatedAt: recordCandidate.expectedUpdatedAt,
-      });
-    }
+    const batch = validateConditionalJsonRecordBatch(
+      payload,
+      'Payload de lote de solicitudes de Teletrabajo inválido.',
+    );
+    if (!batch.ok) return batch.result;
 
     return enqueueSqliteIpc('teletrabajo:save-records-if-unchanged', () =>
-      saveTeletrabajoRecordsIfUnchanged(records),
+      saveTeletrabajoRecordsIfUnchanged(batch.records),
     );
   });
   ipcMain.handle('teletrabajo:select-template', async (event) => {
@@ -147,10 +94,7 @@ export function registerTeletrabajoIpc(): void {
       ? await dialog.showOpenDialog(browserWindow, options)
       : await dialog.showOpenDialog(options);
 
-    if (result.canceled) {
-      return null;
-    }
-
+    if (result.canceled) return null;
     return result.filePaths[0] ?? null;
   });
   ipcMain.handle('teletrabajo:read-template', async (_event, filePath: string) => {
