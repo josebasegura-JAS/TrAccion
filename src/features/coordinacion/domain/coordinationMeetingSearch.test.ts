@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { CoordinationMeeting } from './coordinacion';
+import { coordinationMeetingDisplayTitle, type CoordinationMeeting } from './coordinacion';
 import { matchingMeetingPointTitles, meetingMatchesSearch } from './coordinationMeetingSearch';
 
 const meeting: CoordinationMeeting = {
   id: 'm-1',
+  title: 'Uniforme verano 2027',
   area: 'otras-areas',
   areaName: 'Prevención',
   interlocutors: 'Marta y RRLL',
@@ -29,6 +30,10 @@ const meeting: CoordinationMeeting = {
 };
 
 describe('coordinationMeetingSearch', () => {
+  it('busca por el título de la reunión', () => {
+    expect(meetingMatchesSearch(meeting, 'uniforme 2027')).toBe(true);
+    expect(coordinationMeetingDisplayTitle(meeting)).toBe('Uniforme verano 2027');
+  });
   it('busca en contexto, objetivo, interlocutores y estado de la reunión', () => {
     expect(meetingMatchesSearch(meeting, 'prevencion')).toBe(true);
     expect(meetingMatchesSearch(meeting, 'vestuario verano')).toBe(true);
@@ -43,5 +48,13 @@ describe('coordinationMeetingSearch', () => {
 
   it('ignora mayúsculas y tildes', () => {
     expect(meetingMatchesSearch(meeting, 'PREVENCION')).toBe(true);
+  });
+});
+
+
+describe('coordinationMeetingDisplayTitle', () => {
+  it('mantiene un fallback útil para reuniones antiguas sin título', () => {
+    const legacy = { ...meeting, title: undefined, purpose: 'Objetivo histórico' };
+    expect(coordinationMeetingDisplayTitle(legacy)).toBe('Objetivo histórico');
   });
 });

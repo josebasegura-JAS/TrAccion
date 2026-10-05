@@ -38,6 +38,7 @@ export function meetingMatchesSearch(meeting: CoordinationMeeting, query: string
   ].join(' ')).join(' ');
 
   const searchable = normalizeSearchText([
+    meeting.title ?? '',
     meetingAreaSearchText(meeting),
     meeting.date,
     meeting.status === 'closed' ? 'cerrada cerrado historico' : 'abierta abierto',

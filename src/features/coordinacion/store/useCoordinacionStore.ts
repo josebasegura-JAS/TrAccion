@@ -24,9 +24,10 @@ interface CoordinationStore extends CoordinationState {
   setTaskForUnion: (taskId: string, unionName: string | null) => Promise<Result>;
   setTaskForArea: (taskId: string, areaName: string | null) => Promise<Result>;
   setTaskTargets: (taskId: string, targets: { direction: boolean; unionName: string | null; areaName: string | null }) => Promise<Result>;
-  createDirectionMeeting: (date: string, tasks: Task[]) => Promise<Result>;
+  createDirectionMeeting: (date: string, title: string, tasks: Task[]) => Promise<Result>;
   createOtherAreaMeeting: (
     date: string,
+    title: string,
     areaName: string,
     referenceTaskId: string,
     interlocutors: string,
@@ -35,6 +36,7 @@ interface CoordinationStore extends CoordinationState {
   ) => Promise<Result>;
   createUnionMeeting: (
     date: string,
+    title: string,
     unionName: string,
     meetingType: UnionMeetingType,
     interlocutors: string,
@@ -190,9 +192,11 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (result.ok) set(next);
     return result;
   },
-  createDirectionMeeting: async (date, tasks) => {
+  createDirectionMeeting: async (date, title, tasks) => {
     const normalizedDate = date.trim();
+    const cleanTitle = title.trim();
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
+    if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
     const current = get();
     const marked = new Set(current.directionTaskIds);
     const now = new Date().toISOString();
@@ -211,6 +215,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       }));
     const meeting: CoordinationMeeting = {
       id: createCoordinationId('dir-meeting'),
+      title: cleanTitle,
       area: 'direccion',
       date: normalizedDate,
       status: 'open',
@@ -224,10 +229,12 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
   },
-  createOtherAreaMeeting: async (date, areaName, referenceTaskId, interlocutors, purpose, tasks) => {
+  createOtherAreaMeeting: async (date, title, areaName, referenceTaskId, interlocutors, purpose, tasks) => {
     const normalizedDate = date.trim();
+    const cleanTitle = title.trim();
     const cleanAreaName = areaName.trim();
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
+    if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
     if (!cleanAreaName) return { ok: false, message: 'Indica el área con la que se celebra la reunión.' };
 
     const task = referenceTaskId
@@ -256,6 +263,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       }));
     const meeting: CoordinationMeeting = {
       id: createCoordinationId('area-meeting'),
+      title: cleanTitle,
       area: 'otras-areas',
       areaName: resolvedAreaName,
       referenceTaskId: task?.id ?? null,
@@ -273,10 +281,12 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
   },
-  createUnionMeeting: async (date, unionName, meetingType, interlocutors, purpose, taskIds, tasks) => {
+  createUnionMeeting: async (date, title, unionName, meetingType, interlocutors, purpose, taskIds, tasks) => {
     const normalizedDate = date.trim();
+    const cleanTitle = title.trim();
     const cleanUnion = unionName.trim();
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
+    if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
     if (!cleanUnion) return { ok: false, message: 'Selecciona el sindicato.' };
     const current = get();
     const selectedIds = new Set([...(current.unionTaskIds[cleanUnion] ?? []), ...taskIds]);
@@ -298,7 +308,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
         responsible: '', dueDate: '', createdAt: now, updatedAt: now,
       }));
     const meeting: CoordinationMeeting = {
-      id: createCoordinationId('union-meeting'), area: 'sindicatos', unionName: cleanUnion,
+      id: createCoordinationId('union-meeting'), title: cleanTitle, area: 'sindicatos', unionName: cleanUnion,
       meetingType, interlocutors: interlocutors.trim(), purpose: purpose.trim(),
       date: normalizedDate, status: 'open', points, createdAt: now, updatedAt: now, closedAt: null,
     };

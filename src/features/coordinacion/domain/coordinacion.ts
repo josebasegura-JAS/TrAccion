@@ -27,6 +27,8 @@ export interface CoordinationPoint {
 
 export interface CoordinationMeeting {
   id: string;
+  /** Título breve para identificar rápidamente la reunión en listados y búsquedas. */
+  title?: string;
   area: CoordinationArea;
   /** Nombre concreto del área cuando la reunión no es con Dirección. */
   areaName?: string;
@@ -68,3 +70,16 @@ export function formatCoordinationDate(value: string): string {
   const parsed = new Date(`${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('es-ES');
 }
+
+export function coordinationMeetingDisplayTitle(meeting: CoordinationMeeting): string {
+  const explicitTitle = meeting.title?.trim();
+  if (explicitTitle) return explicitTitle;
+  const purpose = meeting.purpose?.trim();
+  if (purpose) return purpose;
+  const firstPoint = meeting.points[0]?.title?.trim();
+  if (firstPoint) return firstPoint;
+  if (meeting.area === 'direccion') return `Reunión con Dirección · ${formatCoordinationDate(meeting.date)}`;
+  if (meeting.area === 'sindicatos') return `Reunión con ${meeting.unionName?.trim() || 'sindicato'} · ${formatCoordinationDate(meeting.date)}`;
+  return `Reunión con ${meeting.areaName?.trim() || 'otra área'} · ${formatCoordinationDate(meeting.date)}`;
+}
+

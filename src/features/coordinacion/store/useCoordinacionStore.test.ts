@@ -39,20 +39,32 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
   it('crea una reunión con varias tareas y conserva la ficha del sindicato', async () => {
     const tasks = [task('t-1', 'Calendario'), task('t-2', 'Turnos')];
     const result = await useCoordinacionStore.getState().createUnionMeeting(
-      '2026-09-22', 'ELA', 'ordinaria', 'Representación y RRLL', 'Seguimiento mensual', ['t-1', 't-2'], tasks,
+      '2026-09-22', 'Reunión sindical', 'ELA', 'ordinaria', 'Representación y RRLL', 'Seguimiento mensual', ['t-1', 't-2'], tasks,
     );
 
     expect(result.ok).toBe(true);
     expect(useCoordinacionStore.getState().meetings[0]).toMatchObject({
-      area: 'sindicatos', unionName: 'ELA', meetingType: 'ordinaria', interlocutors: 'Representación y RRLL',
+      title: 'Reunión sindical', area: 'sindicatos', unionName: 'ELA', meetingType: 'ordinaria', interlocutors: 'Representación y RRLL',
     });
     expect(useCoordinacionStore.getState().meetings[0].points.map((point) => point.taskId)).toEqual(['t-1', 't-2']);
   });
 
+  it('exige y conserva un título identificativo en las nuevas reuniones', async () => {
+    const tasks = [task('t-title', 'Asunto', '')];
+    const rejected = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-05', '   ', tasks);
+    expect(rejected.ok).toBe(false);
+    expect(rejected.message).toContain('título');
+
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-05', '  Seguimiento de plantilla  ', tasks);
+    expect(created.ok).toBe(true);
+    expect(useCoordinacionStore.getState().meetings[0].title).toBe('Seguimiento de plantilla');
+  });
+
+
   it('arrastra al siguiente guion los asuntos no cerrados y elimina los tratados', async () => {
     const tasks = [task('t-1', 'Calendario'), task('t-2', 'Turnos')];
     const created = await useCoordinacionStore.getState().createUnionMeeting(
-      '2026-09-01', 'ELA', 'ordinaria', '', '', ['t-1', 't-2'], tasks,
+      '2026-09-01', 'Reunión sindical', 'ELA', 'ordinaria', '', '', ['t-1', 't-2'], tasks,
     );
     const meetingId = created.recordId ?? '';
     const [first, second] = useCoordinacionStore.getState().meetings[0].points;
@@ -63,7 +75,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     expect(useCoordinacionStore.getState().unionTaskIds.ELA).toEqual(['t-2']);
 
     await useCoordinacionStore.getState().createUnionMeeting(
-      '2026-10-01', 'ELA', 'seguimiento', '', '', [], tasks,
+      '2026-10-01', 'Reunión sindical', 'ELA', 'seguimiento', '', '', [], tasks,
     );
     expect(useCoordinacionStore.getState().meetings[0].points.map((point) => point.taskId)).toEqual(['t-2']);
   });
@@ -78,7 +90,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
 
   it('permite añadir a una reunión con Dirección una tarea activa no marcada previamente', async () => {
     const tasks = [task('t-1', 'Asunto sobrevenido')];
-    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-22', tasks);
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-22', 'Reunión Dirección', tasks);
 
     expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(0);
 
@@ -95,7 +107,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
 
   it('convierte un punto manual en tarea sin duplicar el punto de la reunión', async () => {
     const tasks = [task('t-2', 'Tarea nacida en la reunión')];
-    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-22', tasks);
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-22', 'Reunión Dirección', tasks);
     await useCoordinacionStore.getState().addManualPoint(created.recordId ?? '', 'Compromiso nuevo', 'Detalle acordado');
     const manualPoint = useCoordinacionStore.getState().meetings[0].points[0];
 
@@ -115,7 +127,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
   it('permite crear una reunión con otra área sin tarea inicial y añadir asuntos después', async () => {
     const tasks = [task('t-area', 'Seguimiento de cobertura', '')];
     const created = await useCoordinacionStore.getState().createOtherAreaMeeting(
-      '2026-09-22', 'Operaciones', '', 'Responsable de área y RRLL', 'Revisión mensual', tasks,
+      '2026-09-22', 'Reunión área', 'Operaciones', '', 'Responsable de área y RRLL', 'Revisión mensual', tasks,
     );
 
     expect(created.ok).toBe(true);
@@ -138,7 +150,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     await useCoordinacionStore.getState().setTaskForArea('t-area-2', 'Prevención');
 
     const created = await useCoordinacionStore.getState().createOtherAreaMeeting(
-      '2026-09-25', 'prevencion', '', 'Prevención y RRLL', 'Seguimiento', tasks,
+      '2026-09-25', 'Reunión área', 'prevencion', '', 'Prevención y RRLL', 'Seguimiento', tasks,
     );
 
     expect(created.ok).toBe(true);
@@ -163,7 +175,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     ];
     for (const item of tasks) await useCoordinacionStore.getState().setTaskForArea(item.id, 'Prevención');
     const created = await useCoordinacionStore.getState().createOtherAreaMeeting(
-      '2026-09-25', 'Prevención', '', '', '', tasks,
+      '2026-09-25', 'Reunión área', 'Prevención', '', '', '', tasks,
     );
     const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
     expect(meeting).toBeTruthy();
@@ -183,7 +195,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
   it('mantiene en la siguiente reunión de Dirección los puntos marcados como no tratados', async () => {
     const tasks = [task('t-dir', 'Asunto Dirección', '')];
     await useCoordinacionStore.getState().setTaskForDirection('t-dir', true);
-    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-25', tasks);
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-25', 'Reunión Dirección', tasks);
     const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
     expect(meeting).toBeTruthy();
     if (!meeting) return;
@@ -197,7 +209,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
   it('no arrastra a la siguiente reunión sindical un punto ya tratado con seguimiento', async () => {
     const tasks = [task('t-follow', 'Asunto con seguimiento')];
     const created = await useCoordinacionStore.getState().createUnionMeeting(
-      '2026-09-01', 'ELA', 'ordinaria', '', '', ['t-follow'], tasks,
+      '2026-09-01', 'Reunión sindical', 'ELA', 'ordinaria', '', '', ['t-follow'], tasks,
     );
     const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
     expect(meeting).toBeTruthy();
@@ -208,14 +220,14 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     expect(useCoordinacionStore.getState().unionTaskIds.ELA ?? []).toEqual([]);
 
     await useCoordinacionStore.getState().createUnionMeeting(
-      '2026-10-01', 'ELA', 'seguimiento', '', '', [], tasks,
+      '2026-10-01', 'Reunión sindical', 'ELA', 'seguimiento', '', '', [], tasks,
     );
     expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(0);
   });
 
   it('permite crear una reunión sindical sin tareas iniciales', async () => {
     const result = await useCoordinacionStore.getState().createUnionMeeting(
-      '2026-09-22', 'ELA', 'ordinaria', 'Representación y RRLL', 'Asunto sobrevenido', [], [],
+      '2026-09-22', 'Reunión sindical', 'ELA', 'ordinaria', 'Representación y RRLL', 'Asunto sobrevenido', [], [],
     );
 
     expect(result.ok).toBe(true);
@@ -229,7 +241,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
   it('guarda de una vez los cambios editables de todos los puntos de una reunión', async () => {
     const tasks = [task('t-save', 'Asunto a guardar')];
     await useCoordinacionStore.getState().setTaskForDirection('t-save', true);
-    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-01', tasks);
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-01', 'Reunión Dirección', tasks);
     const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
     expect(meeting).toBeTruthy();
     if (!meeting) return;
@@ -250,7 +262,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
   it('reabre una reunión cerrada conservando el mismo registro y sus puntos', async () => {
     const tasks = [task('t-reopen', 'Asunto a corregir', '')];
     await useCoordinacionStore.getState().setTaskForDirection('t-reopen', true);
-    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-05', tasks);
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-05', 'Reunión Dirección', tasks);
     const meetingId = created.recordId ?? '';
     const originalPointId = useCoordinacionStore.getState().meetings.find((item) => item.id === meetingId)?.points[0]?.id;
 

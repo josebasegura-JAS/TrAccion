@@ -11,7 +11,7 @@ import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { type Task, type TaskDraft } from '../../tareas/domain/task';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
-import { formatCoordinationDate, type CoordinationArea, type CoordinationMeeting, type CoordinationPointStatus } from '../domain/coordinacion';
+import { coordinationMeetingDisplayTitle, formatCoordinationDate, type CoordinationArea, type CoordinationMeeting, type CoordinationPointStatus } from '../domain/coordinacion';
 import { matchingMeetingPointTitles, meetingMatchesSearch } from '../domain/coordinationMeetingSearch';
 import { coordinationPointStatusLabel, useCoordinacionStore } from '../store/useCoordinacionStore';
 import { SindicatosCoordinationPanel } from './SindicatosCoordinationPanel';
@@ -50,7 +50,7 @@ function coordinationTrackingId(meetingId: string, pointId: string): string {
 function buildCoordinationTrackingText(meeting: CoordinationMeeting, point: CoordinationMeeting['points'][number], allowStatusOnly: boolean): string {
   const result = point.result.trim();
   if (!result && !allowStatusOnly) return '';
-  const header = `Coordinación · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`;
+  const header = `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`;
   const status = coordinationPointStatusLabel(point.status);
   return result ? `${header}\n${status}\n${result}` : `${header}\n${status}`;
 }
@@ -74,7 +74,7 @@ async function syncMeetingTracking(
         module: 'coordinacion',
         recordId: meeting.id,
         pointId: point.id,
-        label: `Coordinación · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`,
+        label: `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`,
       },
       closeTask: options.closeResolvedTasks && point.status === 'tratado',
     });
@@ -189,6 +189,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [area, setArea] = useState<CoordinationArea>('direccion');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [date, setDate] = useState(todayIso());
+  const [meetingTitle, setMeetingTitle] = useState('');
   const [areaName, setAreaName] = useState('');
   const [referenceTaskId, setReferenceTaskId] = useState('');
   const [interlocutors, setInterlocutors] = useState('');
@@ -307,10 +308,11 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const handleCreate = async () => {
     setStatus('');
     const result = area === 'direccion'
-      ? await createDirectionMeeting(date, tasks)
-      : await createOtherAreaMeeting(date, areaName, referenceTaskId, interlocutors, purpose, tasks);
+      ? await createDirectionMeeting(date, meetingTitle, tasks)
+      : await createOtherAreaMeeting(date, meetingTitle, areaName, referenceTaskId, interlocutors, purpose, tasks);
     if (!result.ok) { setStatus(result.message); return; }
     setSelectedId(result.recordId ?? null);
+    setMeetingTitle('');
     if (area !== 'direccion') { setAreaName(''); setReferenceTaskId(''); setInterlocutors(''); setPurpose(''); }
     await backup();
   };
@@ -366,7 +368,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const handleReopen = async () => {
     if (!selected || selected.status !== 'closed') return;
     const confirmed = await confirm(
-      `La reunión del ${formatCoordinationDate(selected.date)} volverá a estar abierta y podrá editarse de nuevo. Se conservarán todos sus puntos, vínculos y seguimientos ya registrados.`,
+      `La reunión “${coordinationMeetingDisplayTitle(selected)}” del ${formatCoordinationDate(selected.date)} volverá a estar abierta y podrá editarse de nuevo. Se conservarán todos sus puntos, vínculos y seguimientos ya registrados.`,
       {
         title: 'Reabrir reunión',
         confirmLabel: 'Reabrir reunión',
@@ -382,7 +384,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const handleDeleteMeeting = async () => {
     if (!selected) return;
     const warning = selected.status === 'closed' ? '\n\nLos seguimientos ya registrados en las tareas vinculadas se conservarán.' : '';
-    const confirmed = await confirm(`Se eliminará la reunión del ${formatCoordinationDate(selected.date)} y todos sus puntos.${warning}`, {
+    const confirmed = await confirm(`Se eliminará la reunión “${coordinationMeetingDisplayTitle(selected)}” del ${formatCoordinationDate(selected.date)} y todos sus puntos.${warning}`, {
       title: 'Eliminar reunión', confirmLabel: 'Eliminar reunión', cancelLabel: 'Cancelar', danger: true,
     });
     if (!confirmed) return;
@@ -429,10 +431,10 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       origen: `Reunión con ${meetingContext(selected)}`,
     };
     const taskInitialTrackingText = sourcePoint
-      ? `Tarea creada durante la reunión con ${meetingContext(selected)} del ${formatCoordinationDate(selected.date)}, a partir del punto “${sourcePoint.title}”.`
-      : `Tarea creada durante la reunión con ${meetingContext(selected)} del ${formatCoordinationDate(selected.date)}.`;
+      ? `Tarea creada durante la reunión “${coordinationMeetingDisplayTitle(selected)}” con ${meetingContext(selected)} del ${formatCoordinationDate(selected.date)}, a partir del punto “${sourcePoint.title}”.`
+      : `Tarea creada durante la reunión “${coordinationMeetingDisplayTitle(selected)}” con ${meetingContext(selected)} del ${formatCoordinationDate(selected.date)}.`;
     const exportPayload = {
-      title: `Reunión con ${meetingContext(selected)} · ${formatCoordinationDate(selected.date)}`,
+      title: `${coordinationMeetingDisplayTitle(selected)} · ${meetingContext(selected)} · ${formatCoordinationDate(selected.date)}`,
       filename: `reunion-${meetingContext(selected)}-${selected.date}`,
       filterLabel: selected.status === 'closed' ? 'Reunión cerrada' : 'Guion de reunión',
       rows: selected.points,
@@ -450,8 +452,8 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <button className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-metro-muted hover:text-metro-text" onClick={() => setSelectedId(null)} type="button"><ChevronLeft size={15}/>Volver</button>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Coordinación · {meetingContext(selected)}</p>
-          <h2 className="mt-1 text-2xl font-bold text-metro-text">Reunión {formatCoordinationDate(selected.date)}</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Coordinación · {meetingContext(selected)} · {formatCoordinationDate(selected.date)}</p>
+          <h2 className="mt-1 text-2xl font-bold text-metro-text">{coordinationMeetingDisplayTitle(selected)}</h2>
           {!isDirection && <p className="mt-1 text-sm text-metro-muted">{isUnion && selected.meetingType ? `${selected.meetingType === 'urgente' ? 'Urgente' : selected.meetingType === 'seguimiento' ? 'Seguimiento' : 'Ordinaria'} · ` : ''}{selected.interlocutors ? `Interlocutores: ${selected.interlocutors}` : 'Sin interlocutores indicados'}{selected.purpose ? ` · ${selected.purpose}` : ''}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -514,7 +516,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           className="pl-9"
           density="compact"
           onChange={(event) => setMeetingSearch(event.target.value)}
-          placeholder="Buscar en reuniones: tema, acuerdo, responsable, área, sindicato..."
+          placeholder="Buscar en reuniones: título, tema, acuerdo, responsable, área, sindicato..."
           value={meetingSearch}
         />
       </div>
@@ -533,8 +535,8 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
               type="button"
             >
               <span className="min-w-0">
-                <strong className="block truncate text-sm text-metro-text">{meetingContext(meeting)} · {formatCoordinationDate(meeting.date)}</strong>
-                <span className="block truncate text-xs text-metro-muted">
+                <strong className="block truncate text-sm text-metro-text">{coordinationMeetingDisplayTitle(meeting)}</strong>
+                <span className="block truncate text-xs text-metro-muted">{meetingContext(meeting)} · {formatCoordinationDate(meeting.date)} · 
                   {matchedPoints.length > 0 ? matchedPoints.join(' · ') : meeting.purpose || meeting.interlocutors || `${meeting.points.length} punto${meeting.points.length === 1 ? '' : 's'}`}
                 </span>
               </span>
@@ -552,9 +554,9 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       <button className={`ui-area-selector ${area === 'sindicatos' ? 'ui-area-selector--active' : ''}`} onClick={() => setArea('sindicatos')} type="button"><UsersRound className="mb-2 text-metro-red" size={20}/><strong className="block text-metro-text">Sindicatos</strong><span className="text-xs text-metro-muted">Guion flexible e histórico por organización</span></button>
     </div>
     {area === 'sindicatos' ? <SindicatosCoordinationPanel onChanged={backup} onOpenMeeting={setSelectedId} onStatus={setStatus} tasks={tasks}/> : <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-      {area === 'direccion' ? <div className="ui-section p-3"><h3 className="font-bold text-metro-text">Nueva reunión con Dirección</h3><p className="mt-1 text-xs leading-5 text-metro-muted">Se incorporarán automáticamente las {markedCount} tarea(s) marcadas para trasladar a Dirección.</p><Field className="mt-4" density="compact" label="Fecha"><Input dateTone="request" onChange={(event) => setDate(event.target.value)} type="date" value={date}/></Field><ActionButton className="mt-3 w-full" icon={CalendarDays} iconOnly={false} onClick={() => void handleCreate()} size="sm" variant="primary">Crear reunión</ActionButton><p className="mt-3 break-words text-xs text-metro-muted">Backup: {backupPath || 'Configura la ruta en Ajustes'}</p></div>
-      : <div className="ui-section p-3"><h3 className="font-bold text-metro-text">Nueva reunión con otra área</h3><p className="mt-1 text-xs leading-5 text-metro-muted">{areaName.trim() ? `Se incorporarán automáticamente ${markedAreaCount} tarea(s) pendiente(s) para ${areaName.trim()}. También puedes añadir una tarea inicial opcional.` : 'Indica el área. Si tiene asuntos marcados desde Tareas, se incorporarán automáticamente al crear la reunión.'}</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><Field density="compact" label="Área" required><Input onChange={(event) => setAreaName(event.target.value)} placeholder="Operaciones, Prevención, Finanzas..." required value={areaName}/></Field><Field density="compact" label="Tarea inicial · opcional"><Select onChange={(event) => setReferenceTaskId(event.target.value)} value={referenceTaskId}><option value="">Sin tarea inicial</option>{activeTasks.map((task) => <option key={task.id} value={task.id}>{task.titulo}</option>)}</Select></Field><Field density="compact" label="Fecha"><Input dateTone="request" onChange={(event) => setDate(event.target.value)} type="date" value={date}/></Field><Field density="compact" label="Interlocutores"><Input onChange={(event) => setInterlocutors(event.target.value)} placeholder="Personas participantes" value={interlocutors}/></Field><Field className="sm:col-span-2" density="compact" label="Objetivo"><Textarea className="min-h-16" onChange={(event) => setPurpose(event.target.value)} placeholder="Qué se necesita tratar o resolver" value={purpose}/></Field></div><ActionButton className="mt-3 w-full" disabled={!areaName.trim()} icon={CalendarDays} iconOnly={false} onClick={() => void handleCreate()} size="sm" variant="primary">Crear reunión</ActionButton></div>}
-      <div className="ui-section p-3"><h3 className="mb-3 font-bold text-metro-text">{area === 'direccion' ? 'Reuniones de Dirección' : 'Reuniones con otras áreas'}</h3><div className="space-y-2">{visibleMeetings.map((meeting) => <button className="ui-list-row" key={meeting.id} onClick={() => setSelectedId(meeting.id)} type="button"><span className="min-w-0"><strong className="block truncate text-sm text-metro-text">{area === 'direccion' ? formatCoordinationDate(meeting.date) : meeting.areaName || 'Área sin indicar'}</strong><span className="block truncate text-xs text-metro-muted">{area === 'direccion' ? `${meeting.points.length} puntos` : `${formatCoordinationDate(meeting.date)} · ${meeting.points.length ? `${meeting.points.length} asunto${meeting.points.length === 1 ? '' : 's'}` : 'Sin asuntos todavía'}`}</span></span><StatusBadge tone={meeting.status === 'closed' ? 'success' : 'warning'} size="xs">{meeting.status === 'closed' ? 'Cerrada' : 'Abierta'}</StatusBadge></button>)}{visibleMeetings.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">Todavía no hay reuniones registradas.</p>}</div></div>
+      {area === 'direccion' ? <div className="ui-section p-3"><h3 className="font-bold text-metro-text">Nueva reunión con Dirección</h3><p className="mt-1 text-xs leading-5 text-metro-muted">Se incorporarán automáticamente las {markedCount} tarea(s) marcadas para trasladar a Dirección.</p><Field className="mt-4" density="compact" label="Título de la reunión" required><Input maxLength={120} onChange={(event) => setMeetingTitle(event.target.value)} placeholder="Ej. Seguimiento plantilla 2027" required value={meetingTitle}/></Field><Field className="mt-3" density="compact" label="Fecha"><Input dateTone="request" onChange={(event) => setDate(event.target.value)} type="date" value={date}/></Field><ActionButton className="mt-3 w-full" disabled={!meetingTitle.trim()} icon={CalendarDays} iconOnly={false} onClick={() => void handleCreate()} size="sm" variant="primary">Crear reunión</ActionButton><p className="mt-3 break-words text-xs text-metro-muted">Backup: {backupPath || 'Configura la ruta en Ajustes'}</p></div>
+      : <div className="ui-section p-3"><h3 className="font-bold text-metro-text">Nueva reunión con otra área</h3><p className="mt-1 text-xs leading-5 text-metro-muted">{areaName.trim() ? `Se incorporarán automáticamente ${markedAreaCount} tarea(s) pendiente(s) para ${areaName.trim()}. También puedes añadir una tarea inicial opcional.` : 'Indica el área. Si tiene asuntos marcados desde Tareas, se incorporarán automáticamente al crear la reunión.'}</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><Field className="sm:col-span-2" density="compact" label="Título de la reunión" required><Input maxLength={120} onChange={(event) => setMeetingTitle(event.target.value)} placeholder="Ej. Cobertura turnos y necesidades de personal" required value={meetingTitle}/></Field><Field density="compact" label="Área" required><Input onChange={(event) => setAreaName(event.target.value)} placeholder="Operaciones, Prevención, Finanzas..." required value={areaName}/></Field><Field density="compact" label="Tarea inicial · opcional"><Select onChange={(event) => setReferenceTaskId(event.target.value)} value={referenceTaskId}><option value="">Sin tarea inicial</option>{activeTasks.map((task) => <option key={task.id} value={task.id}>{task.titulo}</option>)}</Select></Field><Field density="compact" label="Fecha"><Input dateTone="request" onChange={(event) => setDate(event.target.value)} type="date" value={date}/></Field><Field density="compact" label="Interlocutores"><Input onChange={(event) => setInterlocutors(event.target.value)} placeholder="Personas participantes" value={interlocutors}/></Field><Field className="sm:col-span-2" density="compact" label="Objetivo"><Textarea className="min-h-16" onChange={(event) => setPurpose(event.target.value)} placeholder="Qué se necesita tratar o resolver" value={purpose}/></Field></div><ActionButton className="mt-3 w-full" disabled={!meetingTitle.trim() || !areaName.trim()} icon={CalendarDays} iconOnly={false} onClick={() => void handleCreate()} size="sm" variant="primary">Crear reunión</ActionButton></div>}
+      <div className="ui-section p-3"><h3 className="mb-3 font-bold text-metro-text">{area === 'direccion' ? 'Reuniones de Dirección' : 'Reuniones con otras áreas'}</h3><div className="space-y-2">{visibleMeetings.map((meeting) => <button className="ui-list-row" key={meeting.id} onClick={() => setSelectedId(meeting.id)} type="button"><span className="min-w-0"><strong className="block truncate text-sm text-metro-text">{coordinationMeetingDisplayTitle(meeting)}</strong><span className="block truncate text-xs text-metro-muted">{area === 'direccion' ? `${formatCoordinationDate(meeting.date)} · ${meeting.points.length} puntos` : `${meeting.areaName || 'Área sin indicar'} · ${formatCoordinationDate(meeting.date)} · ${meeting.points.length ? `${meeting.points.length} asunto${meeting.points.length === 1 ? '' : 's'}` : 'Sin asuntos todavía'}`}</span></span><StatusBadge tone={meeting.status === 'closed' ? 'success' : 'warning'} size="xs">{meeting.status === 'closed' ? 'Cerrada' : 'Abierta'}</StatusBadge></button>)}{visibleMeetings.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">Todavía no hay reuniones registradas.</p>}</div></div>
     </div>}
     </>}
     {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}{dialogNode}
