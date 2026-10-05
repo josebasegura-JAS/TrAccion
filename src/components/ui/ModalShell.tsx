@@ -15,7 +15,7 @@ const MODAL_SIZE_CLASS: Record<ModalSize, string> = {
   xl: 'max-w-6xl',
 };
 
-const LEGACY_DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]:not([data-modal-shell="true"])';
+const LEGACY_DIALOG_SELECTOR = '[data-legacy-modal="true"][role="dialog"][aria-modal="true"]';
 const LEGACY_FOCUSABLE_SELECTOR = [
   'a[href]',
   'area[href]',
@@ -196,12 +196,10 @@ function startLegacyDialogAccessibilityBridge() {
 }
 
 /**
- * Compatibilidad temporal para diálogos antiguos que todavía no han migrado
- * su JSX a ModalShell. Solo añade comportamiento accesible: no altera su
- * contenido, estilos ni lógica de negocio.
- *
- * Ticket Restaurante carga ModalShell desde sus modales de configuración, por
- * lo que el detalle anual legacy queda cubierto mientras completa su migración.
+ * Compatibilidad temporal y explícita para diálogos antiguos que todavía no
+ * han migrado su JSX a ModalShell. Solo actúa sobre overlays marcados con
+ * `data-legacy-modal="true"`, evitando capturar AppDialog u otros diálogos que
+ * ya gestionan foco y Escape mediante su propio hook.
  */
 startLegacyDialogAccessibilityBridge();
 

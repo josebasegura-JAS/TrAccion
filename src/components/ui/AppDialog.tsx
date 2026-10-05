@@ -86,6 +86,7 @@ export function AppDialog({
         aria-labelledby={titleId}
         aria-modal="true"
         className={`flex max-h-[calc(100vh-2rem)] w-full max-w-md scale-100 flex-col overflow-hidden rounded-2xl border p-5 font-sans text-metro-text opacity-100 shadow-2xl transition duration-150 ${panelClassName}`}
+        data-managed-modal="true"
         role="dialog"
         tabIndex={-1}
       >

@@ -33,7 +33,12 @@ function LegacyModalHarness() {
     <>
       <button onClick={() => setOpen(true)} type="button">Abrir legacy</button>
       {open ? (
-        <div aria-label="Detalle anual de prueba" aria-modal="true" role="dialog">
+        <div
+          aria-label="Detalle anual de prueba"
+          aria-modal="true"
+          data-legacy-modal="true"
+          role="dialog"
+        >
           <button aria-label="Cerrar detalle" onClick={() => setOpen(false)} type="button">
             Cerrar
           </button>
@@ -81,6 +86,7 @@ describe('ModalShell', () => {
     fireEvent.click(opener);
 
     const dialog = await screen.findByRole('dialog', { name: 'Detalle anual de prueba' });
+    expect(dialog).toHaveAttribute('data-legacy-modal', 'true');
     expect(dialog).not.toHaveAttribute('data-modal-shell');
 
     const close = screen.getByRole('button', { name: 'Cerrar detalle' });

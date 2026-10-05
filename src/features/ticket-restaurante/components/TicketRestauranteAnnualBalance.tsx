@@ -7,13 +7,14 @@ import {
   LockOpen,
   Search,
   Ticket,
-  X,
   Users,
   type LucideIcon,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { SortDirection } from '../../../shared/sort/sortDirection';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
+import { ModalBody, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { openWorkbookInExcel } from '../../../shared/export/tableExport';
 import type { Employee } from '../../plantilla/domain/employee';
@@ -868,22 +869,29 @@ export function TicketRestauranteAnnualBalance({
         </div>
       </div>
       {selectedPerson ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/65 p-4" role="dialog" aria-modal="true" aria-label={`Desglose anual de ${selectedPerson.nombreApellidos}`}>
-          <section className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel shadow-2xl">
-            <header className="flex items-start justify-between gap-3 border-b border-metro-border px-5 py-4">
-              <div><p className="text-[11px] font-bold uppercase tracking-wide text-blue-500">Detalle anual · {year}</p><h3 className="mt-1 text-lg font-black text-metro-text">{selectedPerson.nombreApellidos}</h3><p className="text-xs text-metro-muted">Nº {selectedPerson.empleado} · {selectedPerson.area}</p></div>
-              <button className="grid h-9 w-9 place-items-center rounded-xl border border-metro-border bg-metro-surface text-metro-muted hover:text-metro-text" onClick={() => setSelectedEmployee(null)} type="button" aria-label="Cerrar detalle"><X className="h-4 w-4" /></button>
-            </header>
-            <div className="overflow-auto p-4">
+        <ModalShell
+          labelledBy="ticket-annual-detail-title"
+          onClose={() => setSelectedEmployee(null)}
+          size="xl"
+          stacked
+        >
+          <ModalHeader>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-blue-500">Detalle anual · {year}</p>
+              <ModalTitle id="ticket-annual-detail-title">{selectedPerson.nombreApellidos}</ModalTitle>
+              <p className="text-xs text-metro-muted">Nº {selectedPerson.empleado} · {selectedPerson.area}</p>
+            </div>
+            <ModalCloseButton onClick={() => setSelectedEmployee(null)} />
+          </ModalHeader>
+          <ModalBody className="p-4">
               <div className="mb-3 flex flex-wrap gap-3 text-[11px] font-semibold text-metro-muted"><span><strong className="text-metro-text">Real/en curso:</strong> {selectedPerson.actualTickets} tickets · {formatCurrency(selectedPerson.actualAmount)}</span><span><strong className="text-metro-text">Previsión:</strong> {selectedPerson.forecastTickets} tickets · {formatCurrency(selectedPerson.forecastAmount)}</span><span><strong className="text-metro-text">Estimación anual:</strong> {selectedPerson.totalTickets} tickets · {formatCurrency(selectedPerson.totalAmount)}</span></div>
               <table className="w-full min-w-[980px] border-collapse text-xs">
                 <thead className="bg-metro-surface/80 text-metro-muted"><tr><th className="px-2 py-2 text-left">Mes</th><th className="px-2 py-2 text-left">Estado</th><th className="px-2 py-2 text-left">Calendario</th><th className="px-2 py-2 text-right">Días calendario</th><th className="px-2 py-2 text-right">Ausencias</th><th className="px-2 py-2 text-right">Notas gasto</th><th className="px-2 py-2 text-right">Deuda arrastrada</th><th className="px-2 py-2 text-right">Descuentos aplicados</th><th className="px-2 py-2 text-right">Deuda pendiente</th><th className="px-2 py-2 text-right">Tickets</th><th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-left">Comprobación</th></tr></thead>
                 <tbody>{MONTHS.map((monthLabel, index) => { const detail = selectedPerson.monthlyDetails[index]; const kind = selectedPerson.monthlyKinds[index]; return (<tr className={`border-t border-metro-border/70 ${kind === 'inactive' ? 'bg-slate-400/[0.03]' : kind === 'forecast' ? 'bg-amber-400/[0.06]' : 'bg-emerald-500/[0.05]'}`} key={monthLabel}><td className="px-2 py-2 font-bold text-metro-text">{monthLabel}</td><td className={`px-2 py-2 font-semibold ${kind === 'forecast' ? 'text-amber-500' : kind === 'inactive' ? 'text-slate-500' : 'text-emerald-500'}`}>{kind === 'inactive' ? 'Fuera histórico / sin vigencia' : kind === 'forecast' ? 'Previsión' : kind === 'current' ? 'En curso' : 'Real'}</td><td className="px-2 py-2 text-metro-muted">{detail?.calendario || '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.diasTeoricos ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.ausenciasMes ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.hojasGastoMes ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.deudaEntrante ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.ausenciasAplicadas ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.deudaPendiente ?? '—'}</td><td className="px-2 py-2 text-right font-black tabular-nums text-metro-text">{kind === 'inactive' ? '—' : selectedPerson.monthlyTickets[index]}</td><td className="px-2 py-2 text-right font-bold tabular-nums text-metro-text">{kind === 'inactive' ? '—' : formatCurrency(selectedPerson.monthlyAmounts[index])}</td><td className="max-w-[280px] px-2 py-2 text-left text-metro-muted">{explainMonthResult(detail, kind, selectedPerson.monthlyTickets[index], selectedPerson.manual)}</td></tr>); })}</tbody>
               </table>
               <p className="mt-3 text-[11px] text-metro-muted">En los meses futuros no se anticipan ausencias, notas de gasto ni regularizaciones: la previsión se basa únicamente en el calendario y la vigencia conocida.</p>
-            </div>
-          </section>
-        </div>
+          </ModalBody>
+        </ModalShell>
       ) : null}
       {dialogNode}
     </div>
