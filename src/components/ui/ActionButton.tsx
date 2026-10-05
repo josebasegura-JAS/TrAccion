@@ -119,22 +119,25 @@ const labelByVariant: Record<ActionButtonVariant, string> = {
   word: 'Word',
 };
 
+const secondaryActionClass =
+  'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised';
+
 const colorClassByVariant: Record<ActionButtonVariant, string> = {
   primary: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
   add: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
   approve: 'bg-emerald-700 text-white hover:bg-emerald-800 border-transparent shadow-sm shadow-emerald-950/25',
   delete: 'border-red-500/45 bg-red-950/20 text-red-200 hover:bg-red-950/35',
-  duplicate: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
-  edit: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
-  excel: 'bg-[#1a5c38] text-white hover:bg-[#217346] border-transparent',
-  history: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
-  import: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
-  outlook: 'bg-[#0078d4] text-white hover:bg-[#106ebe] border-transparent',
-  print: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
-  reject: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
+  duplicate: secondaryActionClass,
+  edit: secondaryActionClass,
+  excel: secondaryActionClass,
+  history: secondaryActionClass,
+  import: secondaryActionClass,
+  outlook: secondaryActionClass,
+  print: secondaryActionClass,
+  reject: secondaryActionClass,
   save: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
-  secondary: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
-  word: 'bg-[#1e3f6f] text-white hover:bg-[#2b579a] border-transparent',
+  secondary: secondaryActionClass,
+  word: secondaryActionClass,
 };
 
 const sizeClassBySize: Record<ActionButtonSize, string> = {

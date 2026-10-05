@@ -13,7 +13,7 @@ interface StatusBadgeProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'title'
 }
 
 const toneClassName: Record<StatusBadgeTone, string> = {
-  accent: 'border-violet-400/30 bg-violet-500/10 text-violet-200',
+  accent: 'border-metro-red/30 bg-metro-red/10 text-red-100',
   error: 'border-red-500/30 bg-red-500/10 text-red-200',
   info: 'border-blue-400/30 bg-blue-500/10 text-blue-100',
   muted: 'border-metro-border bg-slate-950/20 text-metro-muted',
@@ -42,7 +42,7 @@ export function StatusBadge({
   return (
     <span
       className={cx(
-        'inline-flex max-w-full shrink-0 items-center truncate rounded-full border font-extrabold shadow-sm shadow-slate-950/10',
+        'inline-flex max-w-full shrink-0 items-center truncate rounded-full border font-semibold',
         sizeClassName[size],
         toneClassName[tone],
         className,
