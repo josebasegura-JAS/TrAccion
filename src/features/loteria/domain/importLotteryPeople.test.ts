@@ -97,7 +97,7 @@ describe('Lotería - importación de participantes', () => {
     mocks.parseXlsxRows.mockResolvedValue([
       ['Cabecera'],
       ['Correo', 'Teléfono'],
-      ['persona@empresa.test', '600000000'],
+      ['usuario@empresa.test', '600000000'],
     ]);
 
     await expect(importLotteryPeopleFromXlsx(fakeFile())).rejects.toThrow(
