@@ -39,10 +39,7 @@ import {
   writeDatabasePreferences,
 } from './persistence/databasePreferences.js';
 import { createEmployeeRepository } from './persistence/employeeRepository.js';
-import {
-  createSorteosRepository,
-  getSorteosCollectionUpdatedAt,
-} from './persistence/sorteosRepository.js';
+import { createSorteosRepository } from './persistence/sorteosRepository.js';
 import { createTaskRepository } from './persistence/taskRepository.js';
 import { createSesionesRepository } from './persistence/sesionesRepository.js';
 import { createTeletrabajoRepository } from './persistence/teletrabajoRepository.js';
@@ -87,23 +84,26 @@ import {
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { activateSqliteDatabase } from './persistence/databaseActivation.js';
 import {
+  createPersistedRecordsRepository,
+  type ConditionalPersistedRecordSaveResult,
+  type ConditionalPersistedStorageRecord,
+  type LocalStorageBackupPayload,
+  type PersistedRecordSnapshot,
+  type PersistedRecordsSnapshot,
+  type PersistedRecordsTokenSnapshot,
+  type PersistedStorageRecord,
+  type PersistedStorageRecordSnapshot,
+} from './persistence/persistedRecordsRepository.js';
+import {
   SQLITE_BUSY_RETRY_DELAYS_MS,
   isSqliteBusyOrLockedError,
   isSqliteCorruptionError,
   isSqliteLockContentionError,
 } from './persistence/sqliteOperationGuard.js';
 import {
-  getDirectStoreUpdatedAtSnapshot,
-} from './persistence/directStoreUpdatedAt.js';
-import {
   isCountRow,
   isJsonObjectWithStringId,
-  isMetadataRow,
   isUpdatedAtRow,
-  largestPersistedRecordSizes,
-  logSqliteMetric,
-  readAllPersistedRecords,
-  readPersistedRecordByKey,
 } from './persistence/sqlitePersistenceHelpers.js';
 
 export {
@@ -123,14 +123,16 @@ export type { DailyLocalBackupSettings } from './persistence/runtimePreferences.
 
 const SQLITE_BUSY_TIMEOUT_MS = 15_000;
 
-export interface PersistedStorageRecord {
-  key: string;
-  value: string;
-}
-
-export interface ConditionalPersistedStorageRecord extends PersistedStorageRecord {
-  expectedUpdatedAt: string | null;
-}
+export type {
+  ConditionalPersistedRecordSaveResult,
+  ConditionalPersistedStorageRecord,
+  LocalStorageBackupPayload,
+  PersistedRecordSnapshot,
+  PersistedRecordsSnapshot,
+  PersistedRecordsTokenSnapshot,
+  PersistedStorageRecord,
+  PersistedStorageRecordSnapshot,
+};
 
 export type {
   SqliteTaskRecord,
@@ -205,33 +207,6 @@ export type {
   ConditionalSqliteSorteosSnapshot,
   ConditionalSqliteSorteosSaveResult,
 } from './persistence/sorteosRepository.js';
-
-export interface PersistedStorageRecordSnapshot extends PersistedStorageRecord {
-  updatedAt: string;
-}
-
-export interface PersistedRecordsTokenSnapshot {
-  status: DatabaseStatus;
-  refreshToken: string | null;
-  latestUpdatedAt: string | null;
-  taskRecordsUpdatedAt: string | null;
-  sorteosDrawsUpdatedAt: string | null;
-  sorteosExclusionsUpdatedAt: string | null;
-  directStoreUpdatedAt: Record<string, string | null>;
-}
-
-export interface PersistedRecordsSnapshot extends PersistedRecordsTokenSnapshot {
-  records: PersistedStorageRecordSnapshot[];
-}
-
-export interface PersistedRecordSnapshot {
-  status: DatabaseStatus;
-  record: PersistedStorageRecordSnapshot | null;
-}
-
-export interface LocalStorageBackupPayload {
-  records: PersistedStorageRecord[];
-}
 
 export interface LocalBackupEntry {
   id: string;
@@ -347,7 +322,6 @@ function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies 
     getLockPath,
     startDatabaseLockHeartbeat,
     isLockContentionError: isSqliteLockContentionError,
-    readAllPersistedRecords,
     migrateLocalStorageSnapshot,
     withDatabaseOperationLock,
     backupExistingDatabase,
@@ -768,236 +742,43 @@ export async function createManualLocalBackup(): Promise<void> {
   await getLocalBackupService().createManualLocalBackup();
 }
 
-function updateRefreshMetadata(db: Database, updatedAt: string): void {
-  const token = `${updatedAt}:${ownerId}`;
-  db.prepare(
-    `INSERT INTO app_metadata (key, value, updated_at)
-     VALUES ('persisted_records_refresh_token', ?, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value = excluded.value,
-       updated_at = excluded.updated_at`,
-  ).run(token, updatedAt);
-}
-
-function readRefreshToken(db: Database): string | null {
-  const row = db
-    .prepare("SELECT value FROM app_metadata WHERE key = 'persisted_records_refresh_token'")
-    .get();
-  return isMetadataRow(row) ? row.value : null;
-}
-
-export async function savePersistedRecord(record: PersistedStorageRecord): Promise<DatabaseStatus> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (
-        !currentStatus.ready ||
-        currentStatus.phase === 'locked' ||
-        isDatabaseWriteBlockedByHeartbeat()
-      ) {
-        return currentStatus;
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const now = new Date().toISOString();
-      const db = requireDatabase();
-      db.transaction(() => {
-        db.prepare(
-          `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
-             VALUES (?, ?, 'sqlite-primary', ?, ?)
-             ON CONFLICT(key) DO UPDATE SET
-               value_json = excluded.value_json,
-               source = excluded.source,
-               updated_at = excluded.updated_at`,
-        ).run(record.key, record.value, now, now);
-        updateRefreshMetadata(db, now);
-      })();
-      enqueueLocalBackup(`save:${record.key}`);
-
-      return currentStatus;
-    },
-    (nextStatus) => nextStatus,
-  );
-}
-
-export interface ConditionalPersistedRecordSaveResult {
-  ok: boolean;
-  status: DatabaseStatus;
-  currentUpdatedAt: string | null;
-  message: string;
-}
-
-export async function savePersistedRecordIfUnchanged(
-  record: ConditionalPersistedStorageRecord,
-): Promise<ConditionalPersistedRecordSaveResult> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (
-        !currentStatus.ready ||
-        currentStatus.phase !== 'active' ||
-        isDatabaseWriteBlockedByHeartbeat()
-      ) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message:
-            currentStatus.message ??
-            'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const db = requireDatabase();
-      const result = db.transaction((): ConditionalPersistedRecordSaveResult => {
-        const row = db
-          .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-          .get(record.key);
-        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-
-        if (currentUpdatedAt !== record.expectedUpdatedAt) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt,
-            message:
-              'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
-          };
-        }
-
-        const now = new Date().toISOString();
-
-        if (currentUpdatedAt === null) {
-          const insertResult = db
-            .prepare(
-              `INSERT OR IGNORE INTO persisted_records (key, value_json, source, created_at, updated_at)
-               VALUES (?, ?, 'sqlite-primary', ?, ?)`,
-            )
-            .run(record.key, record.value, now, now);
-
-          if (insertResult.changes !== 1) {
-            const latest = db
-              .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-              .get(record.key);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message:
-                'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
-            };
-          }
-        } else {
-          const updateResult = db
-            .prepare(
-              `UPDATE persisted_records
-               SET value_json = ?, source = 'sqlite-primary', updated_at = ?
-               WHERE key = ? AND updated_at = ?`,
-            )
-            .run(record.value, now, record.key, currentUpdatedAt);
-
-          if (updateResult.changes !== 1) {
-            const latest = db
-              .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-              .get(record.key);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message:
-                'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
-            };
-          }
-        }
-
-        updateRefreshMetadata(db, now);
-
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: now,
-          message: 'Guardado confirmado en SQLite compartido.',
-        };
-      })();
-
-      if (result.ok) {
-        enqueueLocalBackup(`save:${record.key}`);
-      }
-
-      return result;
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
-      message,
-    }),
-  );
-}
-
 function getTaskRecordsUpdatedAt(db: Database): string | null {
   const row = db.prepare('SELECT MAX(updated_at) AS updated_at FROM task_records').get();
   return isUpdatedAtRow(row) ? row.updated_at : null;
 }
 
-export async function migrateLocalStorageSnapshot(
-  payload: LocalStorageBackupPayload,
-): Promise<DatabaseStatus> {
-  const currentStatus = getSqliteStatus();
-  if (
-    !currentStatus.ready ||
-    currentStatus.phase === 'locked' ||
-    isDatabaseWriteBlockedByHeartbeat()
-  ) {
-    return currentStatus;
-  }
+const persistedRecordsModule = createPersistedRecordsRepository({
+  ownerId: () => ownerId,
+  getSqliteStatus,
+  requireDatabase,
+  safeDatabaseOperation,
+  isDatabaseWriteBlockedByHeartbeat,
+  assertDatabaseWritesAllowed,
+  withDatabaseOperationLock,
+  enqueueLocalBackup,
+  getTaskRecordsUpdatedAt,
+});
 
-  assertDatabaseWritesAllowed();
-  return withDatabaseOperationLock(currentStatus.path, async () => {
-    const db = requireDatabase();
-    const now = new Date().toISOString();
-    const records = payload.records.filter(
-      (record): record is PersistedStorageRecord =>
-        typeof record.key === 'string' && typeof record.value === 'string',
-    );
+const {
+  updateRefreshMetadata,
+  savePersistedRecord,
+  savePersistedRecordIfUnchanged,
+  migrateLocalStorageSnapshot,
+  getPersistedRecordSnapshot,
+  loadPersistedRecordsHydrationSnapshot,
+  loadPersistedRecordsSnapshot,
+  getPersistedRecordsTokenSnapshot,
+} = persistedRecordsModule;
 
-    const migrateSnapshotTransaction = db.transaction(() => {
-      db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)').run(
-        now,
-        JSON.stringify({ records }),
-      );
-      pruneLocalStorageBackups(db);
-
-      const upsert = db.prepare(
-        `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
-         VALUES (?, ?, 'sqlite-primary', ?, ?)
-         ON CONFLICT(key) DO UPDATE SET
-           value_json = excluded.value_json,
-           source = excluded.source,
-           updated_at = excluded.updated_at`,
-      );
-
-      for (const record of records) {
-        upsert.run(record.key, record.value, now, now);
-      }
-
-      if (records.length > 0) {
-        updateRefreshMetadata(db, now);
-      }
-    });
-
-    migrateSnapshotTransaction();
-
-    if (records.length > 0) {
-      enqueueLocalBackup('migrate-local-storage-snapshot');
-    }
-
-    return currentStatus;
-  });
-}
+export {
+  savePersistedRecord,
+  savePersistedRecordIfUnchanged,
+  migrateLocalStorageSnapshot,
+  getPersistedRecordSnapshot,
+  loadPersistedRecordsHydrationSnapshot,
+  loadPersistedRecordsSnapshot,
+  getPersistedRecordsTokenSnapshot,
+};
 
 export async function createLocalStorageBackup(
   payload: LocalStorageBackupPayload,
@@ -1036,188 +817,6 @@ export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
 
 export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
   return getLocalBackupService().restoreLocalBackup(fileName);
-}
-
-export async function getPersistedRecordSnapshot(key: string): Promise<PersistedRecordSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase === 'locked') {
-        return { status: currentStatus, record: null };
-      }
-
-      const db = requireDatabase();
-      return { status: currentStatus, record: readPersistedRecordByKey(db, key) };
-    },
-    (nextStatus) => ({ status: nextStatus, record: null }),
-  );
-}
-
-export async function loadPersistedRecordsHydrationSnapshot(): Promise<PersistedRecordsSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase === 'locked') {
-        return {
-          status: currentStatus,
-          records: [],
-          refreshToken: null,
-          latestUpdatedAt: null,
-          taskRecordsUpdatedAt: null,
-          sorteosDrawsUpdatedAt: null,
-          sorteosExclusionsUpdatedAt: null,
-          directStoreUpdatedAt: {},
-        };
-      }
-
-      // El arranque solo necesita los registros genéricos y el token global.
-      // Los MAX(updated_at) de las tablas nativas se usan para el polling
-      // multiusuario, pero no para aplicar la hidratación inicial. Evitarlos
-      // aquí ahorra múltiples consultas sobre la SQLite compartida sin
-      // reducir los datos de negocio que recibe el renderer.
-      const db = requireDatabase();
-      const startedAt = Date.now();
-      const records = readAllPersistedRecords(db);
-      const latestUpdatedAt = records.reduce<string | null>((latest, record) => {
-        if (!latest) return record.updatedAt;
-        return Date.parse(record.updatedAt) > Date.parse(latest) ? record.updatedAt : latest;
-      }, null);
-
-      logSqliteMetric('loadPersistedRecordsHydrationSnapshot', {
-        records: records.length,
-        elapsedMs: Date.now() - startedAt,
-        largestKeys: largestPersistedRecordSizes(records),
-      });
-
-      return {
-        status: currentStatus,
-        records,
-        refreshToken: readRefreshToken(db),
-        latestUpdatedAt,
-        taskRecordsUpdatedAt: null,
-        sorteosDrawsUpdatedAt: null,
-        sorteosExclusionsUpdatedAt: null,
-        directStoreUpdatedAt: {},
-      };
-    },
-    (nextStatus) => ({
-      status: nextStatus,
-      records: [],
-      refreshToken: null,
-      latestUpdatedAt: null,
-      taskRecordsUpdatedAt: null,
-      sorteosDrawsUpdatedAt: null,
-      sorteosExclusionsUpdatedAt: null,
-      directStoreUpdatedAt: {},
-    }),
-  );
-}
-
-export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase === 'locked') {
-        return {
-          status: currentStatus,
-          records: [],
-          refreshToken: null,
-          latestUpdatedAt: null,
-          taskRecordsUpdatedAt: null,
-          sorteosDrawsUpdatedAt: null,
-          sorteosExclusionsUpdatedAt: null,
-          directStoreUpdatedAt: {},
-        };
-      }
-
-      const db = requireDatabase();
-      const startedAt = Date.now();
-      const records = readAllPersistedRecords(db);
-      const latestUpdatedAt = records.reduce<string | null>((latest, record) => {
-        if (!latest) {
-          return record.updatedAt;
-        }
-
-        return Date.parse(record.updatedAt) > Date.parse(latest) ? record.updatedAt : latest;
-      }, null);
-
-      logSqliteMetric('loadPersistedRecordsSnapshot', {
-        records: records.length,
-        elapsedMs: Date.now() - startedAt,
-        largestKeys: largestPersistedRecordSizes(records),
-      });
-
-      return {
-        status: currentStatus,
-        records,
-        refreshToken: readRefreshToken(db),
-        latestUpdatedAt,
-        taskRecordsUpdatedAt: getTaskRecordsUpdatedAt(db),
-        sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
-        sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
-        directStoreUpdatedAt: getDirectStoreUpdatedAtSnapshot(db),
-      };
-    },
-    (nextStatus) => ({
-      status: nextStatus,
-      records: [],
-      refreshToken: null,
-      latestUpdatedAt: null,
-      taskRecordsUpdatedAt: null,
-      sorteosDrawsUpdatedAt: null,
-      sorteosExclusionsUpdatedAt: null,
-      directStoreUpdatedAt: {},
-    }),
-  );
-}
-
-export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecordsTokenSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase === 'locked') {
-        return {
-          status: currentStatus,
-          refreshToken: null,
-          latestUpdatedAt: null,
-          taskRecordsUpdatedAt: null,
-          sorteosDrawsUpdatedAt: null,
-          sorteosExclusionsUpdatedAt: null,
-          directStoreUpdatedAt: {},
-        };
-      }
-
-      const db = requireDatabase();
-      const latestRow = db
-        .prepare('SELECT updated_at FROM persisted_records ORDER BY updated_at DESC LIMIT 1')
-        .get();
-      const latestUpdatedAt =
-        latestRow &&
-        typeof latestRow === 'object' &&
-        typeof (latestRow as { updated_at?: unknown }).updated_at === 'string'
-          ? (latestRow as { updated_at: string }).updated_at
-          : null;
-
-      return {
-        status: currentStatus,
-        refreshToken: readRefreshToken(db),
-        latestUpdatedAt,
-        taskRecordsUpdatedAt: getTaskRecordsUpdatedAt(db),
-        sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
-        sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
-        directStoreUpdatedAt: getDirectStoreUpdatedAtSnapshot(db),
-      };
-    },
-    (nextStatus) => ({
-      status: nextStatus,
-      refreshToken: null,
-      latestUpdatedAt: null,
-      taskRecordsUpdatedAt: null,
-      sorteosDrawsUpdatedAt: null,
-      sorteosExclusionsUpdatedAt: null,
-      directStoreUpdatedAt: {},
-    }),
-  );
 }
 
 type JsonRecordSaveResult = SimpleJsonSaveResult;
@@ -1470,7 +1069,6 @@ const taskModule = createTaskRepository({
   safeDatabaseOperation,
   getSqliteStatus,
   requireDatabase,
-  readPersistedRecordByKey,
   isJsonObjectWithStringId,
   isCountRow,
   isUpdatedAtRow,
@@ -1486,7 +1084,6 @@ const employeeModule = createEmployeeRepository({
   safeDatabaseOperation,
   getSqliteStatus,
   requireDatabase,
-  readPersistedRecordByKey,
   isCountRow,
   updateRefreshMetadata,
   enqueueLocalBackup,
@@ -1508,7 +1105,6 @@ const sorteosModule = createSorteosRepository({
   safeDatabaseOperation,
   getSqliteStatus,
   requireDatabase,
-  readPersistedRecordByKey,
   isJsonObjectWithStringId,
   isCountRow,
   updateRefreshMetadata,
