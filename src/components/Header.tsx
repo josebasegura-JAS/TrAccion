@@ -316,15 +316,15 @@ export function Header({
 
   return (
     <header className="relative z-40 px-1 pt-1 sm:px-1.5 sm:pt-1.5">
-      <div className="relative grid min-w-0 gap-2.5 overflow-visible rounded-[16px] border border-white/10 bg-gradient-to-r from-[#071322] via-metro-topbar to-[#091424] px-3 py-2 shadow-[0_16px_32px_rgba(2,6,23,0.24)] lg:min-h-[58px] lg:grid-cols-[minmax(0,1fr)_minmax(270px,360px)_auto] lg:items-center lg:gap-3.5 lg:px-3.5">
+      <div className="relative grid min-w-0 gap-2 overflow-visible rounded-[15px] border border-white/10 bg-gradient-to-r from-[#071322] via-metro-topbar to-[#091424] px-2.5 py-1.5 shadow-[0_14px_28px_rgba(2,6,23,0.22)] lg:min-h-[50px] lg:grid-cols-[minmax(0,1fr)_minmax(270px,360px)_auto] lg:items-center lg:gap-3 lg:px-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-metro-red/35 bg-metro-red/10 text-metro-red shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-            <ModuleIcon aria-hidden="true" size={18} strokeWidth={2.1} />
+            <ModuleIcon aria-hidden="true" size={17} strokeWidth={2.1} />
           </span>
 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
-              <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.14em] text-sky-100/80">
+              <p className="truncate text-[9px] font-extrabold uppercase tracking-[0.145em] text-sky-100/80">
                 {breadcrumb}
               </p>
               {moduleHelp ? (
@@ -335,14 +335,9 @@ export function Header({
                 />
               ) : null}
             </div>
-            <div className="mt-0.5 min-w-0 overflow-hidden">
-              <h1 className="truncate text-[1.28rem] font-black leading-none tracking-tight text-metro-text">
-                {headerCopy.title}
-              </h1>
-              <p className="mt-0.5 hidden truncate text-[11px] text-metro-muted xl:block">
-                {headerCopy.subtitle}
-              </p>
-            </div>
+            <h1 className="mt-0.5 truncate text-[1.12rem] font-black leading-none tracking-tight text-metro-text">
+              {headerCopy.title}
+            </h1>
           </div>
         </div>
 
@@ -359,7 +354,7 @@ export function Header({
               aria-label={unseenAssignments.length > 0
                 ? `${unseenAssignments.length} tarea${unseenAssignments.length === 1 ? '' : 's'} nueva${unseenAssignments.length === 1 ? '' : 's'} asignada${unseenAssignments.length === 1 ? '' : 's'}`
                 : 'No hay nuevas tareas asignadas'}
-              className={`relative inline-flex h-9 w-9 items-center justify-center rounded-lg border text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${
+              className={`relative inline-flex h-8 w-8 items-center justify-center rounded-lg border text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${
                 unseenAssignments.length > 0
                   ? 'border-amber-400/35 bg-amber-400/10 text-amber-200 hover:border-amber-300/70 hover:bg-amber-400/18'
                   : 'border-white/10 bg-white/[0.045] text-metro-muted hover:border-white/20 hover:text-metro-text'
@@ -368,7 +363,7 @@ export function Header({
               title={unseenAssignments.length > 0 ? 'Consultar nuevas tareas asignadas' : 'Sin nuevas tareas asignadas'}
               type="button"
             >
-              <Bell size={16} aria-hidden="true" />
+              <Bell size={15} aria-hidden="true" />
               {unseenAssignments.length > 0 ? (
                 <span className="absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-extrabold leading-none text-slate-950 ring-2 ring-[#08111F]">
                   {unseenAssignments.length > 9 ? '9+' : unseenAssignments.length}
@@ -408,15 +403,15 @@ export function Header({
             ) : null}
           </div>
 
-          <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.045] px-2.5 py-1.5 shadow-sm shadow-slate-950/15 lg:min-w-[188px]">
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1E3650] text-[13px] font-black tracking-[0.02em] text-sky-100 ring-1 ring-white/8">
+          <div className="flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.045] px-2 py-1 shadow-sm shadow-slate-950/15 lg:min-w-[180px]">
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#1E3650] text-[12px] font-black tracking-[0.02em] text-sky-100 ring-1 ring-white/8">
               {userInitials}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-bold leading-tight text-metro-text" title={windowsUserName}>
+              <p className="truncate text-[12px] font-bold leading-tight text-metro-text" title={windowsUserName}>
                 {windowsUserName}
               </p>
-              <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-semibold ${syncVisual.textClass}`} title={connectivity.phase === 'connected' ? syncStatus.message : connectivity.message}>
+              <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-[9px] font-semibold ${syncVisual.textClass}`} title={connectivity.phase === 'connected' ? syncStatus.message : connectivity.message}>
                 {connectivity.phase === 'reconnecting' ? (
                   <WifiOff className="shrink-0 animate-pulse" size={12} aria-hidden="true" />
                 ) : connectivity.phase === 'syncing' ? (
