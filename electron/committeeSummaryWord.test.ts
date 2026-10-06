@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { updateCommitteeSummaryDocumentXml } from './committeeSummaryWord';
+import { updateCommitteeSummaryDocumentXml } from './committeeSummaryWord.js';
 
 const XML = `<?xml version="1.0"?><w:document><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>2026</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>26-PE-AR-0xx</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Orden del día</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Varios.</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>26-PE-AR-046</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>21/07/2026</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Orden del día</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:numPr/></w:pPr><w:r><w:t>Turnos PMC 2º reunión</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t></w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>`;
 
