@@ -1,6 +1,6 @@
 import { isTaskClosed } from '../../tareas/domain/task';
-import { ArrowRight, Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, RotateCcw, Search, Trash2, UsersRound } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, RotateCcw, Search, Trash2, UsersRound } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TaskEditor } from '../../../components/TaskEditor';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Field';
@@ -11,15 +11,19 @@ import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { type Task, type TaskDraft } from '../../tareas/domain/task';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
-import { coordinationMeetingDisplayTitle, formatCoordinationDate, type CoordinationArea, type CoordinationMeeting, type CoordinationPointStatus } from '../domain/coordinacion';
+import { coordinationMeetingDisplayTitle, formatCoordinationDate, type CoordinationArea, type CoordinationMeeting } from '../domain/coordinacion';
 import { matchingMeetingPointTitles, meetingMatchesSearch } from '../domain/coordinationMeetingSearch';
 import { coordinationPointStatusLabel, useCoordinacionStore } from '../store/useCoordinacionStore';
 import { SindicatosCoordinationPanel } from './SindicatosCoordinationPanel';
-import { navigateInApp } from '../../../services/appNavigationBus';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
-
+import {
+  CoordinationPointEditor,
+  pointToDraft,
+  type CoordinationPointDraft,
+} from './CoordinationPointEditor';
+import { meetingContext, syncMeetingTracking } from '../services/coordinationMeetingTracking';
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
   { title: 'Para qué sirve', items: ['Prepara y conserva las reuniones de RRLL con Dirección, otras áreas y sindicatos.', 'Permite convertir tareas abiertas en puntos de reunión, añadir puntos libres y crear tareas nuevas sin perder la relación entre reunión y seguimiento.'] },
@@ -35,137 +39,9 @@ function todayIso(): string {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }
 
-function meetingContext(meeting: CoordinationMeeting): string {
-  if (meeting.area === 'direccion') return 'Dirección';
-  if (meeting.area === 'sindicatos') return meeting.unionName?.trim() || 'sindicato';
-  return meeting.areaName?.trim() || 'otra área';
-}
-
-type TrackingSyncFailure = { pointId: string; message: string };
-
-function coordinationTrackingId(meetingId: string, pointId: string): string {
-  return `coordination:${meetingId}:${pointId}`;
-}
-
-function buildCoordinationTrackingText(meeting: CoordinationMeeting, point: CoordinationMeeting['points'][number], allowStatusOnly: boolean): string {
-  const result = point.result.trim();
-  if (!result && !allowStatusOnly) return '';
-  const header = `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`;
-  const status = coordinationPointStatusLabel(point.status);
-  return result ? `${header}\n${status}\n${result}` : `${header}\n${status}`;
-}
-
-async function syncMeetingTracking(
-  meeting: CoordinationMeeting,
-  pointIds: Iterable<string>,
-  options: { allowStatusOnly: boolean; closeResolvedTasks: boolean },
-): Promise<TrackingSyncFailure[]> {
-  const failures: TrackingSyncFailure[] = [];
-  const pointIdSet = new Set(pointIds);
-  for (const point of meeting.points) {
-    if (!pointIdSet.has(point.id) || !point.taskId) continue;
-    const task = useTaskStore.getState().tasks.find((candidate) => candidate.id === point.taskId);
-    if (!task || task.deletedAt) continue;
-    const result = await useTaskStore.getState().upsertCoordinationTracking({
-      taskId: point.taskId,
-      trackingId: coordinationTrackingId(meeting.id, point.id),
-      text: buildCoordinationTrackingText(meeting, point, options.allowStatusOnly),
-      source: {
-        module: 'coordinacion',
-        recordId: meeting.id,
-        pointId: point.id,
-        label: `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`,
-      },
-      closeTask: options.closeResolvedTasks && point.status === 'tratado',
-    });
-    if (!result.ok) failures.push({ pointId: point.id, message: `${task.titulo}: ${result.message}` });
-  }
-  return failures;
-}
-
 function isActiveTask(task: Task): boolean {
   return !task.deletedAt && !isTaskClosed(task);
 }
-
-
-type CoordinationPointDraft = {
-  result: string;
-  status: CoordinationPointStatus;
-  responsible: string;
-  dueDate: string;
-};
-
-function pointToDraft(point: CoordinationMeeting['points'][number]): CoordinationPointDraft {
-  return {
-    result: point.result,
-    status: point.status,
-    responsible: point.responsible ?? '',
-    dueDate: point.dueDate ?? '',
-  };
-}
-
-function pointDraftIsDirty(point: CoordinationMeeting['points'][number], draft: CoordinationPointDraft): boolean {
-  return draft.result !== point.result
-    || draft.status !== point.status
-    || draft.responsible !== (point.responsible ?? '')
-    || draft.dueDate !== (point.dueDate ?? '');
-}
-
-const CoordinationPointEditor = memo(function CoordinationPointEditor({
-  index,
-  isUnion,
-  meetingOpen,
-  onConvertToTask,
-  onDelete,
-  onDraftChange,
-  point,
-}: {
-  index: number;
-  isUnion: boolean;
-  meetingOpen: boolean;
-  onConvertToTask: (pointId: string) => void;
-  onDelete: (pointId: string, title: string) => void;
-  onDraftChange: (pointId: string, draft: CoordinationPointDraft, dirty: boolean) => void;
-  point: CoordinationMeeting['points'][number];
-}) {
-  const [draft, setDraft] = useState<CoordinationPointDraft>(() => pointToDraft(point));
-
-  const updateDraft = (patch: Partial<CoordinationPointDraft>) => {
-    const next = { ...draft, ...patch };
-    setDraft(next);
-    onDraftChange(point.id, next, pointDraftIsDirty(point, next));
-  };
-
-  return (
-    <article className="ui-subsection p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="rounded-md bg-metro-surface px-2 py-1 text-xs font-bold text-metro-muted">{index + 1}</span>
-            <h4 className="font-bold text-metro-text">{point.title}</h4>
-            {point.origin === 'task' && <StatusBadge tone="info" size="xs">Tarea de referencia</StatusBadge>}
-          </div>
-          {point.detail && <p className="mt-2 text-sm leading-5 text-metro-muted">{point.detail}</p>}
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {point.taskId && <ActionButton variant="secondary" size="sm" icon={ArrowRight} onClick={() => navigateInApp({ view: 'tareas', recordId: point.taskId ?? undefined })} title="Abrir la tarea vinculada">Abrir tarea</ActionButton>}
-          <Select className="w-auto min-w-48 text-xs font-semibold" density="compact" disabled={!meetingOpen} onChange={(event) => updateDraft({ status: event.target.value as CoordinationPointStatus })} value={draft.status}>
-            <option value="pendiente">Pendiente de tratar</option><option value="tratado">Tratado y resuelto</option><option value="seguimiento">Tratado · requiere seguimiento</option><option value="volver">Volver a próxima reunión</option><option value="no-tratado">No tratado</option>{isUnion && <><option value="pendiente-rrll">Pendiente de RRLL</option><option value="pendiente-sindicato">Pendiente del sindicato</option></>}
-          </Select>
-          {point.origin === 'manual' && meetingOpen && <ActionButton variant="secondary" size="sm" icon={Plus} onClick={() => onConvertToTask(point.id)} title="Crear una tarea conservando este punto">Convertir en tarea</ActionButton>}
-          {point.origin === 'manual' && <ActionButton variant="delete" size="sm" iconOnly onClick={() => onDelete(point.id, point.title)} title={`Eliminar punto manual ${point.title}`} />}
-        </div>
-      </div>
-      <Field className="mt-3" density="compact" label="Resultado / acuerdos">
-        <Textarea className="min-h-20" disabled={!meetingOpen} onChange={(event) => updateDraft({ result: event.target.value })} value={draft.result} placeholder="Decisión, actuación acordada y siguiente paso..." />
-      </Field>
-      {isUnion && <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <Field density="compact" label="Responsable del siguiente paso"><Input disabled={!meetingOpen} onChange={(event) => updateDraft({ responsible: event.target.value })} value={draft.responsible}/></Field>
-        <Field density="compact" label="Fecha de compromiso"><Input dateTone="end" disabled={!meetingOpen} onChange={(event) => updateDraft({ dueDate: event.target.value })} value={draft.dueDate} type="date"/></Field>
-      </div>}
-    </article>
-  );
-});
 
 export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: { initialMeetingId?: string | null; navigationNonce?: number }) {
   const tasks = useTaskStore((state) => state.tasks);
