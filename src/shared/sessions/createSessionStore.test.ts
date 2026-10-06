@@ -12,6 +12,7 @@ function draft(overrides: Partial<ManagedSessionDraft> = {}): ManagedSessionDraf
     code: 'CE-2026-06',
     title: 'Comité junio',
     notes: 'Notas',
+    observations: 'Resumen de la sesión',
     ...overrides,
   };
 }

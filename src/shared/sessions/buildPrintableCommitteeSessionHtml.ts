@@ -154,6 +154,13 @@ export function buildPrintableCommitteeSessionHtml({
         ${buildSummaryCards(session, generatedAt)}
       </section>
 
+      ${session.observations ? `
+        <section class="print-session-notes">
+          <span>Observaciones de la sesión</span>
+          <p>${escapeHtml(session.observations)}</p>
+        </section>
+      ` : ''}
+
       ${session.notes ? `
         <section class="print-session-notes">
           <span>Notas de la sesión</span>

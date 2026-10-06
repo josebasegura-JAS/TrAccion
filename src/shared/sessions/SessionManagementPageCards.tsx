@@ -131,7 +131,12 @@ export function SessionCard({
           <p className="mt-1 text-xs text-metro-muted">
             {managedSessionLabel(session)} · {session.items.length} puntos
           </p>
-          {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
+          {session.observations && (
+            <p className="mt-2 rounded-lg border border-metro-border/70 bg-metro-surface/55 px-3 py-2 text-sm text-metro-secondary">
+              <span className="mr-1 font-bold text-metro-text">Observaciones:</span>{session.observations}
+            </p>
+          )}
+          {session.notes && <p className="mt-2 text-xs text-metro-muted">{session.notes}</p>}
         </button>
         <div className="flex shrink-0 flex-wrap gap-2">
           <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} size="sm" />
@@ -323,7 +328,12 @@ export function HistoricSessionCard({
             {managedSessionLabel(session)} · Cerrada:{' '}
             {session.closedAt ? new Date(session.closedAt).toLocaleString('es-ES') : '—'}
           </p>
-          {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
+          {session.observations && (
+            <p className="mt-2 rounded-lg border border-metro-border/70 bg-metro-surface/55 px-3 py-2 text-sm text-metro-secondary">
+              <span className="mr-1 font-bold text-metro-text">Observaciones:</span>{session.observations}
+            </p>
+          )}
+          {session.notes && <p className="mt-2 text-xs text-metro-muted">{session.notes}</p>}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} size="sm" />

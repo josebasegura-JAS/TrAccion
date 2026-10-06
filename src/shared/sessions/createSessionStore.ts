@@ -422,6 +422,7 @@ function buildSessionFromDraft(
     code: draft.code.trim(),
     title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
     notes: draft.notes.trim(),
+    observations: draft.observations.trim(),
     status: 'open',
     items: [],
     treatedTaskIds: [],
@@ -443,6 +444,7 @@ function buildUpdatedSessionFromDraft(
     code: draft.code.trim(),
     title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
     notes: draft.notes.trim(),
+    observations: draft.observations.trim(),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -607,6 +609,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             code: draft.code.trim(),
             title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
             notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
+            observations: draft.observations.trim(),
             status: 'closed',
             items: taskIds,
             treatedTaskIds: taskIds,
@@ -671,6 +674,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
               title:
                 draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
               notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
+              observations: draft.observations.trim(),
               status: 'closed',
               items: taskIds,
               treatedTaskIds: taskIds,
@@ -775,8 +779,8 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         const changes = buildAuditChanges(
           result.previousRecord as unknown as Record<string, unknown>,
           result.updatedRecord as unknown as Record<string, unknown>,
-          { title: 'Título', date: 'Fecha', code: 'Código' },
-          ['title', 'date', 'code'],
+          { title: 'Título', date: 'Fecha', code: 'Código', observations: 'Observaciones' },
+          ['title', 'date', 'code', 'observations'],
         );
         if (changes.length > 0) {
           enqueueAuditEvent({

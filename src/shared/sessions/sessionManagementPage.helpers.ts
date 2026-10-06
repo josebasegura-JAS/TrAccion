@@ -13,6 +13,7 @@ export const sessionExportColumns: ExportColumn<ManagedSession>[] = [
   { key: 'code', header: 'Código', value: (session) => session.code },
   { key: 'date', header: 'Fecha', value: (session) => session.date || null },
   { key: 'title', header: 'Título', value: (session) => session.title },
+  { key: 'observations', header: 'Observaciones', value: (session) => session.observations || null },
   { key: 'notes', header: 'Notas', value: (session) => session.notes || null },
   { key: 'items', header: 'Puntos', value: (session) => session.items.length },
   { key: 'closedAt', header: 'Cerrada', value: (session) => session.closedAt || null },
@@ -97,6 +98,7 @@ function getSessionSearchHaystack(
       session.date,
       session.title,
       session.notes,
+      session.observations ?? '',
       session.status,
       session.closedAt ?? '',
       ...session.treatedTaskIds,
@@ -218,6 +220,7 @@ export function buildSessionExportPayload(
     ['Sesión', label],
     ['Título', session.title],
     ['Estado', session.status === 'closed' ? 'Cerrada' : 'Abierta'],
+    ['Observaciones', session.observations ?? ''],
     ['Notas', session.notes],
   ]);
 

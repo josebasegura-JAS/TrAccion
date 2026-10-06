@@ -28,6 +28,7 @@ function session(overrides: Partial<ManagedSession> = {}): ManagedSession {
     code: 'CE-2026-06',
     title: 'Sesión de junio',
     notes: '',
+    observations: '',
     status: 'open',
     items: [],
     treatedTaskIds: [],
@@ -45,6 +46,7 @@ function draft(overrides: Partial<ManagedSessionDraft> = {}): ManagedSessionDraf
     code: 'CE-2026-06',
     title: 'Sesión de junio',
     notes: '',
+    observations: '',
     ...overrides,
   };
 }

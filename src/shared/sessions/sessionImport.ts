@@ -153,6 +153,7 @@ export function parseSessionImportText(text: string, fallbackKind: SessionImport
           code: pendingCode,
           title: buildSessionTitle(kind, pendingCode, parsedDate),
           notes: 'Sesión importada desde resumen histórico Word.',
+          observations: '',
         },
         points: [],
       };

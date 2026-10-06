@@ -32,7 +32,7 @@ export function SessionEditModal({
       <ModalHeader>
         <ModalTitle
           id={titleId}
-          subtitle="Modifica fecha, código, título o notas. El estado de la sesión no cambia."
+          subtitle="Modifica fecha, código, título u observaciones. El estado de la sesión no cambia."
         >
           Editar sesión de {config.shortTitle}
         </ModalTitle>
@@ -56,9 +56,15 @@ export function SessionEditModal({
           />
         </div>
         <Textarea
-          className="min-h-[120px]"
+          className="min-h-[110px]"
+          onChange={(event) => updateEditDraft('observations', event.target.value)}
+          placeholder="Observaciones / pequeño resumen de la sesión"
+          value={editDraft.observations}
+        />
+        <Textarea
+          className="min-h-[72px]"
           onChange={(event) => updateEditDraft('notes', event.target.value)}
-          placeholder="Notas de la sesión, documentación asociada, observaciones, etc."
+          placeholder="Notas internas o documentación asociada (opcional)"
           value={editDraft.notes}
         />
       </ModalBody>

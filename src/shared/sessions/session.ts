@@ -10,6 +10,8 @@ export interface ManagedSession {
   code: string;
   title: string;
   notes: string;
+  /** Resumen o detalle libre de la sesión. Ausente en sesiones antiguas. */
+  observations?: string;
   status: ManagedSessionStatus;
   items: string[];
   treatedTaskIds: string[];
@@ -26,6 +28,7 @@ export interface ManagedSessionDraft {
   code: string;
   title: string;
   notes: string;
+  observations: string;
 }
 
 export const EMPTY_MANAGED_SESSION_DRAFT: ManagedSessionDraft = {
@@ -33,6 +36,7 @@ export const EMPTY_MANAGED_SESSION_DRAFT: ManagedSessionDraft = {
   code: '',
   title: '',
   notes: '',
+  observations: '',
 };
 
 export interface SessionModuleConfig {
@@ -102,6 +106,7 @@ export function normalizeManagedSession(session: ManagedSession, fallbackTitle: 
     code: session.code,
     title: session.title || `${fallbackTitle} ${session.date || ''}`.trim(),
     notes: session.notes ?? EMPTY_MANAGED_SESSION_DRAFT.notes,
+    observations: typeof session.observations === 'string' ? session.observations : '',
     status: session.status === 'closed' || shouldForceHistory ? 'closed' : 'open',
     items,
     treatedTaskIds: shouldForceHistory ? items : treatedTaskIds,

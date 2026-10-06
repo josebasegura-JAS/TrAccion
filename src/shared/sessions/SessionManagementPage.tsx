@@ -177,7 +177,7 @@ export function SessionManagementPage({
   const editingTask = editingTaskId
     ? (tasks.find((task) => task.id === editingTaskId) ?? null)
     : null;
-  const canEditSessions = config.moduleId === 'comite';
+  const canEditSessions = config.moduleId === 'comite' || config.moduleId === 'paritaria';
   const showSearchInHeader = config.moduleId === 'comite' || config.moduleId === 'paritaria';
   const sessionFilterLabel = buildFilterLabel([
     ['Módulo', config.title],
@@ -274,6 +274,7 @@ export function SessionManagementPage({
       code: session.code,
       title: session.title,
       notes: session.notes,
+      observations: session.observations ?? '',
     });
     setEditingSessionId(session.id);
   };
@@ -799,8 +800,14 @@ export function SessionManagementPage({
           </div>
           <textarea
             className="ui-control mt-2 min-h-[72px] w-full resize-y"
+            onChange={(event) => updateDraft('observations', event.target.value)}
+            placeholder="Observaciones / pequeño resumen de la sesión"
+            value={draft.observations}
+          />
+          <textarea
+            className="ui-control mt-2 min-h-[56px] w-full resize-y"
             onChange={(event) => updateDraft('notes', event.target.value)}
-            placeholder="Notas de la sesión, documentación asociada, observaciones, etc."
+            placeholder="Notas internas o documentación asociada (opcional)"
             value={draft.notes}
           />
           <div className="mt-2 flex flex-wrap justify-end gap-2">
