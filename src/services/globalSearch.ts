@@ -27,6 +27,12 @@ type SearchableModule = {
 
 type UnknownRecord = Record<string, unknown>;
 
+export interface GlobalSearchData {
+  tasks?: readonly unknown[];
+  committeeSessions?: readonly unknown[];
+  paritariaSessions?: readonly unknown[];
+}
+
 const UNKNOWN_YEAR = 0;
 export const MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH = 3;
 
@@ -238,6 +244,10 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 const parsedArrayCache = new Map<string, { rawValue: string; records: UnknownRecord[] }>();
 
+function recordsFromOverride(records: readonly unknown[] | undefined): UnknownRecord[] | null {
+  return records ? records.filter(isRecord) : null;
+}
+
 function readArray(storageKey: string): UnknownRecord[] {
   const stored = readStorageItem(storageKey);
   if (!stored) {
@@ -309,16 +319,29 @@ const SESSION_MODULES = [
 let linkedSessionLookupCache: Map<string, LinkedSessionMatch> | null = null;
 let linkedSessionLookupCacheKey = '';
 
-function buildLinkedSessionLookup(): Map<string, LinkedSessionMatch> {
-  const cacheKey = SESSION_MODULES.map((m) => readStorageItem(m.storageKey) ?? '').join('\0');
-  if (linkedSessionLookupCache !== null && linkedSessionLookupCacheKey === cacheKey) {
+function getSessionModuleRecords(
+  sessionModule: (typeof SESSION_MODULES)[number],
+  data?: GlobalSearchData,
+): UnknownRecord[] {
+  const override = sessionModule.moduleView === 'comite'
+    ? recordsFromOverride(data?.committeeSessions)
+    : recordsFromOverride(data?.paritariaSessions);
+  return override ?? readArray(sessionModule.storageKey);
+}
+
+function buildLinkedSessionLookup(data?: GlobalSearchData): Map<string, LinkedSessionMatch> {
+  const hasOverrides = Boolean(data?.committeeSessions || data?.paritariaSessions);
+  const cacheKey = hasOverrides
+    ? ''
+    : SESSION_MODULES.map((m) => readStorageItem(m.storageKey) ?? '').join('\0');
+  if (!hasOverrides && linkedSessionLookupCache !== null && linkedSessionLookupCacheKey === cacheKey) {
     return linkedSessionLookupCache;
   }
 
   const lookup = new Map<string, LinkedSessionMatch>();
 
   for (const sessionModule of SESSION_MODULES) {
-    for (const session of readArray(sessionModule.storageKey)) {
+    for (const session of getSessionModuleRecords(sessionModule, data)) {
       for (const taskId of asStringArray(session.items)) {
         if (!lookup.has(taskId)) {
           lookup.set(taskId, { module: sessionModule.module, moduleView: sessionModule.moduleView, session });
@@ -327,8 +350,10 @@ function buildLinkedSessionLookup(): Map<string, LinkedSessionMatch> {
     }
   }
 
-  linkedSessionLookupCache = lookup;
-  linkedSessionLookupCacheKey = cacheKey;
+  if (!hasOverrides) {
+    linkedSessionLookupCache = lookup;
+    linkedSessionLookupCacheKey = cacheKey;
+  }
   return lookup;
 }
 
@@ -355,7 +380,7 @@ function makeSessionResultFromLinkedTask(
     linkedSession.session,
     taskIndex,
     ['title', 'code'],
-    ['code', 'status', 'notes'],
+    ['code', 'status', 'observations', 'notes'],
     ['date', 'closedAt', 'updatedAt', 'createdAt'],
     linkedSession.moduleView === 'comite' ? 'Sesión de comité' : 'Sesión de paritaria',
   );
@@ -655,7 +680,7 @@ const searchableModules: SearchableModule[] = [
         record,
         index,
         ['title', 'code'],
-        ['code', 'status', 'notes'],
+        ['code', 'status', 'observations', 'notes'],
         ['date', 'closedAt', 'updatedAt', 'createdAt'],
         'Sesión de comité',
       ),
@@ -683,7 +708,7 @@ const searchableModules: SearchableModule[] = [
         record,
         index,
         ['title', 'code'],
-        ['code', 'status', 'notes'],
+        ['code', 'status', 'observations', 'notes'],
         ['date', 'closedAt', 'updatedAt', 'createdAt'],
         'Sesión de paritaria',
       ),
@@ -704,7 +729,22 @@ const searchableModules: SearchableModule[] = [
   },
 ];
 
-export function searchTraccion(query: string): GlobalSearchResult[] {
+function getSearchableModuleRecords(
+  searchableModule: SearchableModule,
+  data?: GlobalSearchData,
+): UnknownRecord[] {
+  const override = searchableModule.moduleView === 'tareas'
+    ? recordsFromOverride(data?.tasks)
+    : searchableModule.moduleView === 'comite'
+      ? recordsFromOverride(data?.committeeSessions)
+      : searchableModule.moduleView === 'paritaria'
+        ? recordsFromOverride(data?.paritariaSessions)
+        : null;
+
+  return override ?? readArray(searchableModule.storageKey);
+}
+
+export function searchTraccion(query: string, data?: GlobalSearchData): GlobalSearchResult[] {
   const parsedQuery = parseSearchQuery(query);
   if (
     parsedQuery.normalizedFreeText.length < MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH &&
@@ -716,10 +756,10 @@ export function searchTraccion(query: string): GlobalSearchResult[] {
   const shouldBuildLinkedSessionLookup =
     !parsedQuery.filters.moduleView || parsedQuery.filters.moduleView === 'tareas';
   const linkedSessionLookup = shouldBuildLinkedSessionLookup
-    ? buildLinkedSessionLookup()
+    ? buildLinkedSessionLookup(data)
     : new Map<string, LinkedSessionMatch>();
   const rawResults = searchableModules.flatMap((searchableModule) =>
-    readArray(searchableModule.storageKey).flatMap((record, index) => {
+    getSearchableModuleRecords(searchableModule, data).flatMap((record, index) => {
       const mapped = searchableModule.mapRecord(record, index);
       if (!mapped) {
         return [];
