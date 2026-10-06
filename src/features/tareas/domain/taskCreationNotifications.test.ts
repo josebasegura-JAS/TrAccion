@@ -4,6 +4,7 @@ import type { Task } from './task';
 import {
   getUnseenTaskCreations,
   initializeTaskCreationNoticeBaseline,
+  markTaskCreationIdsSeen,
   markTaskCreationsSeen,
 } from './taskCreationNotifications';
 
@@ -47,6 +48,13 @@ describe('taskCreationNotifications', () => {
     const created = task('new', '2026-10-06T18:01:00.000Z', 'Nueva negociación');
     expect(getUnseenTaskCreations([created], 'Joseba').map((item) => item.id)).toEqual(['new']);
     markTaskCreationsSeen('Joseba', [created]);
+    expect(getUnseenTaskCreations([created], 'Joseba')).toEqual([]);
+  });
+
+  it('permite marcar como vista una tarea recién creada solo por su ID', () => {
+    initializeTaskCreationNoticeBaseline('Joseba', '2026-10-06T18:00:00.000Z');
+    const created = task('own-task', '2026-10-06T18:01:00.000Z');
+    markTaskCreationIdsSeen('Joseba', ['own-task']);
     expect(getUnseenTaskCreations([created], 'Joseba')).toEqual([]);
   });
 

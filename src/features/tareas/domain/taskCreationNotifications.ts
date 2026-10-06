@@ -60,11 +60,15 @@ export function getUnseenTaskCreations(tasks: readonly Task[], windowsUser: stri
   return Array.from(unique.values()).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
-export function markTaskCreationsSeen(windowsUser: string, tasks: readonly Task[]): void {
+export function markTaskCreationIdsSeen(windowsUser: string, taskIds: readonly string[]): void {
   const state = readState(windowsUser);
   if (!state) return;
   writeState(windowsUser, {
     ...state,
-    seenTaskIds: [...state.seenTaskIds, ...tasks.map((task) => task.id)],
+    seenTaskIds: [...state.seenTaskIds, ...taskIds.filter(Boolean)],
   });
+}
+
+export function markTaskCreationsSeen(windowsUser: string, tasks: readonly Task[]): void {
+  markTaskCreationIdsSeen(windowsUser, tasks.map((task) => task.id));
 }
