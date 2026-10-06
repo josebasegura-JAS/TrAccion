@@ -25,6 +25,7 @@ import {
 import { requestTaskCriterionEditor } from '../../features/criterios-rrll/domain/taskCriterionEditorBus';
 import { navigateInApp } from '../../services/appNavigationBus';
 import { formatImportedTaskMail } from '../../features/tareas/domain/taskMail';
+import { markTaskCreationIdsSeen } from '../../features/tareas/domain/taskCreationNotifications';
 import {
   buildTaskDocumentLink,
   createInitialDraft,
@@ -331,6 +332,9 @@ export function useTaskEditorController({
         return;
       }
       if (result.recordId) {
+        // La tarea recién creada no debe aparecer como "nueva" al propio creador.
+        // El visto es local por usuario, por lo que el resto del equipo sí recibirá el aviso azul.
+        markTaskCreationIdsSeen(trackingUser, [result.recordId]);
         const coordinationResult = await updateCoordinationTargets(result.recordId);
         if (!coordinationResult.ok) {
           setSaveStatus(`Tarea guardada, pero no se ha podido actualizar Coordinación: ${coordinationResult.message}`);
