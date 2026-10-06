@@ -67,7 +67,7 @@ export interface PersistedRecordsRepositoryDependencies {
   safeDatabaseOperation: SafeDatabaseOperation;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
   assertDatabaseWritesAllowed: () => void;
-  withDatabaseOperationLock: <T>(databasePath: string, operation: () => Promise<T> | T) => Promise<T>;
+  withDatabaseOperationLock: <T>(databasePath: string, operation: () => Promise<T>) => Promise<T>;
   enqueueLocalBackup: (reason: string) => void;
   getTaskRecordsUpdatedAt: (db: Database) => string | null;
 }

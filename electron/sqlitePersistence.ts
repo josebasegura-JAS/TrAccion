@@ -104,6 +104,8 @@ import {
   isCountRow,
   isJsonObjectWithStringId,
   isUpdatedAtRow,
+  readAllPersistedRecords,
+  readPersistedRecordByKey,
 } from './persistence/sqlitePersistenceHelpers.js';
 
 export {
@@ -323,6 +325,7 @@ function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies 
     startDatabaseLockHeartbeat,
     isLockContentionError: isSqliteLockContentionError,
     migrateLocalStorageSnapshot,
+    readAllPersistedRecords,
     withDatabaseOperationLock,
     backupExistingDatabase,
     closeDatabaseAndReleaseLock,
@@ -1069,6 +1072,7 @@ const taskModule = createTaskRepository({
   safeDatabaseOperation,
   getSqliteStatus,
   requireDatabase,
+  readPersistedRecordByKey,
   isJsonObjectWithStringId,
   isCountRow,
   isUpdatedAtRow,
@@ -1084,6 +1088,7 @@ const employeeModule = createEmployeeRepository({
   safeDatabaseOperation,
   getSqliteStatus,
   requireDatabase,
+  readPersistedRecordByKey,
   isCountRow,
   updateRefreshMetadata,
   enqueueLocalBackup,
@@ -1105,6 +1110,7 @@ const sorteosModule = createSorteosRepository({
   safeDatabaseOperation,
   getSqliteStatus,
   requireDatabase,
+  readPersistedRecordByKey,
   isJsonObjectWithStringId,
   isCountRow,
   updateRefreshMetadata,
