@@ -754,7 +754,9 @@ export function searchTraccion(query: string, data?: GlobalSearchData): GlobalSe
   }
 
   const shouldBuildLinkedSessionLookup =
-    !parsedQuery.filters.moduleView || parsedQuery.filters.moduleView === 'tareas';
+    !parsedQuery.filters.moduleView ||
+    parsedQuery.filters.moduleView === 'comite' ||
+    parsedQuery.filters.moduleView === 'paritaria';
   const linkedSessionLookup = shouldBuildLinkedSessionLookup
     ? buildLinkedSessionLookup(data)
     : new Map<string, LinkedSessionMatch>();

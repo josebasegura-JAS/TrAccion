@@ -18,4 +18,18 @@ describe('globalSearch closed committee/paritaria sessions', () => {
     });
     expect(results).toEqual(expect.arrayContaining([expect.objectContaining({ moduleView: 'paritaria', recordId: 'paritaria-closed-1', status: 'closed', matchReason: 'Coincidencia en punto incluido en sesión' })]));
   });
+  it('finds a linked closed paritaria task when module filter is explicit', () => {
+    const results = searchTraccion('modulo:paritaria bolsa horas', {
+      committeeSessions: [],
+      paritariaSessions: [{ id: 'paritaria-filtered-1', code: 'CP-08/2026', date: '2026-08-20', title: 'Comisión Paritaria agosto', observations: '', notes: '', status: 'closed', items: ['task-filtered-1'], treatedTaskIds: ['task-filtered-1'], untreatedTaskIds: [], closedAt: '2026-08-20T12:00:00.000Z' }],
+      tasks: [{ id: 'task-filtered-1', titulo: 'Regularización bolsa horas', descripcion: 'Punto histórico', observaciones: '', fase: 'cerrada', estado: 'cerrada', closedAt: '2026-08-20T12:00:00.000Z' }],
+    });
+
+    expect(results).toEqual(expect.arrayContaining([expect.objectContaining({
+      moduleView: 'paritaria',
+      recordId: 'paritaria-filtered-1',
+      matchReason: 'Coincidencia en punto incluido en sesión',
+    })]));
+  });
+
 });

@@ -27,6 +27,7 @@ import { SessionCloseModal } from './SessionCloseModal';
 import {
   matchesSessionSearch,
   groupClosedSessionsByYear,
+  openSessionsReferenceMissingTasks,
   sessionExportColumns,
   sortOpenSessions,
 } from './sessionManagementPage.helpers';
@@ -120,6 +121,17 @@ export function SessionManagementPage({
   ]);
 
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+  const openSessionNeedsHistoricalTasks = useMemo(
+    () => openSessionsReferenceMissingTasks(sessions, tasksById),
+    [sessions, tasksById],
+  );
+
+  useEffect(() => {
+    if (!openSessionNeedsHistoricalTasks || historicalTasksLoaded) {
+      return;
+    }
+    void loadHistoricalTasks();
+  }, [historicalTasksLoaded, loadHistoricalTasks, openSessionNeedsHistoricalTasks]);
   const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
   const rutaResumenParitaria = useConfiguracionStore((state) => state.rutaResumenParitaria);
 
