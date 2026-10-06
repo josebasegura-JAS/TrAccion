@@ -340,7 +340,7 @@ export function HistoricSessionCard({
           {onUpdateSummary && (
             <button
               className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-              data-tip="Actualizar el resumen histórico Word de Comité"
+              data-tip={`Actualizar el resumen histórico Word de ${config.moduleId === 'comite' ? 'Comité' : 'Paritaria'}`}
               onClick={() => void onUpdateSummary(session)}
               type="button"
             >

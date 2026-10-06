@@ -33,6 +33,7 @@ type RouteDraft = {
   rutaExportacionVinculograma: string;
   rutaExportacionCoordinacion: string;
   rutaResumenComites: string;
+  rutaResumenParitaria: string;
   rutaAyudaEscolar: string;
 };
 
@@ -147,6 +148,14 @@ const EXPORT_FIELDS: RouteField[] = [
     selector: 'operational',
   },
   {
+    key: 'rutaResumenParitaria',
+    label: 'Resumen histórico de Paritaria',
+    description: 'Carpeta del Word “Resumen TEMÁTICA Comisión paritaria”. Se actualiza automáticamente al cerrar una Paritaria.',
+    placeholder: 'G:\\Capital Humano\\...\\Comisión Paritaria\\Resumen temática',
+    kind: 'folder',
+    selector: 'operational',
+  },
+  {
     key: 'rutaAyudaEscolar',
     label: 'Ayuda escolar',
     description: 'Carpeta donde se archivan los adjuntos arrastrados desde Outlook.',
@@ -170,6 +179,7 @@ function currentRoutes(): RouteDraft {
     rutaExportacionVinculograma: state.rutaExportacionVinculograma,
     rutaExportacionCoordinacion: state.rutaExportacionCoordinacion,
     rutaResumenComites: state.rutaResumenComites,
+    rutaResumenParitaria: state.rutaResumenParitaria,
     rutaAyudaEscolar: state.rutaAyudaEscolar,
   };
 }
@@ -188,6 +198,7 @@ export function AjustesPage() {
   const rutaExportacionVinculograma = useConfiguracionStore((state) => state.rutaExportacionVinculograma);
   const rutaExportacionCoordinacion = useConfiguracionStore((state) => state.rutaExportacionCoordinacion);
   const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
+  const rutaResumenParitaria = useConfiguracionStore((state) => state.rutaResumenParitaria);
   const rutaAyudaEscolar = useConfiguracionStore((state) => state.rutaAyudaEscolar);
 
   const watchedRoutes = useMemo<RouteDraft>(() => ({
@@ -202,6 +213,7 @@ export function AjustesPage() {
     rutaExportacionVinculograma,
     rutaExportacionCoordinacion,
     rutaResumenComites,
+    rutaResumenParitaria,
     rutaAyudaEscolar,
   }), [
     rutaPlantillaTeletrabajo,
@@ -215,6 +227,7 @@ export function AjustesPage() {
     rutaExportacionVinculograma,
     rutaExportacionCoordinacion,
     rutaResumenComites,
+    rutaResumenParitaria,
     rutaAyudaEscolar,
   ]);
 

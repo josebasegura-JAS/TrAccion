@@ -48,6 +48,7 @@ interface ConfiguracionState {
   rutaExportacionVinculograma: string;
   rutaExportacionCoordinacion: string;
   rutaResumenComites: string;
+  rutaResumenParitaria: string;
   rutaAyudaEscolar: string;
   taskPhases: TaskPhaseConfig[];
   taskStates: TaskStateConfig[];
@@ -68,6 +69,7 @@ type SharedRouteSettings = Pick<
   | 'rutaExportacionVinculograma'
   | 'rutaExportacionCoordinacion'
   | 'rutaResumenComites'
+  | 'rutaResumenParitaria'
   | 'rutaAyudaEscolar'
 >;
 
@@ -85,6 +87,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaExportacionVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionCoordinacion: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaResumenComites: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaResumenParitaria: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaAyudaEscolar: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   saveRutasCompartidas: (rutas: SharedRouteSettings) => Promise<{ ok: boolean; message: string }>;
   addTaskState: (nombre: string) => void;
@@ -116,6 +119,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaExportacionVinculograma: state.rutaExportacionVinculograma,
     rutaExportacionCoordinacion: state.rutaExportacionCoordinacion,
     rutaResumenComites: state.rutaResumenComites,
+    rutaResumenParitaria: state.rutaResumenParitaria,
     rutaAyudaEscolar: state.rutaAyudaEscolar,
     taskPhases: state.taskPhases,
     taskStates: state.taskStates,
@@ -244,6 +248,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaExportacionVinculograma: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
     rutaExportacionCoordinacion: '',
     rutaResumenComites: '',
+    rutaResumenParitaria: '',
     rutaAyudaEscolar: getDefaultAyudaEscolarPath(),
     taskPhases: DEFAULT_TASK_PHASES,
     taskStates: DEFAULT_TASK_STATES,
@@ -269,6 +274,7 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
     rutaExportacionVinculograma: typeof (parsed as { rutaExportacionVinculograma?: unknown }).rutaExportacionVinculograma === 'string' ? (parsed as { rutaExportacionVinculograma: string }).rutaExportacionVinculograma.trim() : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
     rutaExportacionCoordinacion: typeof (parsed as { rutaExportacionCoordinacion?: unknown }).rutaExportacionCoordinacion === 'string' ? (parsed as { rutaExportacionCoordinacion: string }).rutaExportacionCoordinacion.trim() : '',
     rutaResumenComites: typeof (parsed as { rutaResumenComites?: unknown }).rutaResumenComites === 'string' ? (parsed as { rutaResumenComites: string }).rutaResumenComites.trim() : '',
+    rutaResumenParitaria: typeof (parsed as { rutaResumenParitaria?: unknown }).rutaResumenParitaria === 'string' ? (parsed as { rutaResumenParitaria: string }).rutaResumenParitaria.trim() : '',
     rutaAyudaEscolar: normalizeAyudaEscolarPath((parsed as { rutaAyudaEscolar?: unknown }).rutaAyudaEscolar),
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
     taskStates: normalizeTaskStates((parsed as { taskStates?: unknown }).taskStates),
@@ -392,6 +398,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaExportacionVinculograma: initialConfiguracion.rutaExportacionVinculograma,
   rutaExportacionCoordinacion: initialConfiguracion.rutaExportacionCoordinacion,
   rutaResumenComites: initialConfiguracion.rutaResumenComites,
+  rutaResumenParitaria: initialConfiguracion.rutaResumenParitaria,
   rutaAyudaEscolar: initialConfiguracion.rutaAyudaEscolar,
   taskPhases: initialConfiguracion.taskPhases,
   taskStates: initialConfiguracion.taskStates,
@@ -403,8 +410,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   },
   reloadFromStorage: () => {
     const applyIfChanged = (configuracion: ConfiguracionState) => {
-      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
-      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
+      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
+      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
       if (!areConfiguracionesEquivalent(current, configuracion)) set(configuracion);
     };
     if (window.traccion?.loadConfiguracion) {
@@ -424,6 +431,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   setRutaExportacionVinculograma: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionVinculograma: ruta.trim() }),
   setRutaExportacionCoordinacion: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionCoordinacion: ruta.trim() }),
   setRutaResumenComites: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaResumenComites: ruta.trim() }),
+  setRutaResumenParitaria: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaResumenParitaria: ruta.trim() }),
   setRutaAyudaEscolar: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaAyudaEscolar: ruta.trim() }),
   saveRutasCompartidas: async (rutas) => commitConfiguracion(set, {
     ...selectConfiguracionState(get()),
@@ -438,6 +446,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     rutaExportacionVinculograma: rutas.rutaExportacionVinculograma.trim(),
     rutaExportacionCoordinacion: rutas.rutaExportacionCoordinacion.trim(),
     rutaResumenComites: rutas.rutaResumenComites.trim(),
+    rutaResumenParitaria: rutas.rutaResumenParitaria.trim(),
     rutaAyudaEscolar: rutas.rutaAyudaEscolar.trim(),
   }),
   addTaskState: (nombre) => set((state) => {

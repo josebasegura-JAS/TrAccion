@@ -1,21 +1,16 @@
-TrAcción 1.2.164 — incremental cabecera compacta global
+TrAcción V1.2.167 - Fase 2 Resumen histórico Comisión Paritaria
 
-Copiar estos archivos respetando exactamente sus rutas desde la raíz del proyecto:
-- src/components/Header.tsx
-- src/components/ModuleHelp.tsx
+Aplicar sobre la raíz del proyecto conservando las rutas.
 
-Cambios:
-- Cabecera principal reducida de 3 líneas visuales a 2: breadcrumb + título.
-- Eliminada la descripción inferior del módulo en la cabecera principal.
-- Altura y paddings reducidos para aproximar la cabecera a la referencia visual del logo de TrAcción.
-- Icono de ayuda ? reducido y menos dominante.
-- Icono de módulo ligeramente compactado.
-- Campana, avatar, nombre de usuario y estado compactados para mantener el equilibrio vertical.
-- Se conserva buscador, avisos de tareas, estado de conexión/sincronización y toda la lógica existente.
-- El cambio se aplica desde el Header común, por lo que afecta a todos los módulos que usan la cabecera principal de TrAcción.
+Incluye:
+- Ruta independiente en Ajustes para el resumen histórico de Paritaria.
+- Actualización automática del Word al cerrar una Paritaria.
+- Botón de reintento manual desde el histórico.
+- Inserción cronológica al final del año correspondiente.
+- Creación automática de un nuevo bloque anual si el año no existe.
+- Prevención de duplicados por código de sesión.
+- Bloqueo de escritura multiusuario y sustitución segura del DOCX.
+- Renombrado: Resumen TEMÁTICA Comisión paritaria (D mes AAAA).docx
+- Tests unitarios del transformador XML.
 
-No se modifica lógica de negocio ni persistencia.
-
-Validación:
-- Revisión diferencial manual realizada sobre los dos archivos modificados.
-- No se pudo completar typecheck/lint en este entorno porque la instalación de dependencias del proyecto agotó el tiempo disponible; los cambios son exclusivamente de JSX/clases Tailwind y no alteran firmas ni tipos públicos.
+No modifica la lógica de cierre de Comité ni su documento histórico.

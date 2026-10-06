@@ -150,9 +150,12 @@ interface SchoolHelpArchiveResult { ok: boolean; message: string; inspection?: S
 
 interface CommitteeSummaryUpdatePayload { folderPath: string; code: string; date: string; points: string[]; }
 interface CommitteeSummaryUpdateResult { ok: boolean; message: string; filePath?: string; alreadyPresent?: boolean; }
+type ParitariaSummaryUpdatePayload = CommitteeSummaryUpdatePayload;
+type ParitariaSummaryUpdateResult = CommitteeSummaryUpdateResult;
 
 interface TraccionApi {
   updateCommitteeSummaryWord?: (payload: CommitteeSummaryUpdatePayload) => Promise<CommitteeSummaryUpdateResult>;
+  updateParitariaSummaryWord?: (payload: ParitariaSummaryUpdatePayload) => Promise<ParitariaSummaryUpdateResult>;
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
   getWindowsUser?: () => Promise<string>;

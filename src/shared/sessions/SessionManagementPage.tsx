@@ -107,18 +107,23 @@ export function SessionManagementPage({
 
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
+  const rutaResumenParitaria = useConfiguracionStore((state) => state.rutaResumenParitaria);
 
-  const updateCommitteeSummaryForSession = async (session: ManagedSession) => {
-    if (config.moduleId !== 'comite') return { ok: true, message: '' };
-    const updater = window.traccion?.updateCommitteeSummaryWord;
+  const updateSummaryForSession = async (session: ManagedSession) => {
+    if (config.moduleId !== 'comite' && config.moduleId !== 'paritaria') return { ok: true, message: '' };
+    const updater = config.moduleId === 'comite'
+      ? window.traccion?.updateCommitteeSummaryWord
+      : window.traccion?.updateParitariaSummaryWord;
+    const folderPath = config.moduleId === 'comite' ? rutaResumenComites : rutaResumenParitaria;
+    const label = config.moduleId === 'comite' ? 'Comité' : 'Paritaria';
     if (!updater) return { ok: false, message: 'La actualización del resumen Word no está disponible. Reinicia TrAcción.' };
-    if (!rutaResumenComites.trim()) return { ok: false, message: 'No hay carpeta configurada para el resumen histórico de Comité. Configúrala en Ajustes.' };
+    if (!folderPath.trim()) return { ok: false, message: `No hay carpeta configurada para el resumen histórico de ${label}. Configúrala en Ajustes.` };
     const missingTaskIds = session.items.filter((taskId) => !tasksById.get(taskId)?.titulo?.trim());
     if (missingTaskIds.length) {
       return { ok: false, message: `No se han podido recuperar ${missingTaskIds.length} puntos del orden del día. Recarga Tareas antes de reintentar.` };
     }
     const points = session.items.map((taskId) => tasksById.get(taskId)!.titulo.trim());
-    return updater({ folderPath: rutaResumenComites, code: session.code, date: session.date, points });
+    return updater({ folderPath, code: session.code, date: session.date, points });
   };
   const openSessions = useMemo(
     () => sortOpenSessions(sessions.filter((session) => session.status === 'open')),
@@ -436,7 +441,7 @@ export function SessionManagementPage({
         title: 'Crear acta',
       });
 
-      let committeeSummarySession: ManagedSession | null = null;
+      let summarySession: ManagedSession | null = null;
 
       await withSharedModuleLocks(
         [
@@ -535,7 +540,7 @@ export function SessionManagementPage({
             throw new Error(result.message);
           }
 
-          if (config.moduleId === 'comite') committeeSummarySession = closedSession;
+          if (config.moduleId === 'comite' || config.moduleId === 'paritaria') summarySession = closedSession;
 
           await load();
           await loadTasks();
@@ -548,11 +553,13 @@ export function SessionManagementPage({
         },
       );
 
-      if (committeeSummarySession) {
-        const summaryResult = await updateCommitteeSummaryForSession(committeeSummarySession);
+      if (summarySession) {
+        const summaryResult = await updateSummaryForSession(summarySession);
         if (!summaryResult.ok) {
+          const label = config.moduleId === 'comite' ? 'Comité' : 'Paritaria';
+          const article = config.moduleId === 'comite' ? 'El' : 'La';
           await alert(
-            `El Comité se ha cerrado correctamente, pero no se ha podido actualizar el resumen histórico Word.\n\n${summaryResult.message}\n\nPuedes reintentarlo desde el histórico del Comité.`,
+            `${article} ${label} se ha cerrado correctamente, pero no se ha podido actualizar el resumen histórico Word.\n\n${summaryResult.message}\n\nPuedes reintentarlo desde el histórico de ${label}.`,
             { type: 'warning' },
           );
         }
@@ -567,8 +574,8 @@ export function SessionManagementPage({
     }
   };
 
-  const handleUpdateCommitteeSummary = async (session: ManagedSession) => {
-    const result = await updateCommitteeSummaryForSession(session);
+  const handleUpdateSummary = async (session: ManagedSession) => {
+    const result = await updateSummaryForSession(session);
     await alert(result.message || (result.ok ? 'Resumen histórico actualizado.' : 'No se ha podido actualizar el resumen histórico.'), {
       type: result.ok ? 'info' : 'error',
     });
@@ -932,7 +939,7 @@ export function SessionManagementPage({
                         onEdit={canEditSessions ? openEditModal : undefined}
                         onConfirm={confirm}
                         onRemove={handleRemoveSession}
-                        onUpdateSummary={config.moduleId === 'comite' ? handleUpdateCommitteeSummary : undefined}
+                        onUpdateSummary={(config.moduleId === 'comite' || config.moduleId === 'paritaria') ? handleUpdateSummary : undefined}
                         session={session}
                         tasksById={tasksById}
                       />
