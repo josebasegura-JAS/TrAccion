@@ -148,7 +148,11 @@ interface SchoolHelpInspectResult { ok: boolean; message: string; inspection?: S
 interface SchoolHelpArchivePayload { fileName: string; buffer: ArrayBuffer; basePath: string; employeeName: string; }
 interface SchoolHelpArchiveResult { ok: boolean; message: string; inspection?: SchoolHelpInspection; files?: Array<{ originalName: string; savedName: string; savedPath: string }>; }
 
+interface CommitteeSummaryUpdatePayload { folderPath: string; code: string; date: string; points: string[]; }
+interface CommitteeSummaryUpdateResult { ok: boolean; message: string; filePath?: string; alreadyPresent?: boolean; }
+
 interface TraccionApi {
+  updateCommitteeSummaryWord?: (payload: CommitteeSummaryUpdatePayload) => Promise<CommitteeSummaryUpdateResult>;
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
   getWindowsUser?: () => Promise<string>;

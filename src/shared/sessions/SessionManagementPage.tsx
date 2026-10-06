@@ -5,6 +5,7 @@ import { CLOSED_TASK_PHASE, DEFAULT_TASK_PHASE, isTaskClosed } from '../../featu
 import { buildActaObservacionesFromSession } from '../../features/actas/domain/acta';
 import { useActasStore } from '../../features/actas/store/useActasStore';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
+import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import { withSharedModuleLocks } from '../../services/sharedModuleLock';
 import { useAppDialog } from '../../hooks/useAppDialog';
 import { buildFilterLabel } from '../export/filterLabel';
@@ -105,6 +106,20 @@ export function SessionManagementPage({
   }, [hasLoadedHistoricalSessions, loadHistoricalSessions, openPanel, sessionSearch]);
 
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+  const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
+
+  const updateCommitteeSummaryForSession = async (session: ManagedSession) => {
+    if (config.moduleId !== 'comite') return { ok: true, message: '' };
+    const updater = window.traccion?.updateCommitteeSummaryWord;
+    if (!updater) return { ok: false, message: 'La actualización del resumen Word no está disponible. Reinicia TrAcción.' };
+    if (!rutaResumenComites.trim()) return { ok: false, message: 'No hay carpeta configurada para el resumen histórico de Comité. Configúrala en Ajustes.' };
+    const missingTaskIds = session.items.filter((taskId) => !tasksById.get(taskId)?.titulo?.trim());
+    if (missingTaskIds.length) {
+      return { ok: false, message: `No se han podido recuperar ${missingTaskIds.length} puntos del orden del día. Recarga Tareas antes de reintentar.` };
+    }
+    const points = session.items.map((taskId) => tasksById.get(taskId)!.titulo.trim());
+    return updater({ folderPath: rutaResumenComites, code: session.code, date: session.date, points });
+  };
   const openSessions = useMemo(
     () => sortOpenSessions(sessions.filter((session) => session.status === 'open')),
     [sessions],
@@ -421,6 +436,8 @@ export function SessionManagementPage({
         title: 'Crear acta',
       });
 
+      let committeeSummarySession: ManagedSession | null = null;
+
       await withSharedModuleLocks(
         [
           { module: config.moduleId, label: config.title },
@@ -518,6 +535,8 @@ export function SessionManagementPage({
             throw new Error(result.message);
           }
 
+          if (config.moduleId === 'comite') committeeSummarySession = closedSession;
+
           await load();
           await loadTasks();
           useActasStore.getState().load();
@@ -528,6 +547,16 @@ export function SessionManagementPage({
           setOpenPanel('history');
         },
       );
+
+      if (committeeSummarySession) {
+        const summaryResult = await updateCommitteeSummaryForSession(committeeSummarySession);
+        if (!summaryResult.ok) {
+          await alert(
+            `El Comité se ha cerrado correctamente, pero no se ha podido actualizar el resumen histórico Word.\n\n${summaryResult.message}\n\nPuedes reintentarlo desde el histórico del Comité.`,
+            { type: 'warning' },
+          );
+        }
+      }
     } catch (error) {
       await alert(
         error instanceof Error
@@ -536,6 +565,13 @@ export function SessionManagementPage({
         { type: 'error' },
       );
     }
+  };
+
+  const handleUpdateCommitteeSummary = async (session: ManagedSession) => {
+    const result = await updateCommitteeSummaryForSession(session);
+    await alert(result.message || (result.ok ? 'Resumen histórico actualizado.' : 'No se ha podido actualizar el resumen histórico.'), {
+      type: result.ok ? 'info' : 'error',
+    });
   };
 
   const openImporter = () => {
@@ -896,6 +932,7 @@ export function SessionManagementPage({
                         onEdit={canEditSessions ? openEditModal : undefined}
                         onConfirm={confirm}
                         onRemove={handleRemoveSession}
+                        onUpdateSummary={config.moduleId === 'comite' ? handleUpdateCommitteeSummary : undefined}
                         session={session}
                         tasksById={tasksById}
                       />

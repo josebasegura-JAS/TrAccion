@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ClipboardList,
   Pencil,
+  RefreshCw,
   Trash2,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -284,12 +285,14 @@ export function HistoricSessionCard({
   onEdit,
   onRemove,
   onConfirm,
+  onUpdateSummary,
   session,
   tasksById,
 }: {
   config: SessionModuleConfig;
   onEdit?: (session: ManagedSession) => void;
   onRemove: (session: ManagedSession) => void | Promise<void>;
+  onUpdateSummary?: (session: ManagedSession) => void | Promise<void>;
   onConfirm: (
     message: string,
     options?: { cancelLabel?: string; confirmLabel?: string; danger?: boolean; title?: string },
@@ -332,6 +335,16 @@ export function HistoricSessionCard({
               type="button"
             >
               <Pencil size={14} /> Editar
+            </button>
+          )}
+          {onUpdateSummary && (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              data-tip="Actualizar el resumen histórico Word de Comité"
+              onClick={() => void onUpdateSummary(session)}
+              type="button"
+            >
+              <RefreshCw size={14} /> Actualizar resumen Word
             </button>
           )}
           <button

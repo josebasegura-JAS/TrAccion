@@ -32,6 +32,7 @@ type RouteDraft = {
   rutaExportacionLicencias: string;
   rutaExportacionVinculograma: string;
   rutaExportacionCoordinacion: string;
+  rutaResumenComites: string;
   rutaAyudaEscolar: string;
 };
 
@@ -138,6 +139,14 @@ const EXPORT_FIELDS: RouteField[] = [
     selector: 'operational',
   },
   {
+    key: 'rutaResumenComites',
+    label: 'Resumen histórico de Comité',
+    description: 'Carpeta del Word “Resumen TEMÁTICA Comités de Empresa”. Se actualiza automáticamente al cerrar un Comité.',
+    placeholder: 'G:\\Capital Humano\\...\\Comité de Empresa\\Resumen temática',
+    kind: 'folder',
+    selector: 'operational',
+  },
+  {
     key: 'rutaAyudaEscolar',
     label: 'Ayuda escolar',
     description: 'Carpeta donde se archivan los adjuntos arrastrados desde Outlook.',
@@ -160,6 +169,7 @@ function currentRoutes(): RouteDraft {
     rutaExportacionLicencias: state.rutaExportacionLicencias,
     rutaExportacionVinculograma: state.rutaExportacionVinculograma,
     rutaExportacionCoordinacion: state.rutaExportacionCoordinacion,
+    rutaResumenComites: state.rutaResumenComites,
     rutaAyudaEscolar: state.rutaAyudaEscolar,
   };
 }
@@ -177,6 +187,7 @@ export function AjustesPage() {
   const rutaExportacionLicencias = useConfiguracionStore((state) => state.rutaExportacionLicencias);
   const rutaExportacionVinculograma = useConfiguracionStore((state) => state.rutaExportacionVinculograma);
   const rutaExportacionCoordinacion = useConfiguracionStore((state) => state.rutaExportacionCoordinacion);
+  const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
   const rutaAyudaEscolar = useConfiguracionStore((state) => state.rutaAyudaEscolar);
 
   const watchedRoutes = useMemo<RouteDraft>(() => ({
@@ -190,6 +201,7 @@ export function AjustesPage() {
     rutaExportacionLicencias,
     rutaExportacionVinculograma,
     rutaExportacionCoordinacion,
+    rutaResumenComites,
     rutaAyudaEscolar,
   }), [
     rutaPlantillaTeletrabajo,
@@ -202,6 +214,7 @@ export function AjustesPage() {
     rutaExportacionLicencias,
     rutaExportacionVinculograma,
     rutaExportacionCoordinacion,
+    rutaResumenComites,
     rutaAyudaEscolar,
   ]);
 

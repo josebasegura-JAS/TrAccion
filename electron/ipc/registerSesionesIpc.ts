@@ -6,6 +6,7 @@
 import { ipcMain } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { createOutlookCalendar } from '../outlookIntegration.js';
+import { updateCommitteeSummaryWord } from '../committeeSummaryWord.js';
 import {
   getSqliteStatus,
   loadComiteSessionRecordsSnapshot,
@@ -18,6 +19,28 @@ import {
 } from '../sqlitePersistence.js';
 
 export function registerSesionesIpc(): void {
+
+  ipcMain.handle('comite:update-summary-word', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return { ok: false, message: 'Datos inválidos para actualizar el resumen histórico de Comité.' };
+    }
+    const candidate = payload as { folderPath?: unknown; code?: unknown; date?: unknown; points?: unknown };
+    if (
+      typeof candidate.folderPath !== 'string' ||
+      typeof candidate.code !== 'string' ||
+      typeof candidate.date !== 'string' ||
+      !Array.isArray(candidate.points) ||
+      !candidate.points.every((point) => typeof point === 'string')
+    ) {
+      return { ok: false, message: 'Datos inválidos para actualizar el resumen histórico de Comité.' };
+    }
+    return updateCommitteeSummaryWord({
+      folderPath: candidate.folderPath,
+      code: candidate.code,
+      date: candidate.date,
+      points: candidate.points,
+    });
+  });
 
   ipcMain.handle('sessions:close-workflow-atomically', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {

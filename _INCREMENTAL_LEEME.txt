@@ -1,0 +1,18 @@
+TrAcción V1.2.166 — Fase 1 · Resumen histórico de Comité
+
+Aplicar estos archivos respetando las rutas incluidas en el ZIP.
+
+Incluye:
+- Nueva ruta compartida en Ajustes: “Resumen histórico de Comité”.
+- Actualización automática del Word al cerrar una sesión de Comité.
+- Solo afecta a Comité; Paritaria queda sin cambios funcionales.
+- Inserta código, fecha y todos los puntos del orden del día.
+- Evita duplicados por código de Comité.
+- Mantiene el placeholder 26-PE-AR-0xx y añade la sesión cerrada debajo.
+- Renombra el documento a “Resumen TEMÁTICA Comités de Empresa (actualizado DD-MM-AA).docx”.
+- Escritura protegida con bloqueo y sustitución segura; si Word está abierto, el cierre del Comité permanece realizado y se informa del fallo.
+- Acción manual “Actualizar resumen Word” en el histórico de Comité para reintentar.
+- Se añade jszip como dependencia directa para editar DOCX conservando su estructura OOXML.
+
+El directorio configurado debe contener un único archivo que cumpla:
+Resumen TEMÁTICA Comités de Empresa (actualizado DD-MM-AA).docx
