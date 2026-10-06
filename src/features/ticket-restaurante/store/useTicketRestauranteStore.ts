@@ -345,9 +345,7 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
 async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutencion[]> {
   if (!hasTicketRestauranteManutencionesSqliteRepository()) {
     return import.meta.env.MODE === 'test'
-      ? readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map((row) =>
-          normalizeStoredTicketManutencion(row),
-        )
+      ? readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map((row) => normalizeStoredTicketManutencion(row))
       : [];
   }
 

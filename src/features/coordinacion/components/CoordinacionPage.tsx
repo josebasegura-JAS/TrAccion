@@ -18,11 +18,8 @@ import { SindicatosCoordinationPanel } from './SindicatosCoordinationPanel';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
-import {
-  CoordinationPointEditor,
-  pointToDraft,
-  type CoordinationPointDraft,
-} from './CoordinationPointEditor';
+import { CoordinationPointEditor } from './CoordinationPointEditor';
+import { pointToDraft, type CoordinationPointDraft } from './coordinationPointDraft';
 import { meetingContext, syncMeetingTracking } from '../services/coordinationMeetingTracking';
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [

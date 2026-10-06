@@ -5,22 +5,7 @@ import { Field, Input, Select, Textarea } from '../../../components/ui/Field';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { navigateInApp } from '../../../services/appNavigationBus';
 import type { CoordinationMeeting, CoordinationPointStatus } from '../domain/coordinacion';
-
-export type CoordinationPointDraft = {
-  result: string;
-  status: CoordinationPointStatus;
-  responsible: string;
-  dueDate: string;
-};
-
-export function pointToDraft(point: CoordinationMeeting['points'][number]): CoordinationPointDraft {
-  return {
-    result: point.result,
-    status: point.status,
-    responsible: point.responsible ?? '',
-    dueDate: point.dueDate ?? '',
-  };
-}
+import { pointToDraft, type CoordinationPointDraft } from './coordinationPointDraft';
 
 function pointDraftIsDirty(
   point: CoordinationMeeting['points'][number],
