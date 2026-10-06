@@ -13,7 +13,6 @@ import {
 import type { Database } from 'better-sqlite3';
 import {
   createSimpleJsonModuleRepository,
-  type SimpleJsonSaveResult,
 } from './persistence/simpleJsonModuleRepository.js';
 import { pruneLocalStorageBackups } from './persistence/maintenanceQueries.js';
 import {
@@ -819,7 +818,6 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
   return getLocalBackupService().restoreLocalBackup(fileName);
 }
 
-type JsonRecordSaveResult = SimpleJsonSaveResult;
 
 function createJsonModuleRepository(
   tableName: string,
