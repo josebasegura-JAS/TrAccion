@@ -16,6 +16,11 @@ import {
   getUnseenTaskAssignments,
   markTaskAssignmentsSeen,
 } from '../features/tareas/domain/taskAssignmentNotifications';
+import {
+  getUnseenTaskCreations,
+  initializeTaskCreationNoticeBaseline,
+  markTaskCreationsSeen,
+} from '../features/tareas/domain/taskCreationNotifications';
 import type { Task } from '../features/tareas/domain/task';
 
 const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
@@ -210,10 +215,15 @@ export function Header({
   const taskResponsibles = useConfiguracionStore((state) => state.taskResponsibles);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const [openedAssignmentIds, setOpenedAssignmentIds] = useState<Set<string>>(() => new Set());
+  const [dismissedCreationIds, setDismissedCreationIds] = useState<Set<string>>(() => new Set());
   const [isAssignmentNoticeOpen, setIsAssignmentNoticeOpen] = useState(false);
+  const [isCreationNoticeOpen, setIsCreationNoticeOpen] = useState(false);
+  const [isCreationBaselineReady, setIsCreationBaselineReady] = useState(false);
   const [isWindowsUserResolved, setIsWindowsUserResolved] = useState(false);
   const announcedAssignmentIds = useRef(new Set<string>());
+  const announcedCreationIds = useRef(new Set<string>());
   const assignmentNoticeRef = useRef<HTMLDivElement>(null);
+  const creationNoticeRef = useRef<HTMLDivElement>(null);
 
   const currentResponsible = useMemo(
     () => taskResponsibles.find(
@@ -228,6 +238,12 @@ export function Header({
       : [],
     [currentResponsible, openedAssignmentIds, tasks, windowsUserName],
   );
+  const unseenCreations = useMemo(
+    () => isCreationBaselineReady
+      ? getUnseenTaskCreations(tasks, windowsUserName).filter((task) => !dismissedCreationIds.has(task.id))
+      : [],
+    [dismissedCreationIds, isCreationBaselineReady, tasks, windowsUserName],
+  );
 
   const syncVisual = buildHeaderSyncVisual(Boolean(dbStatus?.ready), syncStatus, connectivity);
   const userInitials = useMemo(() => getUserInitials(windowsUserName), [windowsUserName]);
@@ -239,6 +255,7 @@ export function Header({
     );
     if (newlyAssigned.length === 0) return;
     newlyAssigned.forEach((task) => announcedAssignmentIds.current.add(task.assignmentNoticeId!));
+    setIsCreationNoticeOpen(false);
     setIsAssignmentNoticeOpen(true);
   }, [currentResponsible, dbStatus?.ready, isWindowsUserResolved, unseenAssignments]);
 
@@ -261,6 +278,41 @@ export function Header({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isAssignmentNoticeOpen]);
+
+  useEffect(() => {
+    if (!dbStatus?.ready || !isWindowsUserResolved) return;
+    initializeTaskCreationNoticeBaseline(windowsUserName);
+    setIsCreationBaselineReady(true);
+  }, [dbStatus?.ready, isWindowsUserResolved, windowsUserName]);
+
+  useEffect(() => {
+    if (!dbStatus?.ready || !isWindowsUserResolved || !isCreationBaselineReady) return;
+    const newlyCreated = unseenCreations.filter((task) => !announcedCreationIds.current.has(task.id));
+    if (newlyCreated.length === 0) return;
+    newlyCreated.forEach((task) => announcedCreationIds.current.add(task.id));
+    setIsAssignmentNoticeOpen(false);
+    setIsCreationNoticeOpen(true);
+  }, [dbStatus?.ready, isCreationBaselineReady, isWindowsUserResolved, unseenCreations]);
+
+  useEffect(() => {
+    if (unseenCreations.length === 0) setIsCreationNoticeOpen(false);
+  }, [unseenCreations.length]);
+
+  useEffect(() => {
+    if (!isCreationNoticeOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!creationNoticeRef.current?.contains(event.target as Node)) setIsCreationNoticeOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsCreationNoticeOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCreationNoticeOpen]);
 
   useEffect(() => subscribeToAppNavigation(onViewChange), [onViewChange]);
 
@@ -314,6 +366,28 @@ export function Header({
     onViewChange({ view: 'tareas', responsibleFilter: '__mine__' });
   };
 
+  const markCreationSeen = (task: Task) => {
+    markTaskCreationsSeen(windowsUserName, [task]);
+    setDismissedCreationIds((current) => new Set(current).add(task.id));
+  };
+
+  const handleOpenCreation = (task: Task) => {
+    markCreationSeen(task);
+    setIsCreationNoticeOpen(false);
+    onViewChange({ view: 'tareas', recordId: task.id });
+  };
+
+  const handleDismissAllCreations = () => {
+    if (unseenCreations.length === 0) return;
+    markTaskCreationsSeen(windowsUserName, unseenCreations);
+    setDismissedCreationIds((current) => new Set([...current, ...unseenCreations.map((task) => task.id)]));
+    setIsCreationNoticeOpen(false);
+  };
+
+  const formatCreationDate = (value: string) => new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(value));
+
   return (
     <header className="relative z-40 px-1 pt-1 sm:px-1.5 sm:pt-1.5">
       <div className="relative grid min-w-0 gap-2 overflow-visible rounded-[15px] border border-white/10 bg-gradient-to-r from-[#071322] via-metro-topbar to-[#091424] px-2.5 py-1.5 shadow-[0_14px_28px_rgba(2,6,23,0.22)] lg:min-h-[50px] lg:grid-cols-[minmax(0,1fr)_minmax(270px,360px)_auto] lg:items-center lg:gap-3 lg:px-3">
@@ -346,6 +420,41 @@ export function Header({
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5 lg:justify-end">
+          <div className="relative shrink-0" ref={creationNoticeRef}>
+            <button
+              aria-controls="task-creation-notice"
+              aria-expanded={isCreationNoticeOpen}
+              aria-haspopup="dialog"
+              aria-label={unseenCreations.length > 0 ? `${unseenCreations.length} tarea${unseenCreations.length === 1 ? '' : 's'} nueva${unseenCreations.length === 1 ? '' : 's'} creada${unseenCreations.length === 1 ? '' : 's'}` : 'No hay nuevas tareas creadas'}
+              className={`relative inline-flex h-8 w-8 items-center justify-center rounded-lg border text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 ${unseenCreations.length > 0 ? 'border-sky-400/40 bg-sky-400/12 text-sky-200 hover:border-sky-300/70 hover:bg-sky-400/20' : 'border-white/10 bg-white/[0.045] text-metro-muted hover:border-white/20 hover:text-metro-text'}`}
+              onClick={() => unseenCreations.length > 0 ? setIsCreationNoticeOpen((open) => !open) : undefined}
+              title={unseenCreations.length > 0 ? 'Consultar nuevas tareas creadas' : 'Sin nuevas tareas creadas'}
+              type="button"
+            >
+              <Bell size={15} aria-hidden="true" />
+              {unseenCreations.length > 0 ? <span className="absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-sky-400 px-1 text-[10px] font-extrabold leading-none text-slate-950 ring-2 ring-[#08111F]">{unseenCreations.length > 9 ? '9+' : unseenCreations.length}</span> : null}
+            </button>
+            {isCreationNoticeOpen && unseenCreations.length > 0 ? (
+              <section aria-label="Nuevas tareas creadas" className="absolute right-0 top-[calc(100%+10px)] z-50 w-[min(25rem,calc(100vw-5rem))] overflow-hidden rounded-2xl border border-sky-400/30 bg-metro-surface text-metro-text shadow-[0_22px_55px_rgba(2,6,23,0.6)]" id="task-creation-notice" role="dialog">
+                <div className="flex items-start gap-3 border-b border-white/10 bg-sky-950/25 px-4 py-3">
+                  <span className="rounded-xl border border-sky-400/30 bg-sky-400/10 p-2 text-sky-300"><Bell size={18} aria-hidden="true" /></span>
+                  <div className="min-w-0 flex-1"><h2 className="text-sm font-bold">{unseenCreations.length === 1 ? 'Nueva tarea creada' : 'Nuevas tareas creadas'}</h2><p className="mt-0.5 text-xs text-metro-muted">Aviso informativo para evitar duplicar tareas o asuntos similares.</p></div>
+                  <button aria-label="Cerrar aviso" className="rounded-lg p-1 text-metro-muted hover:bg-white/10 hover:text-metro-text" onClick={() => setIsCreationNoticeOpen(false)} type="button"><X size={17} /></button>
+                </div>
+                <div className="max-h-72 space-y-1 overflow-y-auto p-2">
+                  {unseenCreations.slice(0, 5).map((task) => (
+                    <div className="rounded-xl border border-sky-400/15 bg-sky-400/[0.045] px-3 py-2.5" key={task.id}>
+                      <div className="flex items-start gap-2"><span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-sky-400" aria-hidden="true" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold" title={task.titulo}>{task.titulo}</p><p className="mt-0.5 text-[11px] text-metro-muted">Creada {formatCreationDate(task.createdAt)}</p></div></div>
+                      <div className="mt-2 flex justify-end gap-2"><button className="rounded-lg border border-sky-400/25 px-2.5 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-400/10" onClick={() => handleOpenCreation(task)} type="button">Ver tarea</button><button className="rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-600" onClick={() => markCreationSeen(task)} type="button">OK</button></div>
+                    </div>
+                  ))}
+                  {unseenCreations.length > 5 ? <p className="px-3 py-1 text-xs text-metro-muted">Y {unseenCreations.length - 5} más</p> : null}
+                </div>
+                <div className="flex justify-end border-t border-white/10 px-3 py-2.5"><button className="rounded-lg px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-400/10" onClick={handleDismissAllCreations} type="button">Marcar todas como vistas</button></div>
+              </section>
+            ) : null}
+          </div>
+
           <div className="relative shrink-0" ref={assignmentNoticeRef}>
             <button
               aria-controls="task-assignment-notice"
