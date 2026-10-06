@@ -12,6 +12,13 @@ import {
   type CoordinationState,
   type UnionMeetingType,
 } from '../domain/coordinacion';
+import {
+  coordinationTargetsEqual,
+  updateAreaTarget,
+  updateDirectionTarget,
+  updateTaskTargets,
+  updateUnionTarget,
+} from '../services/coordinationTaskTargets';
 
 export const COORDINATION_STORAGE_KEY = 'traccion.v1.coordinacion.state';
 
@@ -91,6 +98,15 @@ async function persist(state: CoordinationState): Promise<Result> {
   return { ok: result.ok, message: result.message };
 }
 
+function stateSnapshot(state: CoordinationState): CoordinationState {
+  return {
+    meetings: state.meetings,
+    directionTaskIds: state.directionTaskIds,
+    unionTaskIds: state.unionTaskIds,
+    areaTaskIds: state.areaTaskIds,
+  };
+}
+
 function activeTask(task: Task): boolean {
   return !task.deletedAt && !isTaskClosed(task);
 }
@@ -117,77 +133,34 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   load: () => set(readState()),
   reloadFromStorage: () => {
     const next = readState();
-    if (JSON.stringify(next) !== JSON.stringify({ meetings: get().meetings, directionTaskIds: get().directionTaskIds, unionTaskIds: get().unionTaskIds, areaTaskIds: get().areaTaskIds })) {
+    if (JSON.stringify(next) !== JSON.stringify(stateSnapshot(get()))) {
       set(next);
     }
   },
   setTaskForDirection: async (taskId, enabled) => {
-    const current = get();
-    const ids = new Set(current.directionTaskIds);
-    if (enabled) ids.add(taskId); else ids.delete(taskId);
-    const next: CoordinationState = { meetings: current.meetings, directionTaskIds: [...ids], unionTaskIds: current.unionTaskIds, areaTaskIds: current.areaTaskIds };
+    const next = updateDirectionTarget(stateSnapshot(get()), taskId, enabled);
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
   setTaskForUnion: async (taskId, unionName) => {
-    const current = get();
-    const cleanUnion = unionName?.trim() || null;
-    const unionTaskIds = Object.fromEntries(
-      Object.entries(current.unionTaskIds).map(([name, ids]) => [name, ids.filter((id) => id !== taskId)]),
-    );
-    if (cleanUnion) unionTaskIds[cleanUnion] = [...new Set([...(unionTaskIds[cleanUnion] ?? []), taskId])];
-    const next: CoordinationState = { ...current, unionTaskIds };
+    const next = updateUnionTarget(stateSnapshot(get()), taskId, unionName);
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
   setTaskForArea: async (taskId, areaName) => {
-    const current = get();
-    const cleanArea = areaName?.trim() || null;
-    const areaTaskIds = Object.fromEntries(
-      Object.entries(current.areaTaskIds).map(([name, ids]) => [name, ids.filter((id) => id !== taskId)]),
-    );
-    if (cleanArea) areaTaskIds[cleanArea] = [...new Set([...(areaTaskIds[cleanArea] ?? []), taskId])];
-    const next: CoordinationState = { ...current, areaTaskIds };
+    const next = updateAreaTarget(stateSnapshot(get()), taskId, areaName);
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
   setTaskTargets: async (taskId, targets) => {
-    const current = get();
-
-    const directionTaskIds = new Set(current.directionTaskIds);
-    if (targets.direction) directionTaskIds.add(taskId); else directionTaskIds.delete(taskId);
-
-    const cleanUnion = targets.unionName?.trim() || null;
-    const unionTaskIds = Object.fromEntries(
-      Object.entries(current.unionTaskIds).map(([name, ids]) => [name, ids.filter((id) => id !== taskId)]),
-    );
-    if (cleanUnion) unionTaskIds[cleanUnion] = [...new Set([...(unionTaskIds[cleanUnion] ?? []), taskId])];
-
-    const cleanArea = targets.areaName?.trim() || null;
-    const areaTaskIds = Object.fromEntries(
-      Object.entries(current.areaTaskIds).map(([name, ids]) => [name, ids.filter((id) => id !== taskId)]),
-    );
-    if (cleanArea) areaTaskIds[cleanArea] = [...new Set([...(areaTaskIds[cleanArea] ?? []), taskId])];
-
-    const next: CoordinationState = {
-      meetings: current.meetings,
-      directionTaskIds: [...directionTaskIds],
-      unionTaskIds,
-      areaTaskIds,
-    };
-
-    if (JSON.stringify(next) === JSON.stringify({
-      meetings: current.meetings,
-      directionTaskIds: current.directionTaskIds,
-      unionTaskIds: current.unionTaskIds,
-      areaTaskIds: current.areaTaskIds,
-    })) {
+    const current = stateSnapshot(get());
+    const next = updateTaskTargets(current, taskId, targets);
+    if (coordinationTargetsEqual(current, next)) {
       return { ok: true, message: 'Coordinación ya estaba actualizada.' };
     }
-
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
@@ -224,7 +197,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       updatedAt: now,
       closedAt: null,
     };
-    const next: CoordinationState = { ...current, meetings: [meeting, ...current.meetings] };
+    const next: CoordinationState = { ...stateSnapshot(current), meetings: [meeting, ...current.meetings] };
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
@@ -276,7 +249,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       updatedAt: now,
       closedAt: null,
     };
-    const next: CoordinationState = { ...current, meetings: [meeting, ...current.meetings] };
+    const next: CoordinationState = { ...stateSnapshot(current), meetings: [meeting, ...current.meetings] };
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
@@ -312,7 +285,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       meetingType, interlocutors: interlocutors.trim(), purpose: purpose.trim(),
       date: normalizedDate, status: 'open', points, createdAt: now, updatedAt: now, closedAt: null,
     };
-    const next: CoordinationState = { ...current, meetings: [meeting, ...current.meetings] };
+    const next: CoordinationState = { ...stateSnapshot(current), meetings: [meeting, ...current.meetings] };
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
@@ -332,7 +305,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       responsible: '', dueDate: '', createdAt: now, updatedAt: now,
     };
     const next: CoordinationState = {
-      ...current,
+      ...stateSnapshot(current),
       meetings: current.meetings.map((item) => item.id === meetingId
         ? { ...item, points: [...item.points, point], updatedAt: now }
         : item),
@@ -355,7 +328,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (!task) return { ok: false, message: 'La tarea creada no está activa.' };
     const now = new Date().toISOString();
     const next: CoordinationState = {
-      ...current,
+      ...stateSnapshot(current),
       meetings: current.meetings.map((item) => item.id === meetingId ? {
         ...item,
         updatedAt: now,
@@ -379,7 +352,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (editable.error) return editable.error;
     const now = new Date().toISOString();
     const next: CoordinationState = {
-      ...current,
+      ...stateSnapshot(current),
       meetings: current.meetings.map((meeting) => meeting.id === meetingId ? {
         ...meeting,
         updatedAt: now,
@@ -409,7 +382,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     }
     const now = new Date().toISOString();
     const next: CoordinationState = {
-      ...current,
+      ...stateSnapshot(current),
       meetings: current.meetings.map((meeting) => meeting.id === meetingId ? {
         ...meeting,
         updatedAt: now,
@@ -431,7 +404,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const byPoint = new Map(patches.map(({ pointId, patch }) => [pointId, patch]));
     const now = new Date().toISOString();
     const next: CoordinationState = {
-      ...current,
+      ...stateSnapshot(current),
       meetings: current.meetings.map((item) => item.id === meetingId ? {
         ...item,
         updatedAt: now,
@@ -457,7 +430,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     }
     const now = new Date().toISOString();
     const next: CoordinationState = {
-      ...current,
+      ...stateSnapshot(current),
       meetings: current.meetings.map((item) => item.id === meetingId ? {
         ...item,
         updatedAt: now,
@@ -473,7 +446,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const exists = current.meetings.some((item) => item.id === meetingId);
     if (!exists) return { ok: false, message: 'No se ha encontrado la reunión.' };
     const next: CoordinationState = {
-      ...current,
+      ...stateSnapshot(current),
       meetings: current.meetings.filter((item) => item.id !== meetingId),
     };
     const result = await persist(next);
@@ -536,7 +509,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     }
     const now = new Date().toISOString();
     const next: CoordinationState = {
-      ...current,
+      ...stateSnapshot(current),
       meetings: current.meetings.map((item) => item.id === meetingId ? {
         ...item,
         status: 'open',
