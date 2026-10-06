@@ -3,6 +3,8 @@ import { useConfiguracionStore } from '../../features/configuracion/store/useCon
 import { useCoordinacionStore } from '../../features/coordinacion/store/useCoordinacionStore';
 import { parseOutlookMsg } from '../../features/especiales/domain/especiales';
 import {
+  CLOSED_TASK_PHASE,
+  isTaskClosed,
   type Task,
   type TaskDraft,
   type TaskSeguimientoEntry,
@@ -285,6 +287,36 @@ export function useTaskEditorController({
   const seguimientoForSave = trackingText.trim()
     ? encodeTracking(trackingText, trackingDate, trackingUser)
     : undefined;
+
+  const handleCloseTask = async (): Promise<boolean> => {
+    if (isCreate || !task || isTaskClosed(task) || isFormReadOnly) return false;
+
+    setSaveStatus('');
+    setSaveStatusIsError(false);
+
+    const liveLock = await window.traccion?.getRecordLock?.({ module: 'tareas', recordId: task.id });
+    if (!liveLock?.ok || liveLock.status !== 'acquired') {
+      setSaveStatus(liveLock?.message || 'No se ha confirmado el bloqueo compartido de edición.');
+      setSaveStatusIsError(true);
+      return false;
+    }
+
+    const closedDraft: TaskDraft = {
+      ...draft,
+      estado: 'cerrada',
+      fase: CLOSED_TASK_PHASE,
+    };
+    const result = await updateTask(task.id, closedDraft, undefined, loadedUpdatedAt);
+    if (!result.ok) {
+      setSaveStatus(result.message);
+      setSaveStatusIsError(true);
+      return false;
+    }
+
+    clearRecoveryDraft();
+    onDone();
+    return true;
+  };
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -742,6 +774,7 @@ export function useTaskEditorController({
     handleOpenCriterionRrll,
     handleSaveTrackingEdit,
     handleSelectDocument,
+    handleCloseTask,
     handleSubmit,
     isCommitteeCircuit,
     isCreate,
