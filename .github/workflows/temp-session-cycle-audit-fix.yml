@@ -1,0 +1,177 @@
+name: Temp session cycle audit fix
+
+on:
+  push:
+    branches:
+      - fix/session-cycle-global-search
+    paths:
+      - .github/workflows/temp-session-cycle-audit-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/session-cycle-global-search
+          fetch-depth: 0
+
+      - name: Apply audited fixes
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          # 1) Global search: linked task -> session must also work when filtering by committee/paritaria.
+          p = Path('src/services/globalSearch.ts')
+          s = p.read_text()
+          old = """  const shouldBuildLinkedSessionLookup =
+    !parsedQuery.filters.moduleView || parsedQuery.filters.moduleView === 'tareas';
+"""
+          new = """  const shouldBuildLinkedSessionLookup =
+    !parsedQuery.filters.moduleView ||
+    parsedQuery.filters.moduleView === 'comite' ||
+    parsedQuery.filters.moduleView === 'paritaria';
+"""
+          assert old in s, 'globalSearch condition not found'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # 2) Pure helper: an open/reopened session can reference tasks that are already historical.
+          p = Path('src/shared/sessions/sessionManagementPage.helpers.ts')
+          s = p.read_text()
+          anchor = """export function matchesSessionSearch(
+  session: ManagedSession,
+  tasksById: Map<string, Task>,
+  config: SessionModuleConfig,
+  search: string,
+): boolean {
+"""
+          helper = """export function openSessionsReferenceMissingTasks(
+  sessions: ManagedSession[],
+  tasksById: Map<string, Task>,
+): boolean {
+  return sessions.some(
+    (session) =>
+      session.status === 'open' && session.items.some((taskId) => !tasksById.has(taskId)),
+  );
+}
+
+"""
+          assert anchor in s, 'helpers anchor not found'
+          s = s.replace(anchor, helper + anchor, 1)
+          p.write_text(s)
+
+          # 3) Page: reload historical tasks when a reopened/open session contains closed task ids.
+          p = Path('src/shared/sessions/SessionManagementPage.tsx')
+          s = p.read_text()
+          old_import = """  matchesSessionSearch,
+  groupClosedSessionsByYear,
+  sessionExportColumns,
+  sortOpenSessions,
+"""
+          new_import = """  matchesSessionSearch,
+  groupClosedSessionsByYear,
+  openSessionsReferenceMissingTasks,
+  sessionExportColumns,
+  sortOpenSessions,
+"""
+          assert old_import in s, 'page import anchor not found'
+          s = s.replace(old_import, new_import, 1)
+
+          anchor = """  const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+"""
+          addition = """  const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
+  const openSessionNeedsHistoricalTasks = useMemo(
+    () => openSessionsReferenceMissingTasks(sessions, tasksById),
+    [sessions, tasksById],
+  );
+
+  useEffect(() => {
+    if (!openSessionNeedsHistoricalTasks || historicalTasksLoaded) {
+      return;
+    }
+    void loadHistoricalTasks();
+  }, [historicalTasksLoaded, loadHistoricalTasks, openSessionNeedsHistoricalTasks]);
+"""
+          assert anchor in s, 'tasksById anchor not found'
+          s = s.replace(anchor, addition, 1)
+          p.write_text(s)
+
+          # 4) Extend global search regression coverage.
+          p = Path('src/services/globalSearch.test.ts')
+          s = p.read_text()
+          insert = """
+  it('finds a linked closed paritaria task when module filter is explicit', () => {
+    const results = searchTraccion('modulo:paritaria bolsa horas', {
+      committeeSessions: [],
+      paritariaSessions: [{ id: 'paritaria-filtered-1', code: 'CP-08/2026', date: '2026-08-20', title: 'Comisión Paritaria agosto', observations: '', notes: '', status: 'closed', items: ['task-filtered-1'], treatedTaskIds: ['task-filtered-1'], untreatedTaskIds: [], closedAt: '2026-08-20T12:00:00.000Z' }],
+      tasks: [{ id: 'task-filtered-1', titulo: 'Regularización bolsa horas', descripcion: 'Punto histórico', observaciones: '', fase: 'cerrada', estado: 'cerrada', closedAt: '2026-08-20T12:00:00.000Z' }],
+    });
+
+    expect(results).toEqual(expect.arrayContaining([expect.objectContaining({
+      moduleView: 'paritaria',
+      recordId: 'paritaria-filtered-1',
+      matchReason: 'Coincidencia en punto incluido en sesión',
+    })]));
+  });
+"""
+          marker = "\n});\n"
+          idx = s.rfind(marker)
+          assert idx >= 0, 'globalSearch test closing marker not found'
+          s = s[:idx] + insert + s[idx:]
+          p.write_text(s)
+
+          # 5) Regression for reopened/open sessions referencing historical tasks.
+          Path('src/shared/sessions/sessionManagementPage.helpers.test.ts').write_text("""import { describe, expect, it } from 'vitest';
+import type { Task } from '../../features/tareas/domain/task';
+import type { ManagedSession } from './session';
+import { openSessionsReferenceMissingTasks } from './sessionManagementPage.helpers';
+
+const session = (status: 'open' | 'closed', items: string[]): ManagedSession => ({
+  id: 'session-1',
+  date: '2026-10-01',
+  code: 'CP-10/2026',
+  title: 'Sesión',
+  notes: '',
+  observations: '',
+  status,
+  items,
+  treatedTaskIds: [],
+  untreatedTaskIds: [],
+  createdAt: '2026-10-01T08:00:00.000Z',
+  updatedAt: '2026-10-01T09:00:00.000Z',
+  closedAt: status === 'closed' ? '2026-10-01T09:00:00.000Z' : null,
+});
+
+describe('openSessionsReferenceMissingTasks', () => {
+  it('requests historical tasks for a reopened session whose closed point is absent from active tasks', () => {
+    expect(openSessionsReferenceMissingTasks([session('open', ['closed-task'])], new Map<string, Task>())).toBe(true);
+  });
+
+  it('does not require historical tasks when every point is already loaded', () => {
+    const tasksById = new Map<string, Task>([['closed-task', { id: 'closed-task' } as Task]]);
+    expect(openSessionsReferenceMissingTasks([session('open', ['closed-task'])], tasksById)).toBe(false);
+  });
+
+  it('ignores missing points from closed sessions because history view already loads them', () => {
+    expect(openSessionsReferenceMissingTasks([session('closed', ['closed-task'])], new Map<string, Task>())).toBe(false);
+  });
+});
+""")
+          PY
+
+          git diff --check
+
+      - name: Commit final patch and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/temp-session-cycle-audit-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/services/globalSearch.ts src/services/globalSearch.test.ts src/shared/sessions/SessionManagementPage.tsx src/shared/sessions/sessionManagementPage.helpers.ts src/shared/sessions/sessionManagementPage.helpers.test.ts .github/workflows/temp-session-cycle-audit-fix.yml
+          git commit -m "fix(sessions): conservar puntos históricos y búsqueda por módulo"
+          git push origin HEAD:fix/session-cycle-global-search
