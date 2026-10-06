@@ -108,6 +108,16 @@ function getSessionSearchHaystack(
   );
 }
 
+export function openSessionsReferenceMissingTasks(
+  sessions: ManagedSession[],
+  tasksById: Map<string, Task>,
+): boolean {
+  return sessions.some(
+    (session) =>
+      session.status === 'open' && session.items.some((taskId) => !tasksById.has(taskId)),
+  );
+}
+
 export function matchesSessionSearch(
   session: ManagedSession,
   tasksById: Map<string, Task>,
