@@ -1,0 +1,210 @@
+name: Temp task created notices
+
+on:
+  push:
+    branches:
+      - feat/task-created-notices
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/task-created-notices
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply feature
+        shell: bash
+        run: |
+          cat > src/features/tareas/domain/taskCreationNotifications.ts <<'EOF'
+          import type { Task } from './task';
+
+          const STORAGE_PREFIX = 'traccion.taskCreationNotices.v1';
+          const MAX_SEEN_TASK_IDS = 1000;
+
+          type StoredCreationNoticeState = {
+            baselineAt: string;
+            seenTaskIds: string[];
+          };
+
+          function normalizeUser(value: string): string {
+            return value.trim().toLocaleLowerCase('es') || 'usuario-local';
+          }
+
+          function storageKey(windowsUser: string): string {
+            return `${STORAGE_PREFIX}.${normalizeUser(windowsUser)}`;
+          }
+
+          function readState(windowsUser: string): StoredCreationNoticeState | null {
+            if (typeof window === 'undefined') return null;
+            try {
+              const raw = window.localStorage.getItem(storageKey(windowsUser));
+              if (!raw) return null;
+              const parsed: unknown = JSON.parse(raw);
+              if (!parsed || typeof parsed !== 'object') return null;
+              const candidate = parsed as Partial<StoredCreationNoticeState>;
+              if (typeof candidate.baselineAt !== 'string') return null;
+              return {
+                baselineAt: candidate.baselineAt,
+                seenTaskIds: Array.isArray(candidate.seenTaskIds)
+                  ? candidate.seenTaskIds.filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+                  : [],
+              };
+            } catch {
+              return null;
+            }
+          }
+
+          function writeState(windowsUser: string, state: StoredCreationNoticeState): void {
+            if (typeof window === 'undefined') return;
+            const uniqueSeen = Array.from(new Set(state.seenTaskIds)).slice(-MAX_SEEN_TASK_IDS);
+            window.localStorage.setItem(storageKey(windowsUser), JSON.stringify({ ...state, seenTaskIds: uniqueSeen }));
+          }
+
+          export function initializeTaskCreationNoticeBaseline(windowsUser: string, now = new Date().toISOString()): void {
+            if (!windowsUser.trim() || readState(windowsUser)) return;
+            writeState(windowsUser, { baselineAt: now, seenTaskIds: [] });
+          }
+
+          export function getUnseenTaskCreations(tasks: readonly Task[], windowsUser: string): Task[] {
+            const state = readState(windowsUser);
+            if (!state) return [];
+            const seen = new Set(state.seenTaskIds);
+            const unique = new Map<string, Task>();
+            for (const task of tasks) {
+              if (task.deletedAt || seen.has(task.id) || task.createdAt <= state.baselineAt) continue;
+              const current = unique.get(task.id);
+              if (!current || task.updatedAt > current.updatedAt) unique.set(task.id, task);
+            }
+            return Array.from(unique.values()).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+          }
+
+          export function markTaskCreationsSeen(windowsUser: string, tasks: readonly Task[]): void {
+            const state = readState(windowsUser);
+            if (!state) return;
+            writeState(windowsUser, {
+              ...state,
+              seenTaskIds: [...state.seenTaskIds, ...tasks.map((task) => task.id)],
+            });
+          }
+          EOF
+
+          cat > src/features/tareas/domain/taskCreationNotifications.test.ts <<'EOF'
+          // @vitest-environment jsdom
+          import { beforeEach, describe, expect, it } from 'vitest';
+          import type { Task } from './task';
+          import {
+            getUnseenTaskCreations,
+            initializeTaskCreationNoticeBaseline,
+            markTaskCreationsSeen,
+          } from './taskCreationNotifications';
+
+          function task(id: string, createdAt: string, title = id): Task {
+            return {
+              id,
+              titulo: title,
+              descripcion: '',
+              tipo: 'interna',
+              fase: 'tarea',
+              estado: 'pendiente',
+              prioridad: 'media',
+              fechaLimite: '',
+              responsable: '',
+              origen: '',
+              sindicato: '',
+              observaciones: '',
+              mail: '',
+              documentLinks: [],
+              sessionDocumentCode: '',
+              sessionModule: '',
+              sessionDate: '',
+              seguimiento: [],
+              createdAt,
+              updatedAt: createdAt,
+              deletedAt: null,
+              closedAt: null,
+            };
+          }
+
+          describe('taskCreationNotifications', () => {
+            beforeEach(() => window.localStorage.clear());
+
+            it('toma una línea base y no avisa de tareas anteriores', () => {
+              initializeTaskCreationNoticeBaseline('Joseba', '2026-10-06T18:00:00.000Z');
+              expect(getUnseenTaskCreations([task('old', '2026-10-06T17:59:00.000Z')], 'Joseba')).toEqual([]);
+            });
+
+            it('avisa de tareas creadas después de la línea base y permite descartarlas', () => {
+              initializeTaskCreationNoticeBaseline('Joseba', '2026-10-06T18:00:00.000Z');
+              const created = task('new', '2026-10-06T18:01:00.000Z', 'Nueva negociación');
+              expect(getUnseenTaskCreations([created], 'Joseba').map((item) => item.id)).toEqual(['new']);
+              markTaskCreationsSeen('Joseba', [created]);
+              expect(getUnseenTaskCreations([created], 'Joseba')).toEqual([]);
+            });
+
+            it('mantiene el visto separado por usuario', () => {
+              initializeTaskCreationNoticeBaseline('Joseba', '2026-10-06T18:00:00.000Z');
+              initializeTaskCreationNoticeBaseline('Iker', '2026-10-06T18:00:00.000Z');
+              const created = task('new', '2026-10-06T18:01:00.000Z');
+              markTaskCreationsSeen('Joseba', [created]);
+              expect(getUnseenTaskCreations([created], 'Joseba')).toEqual([]);
+              expect(getUnseenTaskCreations([created], 'Iker')).toHaveLength(1);
+            });
+          });
+          EOF
+
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/Header.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          old = """import {\n  getUnseenTaskAssignments,\n  markTaskAssignmentsSeen,\n} from '../features/tareas/domain/taskAssignmentNotifications';\nimport type { Task } from '../features/tareas/domain/task';"""
+          new = """import {\n  getUnseenTaskAssignments,\n  markTaskAssignmentsSeen,\n} from '../features/tareas/domain/taskAssignmentNotifications';\nimport {\n  getUnseenTaskCreations,\n  initializeTaskCreationNoticeBaseline,\n  markTaskCreationsSeen,\n} from '../features/tareas/domain/taskCreationNotifications';\nimport type { Task } from '../features/tareas/domain/task';"""
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = """  const [openedAssignmentIds, setOpenedAssignmentIds] = useState<Set<string>>(() => new Set());\n  const [isAssignmentNoticeOpen, setIsAssignmentNoticeOpen] = useState(false);\n  const [isWindowsUserResolved, setIsWindowsUserResolved] = useState(false);\n  const announcedAssignmentIds = useRef(new Set<string>());\n  const assignmentNoticeRef = useRef<HTMLDivElement>(null);"""
+          new = """  const [openedAssignmentIds, setOpenedAssignmentIds] = useState<Set<string>>(() => new Set());\n  const [dismissedCreationIds, setDismissedCreationIds] = useState<Set<string>>(() => new Set());\n  const [isAssignmentNoticeOpen, setIsAssignmentNoticeOpen] = useState(false);\n  const [isCreationNoticeOpen, setIsCreationNoticeOpen] = useState(false);\n  const [isCreationBaselineReady, setIsCreationBaselineReady] = useState(false);\n  const [isWindowsUserResolved, setIsWindowsUserResolved] = useState(false);\n  const announcedAssignmentIds = useRef(new Set<string>());\n  const announcedCreationIds = useRef(new Set<string>());\n  const assignmentNoticeRef = useRef<HTMLDivElement>(null);\n  const creationNoticeRef = useRef<HTMLDivElement>(null);"""
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = """  const unseenAssignments = useMemo(\n    () => currentResponsible\n      ? getUnseenTaskAssignments(tasks, currentResponsible.nombre, windowsUserName)\n        .filter((task) => !task.assignmentNoticeId || !openedAssignmentIds.has(task.assignmentNoticeId))\n      : [],\n    [currentResponsible, openedAssignmentIds, tasks, windowsUserName],\n  );\n\n  const syncVisual"""
+          new = """  const unseenAssignments = useMemo(\n    () => currentResponsible\n      ? getUnseenTaskAssignments(tasks, currentResponsible.nombre, windowsUserName)\n        .filter((task) => !task.assignmentNoticeId || !openedAssignmentIds.has(task.assignmentNoticeId))\n      : [],\n    [currentResponsible, openedAssignmentIds, tasks, windowsUserName],\n  );\n  const unseenCreations = useMemo(\n    () => isCreationBaselineReady\n      ? getUnseenTaskCreations(tasks, windowsUserName).filter((task) => !dismissedCreationIds.has(task.id))\n      : [],\n    [dismissedCreationIds, isCreationBaselineReady, tasks, windowsUserName],\n  );\n\n  const syncVisual"""
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = """    newlyAssigned.forEach((task) => announcedAssignmentIds.current.add(task.assignmentNoticeId!));\n    setIsAssignmentNoticeOpen(true);"""
+          new = """    newlyAssigned.forEach((task) => announcedAssignmentIds.current.add(task.assignmentNoticeId!));\n    setIsCreationNoticeOpen(false);\n    setIsAssignmentNoticeOpen(true);"""
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          marker = """  useEffect(() => subscribeToAppNavigation(onViewChange), [onViewChange]);"""
+          insertion = """  useEffect(() => {\n    if (!dbStatus?.ready || !isWindowsUserResolved) return;\n    initializeTaskCreationNoticeBaseline(windowsUserName);\n    setIsCreationBaselineReady(true);\n  }, [dbStatus?.ready, isWindowsUserResolved, windowsUserName]);\n\n  useEffect(() => {\n    if (!dbStatus?.ready || !isWindowsUserResolved || !isCreationBaselineReady) return;\n    const newlyCreated = unseenCreations.filter((task) => !announcedCreationIds.current.has(task.id));\n    if (newlyCreated.length === 0) return;\n    newlyCreated.forEach((task) => announcedCreationIds.current.add(task.id));\n    setIsAssignmentNoticeOpen(false);\n    setIsCreationNoticeOpen(true);\n  }, [dbStatus?.ready, isCreationBaselineReady, isWindowsUserResolved, unseenCreations]);\n\n  useEffect(() => {\n    if (unseenCreations.length === 0) setIsCreationNoticeOpen(false);\n  }, [unseenCreations.length]);\n\n  useEffect(() => {\n    if (!isCreationNoticeOpen) return;\n    const handlePointerDown = (event: PointerEvent) => {\n      if (!creationNoticeRef.current?.contains(event.target as Node)) setIsCreationNoticeOpen(false);\n    };\n    const handleKeyDown = (event: KeyboardEvent) => {\n      if (event.key === 'Escape') setIsCreationNoticeOpen(false);\n    };\n    document.addEventListener('pointerdown', handlePointerDown);\n    document.addEventListener('keydown', handleKeyDown);\n    return () => {\n      document.removeEventListener('pointerdown', handlePointerDown);\n      document.removeEventListener('keydown', handleKeyDown);\n    };\n  }, [isCreationNoticeOpen]);\n\n""" + marker
+          assert marker in s
+          s = s.replace(marker, insertion, 1)
+
+          old = """  const handleOpenNewAssignments = () => {\n    if (unseenAssignments.length === 0) return;\n    markTaskAssignmentsSeen(windowsUserName, unseenAssignments);\n    setOpenedAssignmentIds((current) => new Set([...current, ...unseenAssignments.map((task) => task.assignmentNoticeId).filter((id): id is string => Boolean(id))]));\n    setIsAssignmentNoticeOpen(false);\n    onViewChange({ view: 'tareas', responsibleFilter: '__mine__' });\n  };\n\n  return ("""
+          new = """  const handleOpenNewAssignments = () => {\n    if (unseenAssignments.length === 0) return;\n    markTaskAssignmentsSeen(windowsUserName, unseenAssignments);\n    setOpenedAssignmentIds((current) => new Set([...current, ...unseenAssignments.map((task) => task.assignmentNoticeId).filter((id): id is string => Boolean(id))]));\n    setIsAssignmentNoticeOpen(false);\n    onViewChange({ view: 'tareas', responsibleFilter: '__mine__' });\n  };\n\n  const markCreationSeen = (task: Task) => {\n    markTaskCreationsSeen(windowsUserName, [task]);\n    setDismissedCreationIds((current) => new Set(current).add(task.id));\n  };\n\n  const handleOpenCreation = (task: Task) => {\n    markCreationSeen(task);\n    setIsCreationNoticeOpen(false);\n    onViewChange({ view: 'tareas', recordId: task.id });\n  };\n\n  const handleDismissAllCreations = () => {\n    if (unseenCreations.length === 0) return;\n    markTaskCreationsSeen(windowsUserName, unseenCreations);\n    setDismissedCreationIds((current) => new Set([...current, ...unseenCreations.map((task) => task.id)]));\n    setIsCreationNoticeOpen(false);\n  };\n\n  const formatCreationDate = (value: string) => new Intl.DateTimeFormat('es-ES', {\n    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',\n  }).format(new Date(value));\n\n  return ("""
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          marker = """          <div className=\"relative shrink-0\" ref={assignmentNoticeRef}>"""
+          block = """          <div className=\"relative shrink-0\" ref={creationNoticeRef}>\n            <button\n              aria-controls=\"task-creation-notice\"\n              aria-expanded={isCreationNoticeOpen}\n              aria-haspopup=\"dialog\"\n              aria-label={unseenCreations.length > 0 ? `${unseenCreations.length} tarea${unseenCreations.length === 1 ? '' : 's'} nueva${unseenCreations.length === 1 ? '' : 's'} creada${unseenCreations.length === 1 ? '' : 's'}` : 'No hay nuevas tareas creadas'}\n              className={`relative inline-flex h-8 w-8 items-center justify-center rounded-lg border text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 ${unseenCreations.length > 0 ? 'border-sky-400/40 bg-sky-400/12 text-sky-200 hover:border-sky-300/70 hover:bg-sky-400/20' : 'border-white/10 bg-white/[0.045] text-metro-muted hover:border-white/20 hover:text-metro-text'}`}\n              onClick={() => unseenCreations.length > 0 ? setIsCreationNoticeOpen((open) => !open) : undefined}\n              title={unseenCreations.length > 0 ? 'Consultar nuevas tareas creadas' : 'Sin nuevas tareas creadas'}\n              type=\"button\"\n            >\n              <Bell size={15} aria-hidden=\"true\" />\n              {unseenCreations.length > 0 ? <span className=\"absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-sky-400 px-1 text-[10px] font-extrabold leading-none text-slate-950 ring-2 ring-[#08111F]\">{unseenCreations.length > 9 ? '9+' : unseenCreations.length}</span> : null}\n            </button>\n            {isCreationNoticeOpen && unseenCreations.length > 0 ? (\n              <section aria-label=\"Nuevas tareas creadas\" className=\"absolute right-0 top-[calc(100%+10px)] z-50 w-[min(25rem,calc(100vw-5rem))] overflow-hidden rounded-2xl border border-sky-400/30 bg-metro-surface text-metro-text shadow-[0_22px_55px_rgba(2,6,23,0.6)]\" id=\"task-creation-notice\" role=\"dialog\">\n                <div className=\"flex items-start gap-3 border-b border-white/10 bg-sky-950/25 px-4 py-3\">\n                  <span className=\"rounded-xl border border-sky-400/30 bg-sky-400/10 p-2 text-sky-300\"><Bell size={18} aria-hidden=\"true\" /></span>\n                  <div className=\"min-w-0 flex-1\"><h2 className=\"text-sm font-bold\">{unseenCreations.length === 1 ? 'Nueva tarea creada' : 'Nuevas tareas creadas'}</h2><p className=\"mt-0.5 text-xs text-metro-muted\">Aviso informativo para evitar duplicar tareas o asuntos similares.</p></div>\n                  <button aria-label=\"Cerrar aviso\" className=\"rounded-lg p-1 text-metro-muted hover:bg-white/10 hover:text-metro-text\" onClick={() => setIsCreationNoticeOpen(false)} type=\"button\"><X size={17} /></button>\n                </div>\n                <div className=\"max-h-72 space-y-1 overflow-y-auto p-2\">\n                  {unseenCreations.slice(0, 5).map((task) => (\n                    <div className=\"rounded-xl border border-sky-400/15 bg-sky-400/[0.045] px-3 py-2.5\" key={task.id}>\n                      <div className=\"flex items-start gap-2\"><span className=\"mt-1.5 h-2 w-2 shrink-0 rounded-full bg-sky-400\" aria-hidden=\"true\" /><div className=\"min-w-0 flex-1\"><p className=\"truncate text-sm font-semibold\" title={task.titulo}>{task.titulo}</p><p className=\"mt-0.5 text-[11px] text-metro-muted\">Creada {formatCreationDate(task.createdAt)}</p></div></div>\n                      <div className=\"mt-2 flex justify-end gap-2\"><button className=\"rounded-lg border border-sky-400/25 px-2.5 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-400/10\" onClick={() => handleOpenCreation(task)} type=\"button\">Ver tarea</button><button className=\"rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-600\" onClick={() => markCreationSeen(task)} type=\"button\">OK</button></div>\n                    </div>\n                  ))}\n                  {unseenCreations.length > 5 ? <p className=\"px-3 py-1 text-xs text-metro-muted\">Y {unseenCreations.length - 5} más</p> : null}\n                </div>\n                <div className=\"flex justify-end border-t border-white/10 px-3 py-2.5\"><button className=\"rounded-lg px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-400/10\" onClick={handleDismissAllCreations} type=\"button\">Marcar todas como vistas</button></div>\n              </section>\n            ) : null}\n          </div>\n\n""" + marker
+          assert marker in s
+          s = s.replace(marker, block, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          rm .github/workflows/temp-task-created-notices.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Header.tsx src/features/tareas/domain/taskCreationNotifications.ts src/features/tareas/domain/taskCreationNotifications.test.ts .github/workflows/temp-task-created-notices.yml
+          git commit -m "feat(tareas): avisar de nuevas tareas creadas"
+          git push origin feat/task-created-notices
