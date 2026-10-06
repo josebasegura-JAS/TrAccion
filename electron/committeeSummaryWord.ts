@@ -219,7 +219,7 @@ async function acquireLock(folderPath: string): Promise<() => Promise<void>> {
     const handle = await open(lockPath, 'wx');
     await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), 'utf8');
     await handle.close();
-  } catch (error) {
+  } catch {
     try {
       const info = await stat(lockPath);
       if (Date.now() - info.mtimeMs > LOCK_STALE_MS) {
