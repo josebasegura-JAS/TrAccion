@@ -1,0 +1,161 @@
+from pathlib import Path
+
+service = Path('src/services/globalSearch.ts')
+s = service.read_text()
+
+old = "type UnknownRecord = Record<string, unknown>;\n"
+new = """type UnknownRecord = Record<string, unknown>;
+
+export interface GlobalSearchData {
+  tasks?: readonly unknown[];
+  committeeSessions?: readonly unknown[];
+  paritariaSessions?: readonly unknown[];
+}
+"""
+assert old in s
+s = s.replace(old, new, 1)
+
+old = "function readArray(storageKey: string): UnknownRecord[] {"
+new = """function recordsFromOverride(records: readonly unknown[] | undefined): UnknownRecord[] | null {
+  return records ? records.filter(isRecord) : null;
+}
+
+function readArray(storageKey: string): UnknownRecord[] {"""
+assert old in s
+s = s.replace(old, new, 1)
+
+old = """function buildLinkedSessionLookup(): Map<string, LinkedSessionMatch> {
+  const cacheKey = SESSION_MODULES.map((m) => readStorageItem(m.storageKey) ?? '').join('\\0');
+  if (linkedSessionLookupCache !== null && linkedSessionLookupCacheKey === cacheKey) {
+    return linkedSessionLookupCache;
+  }
+"""
+new = """function getSessionModuleRecords(
+  sessionModule: (typeof SESSION_MODULES)[number],
+  data?: GlobalSearchData,
+): UnknownRecord[] {
+  const override = sessionModule.moduleView === 'comite'
+    ? recordsFromOverride(data?.committeeSessions)
+    : recordsFromOverride(data?.paritariaSessions);
+  return override ?? readArray(sessionModule.storageKey);
+}
+
+function buildLinkedSessionLookup(data?: GlobalSearchData): Map<string, LinkedSessionMatch> {
+  const hasOverrides = Boolean(data?.committeeSessions || data?.paritariaSessions);
+  const cacheKey = hasOverrides
+    ? ''
+    : SESSION_MODULES.map((m) => readStorageItem(m.storageKey) ?? '').join('\\0');
+  if (!hasOverrides && linkedSessionLookupCache !== null && linkedSessionLookupCacheKey === cacheKey) {
+    return linkedSessionLookupCache;
+  }
+"""
+assert old in s
+s = s.replace(old, new, 1)
+s = s.replace("for (const session of readArray(sessionModule.storageKey)) {", "for (const session of getSessionModuleRecords(sessionModule, data)) {", 1)
+old = """  linkedSessionLookupCache = lookup;
+  linkedSessionLookupCacheKey = cacheKey;
+  return lookup;
+}"""
+new = """  if (!hasOverrides) {
+    linkedSessionLookupCache = lookup;
+    linkedSessionLookupCacheKey = cacheKey;
+  }
+  return lookup;
+}"""
+assert old in s
+s = s.replace(old, new, 1)
+s = s.replace("['code', 'status', 'notes'],", "['code', 'status', 'observations', 'notes'],")
+
+old = "export function searchTraccion(query: string): GlobalSearchResult[] {"
+new = """function getSearchableModuleRecords(
+  searchableModule: SearchableModule,
+  data?: GlobalSearchData,
+): UnknownRecord[] {
+  const override = searchableModule.moduleView === 'tareas'
+    ? recordsFromOverride(data?.tasks)
+    : searchableModule.moduleView === 'comite'
+      ? recordsFromOverride(data?.committeeSessions)
+      : searchableModule.moduleView === 'paritaria'
+        ? recordsFromOverride(data?.paritariaSessions)
+        : null;
+
+  return override ?? readArray(searchableModule.storageKey);
+}
+
+export function searchTraccion(query: string, data?: GlobalSearchData): GlobalSearchResult[] {"""
+assert old in s
+s = s.replace(old, new, 1)
+s = s.replace("? buildLinkedSessionLookup()", "? buildLinkedSessionLookup(data)", 1)
+s = s.replace("readArray(searchableModule.storageKey).flatMap((record, index) => {", "getSearchableModuleRecords(searchableModule, data).flatMap((record, index) => {", 1)
+service.write_text(s)
+
+component = Path('src/components/GlobalSearch.tsx')
+s = component.read_text()
+old = "import type { AppView } from '../navigation/navigation';\n"
+new = """import type { AppView } from '../navigation/navigation';
+import { useTaskStore } from '../features/tareas/store/useTaskStore';
+import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
+import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
+"""
+assert old in s
+s = s.replace(old, new, 1)
+old = "  const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentSearches());\n"
+new = old + """  const tasks = useTaskStore((state) => state.tasks);
+  const historicalTasksLoaded = useTaskStore((state) => state.historicalTasksLoaded);
+  const loadHistoricalTasks = useTaskStore((state) => state.loadHistoricalTasks);
+  const committeeSessions = useCommitteeSessionStore((state) => state.sessions);
+  const committeeHistoryLoaded = useCommitteeSessionStore((state) => state.hasLoadedHistoricalSessions);
+  const loadCommitteeHistory = useCommitteeSessionStore((state) => state.loadHistoricalSessions);
+  const paritariaSessions = useParitariaSessionStore((state) => state.sessions);
+  const paritariaHistoryLoaded = useParitariaSessionStore((state) => state.hasLoadedHistoricalSessions);
+  const loadParitariaHistory = useParitariaSessionStore((state) => state.loadHistoricalSessions);
+"""
+assert old in s
+s = s.replace(old, new, 1)
+old = """  const results = useMemo(
+    () => (canSearch ? searchTraccion(debouncedQuery) : []),
+    [canSearch, debouncedQuery],
+  );
+"""
+new = """  useEffect(() => {
+    if (!isOpen || !canSearch) return;
+    if (!historicalTasksLoaded) void loadHistoricalTasks();
+    if (!committeeHistoryLoaded) loadCommitteeHistory();
+    if (!paritariaHistoryLoaded) loadParitariaHistory();
+  }, [canSearch, committeeHistoryLoaded, historicalTasksLoaded, isOpen, loadCommitteeHistory, loadHistoricalTasks, loadParitariaHistory, paritariaHistoryLoaded]);
+
+  const results = useMemo(
+    () => canSearch ? searchTraccion(debouncedQuery, {
+      tasks: historicalTasksLoaded ? tasks : undefined,
+      committeeSessions: committeeHistoryLoaded ? committeeSessions : undefined,
+      paritariaSessions: paritariaHistoryLoaded ? paritariaSessions : undefined,
+    }) : [],
+    [canSearch, committeeHistoryLoaded, committeeSessions, debouncedQuery, historicalTasksLoaded, paritariaHistoryLoaded, paritariaSessions, tasks],
+  );
+"""
+assert old in s
+s = s.replace(old, new, 1)
+component.write_text(s)
+
+Path('src/services/globalSearch.test.ts').write_text("""import { describe, expect, it } from 'vitest';
+import { searchTraccion } from './globalSearch';
+
+describe('globalSearch closed committee/paritaria sessions', () => {
+  it('finds a closed committee session by its observations', () => {
+    const results = searchTraccion('turnos nocturnos', {
+      committeeSessions: [{ id: 'comite-closed-1', code: 'CE-12/2026', date: '2026-09-15', title: 'Comité septiembre', observations: 'Resumen del acuerdo sobre turnos nocturnos', notes: '', status: 'closed', items: [], treatedTaskIds: [], untreatedTaskIds: [], closedAt: '2026-09-15T12:00:00.000Z' }],
+      paritariaSessions: [], tasks: [],
+    });
+    expect(results).toEqual(expect.arrayContaining([expect.objectContaining({ moduleView: 'comite', recordId: 'comite-closed-1', status: 'closed' })]));
+  });
+
+  it('finds a closed paritaria session through a linked closed task', () => {
+    const results = searchTraccion('bolsa de horas', {
+      committeeSessions: [],
+      paritariaSessions: [{ id: 'paritaria-closed-1', code: 'CP-07/2026', date: '2026-07-28', title: 'Comisión Paritaria julio', observations: '', notes: '', status: 'closed', items: ['task-closed-1'], treatedTaskIds: ['task-closed-1'], untreatedTaskIds: [], closedAt: '2026-07-28T12:00:00.000Z' }],
+      tasks: [{ id: 'task-closed-1', titulo: 'Regularización bolsa de horas', descripcion: 'Punto tratado y cerrado en la comisión', observaciones: '', fase: 'cerrada', estado: 'cerrada', closedAt: '2026-07-28T12:00:00.000Z' }],
+    });
+    expect(results).toEqual(expect.arrayContaining([expect.objectContaining({ moduleView: 'paritaria', recordId: 'paritaria-closed-1', status: 'closed', matchReason: 'Coincidencia en punto incluido en sesión' })]));
+  });
+});
+""")
