@@ -7,11 +7,6 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  ensureDirectoryIsUsable,
-  fileExists,
-  prepareDatabaseFile,
-} from './persistence/databaseFileSystem.js';
-import {
   createVolatileOwnerId,
   resolveStableOwnerId,
 } from './persistence/stableOwnerIdentity.js';
@@ -89,11 +84,8 @@ import {
   type DatabaseConnectivityIssuePayload,
   type DatabaseLockInfo,
 } from './persistence/sqliteLockLifecycle.js';
-import { openSqliteDatabase } from './persistence/sqliteConnection.js';
-import {
-  inspectAndEnsureDatabaseIdentity,
-  readDatabaseIdentity,
-} from './persistence/databaseIdentity.js';
+import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
+import { activateSqliteDatabase } from './persistence/databaseActivation.js';
 import {
   SQLITE_BUSY_RETRY_DELAYS_MS,
   isSqliteBusyOrLockedError,
@@ -532,10 +524,6 @@ async function backupExistingDatabase(databasePath: string): Promise<void> {
   }
 }
 
-function openDatabase(databasePath: string): Database {
-  return openSqliteDatabase(databasePath, { busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS });
-}
-
 function resetRepositoryMigrationState(): void {
   taskModule.resetMigrationState();
   employeeModule.resetMigrationState();
@@ -553,11 +541,7 @@ function closeDatabase(): void {
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
-  if (database) {
-    database.close();
-    database = null;
-  }
-  resetRepositoryMigrationState();
+  closeDatabase();
 }
 
 async function activateDatabase(
@@ -565,95 +549,22 @@ async function activateDatabase(
   isDefaultPath: boolean,
   sourceDatabasePath: string | null,
 ): Promise<DatabaseStatus> {
-  const databasePath = getDatabasePathForDirectory(directoryPath);
-  const lockPath = getLockPath(databasePath);
-
-  // TrAcción es una aplicación multiusuario: una SQLite local nunca puede ser
-  // una base operativa válida. Si falta la configuración compartida, se mantiene
-  // el acceso a Ajustes pero toda edición debe quedar bloqueada.
-  if (isDefaultPath) {
-    throw new Error(
-      'No hay una base de datos compartida configurada. Selecciona en Ajustes la carpeta que contiene traccion.sqlite. ' +
-        'TrAcción permanecerá en modo consulta y no guardará cambios en una base local.',
-    );
-  }
-
-  await ensureDirectoryIsUsable(directoryPath);
-
-  // Bloqueo temporal solo para la fase delicada de arranque: creación inicial,
-  // copia desde origen y migraciones. No se mantiene como lock de sesión porque
-  // bloquearía al segundo usuario. La confiabilidad multiusuario se apoya en un
-  // único lock corto por operación crítica SQLite, compartido también por backups.
-  const startupLock = await acquireStartupLock(databasePath);
-  const startupLockHeartbeat = startDatabaseLockHeartbeat(lockPath, startupLock);
-
-  try {
-    // Una ruta SQLite personalizada representa la base compartida de trabajo.
-    // Si el fichero ha desaparecido, no debemos permitir que better-sqlite3 cree
-    // silenciosamente una base vacía: eso haría que el usuario trabajase aislado.
-    // Al cambiar expresamente de ruta sí se permite crearla copiando la base origen.
-    if (!isDefaultPath && sourceDatabasePath === null && !(await fileExists(databasePath))) {
-      throw new Error(
-        `No se encuentra la base de datos compartida configurada: ${databasePath}. ` +
-          'TrAcción permanecerá bloqueado hasta recuperar esa base o corregir la ruta en Ajustes.',
-      );
-    }
-
-    await prepareDatabaseFile(databasePath, sourceDatabasePath);
-
-    // Antes de aplicar ninguna migración, demostrar que el fichero pertenece a
-    // TrAcción. Las bases legacy válidas reciben identidad una única vez. Si el
-    // equipo ya estaba vinculado a un UUID, una base distinta se rechaza.
-    const preferences = await readDatabasePreferences();
-    const configuredDirectoryMatches = Boolean(
-      preferences.customDirectoryPath &&
-        path.resolve(preferences.customDirectoryPath) === path.resolve(directoryPath),
-    );
-    const allowLegacyBootstrap =
-      !preferences.expectedDatabaseUuid || sourceDatabasePath !== null || configuredDirectoryMatches;
-    const identityInspection = inspectAndEnsureDatabaseIdentity(databasePath, {
-      expectedDatabaseUuid: preferences.expectedDatabaseUuid ?? null,
-      allowLegacyBootstrap,
-    });
-    const db = openDatabase(databasePath);
-    const identity = readDatabaseIdentity(db) ?? identityInspection.identity;
-    // Limpiar los editing_locks que este proceso dejó sin liberar en un reinicio
-    // o crash anterior. Al tener ownerId estable, podemos eliminarlos activamente
-    // sin esperar al TTL de 30s.
-    try {
-      db.prepare('DELETE FROM editing_locks WHERE owner_id = ?').run(ownerId);
-    } catch {
-      // No bloquear el arranque si la tabla aún no existe (base nueva).
-    }
-    database = db;
-    status = {
-      ready: true,
-      engine: 'better-sqlite3',
-      phase: 'active',
-      path: databasePath,
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      isDefaultPath,
-      lockPath,
-      applicationId: identity.applicationId,
-      databaseUuid: identity.databaseUuid,
-      databaseCreatedAt: identity.createdAt,
-      environment: identity.environment,
-    };
-
-    if (!preferences.expectedDatabaseUuid) {
-      await writeDatabasePreferences({
-        ...preferences,
-        expectedDatabaseUuid: identity.databaseUuid,
-      });
-    }
-    clearInterval(startupLockHeartbeat);
-    await releaseLock(lockPath, startupLock);
-    return status;
-  } catch (error) {
-    clearInterval(startupLockHeartbeat);
-    await releaseLock(lockPath, startupLock);
-    throw error;
-  }
+  const activated = await activateSqliteDatabase(
+    directoryPath,
+    isDefaultPath,
+    sourceDatabasePath,
+    {
+      ownerId,
+      busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS,
+      getLockPath,
+      acquireStartupLock,
+      startDatabaseLockHeartbeat,
+      releaseLock,
+    },
+  );
+  database = activated.database;
+  status = activated.status;
+  return status;
 }
 
 export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
