@@ -1,0 +1,63 @@
+name: Temp task close button
+
+on:
+  push:
+    branches:
+      - feat/task-close-button
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/task-close-button
+          fetch-depth: 0
+      - name: Aplicar cambio
+        shell: python
+        run: |
+          from pathlib import Path
+
+          controller_path = Path('src/components/task-editor/useTaskEditorController.ts')
+          controller = controller_path.read_text(encoding='utf-8')
+          old_import = """import {\n  type Task,\n  type TaskDraft,\n  type TaskSeguimientoEntry,\n} from '../../features/tareas/domain/task';"""
+          new_import = """import {\n  CLOSED_TASK_PHASE,\n  isTaskClosed,\n  type Task,\n  type TaskDraft,\n  type TaskSeguimientoEntry,\n} from '../../features/tareas/domain/task';"""
+          assert old_import in controller
+          controller = controller.replace(old_import, new_import, 1)
+
+          marker = """  const seguimientoForSave = trackingText.trim()\n    ? encodeTracking(trackingText, trackingDate, trackingUser)\n    : undefined;\n\n  const handleSubmit = async () => {"""
+          replacement = """  const seguimientoForSave = trackingText.trim()\n    ? encodeTracking(trackingText, trackingDate, trackingUser)\n    : undefined;\n\n  const handleCloseTask = async (): Promise<boolean> => {\n    if (isCreate || !task || isTaskClosed(task) || isFormReadOnly) return false;\n\n    setSaveStatus('');\n    setSaveStatusIsError(false);\n\n    const liveLock = await window.traccion?.getRecordLock?.({ module: 'tareas', recordId: task.id });\n    if (!liveLock?.ok || liveLock.status !== 'acquired') {\n      setSaveStatus(liveLock?.message || 'No se ha confirmado el bloqueo compartido de edición.');\n      setSaveStatusIsError(true);\n      return false;\n    }\n\n    const closedDraft: TaskDraft = {\n      ...draft,\n      estado: 'cerrada',\n      fase: CLOSED_TASK_PHASE,\n    };\n    const result = await updateTask(task.id, closedDraft, undefined, loadedUpdatedAt);\n    if (!result.ok) {\n      setSaveStatus(result.message);\n      setSaveStatusIsError(true);\n      return false;\n    }\n\n    clearRecoveryDraft();\n    onDone();\n    return true;\n  };\n\n  const handleSubmit = async () => {"""
+          assert marker in controller
+          controller = controller.replace(marker, replacement, 1)
+          assert '    handleSubmit,\n' in controller
+          controller = controller.replace('    handleSubmit,\n', '    handleCloseTask,\n    handleSubmit,\n', 1)
+          controller_path.write_text(controller, encoding='utf-8')
+
+          editor_path = Path('src/components/TaskEditor.tsx')
+          editor = editor_path.read_text(encoding='utf-8')
+          editor = editor.replace('  BookOpen,\n', '  BookOpen,\n  CheckCircle2,\n', 1)
+          editor = editor.replace("import { type Task, type TaskDraft } from '../features/tareas/domain/task';", "import { isTaskClosed, type Task, type TaskDraft } from '../features/tareas/domain/task';", 1)
+          editor = editor.replace("import { useTaskEditorController } from './task-editor/useTaskEditorController';", "import { useTaskEditorController } from './task-editor/useTaskEditorController';\nimport { useAppDialog } from '../hooks/useAppDialog';", 1)
+          editor = editor.replace("  const [taskPrintPreviewHtml, setTaskPrintPreviewHtml] = useState<string | null>(null);", "  const [taskPrintPreviewHtml, setTaskPrintPreviewHtml] = useState<string | null>(null);\n  const { confirm: confirmCloseTask, dialogNode: closeTaskDialogNode } = useAppDialog();", 1)
+          editor = editor.replace('    handleImportMailFile,\n', '    handleCloseTask,\n    handleImportMailFile,\n', 1)
+          anchor = """              {!isCreate && task && (\n                <ActionButton disabled={isFormReadOnly} iconOnly={false} variant=\"delete\" onClick={() => void (async () => {\n                  const result = await removeTask(task.id, loadedUpdatedAt);\n                  if (!result.ok) { setSaveStatus(result.message); setSaveStatusIsError(true); return; }\n                  clearRecoveryDraft(); onDone();\n                })()}>Eliminar</ActionButton>\n              )}\n"""
+          addition = anchor + """              {!isCreate && task && !isTaskClosed(task) && (\n                <ActionButton\n                  disabled={isFormReadOnly}\n                  icon={CheckCircle2}\n                  iconOnly={false}\n                  onClick={() => void (async () => {\n                    const confirmed = await confirmCloseTask(\n                      '¿Cerrar esta tarea?\\n\\nPasará al histórico y dejará de aparecer entre las tareas activas. El seguimiento y sus vínculos se conservarán.',\n                      { confirmLabel: 'Cerrar tarea', cancelLabel: 'Cancelar', title: 'Cerrar tarea' },\n                    );\n                    if (confirmed) await handleCloseTask();\n                  })()}\n                  variant=\"approve\"\n                >\n                  Cerrar tarea\n                </ActionButton>\n              )}\n"""
+          assert anchor in editor
+          editor = editor.replace(anchor, addition, 1)
+          editor = editor.replace('      {dialogNode}\n', '      {dialogNode}\n      {closeTaskDialogNode}\n', 1)
+          editor_path.write_text(editor, encoding='utf-8')
+
+          test_path = Path('src/features/tareas/store/taskMutations.close.test.ts')
+          test_path.write_text("""import { describe, expect, it } from 'vitest';\nimport { CLOSED_TASK_PHASE, type Task, type TaskDraft } from '../domain/task';\nimport { buildUpdatedTask } from './taskMutations';\n\nconst baseTask: Task = {\n  id: 'task-1', titulo: 'Tarea de prueba', descripcion: '', tipo: 'interna', fase: 'tarea',\n  estado: 'en curso', prioridad: 'media', fechaLimite: '', responsable: '', origen: '', sindicato: '',\n  observaciones: '', mail: '', documentLinks: [], sessionDocumentCode: '', sessionModule: '', sessionDate: '',\n  seguimiento: [], createdAt: '2026-10-01T08:00:00.000Z', updatedAt: '2026-10-01T08:00:00.000Z',\n  deletedAt: null, closedAt: null,\n};\n\nfunction draftFromTask(task: Task): TaskDraft {\n  return {\n    titulo: task.titulo, descripcion: task.descripcion, tipo: task.tipo, fase: task.fase, estado: task.estado,\n    prioridad: task.prioridad, fechaLimite: task.fechaLimite, responsable: task.responsable, origen: task.origen,\n    sindicato: task.sindicato, observaciones: task.observaciones, mail: task.mail, documentLinks: task.documentLinks,\n  };\n}\n\ndescribe('cierre visual de tareas', () => {\n  it('guarda estado y fase cerrados y fija closedAt', () => {\n    const closedDraft = { ...draftFromTask(baseTask), estado: 'cerrada', fase: CLOSED_TASK_PHASE };\n    const result = buildUpdatedTask(baseTask, closedDraft, undefined);\n    expect(result.estado).toBe('cerrada');\n    expect(result.fase).toBe(CLOSED_TASK_PHASE);\n    expect(result.closedAt).not.toBeNull();\n  });\n});\n""", encoding='utf-8')
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temp-task-close-button.yml
+          git add src/components/TaskEditor.tsx src/components/task-editor/useTaskEditorController.ts src/features/tareas/store/taskMutations.close.test.ts
+          git commit -m "feat(tareas): añadir botón visual para cerrar tareas"
+          git push origin HEAD:feat/task-close-button
