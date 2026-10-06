@@ -2,6 +2,9 @@ import { ModalCloseButton } from './ui/ModalCloseButton';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { AppView } from '../navigation/navigation';
+import { useTaskStore } from '../features/tareas/store/useTaskStore';
+import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
+import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
 import { StatusBadge } from './ui/StatusBadge';
 import {
   MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH,
@@ -129,6 +132,15 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   const [yearFilter, setYearFilter] = useState<YearFilter>(ALL_YEARS_FILTER);
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentSearches());
+  const tasks = useTaskStore((state) => state.tasks);
+  const historicalTasksLoaded = useTaskStore((state) => state.historicalTasksLoaded);
+  const loadHistoricalTasks = useTaskStore((state) => state.loadHistoricalTasks);
+  const committeeSessions = useCommitteeSessionStore((state) => state.sessions);
+  const committeeHistoryLoaded = useCommitteeSessionStore((state) => state.hasLoadedHistoricalSessions);
+  const loadCommitteeHistory = useCommitteeSessionStore((state) => state.loadHistoricalSessions);
+  const paritariaSessions = useParitariaSessionStore((state) => state.sessions);
+  const paritariaHistoryLoaded = useParitariaSessionStore((state) => state.hasLoadedHistoricalSessions);
+  const loadParitariaHistory = useParitariaSessionStore((state) => state.loadHistoricalSessions);
   const debouncedQuery = useDebouncedValue(query, 180);
   const trimmedQuery = query.trim();
   const debouncedTrimmedQuery = debouncedQuery.trim();
@@ -136,9 +148,20 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   const canSearch =
     debouncedTrimmedQuery.length >= MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH ||
     parsedSearchSummary.length > 0;
+  useEffect(() => {
+    if (!isOpen || !canSearch) return;
+    if (!historicalTasksLoaded) void loadHistoricalTasks();
+    if (!committeeHistoryLoaded) loadCommitteeHistory();
+    if (!paritariaHistoryLoaded) loadParitariaHistory();
+  }, [canSearch, committeeHistoryLoaded, historicalTasksLoaded, isOpen, loadCommitteeHistory, loadHistoricalTasks, loadParitariaHistory, paritariaHistoryLoaded]);
+
   const results = useMemo(
-    () => (canSearch ? searchTraccion(debouncedQuery) : []),
-    [canSearch, debouncedQuery],
+    () => canSearch ? searchTraccion(debouncedQuery, {
+      tasks: historicalTasksLoaded ? tasks : undefined,
+      committeeSessions: committeeHistoryLoaded ? committeeSessions : undefined,
+      paritariaSessions: paritariaHistoryLoaded ? paritariaSessions : undefined,
+    }) : [],
+    [canSearch, committeeHistoryLoaded, committeeSessions, debouncedQuery, historicalTasksLoaded, paritariaHistoryLoaded, paritariaSessions, tasks],
   );
   const moduleOptions = useMemo(
     () => Array.from(new Map(results.map((result) => [result.moduleView, result.module])).entries()),
