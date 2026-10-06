@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openSqliteDatabase } from './persistence/sqliteConnection';
+import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 
 const testContext = vi.hoisted(() => ({ userDataPath: '' }));
 
