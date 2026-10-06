@@ -345,7 +345,9 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
 async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutencion[]> {
   if (!hasTicketRestauranteManutencionesSqliteRepository()) {
     return import.meta.env.MODE === 'test'
-      ? readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(normalizeStoredTicketManutencion)
+      ? readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map((row) =>
+          normalizeStoredTicketManutencion(row),
+        )
       : [];
   }
 
@@ -380,7 +382,7 @@ function readTicketRestauranteSnapshot(): TicketRestauranteSnapshot {
     people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
     config: readConfig(),
     manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
-      normalizeStoredTicketManutencion,
+      (row) => normalizeStoredTicketManutencion(row),
     ),
   };
 }
