@@ -17,10 +17,8 @@ import {
 } from './persistence/simpleJsonModuleRepository.js';
 import { pruneLocalStorageBackups } from './persistence/maintenanceQueries.js';
 import {
-  CONFIGURACION_STATE_ID,
   CURRENT_SCHEMA_VERSION,
   readCurrentSchemaVersion,
-  isConfiguracionStateRow,
 } from './persistence/schemaMigrations.js';
 import {
   type RecordLockOwnerInfo as RecordLockModuleOwnerInfo,
@@ -58,6 +56,7 @@ import { createTicketRestauranteAbsencesRepository } from './persistence/ticketR
 import { createTicketRestauranteManutencionesRepository } from './persistence/ticketRestauranteManutencionesRepository.js';
 import { createPresupuestosRepository } from './persistence/presupuestosRepository.js';
 import { createLoteriaRepository } from './persistence/loteriaRepository.js';
+import { createConfiguracionRepository } from './persistence/configuracionRepository.js';
 import {
   getVacuumStatus as getVacuumStatusFromModule,
   vacuumDatabase as vacuumDatabaseFromModule,
@@ -263,8 +262,6 @@ let ownerId = createVolatileOwnerId();
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
-// Flags para evitar el COUNT(*) de red en cada carga una vez confirmado que la migración ya se hizo.
-let configuracionMigrationDone = false;
 
 export type { DatabaseConnectivityIssuePayload, DatabaseLockInfo } from './persistence/sqliteLockLifecycle.js';
 
@@ -1271,121 +1268,18 @@ const presupuestosModule = createPresupuestosRepository({
 const { loadPresupuestosRecordsSnapshot, savePresupuestosSnapshotIfUnchanged } = presupuestosModule;
 export { loadPresupuestosRecordsSnapshot, savePresupuestosSnapshotIfUnchanged };
 
-function maybeMigrateConfiguracionFromPersistedRecord(db: Database): void {
-  if (configuracionMigrationDone) {
-    return;
-  }
-
-  const row = db
-    .prepare('SELECT value_json, updated_at FROM persisted_records WHERE key = ?')
-    .get('traccion.v1.configuracion');
-  if (!isConfiguracionStateRow(row)) {
-    configuracionMigrationDone = true;
-    return;
-  }
-
-  const now = row.updated_at || new Date().toISOString();
-  db.prepare(
-    `INSERT OR IGNORE INTO configuracion_state (id, value_json, created_at, updated_at, deleted_at)
-     VALUES (?, ?, ?, ?, NULL)`,
-  ).run(CONFIGURACION_STATE_ID, row.value_json, now, now);
-  configuracionMigrationDone = true;
-}
-
-export async function loadConfiguracionSnapshot(): Promise<{
-  status: DatabaseStatus;
-  value: string | null;
-  updatedAt: string | null;
-}> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return { status: currentStatus, value: null, updatedAt: null };
-      }
-
-      const db = requireDatabase();
-      db.transaction(() => maybeMigrateConfiguracionFromPersistedRecord(db))();
-      const row = db
-        .prepare(
-          'SELECT value_json, updated_at FROM configuracion_state WHERE id = ? AND deleted_at IS NULL',
-        )
-        .get(CONFIGURACION_STATE_ID);
-      if (!isConfiguracionStateRow(row)) {
-        return { status: currentStatus, value: null, updatedAt: null };
-      }
-      return { status: currentStatus, value: row.value_json, updatedAt: row.updated_at };
-    },
-    (nextStatus) => ({ status: nextStatus, value: null, updatedAt: null }),
-  );
-}
-
-export async function saveConfiguracionIfUnchanged(record: {
-  value: string;
-  expectedUpdatedAt: string | null;
-}): Promise<JsonRecordSaveResult> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (
-        !currentStatus.ready ||
-        currentStatus.phase !== 'active' ||
-        isDatabaseWriteBlockedByHeartbeat()
-      ) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message:
-            currentStatus.message ??
-            'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-      const db = requireDatabase();
-      return db.transaction((): JsonRecordSaveResult => {
-        maybeMigrateConfiguracionFromPersistedRecord(db);
-        const row = db
-          .prepare('SELECT updated_at FROM configuracion_state WHERE id = ?')
-          .get(CONFIGURACION_STATE_ID);
-        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-        if (currentUpdatedAt !== record.expectedUpdatedAt) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt,
-            message: 'Configuración ha sido modificada por otro usuario. Recarga antes de guardar.',
-          };
-        }
-
-        const updatedAt = new Date().toISOString();
-        db.prepare(
-          `INSERT INTO configuracion_state (id, value_json, created_at, updated_at, deleted_at)
-           VALUES (?, ?, ?, ?, NULL)
-           ON CONFLICT(id) DO UPDATE SET
-             value_json = excluded.value_json,
-             updated_at = excluded.updated_at,
-             deleted_at = NULL`,
-        ).run(CONFIGURACION_STATE_ID, record.value, updatedAt, updatedAt);
-        updateRefreshMetadata(db, updatedAt);
-        enqueueLocalBackup('save:configuracion');
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: updatedAt,
-          message: 'Configuración guardada en SQLite.',
-        };
-      })();
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
-      message,
-    }),
-  );
-}
+const configuracionModule = createConfiguracionRepository({
+  safeDatabaseOperation,
+  getSqliteStatus,
+  requireDatabase,
+  isUpdatedAtRow,
+  updateRefreshMetadata,
+  enqueueLocalBackup,
+  assertDatabaseWritesAllowed,
+  isDatabaseWriteBlockedByHeartbeat,
+});
+const { loadConfiguracionSnapshot, saveConfiguracionIfUnchanged } = configuracionModule;
+export { loadConfiguracionSnapshot, saveConfiguracionIfUnchanged };
 
 export async function getSqliteSyncTokensSnapshot(): Promise<PersistedRecordsTokenSnapshot> {
   return getPersistedRecordsTokenSnapshot();
