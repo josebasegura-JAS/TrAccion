@@ -75,6 +75,10 @@ export interface ManagedSessionStateStore {
     treatedTaskIds: string[],
     expectedUpdatedAt: string | null,
   ) => Promise<{ ok: boolean; message: string; session?: ManagedSession }>;
+  reopenSessionWithConcurrencyCheck: (
+    sessionId: string,
+    expectedUpdatedAt: string | null,
+  ) => Promise<{ ok: boolean; message: string; session?: ManagedSession }>;
 }
 
 function createSessionId(moduleId: string): string {
@@ -491,6 +495,22 @@ function moveTaskInSession(
   }
   items.splice(nextIndex, 0, item);
   return { ...session, items, updatedAt: new Date().toISOString() };
+}
+
+function reopenManagedSession(session: ManagedSession): ManagedSession {
+  if (session.status !== 'closed') {
+    return session;
+  }
+
+  return {
+    ...session,
+    taskResults: undefined,
+    status: 'open',
+    treatedTaskIds: [],
+    untreatedTaskIds: [],
+    updatedAt: new Date().toISOString(),
+    closedAt: null,
+  };
 }
 
 export function createManagedSessionStore(config: SessionModuleConfig) {
@@ -1051,6 +1071,36 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         return {
           ok: false,
           message: error instanceof Error ? error.message : 'No se ha podido cerrar la sesión.',
+        };
+      }
+    },
+    reopenSessionWithConcurrencyCheck: async (sessionId, expectedUpdatedAt) => {
+      try {
+        const result = await updateSessionRecord(
+          config,
+          sessionId,
+          expectedUpdatedAt,
+          reopenManagedSession,
+          {
+            missingMessage:
+              'La sesión ya no existe en la base compartida. Recarga antes de continuar.',
+            conflictMessage:
+              'La sesión ha sido modificada por otro usuario. Recarga antes de reabrirla.',
+          },
+        );
+
+        set((state) => ({
+          sessions: filterSessionsForState(
+            result.records,
+            state.hasLoadedHistoricalSessions,
+            getVisibleSessionIds(state.sessions),
+          ),
+        }));
+        return { ok: true, message: 'Sesión reabierta.', session: result.updatedRecord };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : 'No se ha podido reabrir la sesión.',
         };
       }
     },

@@ -90,6 +90,36 @@ describe('createManagedSessionStore', () => {
     });
   });
 
+  it('reabre una sesión cerrada y limpia el estado de cierre sin alterar sus puntos', async () => {
+    const created = await useCommitteeSessionStore.getState().createWithConcurrencyCheck(draft());
+    const sessionId = created.sessionId ?? '';
+
+    await useCommitteeSessionStore.getState().addTaskWithConcurrencyCheck(sessionId, 'task-1', timestamp);
+    let session = useCommitteeSessionStore.getState().sessions[0];
+    await useCommitteeSessionStore.getState().closeSessionWithConcurrencyCheck(
+      sessionId,
+      ['task-1'],
+      session.updatedAt,
+    );
+
+    session = useCommitteeSessionStore.getState().sessions[0];
+    const result = await useCommitteeSessionStore.getState().reopenSessionWithConcurrencyCheck(
+      sessionId,
+      session.updatedAt,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(useCommitteeSessionStore.getState().sessions[0]).toMatchObject({
+      id: sessionId,
+      status: 'open',
+      items: ['task-1'],
+      treatedTaskIds: [],
+      untreatedTaskIds: [],
+      closedAt: null,
+    });
+    expect(useCommitteeSessionStore.getState().sessions[0].taskResults).toBeUndefined();
+  });
+
   it('importa sesiones históricas una sola vez por clave externa o código-fecha', async () => {
     const first = await useCommitteeSessionStore.getState().importSessionsWithConcurrencyCheck([
       { externalKey: 'CE:2025-05-21:1', draft: draft({ date: '2025-05-21', code: 'CE-2025-05' }), taskIds: ['task-1'] },

@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Trash2,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -289,6 +290,7 @@ export function HistoricSessionCard({
   config,
   onEdit,
   onRemove,
+  onReopen,
   onConfirm,
   onUpdateSummary,
   session,
@@ -297,6 +299,7 @@ export function HistoricSessionCard({
   config: SessionModuleConfig;
   onEdit?: (session: ManagedSession) => void;
   onRemove: (session: ManagedSession) => void | Promise<void>;
+  onReopen: (session: ManagedSession) => void | Promise<void>;
   onUpdateSummary?: (session: ManagedSession) => void | Promise<void>;
   onConfirm: (
     message: string,
@@ -347,6 +350,13 @@ export function HistoricSessionCard({
               <Pencil size={14} /> Editar
             </button>
           )}
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={() => void onReopen(session)}
+            type="button"
+          >
+            <RotateCcw size={14} /> Reabrir sesión
+          </button>
           {onUpdateSummary && (
             <button
               className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"

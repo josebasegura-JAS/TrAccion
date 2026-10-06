@@ -67,10 +67,13 @@ export function SessionManagementPage({
     addTaskWithConcurrencyCheck,
     removeTaskWithConcurrencyCheck,
     moveTaskWithConcurrencyCheck,
+    reopenSessionWithConcurrencyCheck,
   } = useSessionStore();
   const {
     tasks,
     load: loadTasks,
+    loadHistoricalTasks,
+    historicalTasksLoaded,
     createManyFromImport,
   } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
@@ -96,14 +99,25 @@ export function SessionManagementPage({
   }, [load, loadTasks]);
 
   useEffect(() => {
-    if (hasLoadedHistoricalSessions) {
+    const needsHistory = sessionSearch.trim().length >= 2 || openPanel === 'history';
+    if (!needsHistory) {
       return;
     }
 
-    if (sessionSearch.trim().length >= 2 || openPanel === 'history') {
+    if (!hasLoadedHistoricalSessions) {
       loadHistoricalSessions();
     }
-  }, [hasLoadedHistoricalSessions, loadHistoricalSessions, openPanel, sessionSearch]);
+    if (!historicalTasksLoaded) {
+      void loadHistoricalTasks();
+    }
+  }, [
+    hasLoadedHistoricalSessions,
+    historicalTasksLoaded,
+    loadHistoricalSessions,
+    loadHistoricalTasks,
+    openPanel,
+    sessionSearch,
+  ]);
 
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
@@ -415,6 +429,35 @@ export function SessionManagementPage({
       await alert(error instanceof Error ? error.message : 'No se ha podido reordenar el punto.', {
         type: 'error',
       });
+    }
+  };
+
+  const handleReopenSession = async (session: ManagedSession) => {
+    const confirmed = await confirm(
+      '¿Reabrir esta sesión?\n\nLa sesión volverá a sesiones abiertas. Las tareas que se cerraron al resolver puntos no se reabrirán automáticamente, ya que no es posible reconstruir con seguridad su estado anterior.',
+      { confirmLabel: 'Reabrir sesión', cancelLabel: 'Cancelar', title: 'Reabrir sesión' },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
+        const result = await reopenSessionWithConcurrencyCheck(
+          session.id,
+          session.updatedAt ?? null,
+        );
+        if (!result.ok) {
+          throw new Error(result.message);
+        }
+      });
+      setOpenPanel('open');
+      setExpandedSessionId(session.id);
+    } catch (error) {
+      await alert(
+        error instanceof Error ? error.message : 'No se ha podido reabrir la sesión.',
+        { type: 'error' },
+      );
     }
   };
 
@@ -946,6 +989,7 @@ export function SessionManagementPage({
                         onEdit={canEditSessions ? openEditModal : undefined}
                         onConfirm={confirm}
                         onRemove={handleRemoveSession}
+                        onReopen={handleReopenSession}
                         onUpdateSummary={(config.moduleId === 'comite' || config.moduleId === 'paritaria') ? handleUpdateSummary : undefined}
                         session={session}
                         tasksById={tasksById}
