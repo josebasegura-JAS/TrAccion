@@ -1,12 +1,13 @@
 import {
   BookOpen,
+  CheckCircle2,
   FileSpreadsheet,
   FileText,
   LockKeyhole,
   Printer,
 } from 'lucide-react';
 import { useState } from 'react';
-import { type Task, type TaskDraft } from '../features/tareas/domain/task';
+import { isTaskClosed, type Task, type TaskDraft } from '../features/tareas/domain/task';
 import { buildTaskReportHtml, exportTaskReportToExcel } from '../features/tareas/export/taskReport';
 import { TaskLinksSection } from '../features/task-links/components/TaskLinksSection';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
@@ -23,6 +24,7 @@ import { TaskEditorSection } from './task-editor/TaskEditorSection';
 import { TaskGeneralFields } from './task-editor/TaskGeneralFields';
 import { TaskTrackingSection } from './task-editor/TaskTrackingSection';
 import { useTaskEditorController } from './task-editor/useTaskEditorController';
+import { useAppDialog } from '../hooks/useAppDialog';
 
 export function TaskEditor({
   task,
@@ -40,6 +42,7 @@ export function TaskEditor({
   onCreated?: (taskId: string) => void | Promise<void>;
 }) {
   const [taskPrintPreviewHtml, setTaskPrintPreviewHtml] = useState<string | null>(null);
+  const { confirm: confirmCloseTask, dialogNode: closeTaskDialogNode } = useAppDialog();
   const {
     areaCircuitOptions,
     canSubmit,
@@ -56,6 +59,7 @@ export function TaskEditor({
     editingTrackingText,
     handleAddDocument,
     handleDeleteTracking,
+    handleCloseTask,
     handleImportMailFile,
     handleOpenCriterionRrll,
     handleSaveTrackingEdit,
@@ -232,6 +236,23 @@ export function TaskEditor({
                   clearRecoveryDraft(); onDone();
                 })()}>Eliminar</ActionButton>
               )}
+              {!isCreate && task && !isTaskClosed(task) && (
+                <ActionButton
+                  disabled={isFormReadOnly}
+                  icon={CheckCircle2}
+                  iconOnly={false}
+                  onClick={() => void (async () => {
+                    const confirmed = await confirmCloseTask(
+                      '¿Cerrar esta tarea?\n\nPasará al histórico y dejará de aparecer entre las tareas activas. El seguimiento y sus vínculos se conservarán.',
+                      { confirmLabel: 'Cerrar tarea', cancelLabel: 'Cancelar', title: 'Cerrar tarea' },
+                    );
+                    if (confirmed) await handleCloseTask();
+                  })()}
+                  variant="approve"
+                >
+                  Cerrar tarea
+                </ActionButton>
+              )}
               {!isCreate && task && (
                 <>
                   <ActionButton
@@ -283,6 +304,7 @@ export function TaskEditor({
         </form>
       </ModalShell>
       {dialogNode}
+      {closeTaskDialogNode}
       {recoveryDialogNode}
       {trackingDeleteDialogNode}
       {taskPrintPreviewHtml && (
