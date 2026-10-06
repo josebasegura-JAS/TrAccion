@@ -689,8 +689,10 @@ export function LoteriaPage() {
       ) : null}
 
       <FloatingSaveAction
+        buttonLabel="Guardar Lotería"
         onSave={() => persist(draft, 'Cambios de Lotería guardados.')}
-        visible={dirty && activeSection !== 'seguimiento'}
+        suppressWhenPageHeaderHasActions={false}
+        visible={dirty}
       />
 
       {activeSection === 'cierre' ? (

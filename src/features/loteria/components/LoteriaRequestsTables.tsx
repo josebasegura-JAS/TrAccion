@@ -4,6 +4,7 @@ import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import {
+  lotteryAvailableCountByNumber,
   lotteryRequestAmount,
   lotteryRequestTotalCount,
   type LotteryCampaign,
@@ -83,6 +84,9 @@ export function LoteriaParticipantsTable({
     validColumnIds: participantColumnIds,
   });
 
+  const availableNumero1 = lotteryAvailableCountByNumber(campaign, 1);
+  const availableNumero2 = lotteryAvailableCountByNumber(campaign, 2);
+
   const columns = useMemo<Array<DataTableColumn<LotteryRequest, ParticipantsColumnId>>>(() => [
     {
       id: 'employee', header: 'Nº empleado', tone: 'identity', width: 105, sortable: true,
@@ -107,18 +111,20 @@ export function LoteriaParticipantsTable({
         : <StatusBadge size="xs" tone="success">Plantilla</StatusBadge>,
     },
     {
-      id: 'number1', header: campaign.numero1 || 'Nº 1', width: 92, sortable: true,
+      id: 'number1', header: `${campaign.numero1 || 'Nº 1'} · Disp. ${availableNumero1}`, width: 132, sortable: true,
       accessor: (request) => request.decimosNumero1,
       render: (request) => (
-        <input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero1}
+        <input className={`${inputClass} text-center`} inputMode="numeric" min="0" step="1" type="number" value={request.decimosNumero1}
+          onFocus={(event) => event.currentTarget.select()}
           onChange={(event) => onUpdate(request.id, { decimosNumero1: Math.max(0, Number(event.target.value)) })} />
       ),
     },
     {
-      id: 'number2', header: campaign.numero2 || 'Nº 2', width: 92, sortable: true,
+      id: 'number2', header: `${campaign.numero2 || 'Nº 2'} · Disp. ${availableNumero2}`, width: 132, sortable: true,
       accessor: (request) => request.decimosNumero2,
       render: (request) => (
-        <input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero2}
+        <input className={`${inputClass} text-center`} inputMode="numeric" min="0" step="1" type="number" value={request.decimosNumero2}
+          onFocus={(event) => event.currentTarget.select()}
           onChange={(event) => onUpdate(request.id, { decimosNumero2: Math.max(0, Number(event.target.value)) })} />
       ),
     },
@@ -153,7 +159,7 @@ export function LoteriaParticipantsTable({
         </div>
       ),
     },
-  ], [campaign.numero1, campaign.numero2, onRemove, onUpdate]);
+  ], [availableNumero1, availableNumero2, campaign.numero1, campaign.numero2, onRemove, onUpdate]);
 
   return (
     <DataTable
@@ -202,6 +208,9 @@ export function LoteriaTrackingTable({
     validColumnIds: trackingColumnIds,
   });
 
+  const availableNumero1 = lotteryAvailableCountByNumber(campaign, 1);
+  const availableNumero2 = lotteryAvailableCountByNumber(campaign, 2);
+
   const columns = useMemo<Array<DataTableColumn<LotteryRequest, TrackingColumnId>>>(() => [
     {
       id: 'employee', header: 'Nº empleado', tone: 'identity', width: 105, sortable: true,
@@ -216,18 +225,20 @@ export function LoteriaTrackingTable({
       render: (request) => <span className="font-semibold text-metro-text">{request.nombre}</span>,
     },
     {
-      id: 'number1', header: campaign.numero1 || 'Nº 1', width: 92, sortable: true,
+      id: 'number1', header: `${campaign.numero1 || 'Nº 1'} · Disp. ${availableNumero1}`, width: 132, sortable: true,
       accessor: (request) => request.decimosNumero1,
       render: (request) => (
-        <input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero1}
+        <input className={`${inputClass} text-center`} inputMode="numeric" min="0" step="1" type="number" value={request.decimosNumero1}
+          onFocus={(event) => event.currentTarget.select()}
           onChange={(event) => onUpdate(request.id, { decimosNumero1: Math.max(0, Number(event.target.value)) })} />
       ),
     },
     {
-      id: 'number2', header: campaign.numero2 || 'Nº 2', width: 92, sortable: true,
+      id: 'number2', header: `${campaign.numero2 || 'Nº 2'} · Disp. ${availableNumero2}`, width: 132, sortable: true,
       accessor: (request) => request.decimosNumero2,
       render: (request) => (
-        <input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero2}
+        <input className={`${inputClass} text-center`} inputMode="numeric" min="0" step="1" type="number" value={request.decimosNumero2}
+          onFocus={(event) => event.currentTarget.select()}
           onChange={(event) => onUpdate(request.id, { decimosNumero2: Math.max(0, Number(event.target.value)) })} />
       ),
     },
@@ -277,7 +288,7 @@ export function LoteriaTrackingTable({
           onChange={(event) => onUpdate(request.id, { observacionesPago: event.target.value })} />
       ),
     },
-  ], [campaign, onTogglePaid, onUpdate]);
+  ], [availableNumero1, availableNumero2, campaign, onTogglePaid, onUpdate]);
 
   return (
     <DataTable
