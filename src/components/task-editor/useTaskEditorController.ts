@@ -307,7 +307,7 @@ export function useTaskEditorController({
       estado: 'cerrada',
       fase: CLOSED_TASK_PHASE,
     };
-    const result = await updateTask(task.id, closedDraft, undefined, loadedUpdatedAt);
+    const result = await updateTask(task.id, closedDraft, seguimientoForSave, loadedUpdatedAt);
     if (!result.ok) {
       setSaveStatus(result.message);
       setSaveStatusIsError(true);
