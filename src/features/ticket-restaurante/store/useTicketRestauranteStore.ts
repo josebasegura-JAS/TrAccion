@@ -2,11 +2,9 @@ import { create } from 'zustand';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import {
   buildTicketCalendar,
-  normalizeTicketIsoWeekdays,
   normalizeTicketRestaurantConfig,
   buildTicketPerson,
   normalizeTicketEmployeeNumber,
-  splitTicketPersonFullName,
   DEFAULT_TICKET_RESTAURANT_CONFIG,
   toggleDiaSinTicket,
   type TicketCalendar,
@@ -42,8 +40,20 @@ import {
   saveTicketRestauranteConfigToSqlite,
   saveTicketRestauranteManutencionToSqlite,
   saveTicketRestauranteManutencionesToSqlite,
-  type TicketRestauranteSqliteRecord,
 } from './ticketRestauranteSqliteRepository';
+import {
+  isTicketCalendar,
+  isTicketManutencion,
+  isTicketPerson,
+  isTicketRestaurantAbsence,
+  normalizeStoredTicketCalendar,
+  normalizeStoredTicketManutencion,
+  normalizeStoredTicketPerson,
+  parseTicketAbsenceRecords,
+  parseTicketCalendarRecords,
+  parseTicketManutencionRecords,
+  parseTicketPersonRecords,
+} from './ticketRestauranteStorage';
 
 const CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
@@ -87,86 +97,6 @@ interface TicketRestauranteState {
   removeManutencion: (id: string) => Promise<{ ok: boolean; message?: string }>;
 }
 
-function isTicketCalendar(value: unknown): value is TicketCalendar {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<TicketCalendar>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.nombre === 'string' &&
-    typeof candidate.activo === 'boolean' &&
-    Array.isArray(candidate.diasSinTicket) &&
-    candidate.diasSinTicket.every((fecha) => typeof fecha === 'string') &&
-    typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string' &&
-    (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
-  );
-}
-
-function isTicketPerson(value: unknown): value is TicketPerson {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<TicketPerson>;
-  return (
-    typeof candidate.empleado === 'string' &&
-    (typeof candidate.nombreApellidos === 'string' || typeof candidate.nombre === 'string') &&
-    typeof candidate.puesto === 'string' &&
-    typeof candidate.calendarId === 'string' &&
-    typeof candidate.activo === 'boolean' &&
-    typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string' &&
-    (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
-  );
-}
-
-function isTicketRestaurantAbsence(value: unknown): value is TicketRestaurantAbsence {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<TicketRestaurantAbsence>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.empleado === 'string' &&
-    typeof candidate.nombreApellidos === 'string' &&
-    typeof candidate.desde === 'string' &&
-    typeof candidate.hasta === 'string' &&
-    typeof candidate.motivo === 'string' &&
-    typeof candidate.totalDias === 'number' &&
-    typeof candidate.afectaTicket === 'boolean' &&
-    typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string' &&
-    (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
-  );
-}
-
-function isTicketManutencion(value: unknown): value is TicketManutencion {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<TicketManutencion>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.empleado === 'string' &&
-    typeof candidate.nombreApellidos === 'string' &&
-    typeof candidate.fechaGasto === 'string' &&
-    typeof candidate.origen === 'string' &&
-    typeof candidate.afectaTicket === 'boolean' &&
-    (typeof candidate.imputacionYear === 'number' ||
-      typeof candidate.imputacionYear === 'undefined') &&
-    (typeof candidate.imputacionMonth === 'number' ||
-      typeof candidate.imputacionMonth === 'undefined') &&
-    typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string' &&
-    (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
-  );
-}
-
 function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value is T): T[] {
   const stored = readStorageItem(storageKey);
   if (!stored) {
@@ -179,47 +109,6 @@ function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value i
   }
 
   return parsed.filter(guard);
-}
-
-function normalizeStoredTicketCalendar(calendar: TicketCalendar): TicketCalendar {
-  return {
-    ...calendar,
-    ticketIsoWeekdays: normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays),
-  };
-}
-
-function normalizeStoredTicketManutencion(row: TicketManutencion): TicketManutencion {
-  const now = new Date();
-  return {
-    ...row,
-    imputacionYear:
-      typeof row.imputacionYear === 'number' && Number.isInteger(row.imputacionYear)
-        ? row.imputacionYear
-        : now.getFullYear(),
-    imputacionMonth:
-      typeof row.imputacionMonth === 'number' &&
-      row.imputacionMonth >= 1 &&
-      row.imputacionMonth <= 12
-        ? row.imputacionMonth
-        : now.getMonth() + 1,
-  };
-}
-
-function normalizeStoredTicketPerson(person: TicketPerson): TicketPerson {
-  const nombreApellidos =
-    person.nombreApellidos ||
-    [person.nombre, person.apellido1, person.apellido2].filter(Boolean).join(' ').trim();
-  const splitName = splitTicketPersonFullName(nombreApellidos);
-
-  return {
-    ...person,
-    empleado: normalizeTicketEmployeeNumber(person.empleado),
-    nombre: person.nombre || splitName.nombre,
-    apellido1: person.apellido1 || splitName.apellido1,
-    apellido2: person.apellido2 || splitName.apellido2,
-    dni: person.dni || '',
-    nombreApellidos,
-  };
 }
 
 function readConfig(): TicketRestaurantConfig {
@@ -353,67 +242,8 @@ function updateAbsenceSqliteUpdatedAtMap(absences: readonly TicketRestaurantAbse
   absenceSqliteUpdatedAt = new Map(absences.map((absence) => [absence.id, absence.updatedAt]));
 }
 
-function parseTicketCalendarRecords(
-  records: readonly TicketRestauranteSqliteRecord[],
-): TicketCalendar[] {
-  return records
-    .flatMap((record) => {
-      try {
-        return [JSON.parse(record.value) as TicketCalendar];
-      } catch {
-        return [];
-      }
-    })
-    .filter(isTicketCalendar)
-    .map(normalizeStoredTicketCalendar);
-}
-
-function parseTicketPersonRecords(
-  records: readonly TicketRestauranteSqliteRecord[],
-): TicketPerson[] {
-  return records
-    .flatMap((record) => {
-      try {
-        return [JSON.parse(record.value) as TicketPerson];
-      } catch {
-        return [];
-      }
-    })
-    .filter(isTicketPerson)
-    .map(normalizeStoredTicketPerson);
-}
-
-function parseTicketAbsenceRecords(
-  records: readonly TicketRestauranteSqliteRecord[],
-): TicketRestaurantAbsence[] {
-  return records
-    .flatMap((record) => {
-      try {
-        return [JSON.parse(record.value) as TicketRestaurantAbsence];
-      } catch {
-        return [];
-      }
-    })
-    .filter(isTicketRestaurantAbsence);
-}
-
 function updateManutencionSqliteUpdatedAtMap(manutenciones: readonly TicketManutencion[]): void {
   manutencionSqliteUpdatedAt = new Map(manutenciones.map((row) => [row.id, row.updatedAt]));
-}
-
-function parseTicketManutencionRecords(
-  records: readonly TicketRestauranteSqliteRecord[],
-): TicketManutencion[] {
-  return records
-    .flatMap((record) => {
-      try {
-        return [JSON.parse(record.value) as TicketManutencion];
-      } catch {
-        return [];
-      }
-    })
-    .filter(isTicketManutencion)
-    .map(normalizeStoredTicketManutencion);
 }
 
 /**
