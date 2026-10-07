@@ -8,7 +8,7 @@ import {
   markTaskCreationsSeen,
 } from './taskCreationNotifications';
 
-function task(id: string, createdAt: string, title = id): Task {
+function task(id: string, createdAt: string, title = id, createdBy?: string): Task {
   return {
     id,
     titulo: title,
@@ -28,6 +28,7 @@ function task(id: string, createdAt: string, title = id): Task {
     sessionModule: '',
     sessionDate: '',
     seguimiento: [],
+    createdBy,
     createdAt,
     updatedAt: createdAt,
     deletedAt: null,
@@ -45,10 +46,16 @@ describe('taskCreationNotifications', () => {
 
   it('avisa de tareas creadas después de la línea base y permite descartarlas', () => {
     initializeTaskCreationNoticeBaseline('Joseba', '2026-10-06T18:00:00.000Z');
-    const created = task('new', '2026-10-06T18:01:00.000Z', 'Nueva negociación');
+    const created = task('new', '2026-10-06T18:01:00.000Z', 'Nueva negociación', 'Iker');
     expect(getUnseenTaskCreations([created], 'Joseba').map((item) => item.id)).toEqual(['new']);
     markTaskCreationsSeen('Joseba', [created]);
     expect(getUnseenTaskCreations([created], 'Joseba')).toEqual([]);
+  });
+
+  it('no muestra como nueva una tarea creada por el propio usuario', () => {
+    initializeTaskCreationNoticeBaseline('Joseba', '2026-10-06T18:00:00.000Z');
+    const ownTask = task('own-task', '2026-10-06T18:01:00.000Z', 'Preparar reunión', '  JOSEBA ');
+    expect(getUnseenTaskCreations([ownTask], 'joseba')).toEqual([]);
   });
 
   it('permite marcar como vista una tarea recién creada solo por su ID', () => {
@@ -61,7 +68,7 @@ describe('taskCreationNotifications', () => {
   it('mantiene el visto separado por usuario', () => {
     initializeTaskCreationNoticeBaseline('Joseba', '2026-10-06T18:00:00.000Z');
     initializeTaskCreationNoticeBaseline('Iker', '2026-10-06T18:00:00.000Z');
-    const created = task('new', '2026-10-06T18:01:00.000Z');
+    const created = task('new', '2026-10-06T18:01:00.000Z', 'new', 'Ane');
     markTaskCreationsSeen('Joseba', [created]);
     expect(getUnseenTaskCreations([created], 'Joseba')).toEqual([]);
     expect(getUnseenTaskCreations([created], 'Iker')).toHaveLength(1);
