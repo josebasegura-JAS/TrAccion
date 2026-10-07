@@ -31,10 +31,6 @@ function notifyRendererReady(): void {
   });
 }
 
-function notifyBootVisible(): void {
-  window.traccion?.notifyBootVisible?.();
-}
-
 function renderFatalError(error: unknown): void {
   const message = error instanceof Error ? error.message : 'Error desconocido.';
   root.render(
@@ -84,12 +80,11 @@ async function renderApp(appModulePromise: Promise<AppModule> = import('./App'))
 
 async function startApp(): Promise<void> {
   const startupStartedAt = performance.now();
-  renderBootScreen('Inicializando base de datos...');
+  renderBootScreen('Cargando datos de trabajo...');
   await waitForNextPaint();
-  notifyBootVisible();
-  // Prepara el bundle principal en paralelo con SQLite. La interfaz no se
-  // renderiza hasta que la hidratación termina, por lo que se conservan las
-  // mismas garantías de arranque y fuente única de verdad.
+  // El splash de Electron permanece visible durante esta fase. La ventana
+  // principal solo se muestra cuando notifyRendererReady confirma que React,
+  // SQLite y la interfaz ya han terminado de preparar el primer render útil.
   const appImportStartedAt = performance.now();
   const appModulePromise = import('./App');
   void appModulePromise.then(() => {
@@ -100,7 +95,7 @@ async function startApp(): Promise<void> {
   const hydrationResult = await hydrateLocalStorageFromSqlite();
   recordPerformanceMetric('arranque', 'Hidratación SQLite', performance.now() - hydrationStartedAt);
   reportStartupHydrationResult(hydrationResult);
-  renderBootScreen('Preparando módulos...');
+  renderBootScreen('Preparando interfaz...');
   await renderApp(appModulePromise);
   recordPerformanceMetric('arranque', 'Arranque hasta interfaz lista', performance.now() - startupStartedAt);
 }
