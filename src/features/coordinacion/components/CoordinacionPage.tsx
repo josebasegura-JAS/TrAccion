@@ -19,15 +19,16 @@ import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
 import { CoordinationPointEditor } from './CoordinationPointEditor';
+import { CoordinationTaskClosureDialog } from './CoordinationTaskClosureDialog';
 import { pointToDraft, type CoordinationPointDraft } from './coordinationPointDraft';
-import { meetingContext, syncMeetingTracking } from '../services/coordinationMeetingTracking';
+import { closeCoordinationTasks, meetingContext, syncMeetingTracking } from '../services/coordinationMeetingTracking';
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
   { title: 'Para qué sirve', items: ['Prepara y conserva las reuniones de RRLL con Dirección, otras áreas y sindicatos.', 'Permite convertir tareas abiertas en puntos de reunión, añadir puntos libres y crear tareas nuevas sin perder la relación entre reunión y seguimiento.'] },
   { title: 'Dirección', items: ['Al crear una reunión se incorporan automáticamente las tareas marcadas previamente como «Trasladar a Dirección».', 'Dentro de la reunión puedes añadir tareas activas, puntos manuales o crear una tarea nueva desde la propia reunión.', 'Cada punto puede registrar su resultado y estado. Al guardar la reunión, los puntos vinculados actualizan automáticamente el seguimiento de sus tareas.'] },
   { title: 'Otras áreas', items: ['Indica el área, fecha y, si procede, interlocutores y objetivo. Una tarea inicial es opcional.', 'Si existen tareas pendientes marcadas para esa área, TrAcción puede incorporarlas al crear la reunión.', 'Los puntos pueden ser tareas existentes, puntos no inventariados o nuevas tareas creadas desde la reunión.'] },
   { title: 'Sindicatos', items: ['El seguimiento se organiza por organización sindical y mantiene el histórico de reuniones.', 'El guion es flexible y permite registrar asuntos, resultados y compromisos de seguimiento según la reunión.', 'Utiliza el histórico para consultar lo tratado anteriormente con cada sindicato sin depender de notas externas.'] },
-  { title: 'Tareas y cierre', items: ['Vincular un punto a una tarea mantiene la trazabilidad entre ambos módulos.', 'Guardar un punto vinculado crea o actualiza un único seguimiento en la tarea madre; sucesivos guardados corrigen ese mismo seguimiento sin duplicarlo. Al cerrar la reunión, los puntos tratados aplican además el cierre previsto por el módulo.', 'Un punto manual puede enlazarse posteriormente a una tarea si el asunto pasa a requerir seguimiento formal.'] },
+  { title: 'Tareas y cierre', items: ['Vincular un punto a una tarea mantiene la trazabilidad entre ambos módulos.', 'Guardar un punto vinculado crea o actualiza un único seguimiento en la tarea madre; sucesivos guardados corrigen ese mismo seguimiento sin duplicarlo. Tratar un punto en una reunión no cambia ni cierra automáticamente su tarea.', 'Al cerrar la reunión puedes decidir expresamente si no quieres cerrar ninguna tarea tratada, si quieres cerrar todas o solo algunas.', 'Un punto manual puede enlazarse posteriormente a una tarea si el asunto pasa a requerir seguimiento formal.'] },
   { title: 'Histórico y Excel', items: ['Las reuniones permanecen disponibles como histórico una vez cerradas.', 'Usa «Buscar en reuniones» para localizar asuntos, acuerdos, responsables, interlocutores u objetivos en reuniones abiertas y cerradas.', 'Si una reunión se cerró por error, puedes reabrirla sin crear una copia ni perder sus puntos o vínculos.', 'El Excel automático utiliza la ruta configurada en Ajustes. Comprueba esa ruta si la exportación no puede actualizarse.', 'Eliminar una reunión o un punto manual debe reservarse para registros creados por error; para reuniones celebradas es preferible conservar el histórico.'] },
 ];
 
@@ -74,6 +75,11 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [taskCreation, setTaskCreation] = useState<{ pointId: string | null } | null>(null);
   const [status, setStatus] = useState('');
   const [isSavingMeeting, setIsSavingMeeting] = useState(false);
+  const [taskClosurePrompt, setTaskClosurePrompt] = useState<{
+    meetingId: string;
+    tasks: Array<{ id: string; title: string; responsible: string }>;
+    trackingFailures: string[];
+  } | null>(null);
   const pointDraftsRef = useRef<Record<string, CoordinationPointDraft>>({});
   const dirtyPointIdsRef = useRef<Set<string>>(new Set());
   const [hasUnsavedMeetingChanges, setHasUnsavedMeetingChanges] = useState(false);
@@ -141,7 +147,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     if (message) setStatus(message);
   };
 
-  const handleSaveMeeting = async () => {
+  const handleSaveMeeting = async (tolerateTrackingFailures = false) => {
     if (!selected || selected.status === 'closed' || isSavingMeeting) return false;
     const dirtyPointIds = new Set(dirtyPointIdsRef.current);
     const patches = selected.points.map((point) => {
@@ -158,7 +164,6 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
 
       const trackingFailures = await syncMeetingTracking(latest, dirtyPointIds, {
         allowStatusOnly: false,
-        closeResolvedTasks: false,
       });
       const failedPointIds = new Set(trackingFailures.map((failure) => failure.pointId));
       pointDraftsRef.current = Object.fromEntries(latest.points.map((point) => [point.id, pointToDraft(point)]));
@@ -167,7 +172,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       if (trackingFailures.length > 0) {
         setStatus(`La reunión se ha guardado, pero no se ha podido actualizar el seguimiento de ${trackingFailures.length} tarea(s): ${trackingFailures.map((failure) => failure.message).join(' | ')}`);
         await backup();
-        return false;
+        return tolerateTrackingFailures;
       }
 
       setStatus('Cambios guardados y seguimiento de tareas actualizado.');
@@ -220,22 +225,68 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     if (result.ok) await backup();
   };
 
+  const finalizeMeetingClose = async (
+    meetingId: string,
+    taskIdsToClose: string[],
+    trackingFailures: string[],
+  ) => {
+    setTaskClosurePrompt(null);
+    const result = await closeMeeting(meetingId);
+    if (!result.ok) { setStatus(result.message); return; }
+
+    const taskFailures = taskIdsToClose.length > 0
+      ? await closeCoordinationTasks(taskIdsToClose)
+      : [];
+    const warnings = [
+      ...trackingFailures,
+      ...taskFailures.map((failure) => failure.message),
+    ];
+
+    if (warnings.length > 0) {
+      setStatus(`Reunión cerrada. Hay ${warnings.length} incidencia(s) de sincronización de tareas: ${warnings.join(' | ')}`);
+    } else if (taskIdsToClose.length > 0) {
+      setStatus(`Reunión cerrada. Se han cerrado ${taskIdsToClose.length} tarea(s) seleccionada(s).`);
+    } else {
+      setStatus('Reunión cerrada. Las tareas vinculadas mantienen su estado y fase.');
+    }
+    await backup();
+  };
+
   const handleClose = async () => {
     if (!selected) return;
-    const saved = await handleSaveMeeting();
+    const saved = await handleSaveMeeting(true);
     if (!saved) return;
     const latest = useCoordinacionStore.getState().meetings.find((meeting) => meeting.id === selected.id);
     if (!latest) { setStatus('No se ha encontrado la reunión después de guardar los cambios.'); return; }
     const pending = latest.points.filter((point) => point.status === 'pendiente').length;
     if (pending > 0) { setStatus(`Quedan ${pending} punto(s) sin resultado. Indica si se resolvieron, requieren seguimiento, vuelven a la próxima reunión o no se trataron.`); return; }
-    const failures = await syncMeetingTracking(latest, latest.points.filter((point) => point.status !== 'pendiente').map((point) => point.id), {
-      allowStatusOnly: true,
-      closeResolvedTasks: true,
+
+    const trackingFailures = await syncMeetingTracking(
+      latest,
+      latest.points.filter((point) => point.status !== 'pendiente').map((point) => point.id),
+      { allowStatusOnly: true },
+    );
+
+    const treatedTaskIds = new Set(
+      latest.points
+        .filter((point) => point.status === 'tratado' && point.taskId)
+        .map((point) => point.taskId as string),
+    );
+    const treatedTasks = useTaskStore.getState().tasks
+      .filter((task) => treatedTaskIds.has(task.id) && isActiveTask(task))
+      .map((task) => ({ id: task.id, title: task.titulo, responsible: task.responsable }));
+    const failureMessages = trackingFailures.map((failure) => failure.message);
+
+    if (treatedTasks.length === 0) {
+      await finalizeMeetingClose(latest.id, [], failureMessages);
+      return;
+    }
+
+    setTaskClosurePrompt({
+      meetingId: latest.id,
+      tasks: treatedTasks,
+      trackingFailures: failureMessages,
     });
-    if (failures.length) { setStatus(`No se ha podido actualizar el seguimiento de ${failures.length} tarea(s): ${failures.map((failure) => failure.message).join(' | ')}`); return; }
-    const result = await closeMeeting(latest.id);
-    setStatus(result.ok ? 'Reunión cerrada y seguimiento de tareas actualizado.' : result.message);
-    if (result.ok) await backup();
   };
 
   const handleReopen = async () => {
@@ -375,6 +426,28 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       />
       {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}
       {taskCreation && <TaskEditor initialDraft={taskInitialDraft} initialTrackingText={taskInitialTrackingText} key={`meeting-task-${taskCreation.pointId ?? 'new'}`} mode="create" onCreated={handleCreatedTask} onDone={() => setTaskCreation(null)} task={null} />}
+      {taskClosurePrompt && (
+        <CoordinationTaskClosureDialog
+          key={taskClosurePrompt.meetingId}
+          onCancel={() => setTaskClosurePrompt(null)}
+          onCloseAll={() => void finalizeMeetingClose(
+            taskClosurePrompt.meetingId,
+            taskClosurePrompt.tasks.map((task) => task.id),
+            taskClosurePrompt.trackingFailures,
+          )}
+          onCloseNone={() => void finalizeMeetingClose(
+            taskClosurePrompt.meetingId,
+            [],
+            taskClosurePrompt.trackingFailures,
+          )}
+          onCloseSelected={(taskIds) => void finalizeMeetingClose(
+            taskClosurePrompt.meetingId,
+            taskIds,
+            taskClosurePrompt.trackingFailures,
+          )}
+          tasks={taskClosurePrompt.tasks}
+        />
+      )}
       {dialogNode}
     </section>;
   }
