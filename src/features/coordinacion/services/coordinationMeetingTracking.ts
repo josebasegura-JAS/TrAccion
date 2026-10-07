@@ -1,3 +1,4 @@
+import { CLOSED_TASK_PHASE, isTaskClosed, type Task, type TaskDraft } from '../../tareas/domain/task';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import {
   coordinationMeetingDisplayTitle,
@@ -30,6 +31,24 @@ function buildCoordinationTrackingText(
   return result ? `${header}\n${status}\n${result}` : `${header}\n${status}`;
 }
 
+function closingDraft(task: Task): TaskDraft {
+  return {
+    titulo: task.titulo,
+    descripcion: task.descripcion,
+    tipo: task.tipo,
+    fase: CLOSED_TASK_PHASE,
+    estado: 'cerrada',
+    prioridad: task.prioridad,
+    fechaLimite: task.fechaLimite,
+    responsable: task.responsable,
+    origen: task.origen,
+    sindicato: task.sindicato,
+    observaciones: task.observaciones,
+    mail: task.mail,
+    documentLinks: task.documentLinks,
+  };
+}
+
 export async function syncMeetingTracking(
   meeting: CoordinationMeeting,
   pointIds: Iterable<string>,
@@ -41,7 +60,7 @@ export async function syncMeetingTracking(
     if (!pointIdSet.has(point.id) || !point.taskId) continue;
     const task = useTaskStore.getState().tasks.find((candidate) => candidate.id === point.taskId);
     if (!task || task.deletedAt) continue;
-    const result = await useTaskStore.getState().upsertCoordinationTracking({
+    const trackingResult = await useTaskStore.getState().upsertCoordinationTracking({
       taskId: point.taskId,
       trackingId: coordinationTrackingId(meeting.id, point.id),
       text: buildCoordinationTrackingText(meeting, point, options.allowStatusOnly),
@@ -51,9 +70,25 @@ export async function syncMeetingTracking(
         pointId: point.id,
         label: `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`,
       },
-      closeTask: options.closeResolvedTasks && point.status === 'tratado',
+      closeTask: false,
     });
-    if (!result.ok) failures.push({ pointId: point.id, message: `${task.titulo}: ${result.message}` });
+    if (!trackingResult.ok) {
+      failures.push({ pointId: point.id, message: `${task.titulo}: ${trackingResult.message}` });
+      continue;
+    }
+
+    if (!options.closeResolvedTasks || point.status !== 'tratado') continue;
+    const latestTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === point.taskId);
+    if (!latestTask || latestTask.deletedAt || isTaskClosed(latestTask)) continue;
+    const closeResult = await useTaskStore.getState().updateWithConcurrencyCheck(
+      latestTask.id,
+      closingDraft(latestTask),
+      undefined,
+      latestTask.updatedAt,
+    );
+    if (!closeResult.ok) {
+      failures.push({ pointId: point.id, message: `${latestTask.titulo}: ${closeResult.message}` });
+    }
   }
   return failures;
 }
