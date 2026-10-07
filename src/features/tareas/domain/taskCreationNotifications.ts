@@ -51,9 +51,17 @@ export function getUnseenTaskCreations(tasks: readonly Task[], windowsUser: stri
   const state = readState(windowsUser);
   if (!state) return [];
   const seen = new Set(state.seenTaskIds);
+  const currentUser = normalizeUser(windowsUser);
   const unique = new Map<string, Task>();
   for (const task of tasks) {
-    if (task.deletedAt || seen.has(task.id) || task.createdAt <= state.baselineAt) continue;
+    const createdByCurrentUser = Boolean(task.createdBy?.trim())
+      && normalizeUser(task.createdBy ?? '') === currentUser;
+    if (
+      task.deletedAt
+      || seen.has(task.id)
+      || task.createdAt <= state.baselineAt
+      || createdByCurrentUser
+    ) continue;
     const current = unique.get(task.id);
     if (!current || task.updatedAt > current.updatedAt) unique.set(task.id, task);
   }
