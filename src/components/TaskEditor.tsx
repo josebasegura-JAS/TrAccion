@@ -227,8 +227,8 @@ export function TaskEditor({
             </fieldset>
           </div>
 
-          <div className="shrink-0 border-t border-sky-300/10 bg-[#0c1b2e]/95 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="shrink-0 border-t border-sky-300/10 bg-[#0c1b2e]/95 px-3 py-2">
+            <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden">
               {!isCreate && task && (
                 <ActionButton disabled={isFormReadOnly} iconOnly={false} variant="delete" onClick={() => void (async () => {
                   const result = await removeTask(task.id, loadedUpdatedAt);
@@ -257,13 +257,12 @@ export function TaskEditor({
                 <>
                   <ActionButton
                     icon={Printer}
-                    iconOnly={false}
+                    iconOnly
+                    title="Imprimir"
                     onClick={() => setTaskPrintPreviewHtml(buildTaskReportHtml({ task, draft }))}
                     type="button"
                     variant="secondary"
-                  >
-                    Imprimir
-                  </ActionButton>
+                  />
                   <ActionButton
                     icon={FileSpreadsheet}
                     iconOnly={false}
@@ -274,11 +273,11 @@ export function TaskEditor({
                     type="button"
                     variant="secondary"
                   >
-                    Exportar Excel
+                    Excel
                   </ActionButton>
                 </>
               )}
-              {!isCreate && task && <AuditHistoryButton entityId={task.id} entityTitle={task.titulo || 'Tarea sin título'} module="tareas" />}
+              {!isCreate && task && <AuditHistoryButton className="px-2" entityId={task.id} entityTitle={task.titulo || 'Tarea sin título'} module="tareas" />}
               {!isCreate && task && (
                 <ActionButton
                   disabled={!criterionLinkReady || (isFormReadOnly && !linkedCriterionId)}
@@ -288,17 +287,22 @@ export function TaskEditor({
                   variant="secondary"
                 >
                   {!criterionLinkReady
-                    ? 'Comprobando criterio…'
-                    : linkedCriterionId
-                      ? 'Ver criterio RRLL'
-                      : 'Crear criterio RRLL'}
+                    ? 'Criterio…'
+                    : 'Criterio RRLL'}
                 </ActionButton>
               )}
               <InlineSaveFeedback />
-              {saveStatus && <p className={`text-xs font-semibold ${saveStatusIsError ? 'text-red-300' : 'text-slate-400'}`}>{saveStatus}</p>}
-              <div className="flex-1" />
-              <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd></ActionButton>
-              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></ActionButton>
+              {saveStatus && (
+                <p
+                  className={`min-w-0 flex-1 truncate px-1 text-right text-[11px] font-semibold ${saveStatusIsError ? 'text-red-300' : 'text-emerald-300'}`}
+                  title={saveStatus}
+                >
+                  {saveStatusIsError ? saveStatus : '✓ Guardado'}
+                </p>
+              )}
+              {!saveStatus && <div className="min-w-0 flex-1" />}
+              <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">Cancelar</ActionButton>
+              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar</ActionButton>
             </div>
           </div>
         </form>
