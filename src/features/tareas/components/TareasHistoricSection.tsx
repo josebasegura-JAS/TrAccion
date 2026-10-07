@@ -32,6 +32,11 @@ function formatDateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+function reopenPhase(task: Task): string {
+  const previousPhase = task.phaseBeforeClose?.trim();
+  if (previousPhase) return previousPhase;
+  return task.fase.trim().toLowerCase() === CLOSED_TASK_PHASE ? DEFAULT_TASK_PHASE : task.fase;
+}
 
 export function HistoricYearSection({
   group,
@@ -65,18 +70,22 @@ export function HistoricYearSection({
   const { alert, confirm, dialogNode } = useAppDialog();
 
   const handleReopenTask = async (task: Task) => {
-    const confirmed = await confirm(`La tarea “${task.titulo}” volverá a la lista de tareas activas.`, {
-      title: 'Reabrir tarea',
-      confirmLabel: 'Reabrir tarea',
-      cancelLabel: 'Cancelar',
-    });
+    const restoredPhase = reopenPhase(task);
+    const confirmed = await confirm(
+      `La tarea “${task.titulo}” volverá a la lista de tareas activas en fase “${restoredPhase}”.`,
+      {
+        title: 'Reabrir tarea',
+        confirmLabel: 'Reabrir tarea',
+        cancelLabel: 'Cancelar',
+      },
+    );
     if (!confirmed) return;
 
     const draft: TaskDraft = {
       titulo: task.titulo,
       descripcion: task.descripcion,
       tipo: task.tipo,
-      fase: task.fase.trim().toLowerCase() === CLOSED_TASK_PHASE ? DEFAULT_TASK_PHASE : task.fase,
+      fase: restoredPhase,
       estado: 'pendiente',
       prioridad: task.prioridad,
       fechaLimite: task.fechaLimite,
@@ -90,7 +99,7 @@ export function HistoricYearSection({
     const result = await updateWithConcurrencyCheck(
       task.id,
       draft,
-      'Tarea reabierta desde el histórico.',
+      `Tarea reabierta desde el histórico. Fase restaurada: ${restoredPhase}.`,
       task.updatedAt,
     );
     if (!result.ok) await alert(result.message || 'No se ha podido reabrir la tarea.');
