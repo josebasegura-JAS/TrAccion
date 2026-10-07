@@ -8,6 +8,7 @@ import {
 import { coordinationPointStatusLabel } from '../store/useCoordinacionStore';
 
 export type TrackingSyncFailure = { pointId: string; message: string };
+export type TaskClosureFailure = { taskId: string; message: string };
 
 export function meetingContext(meeting: CoordinationMeeting): string {
   if (meeting.area === 'direccion') return 'Dirección';
@@ -52,7 +53,7 @@ function closingDraft(task: Task): TaskDraft {
 export async function syncMeetingTracking(
   meeting: CoordinationMeeting,
   pointIds: Iterable<string>,
-  options: { allowStatusOnly: boolean; closeResolvedTasks: boolean },
+  options: { allowStatusOnly: boolean },
 ): Promise<TrackingSyncFailure[]> {
   const failures: TrackingSyncFailure[] = [];
   const pointIdSet = new Set(pointIds);
@@ -74,21 +75,23 @@ export async function syncMeetingTracking(
     });
     if (!trackingResult.ok) {
       failures.push({ pointId: point.id, message: `${task.titulo}: ${trackingResult.message}` });
-      continue;
     }
+  }
+  return failures;
+}
 
-    if (!options.closeResolvedTasks || point.status !== 'tratado') continue;
-    const latestTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === point.taskId);
-    if (!latestTask || latestTask.deletedAt || isTaskClosed(latestTask)) continue;
-    const closeResult = await useTaskStore.getState().updateWithConcurrencyCheck(
-      latestTask.id,
-      closingDraft(latestTask),
-      undefined,
-      latestTask.updatedAt,
+export async function closeCoordinationTasks(taskIds: Iterable<string>): Promise<TaskClosureFailure[]> {
+  const failures: TaskClosureFailure[] = [];
+  for (const taskId of new Set(taskIds)) {
+    const task = useTaskStore.getState().tasks.find((candidate) => candidate.id === taskId);
+    if (!task || task.deletedAt || isTaskClosed(task)) continue;
+    const result = await useTaskStore.getState().updateWithConcurrencyCheck(
+      task.id,
+      closingDraft(task),
+      'Tarea cerrada expresamente al cerrar una reunión de Coordinación.',
+      task.updatedAt,
     );
-    if (!closeResult.ok) {
-      failures.push({ pointId: point.id, message: `${latestTask.titulo}: ${closeResult.message}` });
-    }
+    if (!result.ok) failures.push({ taskId, message: `${task.titulo}: ${result.message}` });
   }
   return failures;
 }
