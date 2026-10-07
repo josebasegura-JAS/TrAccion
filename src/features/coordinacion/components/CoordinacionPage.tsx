@@ -1,5 +1,5 @@
 import { isTaskClosed } from '../../tareas/domain/task';
-import { Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, RotateCcw, Search, Trash2, UsersRound } from 'lucide-react';
+import { Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Pencil, Plus, RotateCcw, Search, Trash2, UsersRound } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TaskEditor } from '../../../components/TaskEditor';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -18,9 +18,11 @@ import { SindicatosCoordinationPanel } from './SindicatosCoordinationPanel';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
+import { CoordinationMeetingEditDialog } from './CoordinationMeetingEditDialog';
 import { CoordinationPointEditor } from './CoordinationPointEditor';
 import { CoordinationTaskClosureDialog } from './CoordinationTaskClosureDialog';
 import { pointToDraft, type CoordinationPointDraft } from './coordinationPointDraft';
+import { updateCoordinationMeetingDetails } from '../services/coordinationMeetingDetails';
 import { closeCoordinationTasks, meetingContext, syncMeetingTracking } from '../services/coordinationMeetingTracking';
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -28,6 +30,7 @@ const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
   { title: 'Dirección', items: ['Al crear una reunión se incorporan automáticamente las tareas marcadas previamente como «Trasladar a Dirección».', 'Dentro de la reunión puedes añadir tareas activas, puntos manuales o crear una tarea nueva desde la propia reunión.', 'Cada punto puede registrar su resultado y estado. Al guardar la reunión, los puntos vinculados actualizan automáticamente el seguimiento de sus tareas.'] },
   { title: 'Otras áreas', items: ['Indica el área, fecha y, si procede, interlocutores y objetivo. Una tarea inicial es opcional.', 'Si existen tareas pendientes marcadas para esa área, TrAcción puede incorporarlas al crear la reunión.', 'Los puntos pueden ser tareas existentes, puntos no inventariados o nuevas tareas creadas desde la reunión.'] },
   { title: 'Sindicatos', items: ['El seguimiento se organiza por organización sindical y mantiene el histórico de reuniones.', 'El guion es flexible y permite registrar asuntos, resultados y compromisos de seguimiento según la reunión.', 'Utiliza el histórico para consultar lo tratado anteriormente con cada sindicato sin depender de notas externas.'] },
+  { title: 'Edición de la reunión', items: ['Mientras la reunión esté abierta puedes modificar su título, fecha, participantes y objetivo sin alterar los puntos ni las tareas vinculadas.', 'Las reuniones cerradas protegen el histórico: si necesitas corregir sus datos, reabre primero la reunión.'] },
   { title: 'Tareas y cierre', items: ['Vincular un punto a una tarea mantiene la trazabilidad entre ambos módulos.', 'Guardar un punto vinculado crea o actualiza un único seguimiento en la tarea madre; sucesivos guardados corrigen ese mismo seguimiento sin duplicarlo. Tratar un punto en una reunión no cambia ni cierra automáticamente su tarea.', 'Al cerrar la reunión puedes decidir expresamente si no quieres cerrar ninguna tarea tratada, si quieres cerrar todas o solo algunas.', 'Un punto manual puede enlazarse posteriormente a una tarea si el asunto pasa a requerir seguimiento formal.'] },
   { title: 'Histórico y Excel', items: ['Las reuniones permanecen disponibles como histórico una vez cerradas.', 'Usa «Buscar en reuniones» para localizar asuntos, acuerdos, responsables, interlocutores u objetivos en reuniones abiertas y cerradas.', 'Si una reunión se cerró por error, puedes reabrirla sin crear una copia ni perder sus puntos o vínculos.', 'El Excel automático utiliza la ruta configurada en Ajustes. Comprueba esa ruta si la exportación no puede actualizarse.', 'Eliminar una reunión o un punto manual debe reservarse para registros creados por error; para reuniones celebradas es preferible conservar el histórico.'] },
 ];
@@ -73,6 +76,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [taskSearch, setTaskSearch] = useState('');
   const [meetingSearch, setMeetingSearch] = useState('');
   const [taskCreation, setTaskCreation] = useState<{ pointId: string | null } | null>(null);
+  const [meetingEditOpen, setMeetingEditOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [isSavingMeeting, setIsSavingMeeting] = useState(false);
   const [taskClosurePrompt, setTaskClosurePrompt] = useState<{
@@ -121,6 +125,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       pointDraftsRef.current = {};
       dirtyPointIdsRef.current = new Set();
       setHasUnsavedMeetingChanges(false);
+      setMeetingEditOpen(false);
       return;
     }
     const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === selectedId);
@@ -128,6 +133,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       pointDraftsRef.current = {};
       dirtyPointIdsRef.current = new Set();
       setHasUnsavedMeetingChanges(false);
+      setMeetingEditOpen(false);
       return;
     }
     pointDraftsRef.current = Object.fromEntries(meeting.points.map((point) => [point.id, pointToDraft(point)]));
@@ -223,6 +229,19 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       ? taskCreation?.pointId ? 'Punto convertido en tarea y vinculado a la reunión.' : 'Tarea creada y añadida a la reunión.'
       : `La tarea se ha creado, pero no ha podido vincularse a la reunión: ${result.message}`);
     if (result.ok) await backup();
+  };
+
+  const handleEditMeeting = async (
+    draft: Parameters<typeof updateCoordinationMeetingDetails>[1],
+  ) => {
+    if (!selected) return { ok: false, message: 'No hay una reunión seleccionada.' };
+    const result = await updateCoordinationMeetingDetails(selected.id, draft);
+    setStatus(result.message);
+    if (result.ok) {
+      setMeetingEditOpen(false);
+      await backup();
+    }
+    return result;
   };
 
   const finalizeMeetingClose = async (
@@ -371,6 +390,13 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
         { key: 'dueDate', header: 'Fecha compromiso', value: (point: CoordinationMeeting['points'][number]) => point.dueDate ?? '' },
       ],
     };
+    const meetingMeta = [
+      isUnion && selected.meetingType
+        ? selected.meetingType === 'urgente' ? 'Urgente' : selected.meetingType === 'seguimiento' ? 'Seguimiento' : 'Ordinaria'
+        : '',
+      selected.interlocutors ? `Interlocutores: ${selected.interlocutors}` : '',
+      selected.purpose ?? '',
+    ].filter(Boolean).join(' · ');
     return <section className="space-y-4">
       <PageHeader title="Coordinación" helpSections={COORDINACION_HELP_SECTIONS} helpSubtitle="Guía rápida para preparar reuniones, vincular tareas y conservar el histórico." />
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -378,11 +404,12 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           <button className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-metro-muted hover:text-metro-text" onClick={() => setSelectedId(null)} type="button"><ChevronLeft size={15}/>Volver</button>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Coordinación · {meetingContext(selected)} · {formatCoordinationDate(selected.date)}</p>
           <h2 className="mt-1 text-2xl font-bold text-metro-text">{coordinationMeetingDisplayTitle(selected)}</h2>
-          {!isDirection && <p className="mt-1 text-sm text-metro-muted">{isUnion && selected.meetingType ? `${selected.meetingType === 'urgente' ? 'Urgente' : selected.meetingType === 'seguimiento' ? 'Seguimiento' : 'Ordinaria'} · ` : ''}{selected.interlocutors ? `Interlocutores: ${selected.interlocutors}` : 'Sin interlocutores indicados'}{selected.purpose ? ` · ${selected.purpose}` : ''}</p>}
+          {meetingMeta && <p className="mt-1 text-sm text-metro-muted">{meetingMeta}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           <ActionButton icon={FileSpreadsheet} iconOnly={false} onClick={() => void backup()} size="sm" variant="secondary">Actualizar Excel</ActionButton>
           {isUnion && <ExportPrintButtons payload={exportPayload} size="sm" />}
+          {selected.status === 'open' && <ActionButton icon={Pencil} iconOnly={false} onClick={() => setMeetingEditOpen(true)} size="sm" variant="secondary">Editar reunión</ActionButton>}
           <ActionButton icon={Trash2} iconOnly={false} onClick={() => void handleDeleteMeeting()} size="sm" variant="delete">Eliminar reunión</ActionButton>
           {selected.status === 'closed' && <ActionButton icon={RotateCcw} iconOnly={false} onClick={() => void handleReopen()} size="sm" variant="secondary">Reabrir reunión</ActionButton>}
           {selected.status === 'open' && <ActionButton icon={CheckCircle2} iconOnly={false} onClick={() => void handleClose()} size="sm" variant="primary">Cerrar reunión</ActionButton>}
@@ -426,6 +453,14 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       />
       {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}
       {taskCreation && <TaskEditor initialDraft={taskInitialDraft} initialTrackingText={taskInitialTrackingText} key={`meeting-task-${taskCreation.pointId ?? 'new'}`} mode="create" onCreated={handleCreatedTask} onDone={() => setTaskCreation(null)} task={null} />}
+      {meetingEditOpen && selected.status === 'open' && (
+        <CoordinationMeetingEditDialog
+          key={`edit-${selected.id}-${selected.updatedAt}`}
+          meeting={selected}
+          onCancel={() => setMeetingEditOpen(false)}
+          onSave={handleEditMeeting}
+        />
+      )}
       {taskClosurePrompt && (
         <CoordinationTaskClosureDialog
           key={taskClosurePrompt.meetingId}
