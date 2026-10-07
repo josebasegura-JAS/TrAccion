@@ -7,8 +7,8 @@
     <style>
       :root {
         color-scheme: dark;
-        font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        background: #0f1f2a;
+        font-family: Inter, "Segoe UI", system-ui, sans-serif;
+        background: #07131d;
       }
       * { box-sizing: border-box; }
       body {
@@ -16,98 +16,91 @@
         width: 100vw;
         height: 100vh;
         overflow: hidden;
-        background:
-          radial-gradient(circle at 30% 18%, rgba(214, 35, 53, 0.2), transparent 31%),
-          linear-gradient(145deg, #132836 0%, #0d1a24 56%, #081119 100%);
-        color: #f7fbfd;
         display: grid;
         place-items: center;
+        padding: 32px;
+        background:
+          radial-gradient(circle at top, rgba(220, 38, 38, 0.18), transparent 34%),
+          linear-gradient(135deg, #07131d 0%, #102532 52%, #07131d 100%);
+        color: #f8fafc;
         user-select: none;
       }
-      .splash-card {
-        width: 438px;
-        padding: 24px 28px 22px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 28px;
-        background: rgba(12, 24, 34, 0.84);
-        box-shadow: 0 28px 65px rgba(0, 0, 0, 0.34);
-      }
-      .brand { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
-      .logo {
-        width: 92px;
-        height: 92px;
-        flex: 0 0 92px;
-        border-radius: 24px;
-        object-fit: cover;
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
-      }
-      .title { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 0.02em; }
-      .subtitle {
-        margin: 4px 0 0;
-        color: rgba(247, 251, 253, 0.67);
-        font-size: 12px;
-        font-weight: 650;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-      .status-title { margin: 0 0 10px; font-size: 13px; color: rgba(247, 251, 253, 0.72); }
-      .steps { display: grid; gap: 7px; }
-      .step {
-        min-height: 38px;
-        display: grid;
-        grid-template-columns: 24px minmax(0, 1fr) auto;
+      .app-boot-card {
+        width: min(460px, 100%);
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 8px;
-        padding: 7px 10px;
-        border: 1px solid rgba(255,255,255,.06);
-        border-radius: 10px;
-        background: rgba(255,255,255,.025);
-        transition: background .2s ease, border-color .2s ease;
+        gap: 10px;
+        padding: 34px 36px 30px;
+        border: 1px solid rgba(226, 232, 240, 0.14);
+        border-radius: 28px;
+        background: rgba(15, 31, 42, 0.88);
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+        text-align: center;
       }
-      .step.active { background: rgba(214,35,53,.10); border-color: rgba(214,35,53,.26); }
-      .step.error { background: rgba(255,77,79,.09); border-color: rgba(255,77,79,.25); }
-      .icon { width: 20px; height: 20px; display: grid; place-items: center; font-size: 15px; font-weight: 800; }
-      .step.pending .icon { color: rgba(255,255,255,.25); }
-      .step.done .icon { color: #55d98a; }
-      .step.error .icon { color: #ff6b72; }
-      .spinner {
-        width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.22); border-top-color: #f04452;
-        border-radius: 50%; animation: spin .72s linear infinite;
+      .logo {
+        width: 168px;
+        max-width: 72%;
+        height: auto;
+        margin-bottom: 6px;
+        filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.35));
       }
-      @keyframes spin { to { transform: rotate(360deg); } }
-      .label { font-size: 12.5px; line-height: 1.2; color: rgba(247,251,253,.9); }
-      .detail { grid-column: 2 / 4; margin-top: -3px; font-size: 10.5px; line-height: 1.25; color: rgba(247,251,253,.54); word-break: break-word; }
-      .elapsed { font-size: 10px; color: rgba(247,251,253,.46); font-variant-numeric: tabular-nums; }
-      .footer { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
-      .progress { flex: 1; height: 4px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.10); }
-      .progress-bar { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #8f1724, #d62335, #ff6c78); transition: width .28s ease; }
-      .progress-text { min-width: 28px; text-align: right; font-size: 10px; color: rgba(247,251,253,.52); }
+      .title {
+        margin: 0;
+        font-size: 1.9rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+      .subtitle {
+        margin: 0;
+        color: rgba(226, 232, 240, 0.78);
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+      .loader {
+        width: 190px;
+        height: 4px;
+        margin-top: 16px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.28);
+      }
+      .loader::after {
+        content: '';
+        display: block;
+        width: 42%;
+        height: 100%;
+        border-radius: inherit;
+        background: #dc2626;
+        animation: appBootLoader 1.08s ease-in-out infinite;
+      }
+      .message {
+        min-height: 20px;
+        margin: 4px 0 0;
+        color: rgba(248, 250, 252, 0.86);
+        font-size: 0.9rem;
+        font-weight: 600;
+        line-height: 1.35;
+      }
+      .message.error { color: #fecaca; }
+      @keyframes appBootLoader {
+        0% { transform: translateX(-120%); }
+        50% { transform: translateX(70%); }
+        100% { transform: translateX(260%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .loader::after { animation: none; transform: translateX(70%); }
+      }
     </style>
   </head>
   <body>
-    <main class="splash-card" aria-label="TrAcción se está iniciando">
-      <section class="brand">
-        <img class="logo" src="./traccion-splash.png" alt="TrAcción" />
-        <div>
-          <h1 class="title">TrAcción</h1>
-          <p class="subtitle">Relaciones Laborales</p>
-        </div>
-      </section>
-
-      <p class="status-title">Preparando entorno de trabajo</p>
-      <section class="steps" id="steps">
-        <div class="step active" data-step="electron"><span class="icon"><span class="spinner"></span></span><span class="label">Preparando aplicación</span><span class="elapsed"></span></div>
-        <div class="step pending" data-step="persistence"><span class="icon">•</span><span class="label">Cargando motor de datos</span><span class="elapsed"></span></div>
-        <div class="step pending" data-step="database"><span class="icon">•</span><span class="label">Conectando y verificando base de datos</span><span class="elapsed"></span></div>
-        <div class="step pending" data-step="services"><span class="icon">•</span><span class="label">Preparando servicios internos</span><span class="elapsed"></span></div>
-        <div class="step pending" data-step="interface"><span class="icon">•</span><span class="label">Cargando datos e interfaz</span><span class="elapsed"></span></div>
-      </section>
-      <div class="footer">
-        <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
-        <span class="progress-text" id="progressText">0%</span>
-      </div>
+    <main class="app-boot-card" aria-label="TrAcción se está iniciando" aria-busy="true">
+      <img class="logo" src="./traccion-logo.png" alt="TrAcción" />
+      <h1 class="title">TrAcción</h1>
+      <p class="subtitle">Relaciones Laborales</p>
+      <div class="loader" aria-hidden="true"></div>
+      <p class="message" id="bootMessage" aria-live="polite">Iniciando TrAcción…</p>
     </main>
-
     <script src="./splash.js"></script>
   </body>
 </html>
