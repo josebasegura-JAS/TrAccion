@@ -106,6 +106,10 @@ export function normalizeTask(task: Task): Task {
   const tipo = (TASK_TYPES as readonly string[]).includes(task.tipo) ? task.tipo : EMPTY_TASK_DRAFT.tipo;
   const fase = typeof task.fase === 'string' && task.fase.trim() ? task.fase : DEFAULT_TASK_PHASE;
   const estado = typeof task.estado === 'string' && task.estado.trim() ? task.estado : EMPTY_TASK_DRAFT.estado;
+  const createdBy = typeof task.createdBy === 'string' && task.createdBy.trim() ? task.createdBy.trim() : undefined;
+  const phaseBeforeClose = typeof task.phaseBeforeClose === 'string' && task.phaseBeforeClose.trim()
+    ? task.phaseBeforeClose.trim()
+    : undefined;
   const normalizedTask = {
     id: task.id,
     titulo: task.titulo,
@@ -127,6 +131,8 @@ export function normalizeTask(task: Task): Task {
     sessionModule: typeof task.sessionModule === 'string' ? task.sessionModule : '',
     sessionDate: typeof task.sessionDate === 'string' ? task.sessionDate : '',
     seguimiento: normalizeSeguimiento(task),
+    createdBy,
+    phaseBeforeClose,
     createdAt: task.createdAt,
     updatedAt,
     deletedAt: task.deletedAt ?? null,
