@@ -67,12 +67,21 @@ function resolveClosedAt(task: Task, draft: TaskDraft, fechaHora: string): strin
   return isTaskClosed(task) ? (task.closedAt ?? fechaHora) : fechaHora;
 }
 
+function resolvePhaseBeforeClose(task: Task, draft: TaskDraft): string | undefined {
+  if (!isTaskClosed(draft)) return undefined;
+  if (isTaskClosed(task)) return task.phaseBeforeClose;
+  const previousPhase = task.fase.trim();
+  return previousPhase || undefined;
+}
+
 export function buildUpdatedTask(task: Task, draft: TaskDraft, seguimientoText: string | undefined): Task {
   const now = new Date().toISOString();
   registerTaskUpdateAudit(task, draft);
   return {
     ...task,
     ...draft,
+    createdBy: task.createdBy ?? draft.createdBy,
+    phaseBeforeClose: resolvePhaseBeforeClose(task, draft),
     ...buildAssignmentNoticeFields(task.id, task.responsable, draft.responsable, now, task.assignmentNoticeId, task.assignmentNoticeAt),
     seguimiento: [...buildSeguimiento(seguimientoText, now), ...task.seguimiento],
     closedAt: resolveClosedAt(task, draft, now),

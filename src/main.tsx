@@ -11,6 +11,7 @@ import { getDirtyEditorCount } from './services/dirtyEditors';
 import { recordPerformanceMetric } from './services/performanceMetrics';
 import './styles.css';
 import './dashboard-overrides.css';
+import './tareas-overrides.css';
 import './responsive-overrides.css';
 import './visual-polish.css';
 

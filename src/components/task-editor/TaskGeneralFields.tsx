@@ -28,6 +28,7 @@ export function TaskGeneralFields({
 }) {
   const taskStates = useConfiguracionStore((state) => state.taskStates);
   const stateOptions = taskStates.filter((state) => state.active || state.id === draft.estado);
+  const createdBy = task?.createdBy?.trim() || draft.createdBy?.trim() || 'Creador no registrado';
   return (
     <TaskEditorSection icon={FileText} title="Datos de la tarea">
       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-12">
@@ -61,6 +62,12 @@ export function TaskGeneralFields({
             setDraft((current) => ({ ...current, createdAt: nextDate ? `${nextDate}${suffix}` : current.createdAt }));
           }} />
         </label>
+        <div className="text-[11px] font-semibold text-metro-muted lg:col-span-2">
+          Creada por
+          <div className="flex h-8 items-center truncate rounded-lg border border-metro-border bg-black/10 px-2 text-xs font-medium text-metro-text" title={createdBy}>
+            {createdBy}
+          </div>
+        </div>
         <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Fecha límite
           <Input className="h-8 rounded-lg px-2 text-xs" type="date" value={draft.fechaLimite} onChange={(e) => setDraft((c) => ({ ...c, fechaLimite: e.target.value }))} />
         </label>
