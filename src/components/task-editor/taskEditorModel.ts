@@ -127,7 +127,7 @@ export function mergeDocumentLinks(current: TaskDocumentLink[], incoming: TaskDo
 }
 
 export function toDraft(task: Task | null): TaskDraft {
-  if (!task) return { ...EMPTY_TASK_DRAFT, documentLinks: [] };
+  if (!task) return { ...EMPTY_TASK_DRAFT, documentLinks: [], createdBy: getActiveUser() };
   return {
     titulo: task.titulo,
     descripcion: task.descripcion,
@@ -136,6 +136,7 @@ export function toDraft(task: Task | null): TaskDraft {
     estado: task.estado,
     prioridad: task.prioridad,
     createdAt: task.createdAt,
+    createdBy: task.createdBy,
     fechaLimite: task.fechaLimite,
     responsable: task.responsable,
     origen: task.origen,
@@ -152,6 +153,7 @@ export function createInitialDraft(task: Task | null, initialDraft?: Partial<Tas
   return {
     ...base,
     ...initialDraft,
+    createdBy: base.createdBy,
     documentLinks: initialDraft.documentLinks ?? base.documentLinks,
   };
 }
