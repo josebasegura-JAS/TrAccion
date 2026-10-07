@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { AppBootScreen } from './components/AppBootScreen';
 import { DatabaseLockQuickActionsPortal } from './components/ajustes/DatabaseLockQuickActionsPortal';
 import { TaskCriterionBridge } from './features/criterios-rrll/components/TaskCriterionBridge';
 import {
@@ -51,14 +50,6 @@ function renderFatalError(error: unknown): void {
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 
-function renderBootScreen(message?: string): void {
-  root.render(
-    <React.StrictMode>
-      <AppBootScreen message={message} />
-    </React.StrictMode>,
-  );
-}
-
 type AppModule = typeof import('./App');
 
 async function renderApp(appModulePromise: Promise<AppModule> = import('./App')): Promise<void> {
@@ -80,11 +71,10 @@ async function renderApp(appModulePromise: Promise<AppModule> = import('./App'))
 
 async function startApp(): Promise<void> {
   const startupStartedAt = performance.now();
-  renderBootScreen('Cargando datos de trabajo...');
-  await waitForNextPaint();
-  // El splash de Electron permanece visible durante esta fase. La ventana
-  // principal solo se muestra cuando notifyRendererReady confirma que React,
-  // SQLite y la interfaz ya han terminado de preparar el primer render útil.
+
+  // La ventana principal permanece oculta mientras se hidrata SQLite y React
+  // prepara el primer render útil. El único indicador visual durante esta fase
+  // es el splash de Electron; evitamos así una segunda pantalla de carga.
   const appImportStartedAt = performance.now();
   const appModulePromise = import('./App');
   void appModulePromise.then(() => {
@@ -95,7 +85,7 @@ async function startApp(): Promise<void> {
   const hydrationResult = await hydrateLocalStorageFromSqlite();
   recordPerformanceMetric('arranque', 'Hidratación SQLite', performance.now() - hydrationStartedAt);
   reportStartupHydrationResult(hydrationResult);
-  renderBootScreen('Preparando interfaz...');
+
   await renderApp(appModulePromise);
   recordPerformanceMetric('arranque', 'Arranque hasta interfaz lista', performance.now() - startupStartedAt);
 }
@@ -105,7 +95,6 @@ startApp().catch((error: unknown) => {
     'No se ha podido completar el arranque SQLite; se renderiza en modo bloqueado.',
     error,
   );
-  renderBootScreen('SQLite no disponible. Abriendo TrAcción en modo bloqueado...');
   renderApp().catch((renderError: unknown) => {
     console.error('No se ha podido arrancar TrAcción.', renderError);
     renderFatalError(renderError);
