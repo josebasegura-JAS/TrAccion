@@ -353,7 +353,6 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   };
 
   if (selected) {
-    const isDirection = selected.area === 'direccion';
     const isUnion = selected.area === 'sindicatos';
     const normalizedTaskSearch = taskSearch.trim().toLocaleLowerCase('es');
     const availableTasks = activeTasks.filter((task) =>
