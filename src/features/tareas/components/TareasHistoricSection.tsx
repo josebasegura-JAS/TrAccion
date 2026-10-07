@@ -1,8 +1,10 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useMemo } from 'react';
 import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { ActionButton } from '../../../components/ui/ActionButton';
-import { type Task } from '../domain/task';
+import { CLOSED_TASK_PHASE, DEFAULT_TASK_PHASE, type Task, type TaskDraft } from '../domain/task';
+import { useTaskStore } from '../store/useTaskStore';
 import {
   HISTORIC_PAGE_SIZE_OPTIONS,
   sortHistoricTasks,
@@ -59,6 +61,40 @@ export function HistoricYearSection({
     isOpen,
     sortState,
   ]);
+  const updateWithConcurrencyCheck = useTaskStore((state) => state.updateWithConcurrencyCheck);
+  const { alert, confirm, dialogNode } = useAppDialog();
+
+  const handleReopenTask = async (task: Task) => {
+    const confirmed = await confirm(`La tarea “${task.titulo}” volverá a la lista de tareas activas.`, {
+      title: 'Reabrir tarea',
+      confirmLabel: 'Reabrir tarea',
+      cancelLabel: 'Cancelar',
+    });
+    if (!confirmed) return;
+
+    const draft: TaskDraft = {
+      titulo: task.titulo,
+      descripcion: task.descripcion,
+      tipo: task.tipo,
+      fase: task.fase.trim().toLowerCase() === CLOSED_TASK_PHASE ? DEFAULT_TASK_PHASE : task.fase,
+      estado: 'pendiente',
+      prioridad: task.prioridad,
+      fechaLimite: task.fechaLimite,
+      responsable: task.responsable,
+      origen: task.origen,
+      sindicato: task.sindicato,
+      observaciones: task.observaciones,
+      mail: task.mail,
+      documentLinks: task.documentLinks,
+    };
+    const result = await updateWithConcurrencyCheck(
+      task.id,
+      draft,
+      'Tarea reabierta desde el histórico.',
+      task.updatedAt,
+    );
+    if (!result.ok) await alert(result.message || 'No se ha podido reabrir la tarea.');
+  };
 
   const totalPages = Math.max(1, Math.ceil(group.tasks.length / pageSize));
   const safePage = Math.min(Math.max(page, 1), totalPages);
@@ -68,7 +104,9 @@ export function HistoricYearSection({
   const lastVisible = Math.min(firstRow + pageSize, group.tasks.length);
 
   return (
-    <div className="border-b border-metro-border last:border-b-0">
+    <>
+      {dialogNode}
+      <div className="border-b border-metro-border last:border-b-0">
       <button
         className="flex w-full items-center gap-2 bg-metro-panel px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-metro-red/10"
         onClick={() => onOpenChange(group.year)}
@@ -140,6 +178,7 @@ export function HistoricYearSection({
                       </th>
                     );
                   })}
+                  <th className="w-[150px] px-3 py-2 text-right font-semibold">Acciones</th>
                 </tr>
               </CompactTableHead>
               <CompactTableBody>
@@ -161,6 +200,20 @@ export function HistoricYearSection({
                     <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
                       {task.prioridad}
                     </td>
+                    <td className="px-3 py-1.5 text-right">
+                      <ActionButton
+                        icon={RotateCcw}
+                        iconOnly={false}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleReopenTask(task);
+                        }}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        Reabrir tarea
+                      </ActionButton>
+                    </td>
                   </tr>
                 ))}
               </CompactTableBody>
@@ -168,6 +221,7 @@ export function HistoricYearSection({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
