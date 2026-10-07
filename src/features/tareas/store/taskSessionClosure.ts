@@ -43,6 +43,7 @@ function closeTasks(
 
     return normalizeTask({
       ...task,
+      phaseBeforeClose: task.fase.trim() || undefined,
       estado: 'cerrada' as const,
       fase: CLOSED_TASK_PHASE,
       seguimiento: [...seguimiento, ...task.seguimiento],
