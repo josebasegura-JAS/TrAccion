@@ -1,10 +1,12 @@
-import { ArrowRight, Plus } from 'lucide-react';
+import { ArrowRight, Plus, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Field';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { navigateInApp } from '../../../services/appNavigationBus';
 import type { CoordinationMeeting, CoordinationPointStatus } from '../domain/coordinacion';
+import { removeCoordinationMeetingPoint } from '../services/removeCoordinationMeetingPoint';
 import { pointToDraft, type CoordinationPointDraft } from './coordinationPointDraft';
 
 function pointDraftIsDirty(
@@ -35,6 +37,7 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
   point: CoordinationMeeting['points'][number];
 }) {
   const [draft, setDraft] = useState<CoordinationPointDraft>(() => pointToDraft(point));
+  const { alert, confirm, dialogNode } = useAppDialog();
 
   const updateDraft = (patch: Partial<CoordinationPointDraft>) => {
     const next = { ...draft, ...patch };
@@ -43,7 +46,9 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
   };
 
   return (
-    <article className="ui-subsection p-3">
+    <>
+      {dialogNode}
+      <article className="ui-subsection p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -95,13 +100,33 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
               Convertir en tarea
             </ActionButton>
           )}
-          {point.origin === 'manual' && (
+          {meetingOpen && (
             <ActionButton
               variant="delete"
               size="sm"
+              icon={Trash2}
               iconOnly
-              onClick={() => onDelete(point.id, point.title)}
-              title={`Eliminar punto manual ${point.title}`}
+              onClick={() => {
+                if (!point.taskId) {
+                  onDelete(point.id, point.title);
+                  return;
+                }
+                void (async () => {
+                  const confirmed = await confirm(
+                    `Se quitará la tarea “${point.title}” de esta reunión. La tarea seguirá existiendo en Tareas.`,
+                    {
+                      title: 'Quitar tarea de la reunión',
+                      confirmLabel: 'Quitar de la reunión',
+                      cancelLabel: 'Cancelar',
+                      danger: true,
+                    },
+                  );
+                  if (!confirmed) return;
+                  const result = await removeCoordinationMeetingPoint(point.id);
+                  if (!result.ok) await alert(result.message);
+                })();
+              }}
+              title={point.taskId ? `Quitar ${point.title} de esta reunión` : `Eliminar punto manual ${point.title}`}
             />
           )}
         </div>
@@ -135,6 +160,7 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
           </Field>
         </div>
       )}
-    </article>
+      </article>
+    </>
   );
 });
