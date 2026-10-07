@@ -61,6 +61,10 @@ export interface Task {
   sessionModule: string;
   sessionDate: string;
   seguimiento: TaskSeguimientoEntry[];
+  /** Usuario que creó originalmente la tarea. No se modifica en ediciones posteriores. */
+  createdBy?: string;
+  /** Fase que tenía la tarea inmediatamente antes de pasar a fase cerrada. */
+  phaseBeforeClose?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -84,6 +88,7 @@ export type TaskDraft = Pick<
   | 'documentLinks'
 > & {
   createdAt?: string;
+  createdBy?: string;
 };
 
 export type TaskDraftField = keyof TaskDraft;
@@ -157,6 +162,8 @@ export function migratePeticionToTask(peticion: LegacyPeticionForTaskMigration):
     sessionModule: '',
     sessionDate: '',
     seguimiento: Array.isArray(peticion.seguimiento) ? peticion.seguimiento : [],
+    createdBy: undefined,
+    phaseBeforeClose: undefined,
     createdAt: peticion.createdAt,
     updatedAt,
     deletedAt: peticion.deletedAt ?? null,
