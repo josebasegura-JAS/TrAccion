@@ -51,7 +51,7 @@ export function TaskGeneralFields({
         <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Estado
           <Select className="h-8 rounded-lg px-2 text-xs" value={draft.estado} onChange={(e) => setDraft((c) => ({ ...c, estado: e.target.value as TaskDraft['estado'] }))}>{stateOptions.map((state) => <option key={state.id} value={state.id}>{state.nombre}</option>)}</Select>
         </label>
-        <label className="text-[11px] font-semibold text-metro-muted lg:col-span-4">Detalle origen / solicitante
+        <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Detalle origen / solicitante
           <Input className="h-8 rounded-lg px-2 text-xs" value={draft.origen} onChange={(e) => setDraft((c) => ({ ...c, origen: e.target.value }))} />
         </label>
         <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Fecha de creación
