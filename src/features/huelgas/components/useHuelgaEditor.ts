@@ -6,6 +6,7 @@ import {
   EMPTY_DRAFT,
   STORAGE_KEY,
   createId,
+  reconcilePreparedCommunications,
   validateDraft,
   type Huelga,
   type HuelgaDraft,
@@ -97,7 +98,7 @@ export function useHuelgaEditor({ alert, huelgas, setHuelgas, zonas }: UseHuelga
       asignacionesPuesto: current?.asignacionesPuesto,
       instruccionesCorreoPorZona: current?.instruccionesCorreoPorZona,
       circuitosZonaIds: normalizedDraft.circuitosZonaIds,
-      correosPreparadosPorZona: current?.correosPreparadosPorZona,
+      correosPreparadosPorZona: reconcilePreparedCommunications(current ?? null, normalizedDraft),
     };
     const next = current
       ? huelgas.map((item) => (item.id === current.id ? record : item))
