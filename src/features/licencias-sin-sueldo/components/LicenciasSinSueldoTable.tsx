@@ -275,7 +275,7 @@ export function LicenciasTable({
         ),
       },
     ],
-    [compact, generatingWordId, onAdvance, onDelete, onExtendExcedencia, onGenerateProrrogaWord, onGenerateWord],
+    [compact, generatingWordId, onAdvance, onDelete, onExtendExcedencia, onGenerateDenialWord, onGenerateProrrogaWord, onGenerateWord],
   );
 
   const visibleColumns = useMemo(

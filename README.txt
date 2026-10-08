@@ -1,9 +1,6 @@
-Corrección TypeScript del backup SQLite nativo.
+Incremental: corrección ESLint en Licencias sin sueldo.
 
-Único fichero modificado:
-- electron/persistence/localBackups.ts
+Cambio único:
+- Añadida onGenerateDenialWord al array de dependencias del useMemo que construye las columnas de LicenciasSinSueldoTable.
 
-Cambio:
-- Se añade un tipo local DatabaseWithBackup para declarar de forma segura el método opcional backup().
-- No cambia la lógica ni el comportamiento del backup.
-- Mantiene backup nativo + fallback copyFile.
+No modifica lógica funcional ni otros módulos.
