@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useModuleHelpRegistry } from '../../services/moduleHelpRegistry';
 import type { ModuleHelpSection } from '../ModuleHelp';
@@ -48,6 +48,20 @@ export function PageHeader({
   const setModuleHelp = useModuleHelpRegistry((state) => state.setModuleHelp);
   const clearModuleHelp = useModuleHelpRegistry((state) => state.clearModuleHelp);
   const resolvedHelpTitle = helpTitle ?? title;
+  const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+
+    const syncModalState = () => {
+      setModalOpen(Boolean(document.querySelector('[data-modal-shell="true"]')));
+    };
+
+    syncModalState();
+    const observer = new MutationObserver(syncModalState);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (helpSections) {
@@ -60,7 +74,7 @@ export function PageHeader({
   }, [helpSections, helpSubtitle, resolvedHelpTitle, setModuleHelp, clearModuleHelp]);
 
   if (!actions) {
-    if (!status) {
+    if (!status || modalOpen) {
       return null;
     }
 
