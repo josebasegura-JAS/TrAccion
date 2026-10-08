@@ -1,10 +1,7 @@
-import { isTaskClosed } from '../../tareas/domain/task';
 import { create } from 'zustand';
-import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
-import type { Task } from '../../tareas/domain/task';
+import { isTaskClosed, type Task } from '../../tareas/domain/task';
 import { registerSyncableStore } from '../../../services/syncableStoreRegistry';
 import {
-  EMPTY_COORDINATION_STATE,
   createCoordinationId,
   type CoordinationMeeting,
   type CoordinationPoint,
@@ -19,8 +16,13 @@ import {
   updateTaskTargets,
   updateUnionTarget,
 } from '../services/coordinationTaskTargets';
+import {
+  LEGACY_COORDINATION_STORAGE_KEY,
+  persistCoordinationState,
+  readCoordinationState,
+} from '../services/coordinationPersistence';
 
-export const COORDINATION_STORAGE_KEY = 'traccion.v1.coordinacion.state';
+export const COORDINATION_STORAGE_KEY = LEGACY_COORDINATION_STORAGE_KEY;
 
 type Result = { ok: boolean; message: string; recordId?: string };
 
@@ -69,35 +71,6 @@ interface CoordinationStore extends CoordinationState {
   reopenMeeting: (meetingId: string) => Promise<Result>;
 }
 
-function normalizeCoordinationState(value: unknown): CoordinationState | null {
-  if (!value || typeof value !== 'object') return null;
-  const candidate = value as Partial<CoordinationState>;
-  if (!Array.isArray(candidate.meetings) || !Array.isArray(candidate.directionTaskIds)) return null;
-  const unionTaskIds = candidate.unionTaskIds && typeof candidate.unionTaskIds === 'object'
-    ? Object.fromEntries(Object.entries(candidate.unionTaskIds).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((id) => typeof id === 'string')))
-    : {};
-  const areaTaskIds = candidate.areaTaskIds && typeof candidate.areaTaskIds === 'object'
-    ? Object.fromEntries(Object.entries(candidate.areaTaskIds).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((id) => typeof id === 'string')))
-    : {};
-  return { meetings: candidate.meetings, directionTaskIds: candidate.directionTaskIds, unionTaskIds, areaTaskIds };
-}
-
-function readState(): CoordinationState {
-  const stored = readStorageItem(COORDINATION_STORAGE_KEY);
-  if (!stored) return EMPTY_COORDINATION_STATE;
-  try {
-    const parsed: unknown = JSON.parse(stored);
-    return normalizeCoordinationState(parsed) ?? EMPTY_COORDINATION_STATE;
-  } catch {
-    return EMPTY_COORDINATION_STATE;
-  }
-}
-
-async function persist(state: CoordinationState): Promise<Result> {
-  const result = await writeJsonStorageAsync(COORDINATION_STORAGE_KEY, state);
-  return { ok: result.ok, message: result.message };
-}
-
 function stateSnapshot(state: CoordinationState): CoordinationState {
   return {
     meetings: state.meetings,
@@ -105,6 +78,11 @@ function stateSnapshot(state: CoordinationState): CoordinationState {
     unionTaskIds: state.unionTaskIds,
     areaTaskIds: state.areaTaskIds,
   };
+}
+
+async function persist(state: CoordinationState): Promise<Result> {
+  const result = await persistCoordinationState(state);
+  return { ok: result.ok, message: result.message };
 }
 
 function activeTask(task: Task): boolean {
@@ -128,33 +106,46 @@ function findEditableMeeting(current: CoordinationState, meetingId: string):
   return { meeting, error: null };
 }
 
+function replaceMeeting(
+  current: CoordinationState,
+  meetingId: string,
+  update: (meeting: CoordinationMeeting) => CoordinationMeeting,
+): CoordinationState {
+  return {
+    ...stateSnapshot(current),
+    meetings: current.meetings.map((meeting) => meeting.id === meetingId ? update(meeting) : meeting),
+  };
+}
+
 export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
-  ...readState(),
-  load: () => set(readState()),
+  ...readCoordinationState(),
+  load: () => set(readCoordinationState()),
   reloadFromStorage: () => {
-    const next = readState();
-    if (JSON.stringify(next) !== JSON.stringify(stateSnapshot(get()))) {
-      set(next);
-    }
+    const next = readCoordinationState();
+    if (JSON.stringify(next) !== JSON.stringify(stateSnapshot(get()))) set(next);
   },
+
   setTaskForDirection: async (taskId, enabled) => {
     const next = updateDirectionTarget(stateSnapshot(get()), taskId, enabled);
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   setTaskForUnion: async (taskId, unionName) => {
     const next = updateUnionTarget(stateSnapshot(get()), taskId, unionName);
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   setTaskForArea: async (taskId, areaName) => {
     const next = updateAreaTarget(stateSnapshot(get()), taskId, areaName);
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   setTaskTargets: async (taskId, targets) => {
     const current = stateSnapshot(get());
     const next = updateTaskTargets(current, taskId, targets);
@@ -165,12 +156,14 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (result.ok) set(next);
     return result;
   },
+
   createDirectionMeeting: async (date, title, tasks) => {
     const normalizedDate = date.trim();
     const cleanTitle = title.trim();
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
     if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
-    const current = get();
+
+    const current = stateSnapshot(get());
     const marked = new Set(current.directionTaskIds);
     const now = new Date().toISOString();
     const points: CoordinationPoint[] = tasks
@@ -197,11 +190,12 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       updatedAt: now,
       closedAt: null,
     };
-    const next: CoordinationState = { ...stateSnapshot(current), meetings: [meeting, ...current.meetings] };
+    const next: CoordinationState = { ...current, meetings: [meeting, ...current.meetings] };
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
   },
+
   createOtherAreaMeeting: async (date, title, areaName, referenceTaskId, interlocutors, purpose, tasks) => {
     const normalizedDate = date.trim();
     const cleanTitle = title.trim();
@@ -213,10 +207,13 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const task = referenceTaskId
       ? tasks.find((candidate) => candidate.id === referenceTaskId && activeTask(candidate))
       : undefined;
-    if (referenceTaskId && !task) return { ok: false, message: 'La tarea inicial seleccionada no existe o ya está cerrada.' };
+    if (referenceTaskId && !task) {
+      return { ok: false, message: 'La tarea inicial seleccionada no existe o ya está cerrada.' };
+    }
 
-    const current = get();
-    const queuedArea = Object.entries(current.areaTaskIds).find(([name]) => normalizedName(name) === normalizedName(cleanAreaName));
+    const current = stateSnapshot(get());
+    const queuedArea = Object.entries(current.areaTaskIds)
+      .find(([name]) => normalizedName(name) === normalizedName(cleanAreaName));
     const resolvedAreaName = queuedArea?.[0] ?? cleanAreaName;
     const selectedIds = new Set(queuedArea?.[1] ?? []);
     if (task) selectedIds.add(task.id);
@@ -249,11 +246,12 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       updatedAt: now,
       closedAt: null,
     };
-    const next: CoordinationState = { ...stateSnapshot(current), meetings: [meeting, ...current.meetings] };
+    const next: CoordinationState = { ...current, meetings: [meeting, ...current.meetings] };
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
   },
+
   createUnionMeeting: async (date, title, unionName, meetingType, interlocutors, purpose, taskIds, tasks) => {
     const normalizedDate = date.trim();
     const cleanTitle = title.trim();
@@ -261,7 +259,8 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
     if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
     if (!cleanUnion) return { ok: false, message: 'Selecciona el sindicato.' };
-    const current = get();
+
+    const current = stateSnapshot(get());
     const selectedIds = new Set([...(current.unionTaskIds[cleanUnion] ?? []), ...taskIds]);
     const latestPrevious = current.meetings
       .filter((meeting) => meeting.area === 'sindicatos' && meeting.unionName === cleanUnion && meeting.status === 'closed')
@@ -272,208 +271,242 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
         selectedIds.add(point.taskId);
       }
     });
+
     const now = new Date().toISOString();
     const points: CoordinationPoint[] = tasks
       .filter((task) => selectedIds.has(task.id) && activeTask(task))
       .map((task) => ({
-        id: createCoordinationId('union-point'), origin: 'task', taskId: task.id,
-        title: task.titulo, detail: task.descripcion, result: '', status: 'pendiente',
-        responsible: '', dueDate: '', createdAt: now, updatedAt: now,
+        id: createCoordinationId('union-point'),
+        origin: 'task',
+        taskId: task.id,
+        title: task.titulo,
+        detail: task.descripcion,
+        result: '',
+        status: 'pendiente',
+        responsible: '',
+        dueDate: '',
+        createdAt: now,
+        updatedAt: now,
       }));
     const meeting: CoordinationMeeting = {
-      id: createCoordinationId('union-meeting'), title: cleanTitle, area: 'sindicatos', unionName: cleanUnion,
-      meetingType, interlocutors: interlocutors.trim(), purpose: purpose.trim(),
-      date: normalizedDate, status: 'open', points, createdAt: now, updatedAt: now, closedAt: null,
+      id: createCoordinationId('union-meeting'),
+      title: cleanTitle,
+      area: 'sindicatos',
+      unionName: cleanUnion,
+      meetingType,
+      interlocutors: interlocutors.trim(),
+      purpose: purpose.trim(),
+      date: normalizedDate,
+      status: 'open',
+      points,
+      createdAt: now,
+      updatedAt: now,
+      closedAt: null,
     };
-    const next: CoordinationState = { ...stateSnapshot(current), meetings: [meeting, ...current.meetings] };
+    const next: CoordinationState = { ...current, meetings: [meeting, ...current.meetings] };
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
   },
+
   addTaskPoint: async (meetingId, taskId, tasks) => {
-    const current = get();
+    const current = stateSnapshot(get());
     const editable = findEditableMeeting(current, meetingId);
     if (editable.error) return editable.error;
     const { meeting } = editable;
-    if (meeting.points.some((point) => point.taskId === taskId)) return { ok: false, message: 'La tarea ya está incluida en el guion.' };
+    if (meeting.points.some((point) => point.taskId === taskId)) {
+      return { ok: false, message: 'La tarea ya está incluida en el guion.' };
+    }
     const task = tasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
     if (!task) return { ok: false, message: 'La tarea seleccionada no está activa.' };
+
     const now = new Date().toISOString();
     const point: CoordinationPoint = {
-      id: createCoordinationId('task-point'), origin: 'task', taskId: task.id,
-      title: task.titulo, detail: task.descripcion, result: '', status: 'pendiente',
-      responsible: '', dueDate: '', createdAt: now, updatedAt: now,
+      id: createCoordinationId('task-point'),
+      origin: 'task',
+      taskId: task.id,
+      title: task.titulo,
+      detail: task.descripcion,
+      result: '',
+      status: 'pendiente',
+      responsible: '',
+      dueDate: '',
+      createdAt: now,
+      updatedAt: now,
     };
-    const next: CoordinationState = {
-      ...stateSnapshot(current),
-      meetings: current.meetings.map((item) => item.id === meetingId
-        ? { ...item, points: [...item.points, point], updatedAt: now }
-        : item),
-    };
+    const next = replaceMeeting(current, meetingId, (item) => ({
+      ...item,
+      points: [...item.points, point],
+      updatedAt: now,
+    }));
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   linkManualPointToTask: async (meetingId, pointId, taskId, tasks) => {
-    const current = get();
+    const current = stateSnapshot(get());
     const editable = findEditableMeeting(current, meetingId);
     if (editable.error) return editable.error;
     const { meeting } = editable;
     const point = meeting.points.find((item) => item.id === pointId);
-    if (!point || point.origin !== 'manual') return { ok: false, message: 'El punto manual ya no está disponible.' };
+    if (!point || point.origin !== 'manual') {
+      return { ok: false, message: 'El punto manual ya no está disponible.' };
+    }
     if (meeting.points.some((item) => item.id !== pointId && item.taskId === taskId)) {
       return { ok: false, message: 'La tarea ya está incluida en el guion.' };
     }
     const task = tasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
     if (!task) return { ok: false, message: 'La tarea creada no está activa.' };
+
     const now = new Date().toISOString();
-    const next: CoordinationState = {
-      ...stateSnapshot(current),
-      meetings: current.meetings.map((item) => item.id === meetingId ? {
-        ...item,
+    const next = replaceMeeting(current, meetingId, (item) => ({
+      ...item,
+      updatedAt: now,
+      points: item.points.map((candidate) => candidate.id === pointId ? {
+        ...candidate,
+        origin: 'task',
+        taskId: task.id,
         updatedAt: now,
-        points: item.points.map((candidate) => candidate.id === pointId ? {
-          ...candidate,
-          origin: 'task',
-          taskId: task.id,
-          updatedAt: now,
-        } : candidate),
-      } : item),
-    };
+      } : candidate),
+    }));
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   addManualPoint: async (meetingId, title, detail = '') => {
     const cleanTitle = title.trim();
     if (!cleanTitle) return { ok: false, message: 'Escribe el título del punto.' };
-    const current = get();
+    const current = stateSnapshot(get());
     const editable = findEditableMeeting(current, meetingId);
     if (editable.error) return editable.error;
+
     const now = new Date().toISOString();
-    const next: CoordinationState = {
-      ...stateSnapshot(current),
-      meetings: current.meetings.map((meeting) => meeting.id === meetingId ? {
-        ...meeting,
+    const next = replaceMeeting(current, meetingId, (meeting) => ({
+      ...meeting,
+      updatedAt: now,
+      points: [...meeting.points, {
+        id: createCoordinationId('manual-point'),
+        origin: 'manual',
+        taskId: null,
+        title: cleanTitle,
+        detail: detail.trim(),
+        result: '',
+        status: 'pendiente',
+        createdAt: now,
         updatedAt: now,
-        points: [...meeting.points, {
-          id: createCoordinationId('manual-point'),
-          origin: 'manual',
-          taskId: null,
-          title: cleanTitle,
-          detail: detail.trim(),
-          result: '',
-          status: 'pendiente',
-          createdAt: now,
-          updatedAt: now,
-        }],
-      } : meeting),
-    };
+      }],
+    }));
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   updatePoint: async (meetingId, pointId, patch) => {
-    const current = get();
+    const current = stateSnapshot(get());
     const editable = findEditableMeeting(current, meetingId);
     if (editable.error) return editable.error;
     if (!editable.meeting.points.some((point) => point.id === pointId)) {
       return { ok: false, message: 'No se ha encontrado el punto.' };
     }
+
     const now = new Date().toISOString();
-    const next: CoordinationState = {
-      ...stateSnapshot(current),
-      meetings: current.meetings.map((meeting) => meeting.id === meetingId ? {
-        ...meeting,
-        updatedAt: now,
-        points: meeting.points.map((point) => point.id === pointId ? { ...point, ...patch, updatedAt: now } : point),
-      } : meeting),
-    };
+    const next = replaceMeeting(current, meetingId, (meeting) => ({
+      ...meeting,
+      updatedAt: now,
+      points: meeting.points.map((point) => point.id === pointId ? { ...point, ...patch, updatedAt: now } : point),
+    }));
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   saveMeetingPoints: async (meetingId, patches) => {
-    const current = get();
+    const current = stateSnapshot(get());
     const editable = findEditableMeeting(current, meetingId);
     if (editable.error) return editable.error;
     const existingPointIds = new Set(editable.meeting.points.map((point) => point.id));
     if (patches.some(({ pointId }) => !existingPointIds.has(pointId))) {
       return { ok: false, message: 'Uno de los puntos ya no existe. Recarga la reunión antes de guardar.' };
     }
+
     const byPoint = new Map(patches.map(({ pointId, patch }) => [pointId, patch]));
     const now = new Date().toISOString();
-    const next: CoordinationState = {
-      ...stateSnapshot(current),
-      meetings: current.meetings.map((item) => item.id === meetingId ? {
-        ...item,
-        updatedAt: now,
-        points: item.points.map((point) => {
-          const pointPatch = byPoint.get(point.id);
-          return pointPatch ? { ...point, ...pointPatch, updatedAt: now } : point;
-        }),
-      } : item),
-    };
+    const next = replaceMeeting(current, meetingId, (meeting) => ({
+      ...meeting,
+      updatedAt: now,
+      points: meeting.points.map((point) => {
+        const pointPatch = byPoint.get(point.id);
+        return pointPatch ? { ...point, ...pointPatch, updatedAt: now } : point;
+      }),
+    }));
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   deleteManualPoint: async (meetingId, pointId) => {
-    const current = get();
+    const current = stateSnapshot(get());
     const editable = findEditableMeeting(current, meetingId);
     if (editable.error) return editable.error;
-    const { meeting } = editable;
-    const point = meeting.points.find((item) => item.id === pointId);
+    const point = editable.meeting.points.find((item) => item.id === pointId);
     if (!point) return { ok: false, message: 'No se ha encontrado el punto.' };
     if (point.origin !== 'manual') {
       return { ok: false, message: 'Solo se pueden eliminar directamente los puntos añadidos manualmente.' };
     }
+
     const now = new Date().toISOString();
-    const next: CoordinationState = {
-      ...stateSnapshot(current),
-      meetings: current.meetings.map((item) => item.id === meetingId ? {
-        ...item,
-        updatedAt: now,
-        points: item.points.filter((candidate) => candidate.id !== pointId),
-      } : item),
-    };
+    const next = replaceMeeting(current, meetingId, (meeting) => ({
+      ...meeting,
+      updatedAt: now,
+      points: meeting.points.filter((candidate) => candidate.id !== pointId),
+    }));
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   deleteMeeting: async (meetingId) => {
-    const current = get();
-    const exists = current.meetings.some((item) => item.id === meetingId);
-    if (!exists) return { ok: false, message: 'No se ha encontrado la reunión.' };
+    const current = stateSnapshot(get());
+    if (!current.meetings.some((item) => item.id === meetingId)) {
+      return { ok: false, message: 'No se ha encontrado la reunión.' };
+    }
     const next: CoordinationState = {
-      ...stateSnapshot(current),
+      ...current,
       meetings: current.meetings.filter((item) => item.id !== meetingId),
     };
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
   },
+
   closeMeeting: async (meetingId) => {
-    const current = get();
+    const current = stateSnapshot(get());
     const meeting = current.meetings.find((item) => item.id === meetingId);
     if (!meeting) return { ok: false, message: 'No se ha encontrado la reunión.' };
     if (meeting.status === 'closed') {
       return { ok: true, message: 'La reunión ya estaba cerrada.', recordId: meeting.id };
     }
+
     const now = new Date().toISOString();
     const directionTaskIds = new Set(current.directionTaskIds);
     const unionTaskIds = { ...current.unionTaskIds };
     const areaTaskIds = { ...current.areaTaskIds };
-    if (meeting.area === 'direccion') meeting.points.forEach((point) => {
-      if (!point.taskId) return;
-      if (point.status === 'tratado' || point.status === 'seguimiento') directionTaskIds.delete(point.taskId);
-      if (['volver', 'pendiente', 'no-tratado'].includes(point.status)) directionTaskIds.add(point.taskId);
-    });
+
+    if (meeting.area === 'direccion') {
+      meeting.points.forEach((point) => {
+        if (!point.taskId) return;
+        if (point.status === 'tratado' || point.status === 'seguimiento') directionTaskIds.delete(point.taskId);
+        if (['volver', 'pendiente', 'no-tratado'].includes(point.status)) directionTaskIds.add(point.taskId);
+      });
+    }
     if (meeting.area === 'sindicatos' && meeting.unionName) {
       const ids = new Set(unionTaskIds[meeting.unionName] ?? []);
       meeting.points.forEach((point) => {
         if (!point.taskId) return;
-        if (point.status === 'tratado' || point.status === 'seguimiento') ids.delete(point.taskId); else ids.add(point.taskId);
+        if (point.status === 'tratado' || point.status === 'seguimiento') ids.delete(point.taskId);
+        else ids.add(point.taskId);
       });
       unionTaskIds[meeting.unionName] = [...ids];
     }
@@ -481,10 +514,12 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       const ids = new Set(areaTaskIds[meeting.areaName] ?? []);
       meeting.points.forEach((point) => {
         if (!point.taskId) return;
-        if (point.status === 'tratado' || point.status === 'seguimiento') ids.delete(point.taskId); else ids.add(point.taskId);
+        if (point.status === 'tratado' || point.status === 'seguimiento') ids.delete(point.taskId);
+        else ids.add(point.taskId);
       });
       areaTaskIds[meeting.areaName] = [...ids];
     }
+
     const next: CoordinationState = {
       directionTaskIds: [...directionTaskIds],
       unionTaskIds,
@@ -500,23 +535,22 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
   },
+
   reopenMeeting: async (meetingId) => {
-    const current = get();
+    const current = stateSnapshot(get());
     const meeting = current.meetings.find((item) => item.id === meetingId);
     if (!meeting) return { ok: false, message: 'No se ha encontrado la reunión.' };
     if (meeting.status === 'open') {
       return { ok: true, message: 'La reunión ya estaba abierta.', recordId: meeting.id };
     }
+
     const now = new Date().toISOString();
-    const next: CoordinationState = {
-      ...stateSnapshot(current),
-      meetings: current.meetings.map((item) => item.id === meetingId ? {
-        ...item,
-        status: 'open',
-        closedAt: null,
-        updatedAt: now,
-      } : item),
-    };
+    const next = replaceMeeting(current, meetingId, (item) => ({
+      ...item,
+      status: 'open',
+      closedAt: null,
+      updatedAt: now,
+    }));
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
