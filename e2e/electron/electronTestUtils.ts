@@ -13,30 +13,13 @@ export type ElectronTestApp = {
 };
 
 export type LaunchTraccionElectronOptions = {
-  /** Reutiliza una carpeta de perfil existente para probar reaperturas reales. */
   userDataDir?: string;
-  /** Por defecto se elimina el perfil al cerrar. Puede desactivarse para relanzar la app. */
   removeUserDataOnClose?: boolean;
-  /**
-   * Carpeta compartida donde debe vivir traccion.sqlite. Si se indica, se
-   * preconfigura la instancia (vía sqlite-preferences.json, el mismo fichero
-   * que escribe la UI de Ajustes al "Cambiar ubicación de base de datos")
-   * para que arranque apuntando ahí en vez de a su carpeta de datos por
-   * defecto. Sirve para simular, en un test E2E, a dos usuarios reales
-   * abriendo TrAccion sobre el mismo traccion.sqlite en la unidad de red.
-   */
   sharedDatabaseDirectory?: string;
 };
 
-/**
- * Nombre del fichero de preferencias de base de datos. Debe coincidir con
- * DATABASE_PREFERENCES_FILE_NAME en electron/persistence/databasePreferences.ts.
- * No se importa directamente porque ese módulo depende de `electron` (proceso
- * principal) y este helper corre en el proceso de test de Playwright.
- */
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
 
-/** Crea una carpeta temporal aislada para usar como "unidad de red" compartida en tests. */
 export async function createSharedDatabaseDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), 'traccion-e2e-shared-db-'));
   const databasePath = path.join(directory, 'traccion.sqlite');
@@ -79,15 +62,9 @@ async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
 
   while (Date.now() < deadline) {
     for (const candidate of app.windows()) {
-      const isRendererWindow = candidate.url().startsWith('http://127.0.0.1:5173');
-      if (!isRendererWindow) {
-        continue;
-      }
-
+      if (!candidate.url().startsWith('http://127.0.0.1:5173')) continue;
       const dashboardHeading = candidate.getByRole('heading', { name: 'Dashboard RRLL' });
-      if (await dashboardHeading.isVisible().catch(() => false)) {
-        return candidate;
-      }
+      if (await dashboardHeading.isVisible().catch(() => false)) return candidate;
     }
 
     const remaining = Math.max(250, Math.min(2_000, deadline - Date.now()));
@@ -104,6 +81,16 @@ async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
   throw new Error(
     `No se ha encontrado la ventana principal de TrAccion durante el arranque E2E. Ventanas detectadas: ${JSON.stringify(windowDiagnostics)}`,
   );
+}
+
+export async function closeTraccionElectron(app: ElectronApplication): Promise<void> {
+  // Los formularios con draft instalan beforeunload en el renderer. En teardown E2E
+  // destruimos primero las BrowserWindow para no hacer que Playwright compita con
+  // ese diálogo nativo al cerrar el proceso de pruebas.
+  await app.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows()) window.destroy();
+  }).catch(() => undefined);
+  await app.close().catch(() => undefined);
 }
 
 export async function launchTraccionElectron(
@@ -145,7 +132,7 @@ export async function launchTraccionElectron(
     page,
     userDataDir,
     close: async () => {
-      await app.close().catch(() => undefined);
+      await closeTraccionElectron(app);
       if (removeUserDataOnClose) {
         await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
       }
