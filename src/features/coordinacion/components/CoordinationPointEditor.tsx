@@ -1,13 +1,21 @@
 import { ArrowRight, Plus, Trash2 } from 'lucide-react';
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Field';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { Notice } from '../../../components/ui/Notice';
 import { navigateInApp } from '../../../services/appNavigationBus';
 import type { CoordinationMeeting, CoordinationPointStatus } from '../domain/coordinacion';
 import { removeCoordinationMeetingPoint } from '../services/removeCoordinationMeetingPoint';
 import { pointToDraft, type CoordinationPointDraft } from './coordinationPointDraft';
+
+function pointDraftsEqual(a: CoordinationPointDraft, b: CoordinationPointDraft): boolean {
+  return a.result === b.result
+    && a.status === b.status
+    && a.responsible === b.responsible
+    && a.dueDate === b.dueDate;
+}
 
 function pointDraftIsDirty(
   point: CoordinationMeeting['points'][number],
@@ -26,6 +34,7 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
   onConvertToTask,
   onDelete,
   onDraftChange,
+  onRemoteConflictChange,
   point,
 }: {
   index: number;
@@ -34,10 +43,52 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
   onConvertToTask: (pointId: string) => void;
   onDelete: (pointId: string, title: string) => void;
   onDraftChange: (pointId: string, draft: CoordinationPointDraft, dirty: boolean) => void;
+  onRemoteConflictChange: (pointId: string, hasConflict: boolean) => void;
   point: CoordinationMeeting['points'][number];
 }) {
   const [draft, setDraft] = useState<CoordinationPointDraft>(() => pointToDraft(point));
+  const [hasRemoteConflict, setHasRemoteConflict] = useState(false);
+  const sourcePointRef = useRef(point);
   const { alert, confirm, dialogNode } = useAppDialog();
+
+  useEffect(() => {
+    const previousPoint = sourcePointRef.current;
+    const previousSourceDraft = pointToDraft(previousPoint);
+    const nextSourceDraft = pointToDraft(point);
+    const editableSourceChanged = !pointDraftsEqual(previousSourceDraft, nextSourceDraft);
+    const localWasDirty = !pointDraftsEqual(draft, previousSourceDraft);
+
+    sourcePointRef.current = point;
+    if (!editableSourceChanged) return;
+
+    // If the editor was clean, remote data can safely replace the local draft.
+    // If both sides converged to the same values (for example after our own save),
+    // the update is also safe and must not be reported as a conflict.
+    if (!localWasDirty || pointDraftsEqual(draft, nextSourceDraft)) {
+      setDraft(nextSourceDraft);
+      setHasRemoteConflict(false);
+      onDraftChange(point.id, nextSourceDraft, false);
+      onRemoteConflictChange(point.id, false);
+      return;
+    }
+
+    // Keep the local draft visible, but prevent it from overwriting the remote edit.
+    setHasRemoteConflict(true);
+    onRemoteConflictChange(point.id, true);
+  }, [draft, onDraftChange, onRemoteConflictChange, point]);
+
+  useEffect(() => () => {
+    onRemoteConflictChange(point.id, false);
+  }, [onRemoteConflictChange, point.id]);
+
+  const reloadRemoteDraft = () => {
+    const next = pointToDraft(point);
+    sourcePointRef.current = point;
+    setDraft(next);
+    setHasRemoteConflict(false);
+    onDraftChange(point.id, next, false);
+    onRemoteConflictChange(point.id, false);
+  };
 
   const updateDraft = (patch: Partial<CoordinationPointDraft>) => {
     const next = { ...draft, ...patch };
@@ -131,6 +182,18 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
           )}
         </div>
       </div>
+      {hasRemoteConflict && (
+        <Notice
+          actionLabel="Recargar cambios"
+          className="mt-3"
+          live="assertive"
+          onAction={reloadRemoteDraft}
+          title="Este punto ha cambiado en otra sesión"
+          tone="warning"
+        >
+          Tus cambios locales se conservan en pantalla, pero no se pueden guardar sobre la nueva versión. Recarga este punto para continuar.
+        </Notice>
+      )}
       <Field className="mt-3" density="compact" label="Resultado / acuerdos">
         <Textarea
           className="min-h-20"
