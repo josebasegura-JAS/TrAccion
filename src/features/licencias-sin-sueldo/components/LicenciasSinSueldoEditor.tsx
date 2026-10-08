@@ -43,6 +43,7 @@ export function LicenciasSinSueldoEditor({
   onClose,
   onDelete,
   onGenerateWord,
+  onGenerateDenialWord,
   generatingWordId,
   onSave,
 }: {
@@ -52,6 +53,7 @@ export function LicenciasSinSueldoEditor({
   onClose: () => void;
   onDelete: () => void;
   onGenerateWord: (record: LicenciaSinSueldoRecord) => void;
+  onGenerateDenialWord?: (record: LicenciaSinSueldoRecord) => void;
   generatingWordId: string | null;
   onSave: (draft: LicenciaSinSueldoDraft) => Promise<{ ok: boolean; message: string }>;
 }) {
@@ -451,6 +453,20 @@ export function LicenciasSinSueldoEditor({
                   variant="word"
                 >
                   {generatingWordId === record.id ? 'Generando…' : 'Generar Word'}
+                </ActionButton>
+              )}
+            {mode === 'edit' &&
+              record &&
+              record.estado === 'denegada' &&
+              record.tipo === 'Licencia sin sueldo' &&
+              onGenerateDenialWord && (
+                <ActionButton
+                  disabled={generatingWordId !== null}
+                  iconOnly={false}
+                  onClick={() => onGenerateDenialWord(record)}
+                  variant="word"
+                >
+                  {generatingWordId === record.id ? 'Generando…' : 'Generar Word denegación'}
                 </ActionButton>
               )}
             {mode === 'edit' && record && (

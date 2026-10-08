@@ -28,7 +28,7 @@ import {
   type LicenciaSinSueldoTipo,
 } from '../domain/licenciaSinSueldo';
 import { useLicenciasSinSueldoStore } from '../store/useLicenciasSinSueldoStore';
-import { generateLicenciaSinSueldoWord } from '../domain/word';
+import { generateDenegacionLicenciaSinSueldoWord, generateLicenciaSinSueldoWord } from '../domain/word';
 import { generateExcedenciaWord } from '../domain/excedenciaWord';
 import { generateProrrogaExcedenciaWord } from '../domain/prorrogaExcedenciaWord';
 import { LicenciasSinSueldoEditor } from './LicenciasSinSueldoEditor';
@@ -48,6 +48,9 @@ export function LicenciasSinSueldoPage() {
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const rutaPlantillaLicenciaSinSueldo = useConfiguracionStore(
     (state) => state.rutaPlantillaLicenciaSinSueldo,
+  );
+  const rutaPlantillaDenegacionLicenciaSinSueldo = useConfiguracionStore(
+    (state) => state.rutaPlantillaDenegacionLicenciaSinSueldo,
   );
   const rutaPlantillaExcedencia = useConfiguracionStore(
     (state) => state.rutaPlantillaExcedencia,
@@ -183,6 +186,49 @@ export function LicenciasSinSueldoPage() {
     });
   }, []);
 
+  const generateDenialWord = useCallback(
+    async (record: LicenciaSinSueldoRecord) => {
+      if (
+        record.estado !== 'denegada' ||
+        record.tipo !== 'Licencia sin sueldo' ||
+        generatingWordId
+      ) {
+        return;
+      }
+
+      const plantillaEmployee = findActiveEmployee(employees, record.numeroEmpleado);
+
+      setGeneratingWordId(record.id);
+      setWordStatus('');
+      try {
+        const result = await generateDenegacionLicenciaSinSueldoWord(
+          record,
+          plantillaEmployee,
+          rutaPlantillaDenegacionLicenciaSinSueldo,
+          jobPositionTranslations,
+        );
+        await saveDocxWithDialog(result.blob, result.fileName);
+        setWordStatus(
+          `Word de denegación generado: ${result.detectedMarkers.length} marcadores sustituidos.`,
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'No se ha podido generar el Word de denegación.';
+        setWordStatus(message);
+        await alert(message, { type: 'error' });
+      } finally {
+        setGeneratingWordId(null);
+      }
+    },
+    [
+      alert,
+      employees,
+      generatingWordId,
+      jobPositionTranslations,
+      rutaPlantillaDenegacionLicenciaSinSueldo,
+    ],
+  );
+
   const saveDraft = async (
     draft: LicenciaSinSueldoDraft,
   ): Promise<{ ok: boolean; message: string }> => {
@@ -201,6 +247,10 @@ export function LicenciasSinSueldoPage() {
         editor.record.tipo === 'Excedencia' &&
         editor.record.estado === 'pendiente_aprobacion' &&
         draft.estado === 'pendiente_firma';
+      const shouldGenerateDenial =
+        editor.record.tipo === 'Licencia sin sueldo' &&
+        editor.record.estado !== 'denegada' &&
+        draft.estado === 'denegada';
       const result = await updateWithConcurrencyCheck(
         editor.record.id,
         draft,
@@ -210,6 +260,8 @@ export function LicenciasSinSueldoPage() {
         setEditor(null);
         if (shouldGenerateExcedencia) {
           await generateWord({ ...editor.record, ...draft, estado: 'pendiente_firma' });
+        } else if (shouldGenerateDenial) {
+          await generateDenialWord({ ...editor.record, ...draft, estado: 'denegada' });
         }
       }
       return result;
@@ -467,6 +519,9 @@ export function LicenciasSinSueldoPage() {
               onGenerateWord={(record) => {
                 void generateWord(record);
               }}
+              onGenerateDenialWord={(record) => {
+                void generateDenialWord(record);
+              }}
               onExtendExcedencia={(record) => {
                 if (canProrrogarExcedencia(record, today)) setProrrogaRecord(record);
               }}
@@ -497,6 +552,9 @@ export function LicenciasSinSueldoPage() {
               onGenerateWord={(record) => {
                 void generateWord(record);
               }}
+              onGenerateDenialWord={(record) => {
+                void generateDenialWord(record);
+              }}
               records={blocks.pendienteFirma}
               showToolbar={false}
               title="Licencias sin sueldo - Pendientes de firma"
@@ -521,6 +579,9 @@ export function LicenciasSinSueldoPage() {
           onEdit={(record) => setEditor({ mode: 'edit', record })}
           onGenerateWord={(record) => {
             void generateWord(record);
+          }}
+          onGenerateDenialWord={(record) => {
+            void generateDenialWord(record);
           }}
           onExtendExcedencia={(record) => {
             if (canProrrogarExcedencia(record, today)) setProrrogaRecord(record);
@@ -574,6 +635,9 @@ export function LicenciasSinSueldoPage() {
                     onGenerateWord={(record) => {
                       void generateWord(record);
                     }}
+                    onGenerateDenialWord={(record) => {
+                      void generateDenialWord(record);
+                    }}
                     onExtendExcedencia={(record) => {
                       if (canProrrogarExcedencia(record, today)) setProrrogaRecord(record);
                     }}
@@ -599,6 +663,9 @@ export function LicenciasSinSueldoPage() {
           generatingWordId={generatingWordId}
           onGenerateWord={(record) => {
             void generateWord(record);
+          }}
+          onGenerateDenialWord={(record) => {
+            void generateDenialWord(record);
           }}
           onSave={saveDraft}
           record={editor.record}

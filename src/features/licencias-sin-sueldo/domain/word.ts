@@ -274,10 +274,13 @@ function sanitizeFileName(value: string, fallback: string): string {
   );
 }
 
-function buildFileName(record: LicenciaSinSueldoRecord): string {
+function buildFileName(
+  record: LicenciaSinSueldoRecord,
+  prefix = 'Licencia_sin_sueldo',
+): string {
   const nombre = sanitizeFileName(record.nombreCompleto, record.numeroEmpleado || 'SinNombre');
   const inicio = record.fechaInicio.replace(/-/g, '');
-  return `Licencia_sin_sueldo_${nombre}_${inicio || 'sin_fecha'}.docx`;
+  return `${prefix}_${nombre}_${inicio || 'sin_fecha'}.docx`;
 }
 
 async function readTemplateFromConfiguredPath(path: string): Promise<ArrayBuffer> {
@@ -297,18 +300,25 @@ async function readTemplateFromConfiguredPath(path: string): Promise<ArrayBuffer
   }
 }
 
-export async function generateLicenciaSinSueldoWord(
+interface GenerateLicenciaSinSueldoDocumentOptions {
+  requiredEstado: 'pendiente_firma' | 'denegada';
+  estadoError: string;
+  fileNamePrefix: string;
+}
+
+async function generateLicenciaSinSueldoDocument(
   record: LicenciaSinSueldoRecord,
   plantillaEmployee: Employee | null,
   templatePath: string,
-  jobPositionTranslations: readonly JobPositionTranslation[] = [],
+  jobPositionTranslations: readonly JobPositionTranslation[],
+  options: GenerateLicenciaSinSueldoDocumentOptions,
 ): Promise<LicenciaSinSueldoWordResult> {
   if (record.tipo !== 'Licencia sin sueldo') {
     throw new Error('El Word solo está disponible para registros de Licencia sin sueldo.');
   }
 
-  if (record.estado !== 'pendiente_firma') {
-    throw new Error('El Word solo puede generarse cuando la licencia está pendiente de firma.');
+  if (record.estado !== options.requiredEstado) {
+    throw new Error(options.estadoError);
   }
 
   const templateBuffer = await readTemplateFromConfiguredPath(templatePath);
@@ -337,9 +347,47 @@ export async function generateLicenciaSinSueldoWord(
   const emptyMarkers = detectedMarkers.filter((mapping) => !data[mapping.source]);
 
   return {
-    fileName: buildFileName(record),
+    fileName: buildFileName(record, options.fileNamePrefix),
     blob: new Blob([zipDocx(outputEntries).buffer as ArrayBuffer], { type: WORD_MIME_TYPE }),
     detectedMarkers,
     emptyMarkers,
   };
+}
+
+export async function generateLicenciaSinSueldoWord(
+  record: LicenciaSinSueldoRecord,
+  plantillaEmployee: Employee | null,
+  templatePath: string,
+  jobPositionTranslations: readonly JobPositionTranslation[] = [],
+): Promise<LicenciaSinSueldoWordResult> {
+  return generateLicenciaSinSueldoDocument(
+    record,
+    plantillaEmployee,
+    templatePath,
+    jobPositionTranslations,
+    {
+      requiredEstado: 'pendiente_firma',
+      estadoError: 'El Word solo puede generarse cuando la licencia está pendiente de firma.',
+      fileNamePrefix: 'Licencia_sin_sueldo',
+    },
+  );
+}
+
+export async function generateDenegacionLicenciaSinSueldoWord(
+  record: LicenciaSinSueldoRecord,
+  plantillaEmployee: Employee | null,
+  templatePath: string,
+  jobPositionTranslations: readonly JobPositionTranslation[] = [],
+): Promise<LicenciaSinSueldoWordResult> {
+  return generateLicenciaSinSueldoDocument(
+    record,
+    plantillaEmployee,
+    templatePath,
+    jobPositionTranslations,
+    {
+      requiredEstado: 'denegada',
+      estadoError: 'El Word de denegación solo puede generarse cuando la licencia está denegada.',
+      fileNamePrefix: 'Denegacion_licencia_sin_sueldo',
+    },
+  );
 }

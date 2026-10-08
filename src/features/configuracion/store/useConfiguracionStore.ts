@@ -39,6 +39,7 @@ const CONFIGURACION_FEEDBACK_KEY = 'configuracion';
 interface ConfiguracionState {
   rutaPlantillaTeletrabajo: string;
   rutaPlantillaLicenciaSinSueldo: string;
+  rutaPlantillaDenegacionLicenciaSinSueldo: string;
   rutaPlantillaExcedencia: string;
   rutaPlantillaProrrogaExcedencia: string;
   rutaPlantillaVinculograma: string;
@@ -60,6 +61,7 @@ type SharedRouteSettings = Pick<
   ConfiguracionState,
   | 'rutaPlantillaTeletrabajo'
   | 'rutaPlantillaLicenciaSinSueldo'
+  | 'rutaPlantillaDenegacionLicenciaSinSueldo'
   | 'rutaPlantillaExcedencia'
   | 'rutaPlantillaProrrogaExcedencia'
   | 'rutaPlantillaVinculograma'
@@ -78,6 +80,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   reloadFromStorage: () => void;
   setRutaPlantillaTeletrabajo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaLicenciaSinSueldo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaPlantillaDenegacionLicenciaSinSueldo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaProrrogaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
@@ -110,6 +113,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
   return {
     rutaPlantillaTeletrabajo: state.rutaPlantillaTeletrabajo,
     rutaPlantillaLicenciaSinSueldo: state.rutaPlantillaLicenciaSinSueldo,
+    rutaPlantillaDenegacionLicenciaSinSueldo: state.rutaPlantillaDenegacionLicenciaSinSueldo,
     rutaPlantillaExcedencia: state.rutaPlantillaExcedencia,
     rutaPlantillaProrrogaExcedencia: state.rutaPlantillaProrrogaExcedencia,
     rutaPlantillaVinculograma: state.rutaPlantillaVinculograma,
@@ -239,6 +243,7 @@ function defaultConfiguracion(): ConfiguracionState {
   return {
     rutaPlantillaTeletrabajo: '',
     rutaPlantillaLicenciaSinSueldo: '',
+    rutaPlantillaDenegacionLicenciaSinSueldo: '',
     rutaPlantillaExcedencia: '',
     rutaPlantillaProrrogaExcedencia: '',
     rutaPlantillaVinculograma: '',
@@ -265,6 +270,7 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
   return {
     rutaPlantillaTeletrabajo: normalizeTemplatePath(parsed.rutaPlantillaTeletrabajo),
     rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(typeof (parsed as { rutaPlantillaLicenciaSinSueldo?: unknown }).rutaPlantillaLicenciaSinSueldo === 'string' ? (parsed as { rutaPlantillaLicenciaSinSueldo: string }).rutaPlantillaLicenciaSinSueldo : ''),
+    rutaPlantillaDenegacionLicenciaSinSueldo: normalizeTemplatePath(typeof (parsed as { rutaPlantillaDenegacionLicenciaSinSueldo?: unknown }).rutaPlantillaDenegacionLicenciaSinSueldo === 'string' ? (parsed as { rutaPlantillaDenegacionLicenciaSinSueldo: string }).rutaPlantillaDenegacionLicenciaSinSueldo : ''),
     rutaPlantillaExcedencia: normalizeTemplatePath(typeof (parsed as { rutaPlantillaExcedencia?: unknown }).rutaPlantillaExcedencia === 'string' ? (parsed as { rutaPlantillaExcedencia: string }).rutaPlantillaExcedencia : ''),
     rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(typeof (parsed as { rutaPlantillaProrrogaExcedencia?: unknown }).rutaPlantillaProrrogaExcedencia === 'string' ? (parsed as { rutaPlantillaProrrogaExcedencia: string }).rutaPlantillaProrrogaExcedencia : ''),
     rutaPlantillaVinculograma: normalizeTemplatePath(typeof (parsed as { rutaPlantillaVinculograma?: unknown }).rutaPlantillaVinculograma === 'string' ? (parsed as { rutaPlantillaVinculograma: string }).rutaPlantillaVinculograma : ''),
@@ -389,6 +395,7 @@ const initialConfiguracion = readConfiguracion();
 export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaPlantillaTeletrabajo: initialConfiguracion.rutaPlantillaTeletrabajo,
   rutaPlantillaLicenciaSinSueldo: initialConfiguracion.rutaPlantillaLicenciaSinSueldo,
+  rutaPlantillaDenegacionLicenciaSinSueldo: initialConfiguracion.rutaPlantillaDenegacionLicenciaSinSueldo,
   rutaPlantillaExcedencia: initialConfiguracion.rutaPlantillaExcedencia,
   rutaPlantillaProrrogaExcedencia: initialConfiguracion.rutaPlantillaProrrogaExcedencia,
   rutaPlantillaVinculograma: initialConfiguracion.rutaPlantillaVinculograma,
@@ -410,8 +417,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   },
   reloadFromStorage: () => {
     const applyIfChanged = (configuracion: ConfiguracionState) => {
-      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
-      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
+      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
+      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
       if (!areConfiguracionesEquivalent(current, configuracion)) set(configuracion);
     };
     if (window.traccion?.loadConfiguracion) {
@@ -422,6 +429,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   },
   setRutaPlantillaTeletrabajo: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaTeletrabajo: normalizeTemplatePath(ruta) }),
   setRutaPlantillaLicenciaSinSueldo: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta) }),
+  setRutaPlantillaDenegacionLicenciaSinSueldo: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaDenegacionLicenciaSinSueldo: normalizeTemplatePath(ruta) }),
   setRutaPlantillaExcedencia: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaExcedencia: normalizeTemplatePath(ruta) }),
   setRutaPlantillaProrrogaExcedencia: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(ruta) }),
   setRutaPlantillaVinculograma: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaVinculograma: normalizeTemplatePath(ruta) }),
@@ -437,6 +445,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     ...selectConfiguracionState(get()),
     rutaPlantillaTeletrabajo: normalizeTemplatePath(rutas.rutaPlantillaTeletrabajo),
     rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(rutas.rutaPlantillaLicenciaSinSueldo),
+    rutaPlantillaDenegacionLicenciaSinSueldo: normalizeTemplatePath(rutas.rutaPlantillaDenegacionLicenciaSinSueldo),
     rutaPlantillaExcedencia: normalizeTemplatePath(rutas.rutaPlantillaExcedencia),
     rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(rutas.rutaPlantillaProrrogaExcedencia),
     rutaPlantillaVinculograma: normalizeTemplatePath(rutas.rutaPlantillaVinculograma),

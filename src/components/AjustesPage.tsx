@@ -24,6 +24,7 @@ import { runBackgroundActivity } from '../services/backgroundActivity';
 type RouteDraft = {
   rutaPlantillaTeletrabajo: string;
   rutaPlantillaLicenciaSinSueldo: string;
+  rutaPlantillaDenegacionLicenciaSinSueldo: string;
   rutaPlantillaExcedencia: string;
   rutaPlantillaProrrogaExcedencia: string;
   rutaPlantillaVinculograma: string;
@@ -67,8 +68,16 @@ const TEMPLATE_FIELDS: RouteField[] = [
   {
     key: 'rutaPlantillaLicenciaSinSueldo',
     label: 'Licencia sin sueldo',
-    description: 'Plantilla DOCX utilizada para licencias sin sueldo.',
+    description: 'Plantilla DOCX utilizada para concesiones de licencias sin sueldo.',
     placeholder: 'G:\\...\\Plantillas\\Licencia sin sueldo.docx',
+    kind: 'docx',
+    selector: 'licencia',
+  },
+  {
+    key: 'rutaPlantillaDenegacionLicenciaSinSueldo',
+    label: 'Licencia sin sueldo — denegación',
+    description: 'Plantilla DOCX utilizada para generar la comunicación de no concesión.',
+    placeholder: 'G:\\...\\Plantillas\\Borrador - No Concesión.docx',
     kind: 'docx',
     selector: 'licencia',
   },
@@ -170,6 +179,7 @@ function currentRoutes(): RouteDraft {
   return {
     rutaPlantillaTeletrabajo: state.rutaPlantillaTeletrabajo,
     rutaPlantillaLicenciaSinSueldo: state.rutaPlantillaLicenciaSinSueldo,
+    rutaPlantillaDenegacionLicenciaSinSueldo: state.rutaPlantillaDenegacionLicenciaSinSueldo,
     rutaPlantillaExcedencia: state.rutaPlantillaExcedencia,
     rutaPlantillaProrrogaExcedencia: state.rutaPlantillaProrrogaExcedencia,
     rutaPlantillaVinculograma: state.rutaPlantillaVinculograma,
@@ -189,6 +199,7 @@ export function AjustesPage() {
   const saveRutasCompartidas = useConfiguracionStore((state) => state.saveRutasCompartidas);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
   const rutaPlantillaLicenciaSinSueldo = useConfiguracionStore((state) => state.rutaPlantillaLicenciaSinSueldo);
+  const rutaPlantillaDenegacionLicenciaSinSueldo = useConfiguracionStore((state) => state.rutaPlantillaDenegacionLicenciaSinSueldo);
   const rutaPlantillaExcedencia = useConfiguracionStore((state) => state.rutaPlantillaExcedencia);
   const rutaPlantillaProrrogaExcedencia = useConfiguracionStore((state) => state.rutaPlantillaProrrogaExcedencia);
   const rutaPlantillaVinculograma = useConfiguracionStore((state) => state.rutaPlantillaVinculograma);
@@ -204,6 +215,7 @@ export function AjustesPage() {
   const watchedRoutes = useMemo<RouteDraft>(() => ({
     rutaPlantillaTeletrabajo,
     rutaPlantillaLicenciaSinSueldo,
+    rutaPlantillaDenegacionLicenciaSinSueldo,
     rutaPlantillaExcedencia,
     rutaPlantillaProrrogaExcedencia,
     rutaPlantillaVinculograma,
@@ -218,6 +230,7 @@ export function AjustesPage() {
   }), [
     rutaPlantillaTeletrabajo,
     rutaPlantillaLicenciaSinSueldo,
+    rutaPlantillaDenegacionLicenciaSinSueldo,
     rutaPlantillaExcedencia,
     rutaPlantillaProrrogaExcedencia,
     rutaPlantillaVinculograma,

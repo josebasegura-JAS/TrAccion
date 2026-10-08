@@ -49,6 +49,7 @@ export function LicenciasTable({
   onDelete,
   onEdit,
   onGenerateWord,
+  onGenerateDenialWord,
   onExtendExcedencia,
   onGenerateProrrogaWord,
   generatingWordId,
@@ -63,6 +64,7 @@ export function LicenciasTable({
   onDelete: (record: LicenciaSinSueldoRecord) => void;
   onEdit: (record: LicenciaSinSueldoRecord) => void;
   onGenerateWord: (record: LicenciaSinSueldoRecord) => void;
+  onGenerateDenialWord?: (record: LicenciaSinSueldoRecord) => void;
   onExtendExcedencia?: (record: LicenciaSinSueldoRecord) => void;
   onGenerateProrrogaWord?: (record: LicenciaSinSueldoRecord) => void;
   generatingWordId: string | null;
@@ -200,6 +202,21 @@ export function LicenciasTable({
                 variant="word"
               >
                 {generatingWordId === record.id ? 'Generando…' : 'Word'}
+              </ActionButton>
+            )}
+            {record.estado === 'denegada' && record.tipo === 'Licencia sin sueldo' && onGenerateDenialWord && (
+              <ActionButton
+                aria-label="Generar Word de denegación"
+                disabled={generatingWordId !== null}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onGenerateDenialWord(record);
+                }}
+                size="sm"
+                title="Generar Word de denegación"
+                variant="word"
+              >
+                {generatingWordId === record.id ? 'Generando…' : 'Word denegación'}
               </ActionButton>
             )}
             {record.estado === 'vigente' && record.tipo === 'Excedencia' && !record.prorroga && onExtendExcedencia && (
