@@ -18,25 +18,10 @@
   border-color: rgb(245 158 11 / 0.18);
 }
 
-/* Dashboard compacto: los seis accesos rápidos superiores duplican la
- * navegación disponible en la aplicación y consumen una fila completa. Se
- * retiran visualmente y la rejilla pasa a tres filas, utilizando únicamente la
- * altura realmente disponible. Esto evita que la altura mínima anterior fuerce
- * scroll vertical general en pantallas de portátil. */
-.dashboard-pro {
-  min-height: 0;
-  grid-template-rows: 92px minmax(0, 1fr) minmax(0, 0.9fr);
-  overflow: hidden;
-}
-
-.dashboard-pro > div:first-child {
-  display: none;
-}
-
-/* Mis tareas prioritarias: en alturas ajustadas la última fila podía quedar
- * recortada por el overflow del panel. La lista conserva la altura disponible
- * y desplaza solo su contenido, sin hacer crecer el Dashboard completo. */
-.dashboard-pro > div:nth-child(4) > section:first-child > div:nth-child(2) {
+/* Mis tareas prioritarias mantiene el scroll dentro de su propio panel para que
+ * el Dashboard completo no vuelva a crecer en pantallas de portátil. La clase
+ * semántica evita depender de la posición que ocupe el bloque en la rejilla. */
+.dashboard-pro__priority-list {
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
