@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createSharedDatabaseDirectory, launchTraccionElectron, launchTraccionElectronWithIsolatedSharedDatabase, navigateToModule } from './electronTestUtils';
+import {
+  closeTraccionElectron,
+  createSharedDatabaseDirectory,
+  launchTraccionElectron,
+  launchTraccionElectronWithIsolatedSharedDatabase,
+  navigateToModule,
+} from './electronTestUtils';
 
 async function expectNoConsoleErrors(page: Page, action: () => Promise<void>): Promise<void> {
   const errors: string[] = [];
@@ -9,6 +15,11 @@ async function expectNoConsoleErrors(page: Page, action: () => Promise<void>): P
   });
   await action();
   expect(errors).toEqual([]);
+}
+
+async function openTeletrabajoSolicitudes(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /Solicitudes/ }).first().click();
+  await expect(page.getByRole('button', { name: 'Nueva solicitud' })).toBeVisible();
 }
 
 test('flujo crítico: crear una tarea desde UI y verificar que queda visible', async () => {
@@ -51,7 +62,7 @@ test('persistencia crítica: una tarea sigue disponible después de cerrar y rea
     await dialog.getByRole('button', { name: 'Guardar' }).click();
     await expect(firstLaunch.page.getByText(taskTitle, { exact: true }).first()).toBeVisible();
 
-    await firstLaunch.app.close();
+    await closeTraccionElectron(firstLaunch.app);
 
     const secondLaunch = await launchTraccionElectron({
       userDataDir: firstLaunch.userDataDir,
@@ -68,7 +79,7 @@ test('persistencia crítica: una tarea sigue disponible después de cerrar y rea
       await secondLaunch.close();
     }
   } catch (error) {
-    await firstLaunch.app.close().catch(() => undefined);
+    await closeTraccionElectron(firstLaunch.app);
     await firstLaunch.cleanup();
     throw error;
   } finally {
@@ -83,7 +94,7 @@ test('módulos críticos de auditoría abren sus acciones principales con SQLite
   try {
     await expectNoConsoleErrors(page, async () => {
       await navigateToModule(page, 'Personas', 'Teletrabajo');
-      await expect(page.getByRole('button', { name: 'Nueva solicitud' })).toBeVisible();
+      await openTeletrabajoSolicitudes(page);
       await expect(page.getByRole('button', { name: 'Puestos Teletrabajo' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Grupos Cobertura' })).toBeVisible();
 
