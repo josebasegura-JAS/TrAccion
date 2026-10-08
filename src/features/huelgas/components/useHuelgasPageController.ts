@@ -49,7 +49,7 @@ export function useHuelgasPageController() {
     setEditorOpen,
     toggleSindicato,
     updateTramo,
-  } = useHuelgaEditor({ alert, huelgas, setHuelgas });
+  } = useHuelgaEditor({ alert, huelgas, setHuelgas, zonas });
 
   const {
     closeImport,
@@ -160,10 +160,8 @@ export function useHuelgasPageController() {
     setMailTemplateZoneId,
   } = useHuelgaCollectionMails({
     alert,
-    areas,
     confirm,
     huelgas,
-    puestoResponsables,
     setHuelgas,
     zoneDraft,
     zonas,
