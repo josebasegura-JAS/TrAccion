@@ -1,15 +1,10 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import type { useAppDialog } from '../../../hooks/useAppDialog';
 import { writeJsonStorageAsync } from '../../../services/persistence';
-import { buildCollectionGroups, type HuelgaCollectionGroup } from './huelgasCollectionExport';
+import type { HuelgaCollectionGroup } from './huelgasCollectionExport';
+import { embeddedTemplateForDate, EMBEDDED_HUELGA_TEMPLATES } from './huelgasEmbeddedTemplates';
 import { renderHuelgaMailTemplate } from './huelgasMailTemplates';
-import {
-  buildAsignacionesForPersonal,
-  isAsignacionCompleta,
-  type HuelgaPuestoAsignacion,
-} from './huelgasAssignments';
 import type { HuelgaZona } from './huelgasZones';
-import type { HuelgaArea } from './huelgasAreas';
 import { STORAGE_KEY, type Huelga } from './huelgasPageModel';
 
 type AlertFn = ReturnType<typeof useAppDialog>['alert'];
@@ -17,21 +12,43 @@ type ConfirmFn = ReturnType<typeof useAppDialog>['confirm'];
 
 type UseHuelgaCollectionMailsParams = {
   alert: AlertFn;
-  areas: HuelgaArea[];
   confirm: ConfirmFn;
   huelgas: Huelga[];
-  puestoResponsables: HuelgaPuestoAsignacion[];
   setHuelgas: Dispatch<SetStateAction<Huelga[]>>;
   zoneDraft: HuelgaZona[];
   zonas: HuelgaZona[];
 };
 
+function normalizeKey(value: string): string {
+  return value
+    .replace(/\u00a0/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es-ES')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitRecipients(value: string): string[] {
+  return value
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function fileDate(fecha: string): string {
+  const [year, month, day] = fecha.split('-');
+  return `${day}-${month}-${year}`;
+}
+
+function renderTemplateFileName(pattern: string, fecha: string): string {
+  return pattern.split('{{FECHA_HUELGA_ARCHIVO}}').join(fileDate(fecha));
+}
+
 export function useHuelgaCollectionMails({
   alert,
-  areas,
   confirm,
   huelgas,
-  puestoResponsables,
   setHuelgas,
   zoneDraft,
   zonas,
@@ -44,18 +61,23 @@ export function useHuelgaCollectionMails({
 
   const mailTarget = mailTargetId ? huelgas.find((item) => item.id === mailTargetId) ?? null : null;
 
-  const mailGroups = useMemo(() => {
+  const mailGroups = useMemo<HuelgaCollectionGroup[]>(() => {
     if (!mailTarget) return [];
-    const assignments = buildAsignacionesForPersonal(
-      mailTarget.personalConTurno ?? [],
-      mailTarget.asignacionesPuesto ?? [],
-      puestoResponsables,
-      zonas,
-      areas,
-    );
-    return buildCollectionGroups(mailTarget.personalConTurno ?? [], assignments)
-      .filter((group) => zonas.find((zona) => zona.id === group.zonaId)?.correoActivo !== false);
-  }, [areas, mailTarget, puestoResponsables, zonas]);
+    const selectedIds = mailTarget.circuitosZonaIds?.length
+      ? new Set(mailTarget.circuitosZonaIds)
+      : new Set(zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => zona.id));
+
+    return zonas
+      .filter((zona) => selectedIds.has(zona.id) && zona.active && zona.correoActivo)
+      .map((zona) => ({
+        zonaId: zona.id,
+        zonaNombre: zona.nombre,
+        responsableNombre: zona.responsableNombre,
+        responsableEmail: zona.responsableEmail,
+        asignaciones: [],
+        personal: [],
+      }));
+  }, [mailTarget, zonas]);
 
   const mailPreviewGroup = mailPreviewZoneId
     ? mailGroups.find((group) => group.zonaId === mailPreviewZoneId) ?? null
@@ -65,46 +87,29 @@ export function useHuelgaCollectionMails({
     : null;
 
   const openCollectionMails = async (huelga: Huelga) => {
-    const personal = huelga.personalConTurno ?? [];
-    if (personal.length === 0) {
-      await alert('Importa primero el personal con turno de esta huelga.', {
-        title: 'Falta el personal del día',
+    const selectedIds = huelga.circuitosZonaIds?.length
+      ? huelga.circuitosZonaIds
+      : zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => zona.id);
+    const selected = zonas.filter((zona) => selectedIds.includes(zona.id) && zona.active && zona.correoActivo);
+    const incomplete = selected.filter((zona) => !zona.responsableEmail.trim() || !EMBEDDED_HUELGA_TEMPLATES[normalizeKey(zona.nombre)]);
+
+    if (selected.length === 0) {
+      await alert('Esta huelga no tiene ningún circuito de recogida activo.', {
+        title: 'Sin circuitos',
         type: 'warning',
       });
       return;
     }
-
-    const assignments = buildAsignacionesForPersonal(
-      personal,
-      huelga.asignacionesPuesto ?? [],
-      puestoResponsables,
-      zonas,
-      areas,
-    );
-    const pending = assignments.filter((item) => {
-      const zone = zonas.find((zona) => zona.id === item.zonaId);
-      return zone?.correoActivo !== false && !isAsignacionCompleta(item);
-    });
-    if (pending.length > 0) {
+    if (incomplete.length > 0) {
       await alert(
-        `Hay ${pending.length} combinaciones de residencia + puesto pertenecientes a zonas con correo activo que no tienen Zona, Área válida o responsable/email completos. Complétalas antes de preparar los correos.`,
-        { title: 'Áreas y zonas pendientes', type: 'warning' },
+        `Revisa la configuración de: ${incomplete.map((zona) => zona.nombre).join(', ')}. Falta destinatario o plantilla Excel.`,
+        { title: 'Configuración incompleta', type: 'warning' },
       );
       return;
     }
 
-    const groups = buildCollectionGroups(personal, assignments)
-      .filter((group) => zonas.find((zona) => zona.id === group.zonaId)?.correoActivo !== false);
-    if (groups.length === 0) {
-      await alert('No hay zonas con correo activo y destinatario configurado para esta huelga.', {
-        title: 'Sin correos que generar',
-        type: 'info',
-      });
-      return;
-    }
-
     setMailSpecificNotes(huelga.instruccionesCorreoPorZona ?? {});
-    setMailPreviewZoneId(groups[0]?.zonaId ?? null);
+    setMailPreviewZoneId(selected[0]?.id ?? null);
     setMailTargetId(huelga.id);
   };
 
@@ -115,27 +120,32 @@ export function useHuelgaCollectionMails({
     setMailSpecificNotes({});
   };
 
-  const saveMailSpecificNotes = async () => {
-    if (!mailTarget) return;
-    const now = new Date().toISOString();
-    const cleaned = Object.fromEntries(
-      Object.entries(mailSpecificNotes)
-        .map(([key, value]) => [key, value.trim()])
-        .filter(([, value]) => Boolean(value)),
-    );
-    const next = huelgas.map((item) => item.id === mailTarget.id
-      ? { ...item, instruccionesCorreoPorZona: cleaned, updatedAt: now }
-      : item,
-    );
+  const persistHuelga = async (updated: Huelga): Promise<boolean> => {
+    const next = huelgas.map((item) => (item.id === updated.id ? updated : item));
     const result = await writeJsonStorageAsync(STORAGE_KEY, next);
     if (!result.ok) {
-      await alert(result.message || 'No se han podido guardar las instrucciones específicas.', {
+      await alert(result.message || 'No se han podido guardar los cambios de la huelga.', {
         title: 'Error de guardado',
         type: 'error',
       });
-      return;
+      return false;
     }
     setHuelgas(next);
+    return true;
+  };
+
+  const saveMailSpecificNotes = async () => {
+    if (!mailTarget) return false;
+    const cleaned = Object.fromEntries(
+      Object.entries(mailSpecificNotes)
+        .map(([key, value]) => [key, String(value).trim()])
+        .filter(([, value]) => Boolean(value)),
+    );
+    return persistHuelga({
+      ...mailTarget,
+      instruccionesCorreoPorZona: cleaned,
+      updatedAt: new Date().toISOString(),
+    });
   };
 
   const renderGroupMail = (group: HuelgaCollectionGroup) => {
@@ -145,42 +155,73 @@ export function useHuelgaCollectionMails({
     return renderHuelgaMailTemplate({
       fecha: mailTarget.fecha,
       zona,
-      personal: group.personal,
-      asignaciones: group.asignaciones,
+      personal: [],
+      asignaciones: [],
       instruccionesEspecificas: mailSpecificNotes[group.zonaId] ?? '',
+      tipo: mailTarget.tipo,
+      tramos: mailTarget.tramos,
     });
   };
 
   const createCollectionMail = async (group: HuelgaCollectionGroup): Promise<string | null> => {
+    if (!mailTarget) return 'No se encuentra la convocatoria.';
     const api = window.traccion?.createOutlookDraft;
     if (!api) return 'La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.';
     const zona = zonas.find((item) => item.id === group.zonaId);
-    if (!zona) return 'No se encuentra la zona configurada.';
-    if (!zona.correoActivo) return null;
-    if (!zona.responsableEmail.trim()) return 'La zona no tiene email de responsable.';
+    if (!zona) return 'No se encuentra el circuito configurado.';
+    const to = splitRecipients(zona.responsableEmail);
+    if (to.length === 0) return 'El circuito no tiene destinatarios configurados.';
+    const template = EMBEDDED_HUELGA_TEMPLATES[normalizeKey(zona.nombre)];
+    if (!template) return 'No se encuentra la plantilla Excel incorporada para este circuito.';
     const rendered = renderGroupMail(group);
-    if (!rendered) return 'No se ha podido renderizar la plantilla.';
+    if (!rendered) return 'No se ha podido renderizar la plantilla de correo.';
+
+    const fileName = renderTemplateFileName(zona.plantillaExcelNombrePatron || template.fileNamePattern, mailTarget.fecha);
     const result = await api({
       subject: rendered.subject,
       html: rendered.html,
-      to: [zona.responsableEmail.trim()],
-      cc: [],
+      to,
+      cc: splitRecipients(zona.correoCc),
       bcc: [],
-      attachments: [],
+      attachments: [{
+        fileName,
+        buffer: await embeddedTemplateForDate(template, mailTarget.fecha),
+      }],
     });
     return result.ok ? null : result.message;
+  };
+
+  const markPrepared = async (zoneIds: string[]) => {
+    if (!mailTarget || zoneIds.length === 0) return;
+    const now = new Date().toISOString();
+    const prepared = { ...(mailTarget.correosPreparadosPorZona ?? {}) };
+    const cleanedNotes = Object.fromEntries(
+      Object.entries(mailSpecificNotes)
+        .map(([key, value]) => [key, String(value).trim()])
+        .filter(([, value]) => Boolean(value)),
+    );
+    zoneIds.forEach((zoneId) => { prepared[zoneId] = now; });
+    await persistHuelga({
+      ...mailTarget,
+      instruccionesCorreoPorZona: cleanedNotes,
+      correosPreparadosPorZona: prepared,
+      updatedAt: now,
+    });
   };
 
   const generateSingleCollectionMail = async (group: HuelgaCollectionGroup) => {
     if (!mailTarget) return;
     setGeneratingCollectionForId(mailTarget.id);
     try {
+      const notesSaved = await saveMailSpecificNotes();
+      if (!notesSaved) return;
       const error = await createCollectionMail(group);
       if (error) {
         await alert(error, { title: `No se ha creado el correo de ${group.zonaNombre}`, type: 'warning' });
         return;
       }
-      await alert(`Borrador de Outlook preparado para ${group.zonaNombre}.`, {
+      await markPrepared([group.zonaId]);
+      await alert(`Borrador de Outlook preparado para ${group.zonaNombre} con su Excel adjunto.`, {
         title: 'Correo preparado',
         type: 'info',
       });
@@ -192,34 +233,39 @@ export function useHuelgaCollectionMails({
   const generateAllCollectionMails = async () => {
     if (!mailTarget || mailGroups.length === 0) return;
     const accepted = await confirm(
-      `Se crearán ${mailGroups.length} borrador${mailGroups.length === 1 ? '' : 'es'} de Outlook, uno por zona. En esta fase no se adjuntará ningún Excel. ¿Continuar?`,
-      { title: 'Generar correos por zona', confirmLabel: 'Generar correos', cancelLabel: 'Cancelar' },
+      `Se crearán ${mailGroups.length} borrador${mailGroups.length === 1 ? '' : 'es'} de Outlook, uno por circuito, cada uno con su plantilla Excel real adjunta. ¿Continuar?`,
+      { title: 'Preparar comunicaciones', confirmLabel: 'Preparar correos', cancelLabel: 'Cancelar' },
     );
     if (!accepted) return;
 
-    await saveMailSpecificNotes();
+    const notesSaved = await saveMailSpecificNotes();
+    if (!notesSaved) return;
     setGeneratingCollectionForId(mailTarget.id);
     let created = 0;
+    const createdZoneIds: string[] = [];
     const failures: string[] = [];
     try {
       for (const group of mailGroups) {
         const error = await createCollectionMail(group);
         if (error) failures.push(`${group.zonaNombre}: ${error}`);
-        else created += 1;
+        else {
+          created += 1;
+          createdZoneIds.push(group.zonaId);
+        }
       }
+      await markPrepared(createdZoneIds);
     } finally {
       setGeneratingCollectionForId(null);
     }
-
     if (failures.length > 0) {
       await alert(`Se han creado ${created} de ${mailGroups.length} borradores. Problemas:\n${failures.join('\n')}`, {
-        title: 'Generación incompleta',
+        title: 'Preparación incompleta',
         type: 'warning',
       });
       return;
     }
-    await alert(`Se han creado ${created} borrador${created === 1 ? '' : 'es'} de Outlook sin adjuntos.`, {
-      title: 'Correos preparados',
+    await alert(`Se han preparado ${created} borrador${created === 1 ? '' : 'es'} de Outlook con sus Excel adjuntos.`, {
+      title: 'Comunicaciones preparadas',
       type: 'info',
     });
   };

@@ -3,12 +3,14 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { createId, type HuelgaDraft } from './huelgasPageModel';
+import type { HuelgaZona } from './huelgasZones';
 
 type Props = {
   open: boolean;
   editingId: string | null;
   draft: HuelgaDraft;
   sindicatos: string[];
+  zonas: HuelgaZona[];
   saving: boolean;
   onClose: () => void;
   onDraftChange: (updater: (current: HuelgaDraft) => HuelgaDraft) => void;
@@ -24,6 +26,7 @@ export function HuelgaEditorModal({
   editingId,
   draft,
   sindicatos,
+  zonas,
   saving,
   onClose,
   onDraftChange,
@@ -68,6 +71,31 @@ export function HuelgaEditorModal({
             ) : sindicatos.map((sindicato) => {
               const selected = draft.sindicatos.includes(sindicato);
               return <button key={sindicato} type="button" onClick={() => onToggleSindicato(sindicato)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${selected ? 'border-metro-red bg-metro-red text-white' : 'border-metro-border bg-metro-app text-metro-muted hover:border-metro-red hover:text-metro-text'}`}>{sindicato}</button>;
+            })}
+          </div>
+        </fieldset>
+
+
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-metro-text">Circuitos de recogida <span className="text-metro-red">*</span></legend>
+          <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 sm:grid-cols-2">
+            {zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => {
+              const selected = draft.circuitosZonaIds?.includes(zona.id) ?? false;
+              return (
+                <label key={zona.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${selected ? 'border-metro-red bg-metro-red/10 text-metro-text' : 'border-metro-border bg-metro-app text-metro-muted'}`}>
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() => onDraftChange((current) => ({
+                      ...current,
+                      circuitosZonaIds: selected
+                        ? (current.circuitosZonaIds ?? []).filter((id) => id !== zona.id)
+                        : [...(current.circuitosZonaIds ?? []), zona.id],
+                    }))}
+                  />
+                  {zona.nombre}
+                </label>
+              );
             })}
           </div>
         </fieldset>

@@ -1,4 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
+import type { HuelgaZona } from './huelgasZones';
 import type { useAppDialog } from '../../../hooks/useAppDialog';
 import { writeJsonStorageAsync } from '../../../services/persistence';
 import {
@@ -16,9 +17,10 @@ type UseHuelgaEditorParams = {
   alert: AlertFn;
   huelgas: Huelga[];
   setHuelgas: Dispatch<SetStateAction<Huelga[]>>;
+  zonas: HuelgaZona[];
 };
 
-export function useHuelgaEditor({ alert, huelgas, setHuelgas }: UseHuelgaEditorParams) {
+export function useHuelgaEditor({ alert, huelgas, setHuelgas, zonas }: UseHuelgaEditorParams) {
   const [draft, setDraft] = useState<HuelgaDraft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -26,7 +28,7 @@ export function useHuelgaEditor({ alert, huelgas, setHuelgas }: UseHuelgaEditorP
 
   const openNew = () => {
     setEditingId(null);
-    setDraft(EMPTY_DRAFT);
+    setDraft({ ...EMPTY_DRAFT, circuitosZonaIds: zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => zona.id) });
     setEditorOpen(true);
   };
 
@@ -38,6 +40,7 @@ export function useHuelgaEditor({ alert, huelgas, setHuelgas }: UseHuelgaEditorP
       tipo: huelga.tipo,
       tramos: huelga.tramos.map((tramo) => ({ ...tramo })),
       observaciones: huelga.observaciones,
+      circuitosZonaIds: huelga.circuitosZonaIds?.length ? [...huelga.circuitosZonaIds] : zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => zona.id),
     });
     setEditorOpen(true);
   };
@@ -93,6 +96,8 @@ export function useHuelgaEditor({ alert, huelgas, setHuelgas }: UseHuelgaEditorP
       personalImportadoAt: current?.personalImportadoAt ?? null,
       asignacionesPuesto: current?.asignacionesPuesto,
       instruccionesCorreoPorZona: current?.instruccionesCorreoPorZona,
+      circuitosZonaIds: normalizedDraft.circuitosZonaIds,
+      correosPreparadosPorZona: current?.correosPreparadosPorZona,
     };
     const next = current
       ? huelgas.map((item) => (item.id === current.id ? record : item))
