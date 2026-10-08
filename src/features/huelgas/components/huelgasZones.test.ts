@@ -24,7 +24,6 @@ function zona(overrides: Partial<HuelgaZona>): HuelgaZona {
     correoCuerpoHtml: DEFAULT_HUELGA_MAIL_BODY,
     correoPlazos: '',
     correoInstruccionesHabituales: '',
-    plantillaExcelUrl: 'huelgas-templates/mm-ariz.xlsx',
     plantillaExcelNombrePatron: 'MM Ariz - Seguimiento huelga {{FECHA_HUELGA_ARCHIVO}}.xlsx',
     active: true,
     createdAt: now,
@@ -40,7 +39,7 @@ describe('huelgasZones — caracterización', () => {
     expect(result).toHaveLength(DEFAULT_HUELGA_ZONE_NAMES.length);
     expect(result.map((item) => item.nombre).sort()).toEqual([...DEFAULT_HUELGA_ZONE_NAMES].sort());
     expect(result.some((item) => item.nombre === 'SSCC')).toBe(false);
-    expect(result.every((item) => item.correoActivo)).toBe(true);
+    expect(result.every((item) => item.correoActivo && item.active)).toBe(true);
   });
 
   it('retira una zona legacy SSCC y mantiene únicamente los siete circuitos reales', () => {
@@ -48,7 +47,8 @@ describe('huelgasZones — caracterización', () => {
       zona({
         id: 'existing-sscc',
         nombre: '  sscc  ',
-        correoActivo: undefined as unknown as boolean,
+        correoActivo: false,
+        active: false,
         correoAsunto: '',
         correoCuerpoHtml: '',
       }),
@@ -60,18 +60,28 @@ describe('huelgasZones — caracterización', () => {
     expect(result.every((item) => item.correoCuerpoHtml === DEFAULT_HUELGA_MAIL_BODY)).toBe(true);
   });
 
-  it('una zona inactiva nunca está completa', () => {
-    expect(isZonaCompleta(zona({ active: false, correoActivo: false }))).toBe(false);
+  it('reactiva un circuito real que hubiera quedado inactivo en configuración legacy', () => {
+    const result = ensureDefaultZonas([
+      zona({
+        id: 'legacy-mm-ariz',
+        nombre: 'MM Ariz',
+        active: false,
+        correoActivo: false,
+        responsableNombre: 'Ana',
+        responsableEmail: 'ana@example.com',
+      }),
+    ]);
+
+    const ariz = result.find((item) => item.nombre === 'MM Ariz');
+    expect(ariz?.active).toBe(true);
+    expect(ariz?.correoActivo).toBe(true);
   });
 
-  it('una zona activa con correo desactivado no exige responsable', () => {
-    expect(isZonaCompleta(zona({ correoActivo: false, responsableNombre: '', responsableEmail: '' }))).toBe(true);
-  });
-
-  it('una zona activa con correo exige responsable, email y plantilla Excel', () => {
+  it('un circuito completo exige responsable, email, asunto y cuerpo', () => {
     expect(isZonaCompleta(zona({ responsableNombre: 'Ana', responsableEmail: 'ana@example.com' }))).toBe(true);
     expect(isZonaCompleta(zona({ responsableNombre: 'Ana', responsableEmail: '' }))).toBe(false);
     expect(isZonaCompleta(zona({ responsableNombre: '', responsableEmail: 'ana@example.com' }))).toBe(false);
-    expect(isZonaCompleta(zona({ responsableNombre: 'Ana', responsableEmail: 'ana@example.com', plantillaExcelUrl: '' }))).toBe(false);
+    expect(isZonaCompleta(zona({ responsableNombre: 'Ana', responsableEmail: 'ana@example.com', correoAsunto: '' }))).toBe(false);
+    expect(isZonaCompleta(zona({ responsableNombre: 'Ana', responsableEmail: 'ana@example.com', correoCuerpoHtml: '' }))).toBe(false);
   });
 });
