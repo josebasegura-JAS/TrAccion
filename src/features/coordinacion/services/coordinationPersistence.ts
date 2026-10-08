@@ -15,6 +15,11 @@ type CoordinationIndex = {
 
 type PersistResult = { ok: boolean; message: string };
 
+type SavedExistingMeeting = {
+  key: string;
+  previous: CoordinationMeeting;
+};
+
 export function coordinationMeetingStorageKey(meetingId: string): string {
   return `${COORDINATION_MEETING_STORAGE_PREFIX}${meetingId}`;
 }
@@ -115,32 +120,52 @@ async function migrateLegacyState(state: CoordinationState): Promise<PersistResu
   return { ok: indexResult.ok, message: indexResult.message };
 }
 
+async function rollbackMeetings(saved: SavedExistingMeeting[]): Promise<boolean> {
+  let ok = true;
+  for (const item of [...saved].reverse()) {
+    const result = await writeJsonStorageAsync(item.key, item.previous);
+    if (!result.ok) ok = false;
+  }
+  return ok;
+}
+
 export async function persistCoordinationState(next: CoordinationState): Promise<PersistResult> {
   const storedIndex = parseIndex(readStorageItem(COORDINATION_INDEX_STORAGE_KEY));
   if (!storedIndex) return migrateLegacyState(next);
 
   const current = readCoordinationState();
   const currentById = new Map(current.meetings.map((meeting) => [meeting.id, meeting]));
-  const nextById = new Map(next.meetings.map((meeting) => [meeting.id, meeting]));
+  const savedExisting: SavedExistingMeeting[] = [];
 
   for (const meeting of next.meetings) {
     const previous = currentById.get(meeting.id);
     if (previous && equalJson(previous, meeting)) continue;
-    const result = await writeJsonStorageAsync(coordinationMeetingStorageKey(meeting.id), meeting);
-    if (!result.ok) return { ok: false, message: result.message };
+
+    const key = coordinationMeetingStorageKey(meeting.id);
+    const result = await writeJsonStorageAsync(key, meeting);
+    if (!result.ok) {
+      if (savedExisting.length > 0) await rollbackMeetings(savedExisting);
+      return { ok: false, message: result.message };
+    }
+    if (previous) savedExisting.push({ key, previous });
   }
 
-  for (const meeting of current.meetings) {
-    if (nextById.has(meeting.id)) continue;
-    const result = await writeJsonStorageAsync(coordinationMeetingStorageKey(meeting.id), null);
-    if (!result.ok) return { ok: false, message: result.message };
-  }
-
+  // El índice es la autoridad sobre qué reuniones están activas. Al borrar una
+  // reunión no eliminamos físicamente su registro: queda huérfano e inaccesible,
+  // evitando que un conflicto posterior deje una eliminación a medias.
   const currentIndex = indexFromState(current);
   const nextIndex = indexFromState(next);
   if (!equalJson(currentIndex, nextIndex)) {
     const result = await writeJsonStorageAsync(COORDINATION_INDEX_STORAGE_KEY, nextIndex);
-    if (!result.ok) return { ok: false, message: result.message };
+    if (!result.ok) {
+      const rolledBack = await rollbackMeetings(savedExisting);
+      return {
+        ok: false,
+        message: rolledBack
+          ? result.message
+          : `${result.message} Además, no se ha podido restaurar completamente la reunión previa; recarga Coordinación antes de continuar.`,
+      };
+    }
   }
 
   return { ok: true, message: 'Guardado en SQLite.' };
