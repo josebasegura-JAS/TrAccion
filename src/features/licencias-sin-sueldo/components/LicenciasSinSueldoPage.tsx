@@ -261,7 +261,17 @@ export function LicenciasSinSueldoPage() {
         if (shouldGenerateExcedencia) {
           await generateWord({ ...editor.record, ...draft, estado: 'pendiente_firma' });
         } else if (shouldGenerateDenial) {
-          await generateDenialWord({ ...editor.record, ...draft, estado: 'denegada' });
+          const shouldCreateDenialDocument = await confirm(
+            `La solicitud de ${editor.record.nombreCompleto} ha quedado denegada. ¿Quieres generar ahora el documento de no concesión?`,
+            {
+              cancelLabel: 'Ahora no',
+              confirmLabel: 'Generar documento',
+              title: 'Licencia sin sueldo denegada',
+            },
+          );
+          if (shouldCreateDenialDocument) {
+            await generateDenialWord({ ...editor.record, ...draft, estado: 'denegada' });
+          }
         }
       }
       return result;

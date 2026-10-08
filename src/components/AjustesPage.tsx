@@ -20,6 +20,7 @@ import { publishDatabaseStatus, refreshDatabaseStatus, useDatabaseStatus } from 
 import { PerformanceDiagnostics } from './ajustes/PerformanceDiagnostics';
 import { measurePerformance } from '../services/performanceMetrics';
 import { runBackgroundActivity } from '../services/backgroundActivity';
+import { FloatingSaveAction } from './ui/FloatingSaveAction';
 
 type RouteDraft = {
   rutaPlantillaTeletrabajo: string;
@@ -916,6 +917,16 @@ export function AjustesPage() {
 
       <TaskCatalogSettings />
       <PerformanceDiagnostics />
+
+      <FloatingSaveAction
+        visible={routesDirty}
+        saving={savingRoutes}
+        pendingLabel="Cambios de Ajustes pendientes"
+        buttonLabel="Guardar cambios"
+        savingLabel="Guardando cambios…"
+        suppressWhenPageHeaderHasActions={false}
+        onSave={handleSaveRoutes}
+      />
     </section>
   );
 }

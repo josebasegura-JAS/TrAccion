@@ -1,15 +1,17 @@
-TrAccion - Incremental: generación Word de denegación de Licencia sin sueldo
+TrAcción — incremental: popup de denegación + guardado flotante en Ajustes
 
-Cambios incluidos:
-- Nueva ruta compartida en Ajustes: "Licencia sin sueldo — denegación".
-- La ruta se guarda en la configuración compartida SQLite y es retrocompatible con configuraciones anteriores.
-- Al cambiar una "Licencia sin sueldo" a estado "Denegada" y guardar, se genera automáticamente el Word de no concesión.
-- Las solicitudes denegadas muestran "Word denegación" para poder regenerar el documento posteriormente.
-- La concesión existente, Excedencias, prórrogas y el resto de módulos no se modifican.
-- Se reutiliza exactamente el mismo mapa de variables de la plantilla de concesión.
+Cambios incluidos (solo 2 ficheros):
 
-Ficheros modificados: 6.
+1) src/features/licencias-sin-sueldo/components/LicenciasSinSueldoPage.tsx
+   - Al guardar una Licencia sin sueldo pasando a estado Denegada, la denegación se guarda primero.
+   - Después aparece un diálogo: "¿Quieres generar ahora el documento de no concesión?"
+   - "Generar documento" genera el Word de denegación.
+   - "Ahora no" mantiene la denegación guardada y permite generar el Word posteriormente desde el histórico.
 
-Validación realizada:
-- Plantilla "Borrador - No Concesión.docx" comprobada: contiene Nombre_Completo, Nombre_Corto, Puesto_CAST, Puesto_EUS, Fecha_Solicitud, Fecha_Inicio, Fecha_Fin y D/M/A.
-- El typecheck completo no se puede certificar en este entorno porque el ZIP fuente no incluye node_modules; los errores observados corresponden a dependencias ausentes (React, lucide-react, @types/node, etc.).
+2) src/components/AjustesPage.tsx
+   - Cuando una ruta de plantilla/exportación cambia y aún no se ha guardado, aparece un botón flotante "Guardar cambios".
+   - El botón permanece visible independientemente de la sección de Ajustes en la que esté el usuario.
+   - Al guardar utiliza exactamente el mismo flujo de persistencia compartida que ya existía.
+   - Los ajustes que se persisten de forma inmediata no generan un falso estado pendiente.
+
+No se modifican esquemas SQLite, Electron, IPC, actualizador, lógica de concesión ni otros módulos.
