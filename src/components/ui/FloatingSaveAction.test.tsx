@@ -24,6 +24,9 @@ const offscreenRect = {
 describe('FloatingSaveAction', () => {
   afterEach(() => {
     cleanup();
+    document
+      .querySelectorAll('[data-page-header-actions="true"], [data-save-anchor]')
+      .forEach((element) => element.remove());
     vi.restoreAllMocks();
   });
 
