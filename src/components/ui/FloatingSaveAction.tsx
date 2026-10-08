@@ -8,9 +8,60 @@ interface FloatingSaveActionProps {
   pendingLabel?: string;
   buttonLabel?: string;
   savingLabel?: string;
-  /** Evita duplicar una acción de guardado flotante si la pantalla ya tiene una toolbar de acciones visible. */
+  /**
+   * Evita duplicar el guardado mientras la toolbar de acciones de PageHeader
+   * esté realmente visible. Si el usuario hace scroll y deja de verla, el
+   * guardado flotante vuelve a aparecer.
+   */
   suppressWhenPageHeaderHasActions?: boolean;
+  /**
+   * Selector opcional de un guardado fijo de la pantalla. El flotante se
+   * oculta mientras ese control sea visible y aparece al quedar fuera del
+   * viewport.
+   */
+  suppressWhenSelectorVisible?: string;
   onSave: () => void | Promise<unknown>;
+}
+
+function elementIsVisibleInViewport(element: Element | null): boolean {
+  if (!element || typeof window === 'undefined') return false;
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0
+    && rect.height > 0
+    && rect.bottom > 0
+    && rect.right > 0
+    && rect.top < window.innerHeight
+    && rect.left < window.innerWidth;
+}
+
+function useSelectorVisibility(enabled: boolean, selector: string | undefined): boolean {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || !selector || typeof document === 'undefined' || typeof window === 'undefined') {
+      setIsVisible(false);
+      return undefined;
+    }
+
+    const refresh = () => {
+      setIsVisible(elementIsVisibleInViewport(document.querySelector(selector)));
+    };
+
+    refresh();
+    window.addEventListener('scroll', refresh, true);
+    window.addEventListener('resize', refresh);
+
+    const observer = new MutationObserver(refresh);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      window.removeEventListener('scroll', refresh, true);
+      window.removeEventListener('resize', refresh);
+      observer.disconnect();
+    };
+  }, [enabled, selector]);
+
+  return isVisible;
 }
 
 export function FloatingSaveAction({
@@ -20,29 +71,19 @@ export function FloatingSaveAction({
   buttonLabel = 'Guardar cambios',
   savingLabel = 'Guardando…',
   suppressWhenPageHeaderHasActions = true,
+  suppressWhenSelectorVisible,
   onSave,
 }: FloatingSaveActionProps) {
-  const [pageHasHeaderActions, setPageHasHeaderActions] = useState(false);
+  const pageHeaderActionsVisible = useSelectorVisibility(
+    suppressWhenPageHeaderHasActions,
+    '[data-page-header-actions="true"]',
+  );
+  const fixedSaveActionVisible = useSelectorVisibility(
+    Boolean(suppressWhenSelectorVisible),
+    suppressWhenSelectorVisible,
+  );
 
-  useEffect(() => {
-    if (!suppressWhenPageHeaderHasActions || typeof document === 'undefined') {
-      setPageHasHeaderActions(false);
-      return undefined;
-    }
-
-    const refresh = () => {
-      setPageHasHeaderActions(Boolean(document.querySelector('[data-page-header-actions="true"]')));
-    };
-
-    refresh();
-
-    const observer = new MutationObserver(refresh);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => observer.disconnect();
-  }, [suppressWhenPageHeaderHasActions]);
-
-  if (!visible || pageHasHeaderActions) return null;
+  if (!visible || pageHeaderActionsVisible || fixedSaveActionVisible) return null;
 
   return (
     <>
@@ -50,7 +91,7 @@ export function FloatingSaveAction({
         Compatibilidad con pantallas que todavía conservan un <p> de estado
         inmediatamente después del guardado flotante (Coordinación). Mientras
         saving=true, el flotante es el único feedback de progreso. En cuanto
-        termina, el texto vuelve a mostrarse para éxito, warning o error.
+        termina, el texto vuelve a mostrarse para warning o error.
       */}
       <style>{`
         [data-floating-save-action="true"][data-saving="true"] + p {

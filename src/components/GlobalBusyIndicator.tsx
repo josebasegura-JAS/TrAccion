@@ -108,7 +108,7 @@ export function GlobalBusyIndicator() {
         return;
       }
 
-      setState({ kind: 'saved', message: 'Cambios guardados', slow: false });
+      setState({ kind: 'saved', message: 'Guardado', slow: false });
       completionTimeoutRef.current = window.setTimeout(() => setState(null), SAVED_VISIBLE_MS);
     });
 
@@ -125,15 +125,15 @@ export function GlobalBusyIndicator() {
   if (!state) return null;
 
   const label = state.kind === 'saving' && state.slow
-    ? 'SQLite está tardando más de lo habitual…'
+    ? 'El guardado está tardando más de lo habitual…'
     : state.message;
   const detail = state.kind === 'saving'
     ? state.slow
-      ? 'No cierres la ventana hasta confirmar el guardado.'
-      : 'Confirmando el cambio en la base compartida.'
-    : state.kind === 'saved'
-      ? 'El cambio ha quedado confirmado en SQLite.'
-      : 'El cambio no se ha confirmado.';
+      ? 'No cierres la ventana hasta que termine.'
+      : 'Guardando los cambios.'
+    : state.kind === 'error'
+      ? 'El cambio no se ha guardado.'
+      : null;
 
   return (
     <div className={`global-busy-indicator global-busy-indicator--${state.kind}`} role="status" aria-live="polite" aria-label={label}>
@@ -145,7 +145,7 @@ export function GlobalBusyIndicator() {
         </span>
         <span className="global-busy-indicator__copy">
           <strong>{label}</strong>
-          <small>{detail}</small>
+          {detail ? <small>{detail}</small> : null}
         </span>
       </div>
     </div>
