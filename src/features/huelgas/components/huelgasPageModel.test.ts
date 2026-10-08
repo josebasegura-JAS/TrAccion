@@ -7,12 +7,14 @@ const baseDraft: HuelgaDraft = {
   tipo: 'jornada-completa',
   tramos: [],
   observaciones: '',
+  circuitosZonaIds: ['zona-mm-ariz'],
 };
 
 describe('huelgasPageModel', () => {
   it('valida los campos obligatorios de una convocatoria', () => {
     expect(validateDraft({ ...baseDraft, fecha: '' })).toBe('Indica la fecha de la huelga.');
     expect(validateDraft({ ...baseDraft, sindicatos: [] })).toBe('Selecciona al menos un sindicato convocante.');
+    expect(validateDraft({ ...baseDraft, circuitosZonaIds: [] })).toBe('Selecciona al menos un circuito de recogida.');
     expect(validateDraft(baseDraft)).toBeNull();
   });
 
@@ -27,7 +29,7 @@ describe('huelgasPageModel', () => {
     expect(convocatoriaLabel({ tipo: 'paros-parciales', tramos: [{ id: '1', inicio: '09:00', fin: '10:30' }] })).toBe('09:00–10:30');
   });
 
-  it('rechaza registros incompletos al hidratar huelgas', () => {
+  it('rechaza registros incompletos al hidratar huelgas y mantiene compatibilidad con registros anteriores', () => {
     expect(isHuelga({ id: 'h1' })).toBe(false);
     expect(isHuelga({
       id: 'h1',
