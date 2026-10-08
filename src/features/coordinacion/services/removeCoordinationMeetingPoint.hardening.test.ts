@@ -1,22 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SQLITE_RECORD_METADATA_KEY } from '../../../services/persistenceKeys';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoordinationState } from '../domain/coordinacion';
 import { COORDINATION_STORAGE_KEY, useCoordinacionStore } from '../store/useCoordinacionStore';
+import { COORDINATION_INDEX_STORAGE_KEY } from './coordinationPersistence';
 import { removeCoordinationMeetingPoint } from './removeCoordinationMeetingPoint';
 
 vi.mock('../../../shared/export/coordinacionExcelBackup', () => ({
   syncCoordinacionExcelBackup: vi.fn(async () => ''),
 }));
-
-const status = {
-  ready: true,
-  engine: 'better-sqlite3' as const,
-  phase: 'active' as const,
-  path: '/shared/traccion.sqlite',
-  schemaVersion: 17,
-  isDefaultPath: false,
-  lockPath: '/shared/traccion.sqlite.lockdir',
-};
 
 function stateWithPoint(): CoordinationState {
   return {
@@ -51,74 +41,38 @@ describe('removeCoordinationMeetingPoint hardening', () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
-    useCoordinacionStore.setState(stateWithPoint());
+    useCoordinacionStore.setState({
+      meetings: [],
+      directionTaskIds: [],
+      unionTaskIds: {},
+      areaTaskIds: {},
+    });
   });
 
-  afterEach(() => {
-    delete (window as { traccion?: unknown }).traccion;
-  });
-
-  it('no modifica cache, store ni metadata si SQLite rechaza el guardado optimista', async () => {
+  it('no modifica almacenamiento ni store si el punto ya no existe', async () => {
     const current = stateWithPoint();
-    const previousUpdatedAt = '2026-10-08T06:05:00.000Z';
-    const cachedBefore = JSON.stringify(current);
+    window.localStorage.setItem(COORDINATION_STORAGE_KEY, JSON.stringify(current));
+    useCoordinacionStore.setState(current);
 
-    window.localStorage.setItem(COORDINATION_STORAGE_KEY, cachedBefore);
-    window.localStorage.setItem(SQLITE_RECORD_METADATA_KEY, JSON.stringify({
-      [COORDINATION_STORAGE_KEY]: previousUpdatedAt,
-    }));
-
-    (window as { traccion?: unknown }).traccion = {
-      getPersistedRecord: vi.fn(async () => ({
-        status,
-        record: {
-          key: COORDINATION_STORAGE_KEY,
-          value: JSON.stringify(current),
-          updatedAt: previousUpdatedAt,
-        },
-      })),
-      saveLocalStorageRecordIfUnchanged: vi.fn(async () => ({
-        ok: false,
-        status,
-        currentUpdatedAt: '2026-10-08T06:06:00.000Z',
-        message: 'Conflicto de versión',
-      })),
-    };
-
-    const result = await removeCoordinationMeetingPoint('point-1');
+    const result = await removeCoordinationMeetingPoint('point-inexistente');
 
     expect(result.ok).toBe(false);
-    expect(window.localStorage.getItem(COORDINATION_STORAGE_KEY)).toBe(cachedBefore);
+    expect(window.localStorage.getItem(COORDINATION_INDEX_STORAGE_KEY)).toBeNull();
     expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(1);
-
-    const metadata = JSON.parse(
-      window.localStorage.getItem(SQLITE_RECORD_METADATA_KEY) ?? '{}',
-    ) as Record<string, string | null>;
-    expect(metadata[COORDINATION_STORAGE_KEY]).toBe(previousUpdatedAt);
   });
 
-  it('rechaza borrar un punto de una reunión cerrada sin intentar escribir', async () => {
+  it('rechaza borrar un punto de una reunión cerrada sin iniciar la migración/escritura', async () => {
     const current = stateWithPoint();
     current.meetings[0].status = 'closed';
     current.meetings[0].closedAt = '2026-10-08T07:00:00.000Z';
-    const saveIfUnchanged = vi.fn();
-
-    (window as { traccion?: unknown }).traccion = {
-      getPersistedRecord: vi.fn(async () => ({
-        status,
-        record: {
-          key: COORDINATION_STORAGE_KEY,
-          value: JSON.stringify(current),
-          updatedAt: '2026-10-08T06:05:00.000Z',
-        },
-      })),
-      saveLocalStorageRecordIfUnchanged: saveIfUnchanged,
-    };
+    window.localStorage.setItem(COORDINATION_STORAGE_KEY, JSON.stringify(current));
+    useCoordinacionStore.setState(current);
 
     const result = await removeCoordinationMeetingPoint('point-1');
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain('cerrada');
-    expect(saveIfUnchanged).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(COORDINATION_INDEX_STORAGE_KEY)).toBeNull();
+    expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(1);
   });
 });

@@ -5,6 +5,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.plantilla.jobPositionTranslations',
   'traccion.v1.tareas.tasks',
   'traccion.v1.coordinacion.state',
+  'traccion.v1.coordinacion.index',
   'traccion.v1.peticiones.peticiones',
   'traccion.v1.tareas.peticionesMigrated',
   'traccion.v1.auditTrail.events',
@@ -50,7 +51,9 @@ export const SQLITE_HYDRATION_METADATA_KEY = 'traccion.v1.sqlite.hydrationMetada
 export const SQLITE_PENDING_RECORD_WRITES_KEY = 'traccion.v1.sqlite.pendingRecordWrites';
 export const SQLITE_RECORD_METADATA_KEY = 'traccion.v1.sqlite.recordMetadata';
 
-const PERSISTED_STORAGE_PREFIXES = [] as const;
+const PERSISTED_STORAGE_PREFIXES = [
+  'traccion.v1.coordinacion.meeting.',
+] as const;
 
 function shouldPersistDynamicKey(key: string): boolean {
   if (key.startsWith('traccion.v1.sqlite.')) {

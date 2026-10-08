@@ -1,22 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SQLITE_RECORD_METADATA_KEY } from '../../../services/persistenceKeys';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoordinationState } from '../domain/coordinacion';
 import { COORDINATION_STORAGE_KEY, useCoordinacionStore } from '../store/useCoordinacionStore';
+import {
+  COORDINATION_INDEX_STORAGE_KEY,
+  coordinationMeetingStorageKey,
+  readCoordinationState,
+} from './coordinationPersistence';
 import { removeCoordinationMeetingPoint } from './removeCoordinationMeetingPoint';
 
 vi.mock('../../../shared/export/coordinacionExcelBackup', () => ({
   syncCoordinacionExcelBackup: vi.fn(async () => ''),
 }));
-
-const status = {
-  ready: true,
-  engine: 'better-sqlite3' as const,
-  phase: 'active' as const,
-  path: '/shared/traccion.sqlite',
-  schemaVersion: 17,
-  isDefaultPath: false,
-  lockPath: '/shared/traccion.sqlite.lockdir',
-};
 
 function coordinationState(): CoordinationState {
   return {
@@ -47,7 +41,7 @@ function coordinationState(): CoordinationState {
   };
 }
 
-describe('removeCoordinationMeetingPoint — metadata de concurrencia', () => {
+describe('removeCoordinationMeetingPoint — persistencia granular', () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
@@ -59,56 +53,22 @@ describe('removeCoordinationMeetingPoint — metadata de concurrencia', () => {
     });
   });
 
-  afterEach(() => {
-    delete (window as { traccion?: unknown }).traccion;
-  });
-
-  it('registra el updatedAt confirmado por SQLite para que el siguiente guardado no use una versión obsoleta', async () => {
+  it('migra el snapshot legado y elimina el punto en el registro individual de su reunión', async () => {
     const state = coordinationState();
-    const previousUpdatedAt = '2026-10-08T06:05:00.000Z';
-    const confirmedUpdatedAt = '2026-10-08T06:06:00.000Z';
-
-    window.localStorage.setItem(SQLITE_RECORD_METADATA_KEY, JSON.stringify({
-      [COORDINATION_STORAGE_KEY]: previousUpdatedAt,
-      'traccion.v1.tareas.tasks': '2026-10-08T05:00:00.000Z',
-    }));
-
-    const saveIfUnchanged = vi.fn(async () => ({
-      ok: true,
-      status,
-      currentUpdatedAt: confirmedUpdatedAt,
-      message: 'Guardado.',
-    }));
-
-    (window as { traccion?: unknown }).traccion = {
-      getPersistedRecord: vi.fn(async () => ({
-        status,
-        record: {
-          key: COORDINATION_STORAGE_KEY,
-          value: JSON.stringify(state),
-          updatedAt: previousUpdatedAt,
-        },
-      })),
-      saveLocalStorageRecordIfUnchanged: saveIfUnchanged,
-    };
+    window.localStorage.setItem(COORDINATION_STORAGE_KEY, JSON.stringify(state));
+    useCoordinacionStore.setState(state);
 
     const result = await removeCoordinationMeetingPoint('point-1');
 
     expect(result.ok).toBe(true);
-    expect(saveIfUnchanged).toHaveBeenCalledWith(expect.objectContaining({
-      key: COORDINATION_STORAGE_KEY,
-      expectedUpdatedAt: previousUpdatedAt,
-    }));
+    expect(window.localStorage.getItem(COORDINATION_INDEX_STORAGE_KEY)).not.toBeNull();
 
-    const metadata = JSON.parse(
-      window.localStorage.getItem(SQLITE_RECORD_METADATA_KEY) ?? '{}',
-    ) as Record<string, string | null>;
-    expect(metadata[COORDINATION_STORAGE_KEY]).toBe(confirmedUpdatedAt);
-    expect(metadata['traccion.v1.tareas.tasks']).toBe('2026-10-08T05:00:00.000Z');
+    const storedMeeting = JSON.parse(
+      window.localStorage.getItem(coordinationMeetingStorageKey('meeting-1')) ?? '{}',
+    ) as CoordinationState['meetings'][number];
+    expect(storedMeeting.points).toHaveLength(0);
 
-    const persisted = JSON.parse(
-      window.localStorage.getItem(COORDINATION_STORAGE_KEY) ?? '{}',
-    ) as CoordinationState;
-    expect(persisted.meetings[0].points).toHaveLength(0);
+    expect(readCoordinationState().meetings[0].points).toHaveLength(0);
+    expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(0);
   });
 });

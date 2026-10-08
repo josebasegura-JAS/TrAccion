@@ -1,6 +1,6 @@
-import { writeJsonStorageAsync } from '../../../services/persistence';
 import type { CoordinationMeeting, CoordinationState } from '../domain/coordinacion';
-import { COORDINATION_STORAGE_KEY, useCoordinacionStore } from '../store/useCoordinacionStore';
+import { useCoordinacionStore } from '../store/useCoordinacionStore';
+import { persistCoordinationState } from './coordinationPersistence';
 import { existingTrackingPointIds, syncMeetingTracking } from './coordinationMeetingTracking';
 
 export type CoordinationMeetingDetailsDraft = Pick<
@@ -53,7 +53,7 @@ export async function updateCoordinationMeetingDetails(
   const built = buildUpdatedMeetingDetailsState(current, meetingId, draft);
   if (!built.state) return { ok: false, message: built.error ?? 'No se ha podido editar la reunión.' };
 
-  const result = await writeJsonStorageAsync(COORDINATION_STORAGE_KEY, built.state);
+  const result = await persistCoordinationState(built.state);
   if (!result.ok) return { ok: false, message: result.message };
 
   useCoordinacionStore.setState(built.state);
