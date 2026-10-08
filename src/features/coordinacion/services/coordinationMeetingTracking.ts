@@ -16,7 +16,15 @@ type PendingTrackingSync = {
   allowStatusOnly: boolean;
 };
 
+type PendingTrackingRemoval = {
+  meetingId: string;
+  pointId: string;
+  taskId: string;
+  label: string;
+};
+
 const PENDING_TRACKING_SYNC_KEY = 'traccion.v1.coordinacion.pendingTrackingSync';
+const PENDING_TRACKING_REMOVAL_KEY = 'traccion.v1.coordinacion.pendingTrackingRemoval';
 
 export function meetingContext(meeting: CoordinationMeeting): string {
   if (meeting.area === 'direccion') return 'Dirección';
@@ -66,6 +74,40 @@ function writePendingTrackingSync(entries: PendingTrackingSync[]): void {
   window.localStorage.setItem(PENDING_TRACKING_SYNC_KEY, JSON.stringify(entries));
 }
 
+function readPendingTrackingRemovals(): PendingTrackingRemoval[] {
+  const stored = window.localStorage.getItem(PENDING_TRACKING_REMOVAL_KEY);
+  if (!stored) return [];
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is PendingTrackingRemoval => Boolean(
+      entry
+      && typeof entry === 'object'
+      && typeof (entry as PendingTrackingRemoval).meetingId === 'string'
+      && typeof (entry as PendingTrackingRemoval).pointId === 'string'
+      && typeof (entry as PendingTrackingRemoval).taskId === 'string'
+      && typeof (entry as PendingTrackingRemoval).label === 'string',
+    ));
+  } catch {
+    return [];
+  }
+}
+
+function writePendingTrackingRemovals(entries: PendingTrackingRemoval[]): void {
+  if (entries.length === 0) {
+    window.localStorage.removeItem(PENDING_TRACKING_REMOVAL_KEY);
+    return;
+  }
+  window.localStorage.setItem(PENDING_TRACKING_REMOVAL_KEY, JSON.stringify(entries));
+}
+
+export function queueCoordinationTrackingRemoval(entry: PendingTrackingRemoval): void {
+  const entries = readPendingTrackingRemovals();
+  const filtered = entries.filter((candidate) => !(candidate.meetingId === entry.meetingId && candidate.pointId === entry.pointId));
+  filtered.push(entry);
+  writePendingTrackingRemovals(filtered);
+}
+
 function setPendingTrackingSync(
   meetingId: string,
   pointId: string,
@@ -79,7 +121,7 @@ function setPendingTrackingSync(
 }
 
 export function pendingCoordinationTrackingCount(): number {
-  return readPendingTrackingSync().length;
+  return readPendingTrackingSync().length + readPendingTrackingRemovals().length;
 }
 
 export function existingTrackingPointIds(meeting: CoordinationMeeting): string[] {
@@ -165,29 +207,55 @@ export async function retryPendingCoordinationTracking(
   meetings: CoordinationMeeting[],
 ): Promise<TrackingSyncFailure[]> {
   const failures: TrackingSyncFailure[] = [];
-  const entries = readPendingTrackingSync();
-  const byMeeting = new Map<string, PendingTrackingSync[]>();
-  for (const entry of entries) {
-    const current = byMeeting.get(entry.meetingId) ?? [];
-    current.push(entry);
-    byMeeting.set(entry.meetingId, current);
-  }
 
-  for (const [meetingId, pendingEntries] of byMeeting) {
-    const meeting = meetings.find((candidate) => candidate.id === meetingId);
-    if (!meeting) {
-      for (const entry of pendingEntries) {
-        setPendingTrackingSync(entry.meetingId, entry.pointId, entry.allowStatusOnly, false);
-      }
+  for (const entry of readPendingTrackingSync()) {
+    const meeting = meetings.find((candidate) => candidate.id === entry.meetingId);
+    const point = meeting?.points.find((candidate) => candidate.id === entry.pointId);
+    if (!meeting || !point || !point.taskId) {
+      setPendingTrackingSync(entry.meetingId, entry.pointId, entry.allowStatusOnly, false);
       continue;
     }
-    const result = await syncMeetingTracking(
-      meeting,
-      pendingEntries.map((entry) => entry.pointId),
-      { allowStatusOnly: false },
-    );
-    failures.push(...result);
+
+    const result = await useTaskStore.getState().upsertCoordinationTracking({
+      taskId: point.taskId,
+      trackingId: coordinationTrackingId(meeting.id, point.id),
+      text: buildCoordinationTrackingText(meeting, point, entry.allowStatusOnly),
+      source: {
+        module: 'coordinacion',
+        recordId: meeting.id,
+        pointId: point.id,
+        label: `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`,
+      },
+      closeTask: false,
+    });
+    if (result.ok || result.message.toLowerCase().includes('ya no existe') || result.message.toLowerCase().includes('eliminada')) {
+      setPendingTrackingSync(entry.meetingId, entry.pointId, entry.allowStatusOnly, false);
+      continue;
+    }
+    failures.push({ pointId: point.id, message: `${point.title}: ${result.message}` });
   }
+
+  const remainingRemovals: PendingTrackingRemoval[] = [];
+  for (const entry of readPendingTrackingRemovals()) {
+    const result = await useTaskStore.getState().upsertCoordinationTracking({
+      taskId: entry.taskId,
+      trackingId: coordinationTrackingId(entry.meetingId, entry.pointId),
+      text: '',
+      source: {
+        module: 'coordinacion',
+        recordId: entry.meetingId,
+        pointId: entry.pointId,
+        label: entry.label,
+      },
+      closeTask: false,
+    });
+    if (result.ok || result.message.toLowerCase().includes('ya no existe') || result.message.toLowerCase().includes('eliminada')) {
+      continue;
+    }
+    remainingRemovals.push(entry);
+    failures.push({ pointId: entry.pointId, message: result.message });
+  }
+  writePendingTrackingRemovals(remainingRemovals);
   return failures;
 }
 
