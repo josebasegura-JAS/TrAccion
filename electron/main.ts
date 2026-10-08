@@ -103,8 +103,11 @@ function createContextMenu(mainWindow: BrowserWindow): void {
 type SplashStepStatus = 'pending' | 'active' | 'done' | 'error';
 
 function createSplashWindow(): BrowserWindow {
-  const splashWindow = new BrowserWindow({ width: 500, height: 540, resizable: false, movable: true, minimizable: false, maximizable: false, closable: true, frame: false, show: true, alwaysOnTop: true, skipTaskbar: true, title: 'Cargando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const splashWindow = new BrowserWindow({ width: 500, height: 540, resizable: false, movable: true, minimizable: false, maximizable: false, closable: true, frame: false, show: false, alwaysOnTop: true, skipTaskbar: true, title: 'Cargando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   splashWindow.center();
+  splashWindow.once('ready-to-show', () => {
+    if (!splashWindow.isDestroyed()) splashWindow.show();
+  });
   splashWindow.loadFile(splashHtmlPath).catch(() => undefined);
   return splashWindow;
 }
