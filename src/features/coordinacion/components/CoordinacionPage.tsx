@@ -86,6 +86,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   } | null>(null);
   const pointDraftsRef = useRef<Record<string, CoordinationPointDraft>>({});
   const dirtyPointIdsRef = useRef<Set<string>>(new Set());
+  const conflictingPointIdsRef = useRef<Set<string>>(new Set());
   const [hasUnsavedMeetingChanges, setHasUnsavedMeetingChanges] = useState(false);
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
   const { confirm, dialogNode } = useAppDialog();
@@ -124,6 +125,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     if (!selectedId) {
       pointDraftsRef.current = {};
       dirtyPointIdsRef.current = new Set();
+      conflictingPointIdsRef.current = new Set();
       setHasUnsavedMeetingChanges(false);
       setMeetingEditOpen(false);
       return;
@@ -132,12 +134,14 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     if (!meeting) {
       pointDraftsRef.current = {};
       dirtyPointIdsRef.current = new Set();
+      conflictingPointIdsRef.current = new Set();
       setHasUnsavedMeetingChanges(false);
       setMeetingEditOpen(false);
       return;
     }
     pointDraftsRef.current = Object.fromEntries(meeting.points.map((point) => [point.id, pointToDraft(point)]));
     dirtyPointIdsRef.current = new Set();
+    conflictingPointIdsRef.current = new Set();
     setHasUnsavedMeetingChanges(false);
   }, [selectedId]);
 
@@ -148,6 +152,15 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     setHasUnsavedMeetingChanges((current) => current === hasDirtyPoints ? current : hasDirtyPoints);
   }, []);
 
+  const handlePointRemoteConflictChange = useCallback((pointId: string, hasConflict: boolean) => {
+    if (hasConflict) {
+      conflictingPointIdsRef.current.add(pointId);
+      setStatus('Hay cambios externos en un punto de la reunión. Recarga ese punto antes de guardar.');
+      return;
+    }
+    conflictingPointIdsRef.current.delete(pointId);
+  }, []);
+
   const backup = async () => {
     const message = await syncCoordinacionExcelBackup(useCoordinacionStore.getState().meetings);
     if (message) setStatus(message);
@@ -155,6 +168,10 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
 
   const handleSaveMeeting = async (tolerateTrackingFailures = false) => {
     if (!selected || selected.status === 'closed' || isSavingMeeting) return false;
+    if (conflictingPointIdsRef.current.size > 0) {
+      setStatus('No se puede guardar: hay un punto modificado en otra sesión. Recarga sus cambios antes de continuar.');
+      return false;
+    }
     const dirtyPointIds = new Set(dirtyPointIdsRef.current);
     const patches = selected.points.map((point) => {
       const draft = pointDraftsRef.current[point.id] ?? pointToDraft(point);
@@ -426,6 +443,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
               onConvertToTask={(pointId) => setTaskCreation({ pointId })}
               onDelete={(pointId, title) => void handleDeleteManualPoint(pointId, title)}
               onDraftChange={handlePointDraftChange}
+              onRemoteConflictChange={handlePointRemoteConflictChange}
               point={point}
             />
           ))}
