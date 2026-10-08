@@ -4,6 +4,7 @@ import { useTaskStore } from '../../tareas/store/useTaskStore';
 import type { CoordinationMeeting } from '../domain/coordinacion';
 import {
   pendingCoordinationTrackingCount,
+  queueCoordinationTrackingRemoval,
   retryPendingCoordinationTracking,
   syncMeetingTracking,
 } from './coordinationMeetingTracking';
@@ -117,6 +118,29 @@ describe('coordinationMeetingTracking hardening', () => {
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
       trackingId: 'coordination:meeting-1:point-1',
       text: expect.stringContaining('Tratado · requiere seguimiento'),
+    }));
+    expect(pendingCoordinationTrackingCount()).toBe(0);
+  });
+
+  it('reintenta una operación pendiente para un punto que ya salió de la reunión', async () => {
+    queueCoordinationTrackingRemoval({
+      meetingId: 'meeting-1',
+      pointId: 'point-1',
+      taskId: 'task-1',
+      label: 'Coordinación · Reunión semanal · Dirección · 08/10/2026',
+    });
+    expect(pendingCoordinationTrackingCount()).toBe(1);
+
+    const upsert = vi.fn().mockResolvedValue({ ok: true, message: 'Guardado' });
+    useTaskStore.setState({ upsertCoordinationTracking: upsert });
+
+    const failures = await retryPendingCoordinationTracking([meeting()]);
+
+    expect(failures).toEqual([]);
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      trackingId: 'coordination:meeting-1:point-1',
+      text: '',
     }));
     expect(pendingCoordinationTrackingCount()).toBe(0);
   });
