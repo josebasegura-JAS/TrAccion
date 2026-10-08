@@ -1,7 +1,8 @@
 /* Ajustes visuales del módulo Tareas.
- * Compacta exclusivamente los cinco KPIs superiores para recuperar altura útil
- * sin modificar sus datos, cálculos ni comportamiento. Las reglas usan clases
- * semánticas para no depender del orden de los bloques dentro de la página.
+ * Compacta los cinco KPIs superiores y la zona de controles de tareas activas
+ * para recuperar altura útil sin modificar datos, cálculos ni comportamiento.
+ * Las reglas quedan acotadas al módulo y aprovechan las clases semánticas ya
+ * existentes para evitar afectar a otras pantallas.
  */
 
 .tareas-kpi-grid {
@@ -51,4 +52,81 @@
   margin-top: 0;
   font-size: 0.625rem;
   line-height: 1.2;
+}
+
+/*
+ * Toolbar de tareas activas en dos filas:
+ * 1) filtros de responsable + contador de registros
+ * 2) búsqueda + acciones
+ *
+ * El segundo contenedor se aplana con display: contents para recolocar sus
+ * tres bloques visuales sin alterar el JSX ni los handlers existentes.
+ */
+#tareas > .tareas-kpi-grid + div > div:first-child {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.75rem;
+  row-gap: 0.5rem;
+}
+
+#tareas > .tareas-kpi-grid + div > div:first-child > :first-child {
+  grid-column: 1;
+  grid-row: 1;
+  margin-bottom: 0;
+}
+
+#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) {
+  display: contents;
+}
+
+/* En la primera fila conservamos el contador; el título ya está implícito en
+ * la página y en los KPIs, por lo que no necesita ocupar espacio visual. */
+#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :first-child {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  min-width: max-content;
+}
+
+#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :first-child > svg,
+#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :first-child > .whitespace-nowrap {
+  display: none;
+}
+
+#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :nth-child(3) {
+  grid-column: 2;
+  grid-row: 2;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-width: max-content;
+}
+
+/* En anchos reducidos priorizamos que no exista overflow. En escritorio se
+ * mantienen estrictamente las dos filas; solo se permite una tercera fila de
+ * acciones cuando el espacio disponible ya no permite conservar legibilidad. */
+@media (max-width: 1180px) {
+  #tareas > .tareas-kpi-grid + div > div:first-child {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  #tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :nth-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  #tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    min-width: 0;
+  }
 }
