@@ -7,7 +7,7 @@ import {
 } from '../domain/coordinacion';
 import { useCoordinacionStore } from '../store/useCoordinacionStore';
 import { persistCoordinationState, readCoordinationState } from './coordinationPersistence';
-import { meetingContext } from './coordinationMeetingTracking';
+import { meetingContext, queueCoordinationTrackingRemoval } from './coordinationMeetingTracking';
 
 type RemovePointResult = { ok: boolean; message: string };
 
@@ -46,23 +46,31 @@ export async function removeCoordinationMeetingPoint(pointId: string): Promise<R
 
   let trackingWarning = '';
   if (point.taskId) {
-    const task = useTaskStore.getState().tasks.find((candidate) => candidate.id === point.taskId);
-    if (task && !task.deletedAt) {
-      const trackingResult = await useTaskStore.getState().upsertCoordinationTracking({
+    const trackingLabel = `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`;
+    const trackingResult = await useTaskStore.getState().upsertCoordinationTracking({
+      taskId: point.taskId,
+      trackingId: `coordination:${meeting.id}:${point.id}`,
+      text: '',
+      source: {
+        module: 'coordinacion',
+        recordId: meeting.id,
+        pointId: point.id,
+        label: trackingLabel,
+      },
+      closeTask: false,
+    });
+    if (
+      !trackingResult.ok
+      && !trackingResult.message.toLowerCase().includes('ya no existe')
+      && !trackingResult.message.toLowerCase().includes('eliminada')
+    ) {
+      queueCoordinationTrackingRemoval({
+        meetingId: meeting.id,
+        pointId: point.id,
         taskId: point.taskId,
-        trackingId: `coordination:${meeting.id}:${point.id}`,
-        text: '',
-        source: {
-          module: 'coordinacion',
-          recordId: meeting.id,
-          pointId: point.id,
-          label: `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`,
-        },
-        closeTask: false,
+        label: trackingLabel,
       });
-      if (!trackingResult.ok) {
-        trackingWarning = ` Aviso: el punto se ha quitado, pero no se ha podido limpiar su seguimiento en la tarea: ${trackingResult.message}`;
-      }
+      trackingWarning = ` Aviso: el punto se ha quitado, pero no se ha podido limpiar su seguimiento en la tarea: ${trackingResult.message}. Se reintentará automáticamente.`;
     }
   }
 

@@ -2,6 +2,8 @@ import { useActasStore } from '../features/actas/store/useActasStore';
 import { useAyudaEscolarStore } from '../features/ayuda-escolar/store/useAyudaEscolarStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+import { useCoordinacionStore } from '../features/coordinacion/store/useCoordinacionStore';
+import { pendingCoordinationTrackingCount, retryPendingCoordinationTracking } from '../features/coordinacion/services/coordinationMeetingTracking';
 import { useCriteriosRrllStore } from '../features/criterios-rrll/store/useCriteriosRrllStore';
 import { useEspecialesStore } from '../features/especiales/store/useEspecialesStore';
 import { useLicenciasSinSueldoStore } from '../features/licencias-sin-sueldo/store/useLicenciasSinSueldoStore';
@@ -15,6 +17,23 @@ import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabaj
 import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
 import { useVinculogramaStore } from '../features/vinculograma/store/useVinculogramaStore';
 import { registerSyncableStore } from './syncableStoreRegistry';
+
+function retryPendingCoordinationTrackingSafely(): void {
+  if (pendingCoordinationTrackingCount() === 0) return;
+  void retryPendingCoordinationTracking(useCoordinacionStore.getState().meetings).catch((error: unknown) => {
+    console.warn('No se han podido reintentar los seguimientos pendientes de Coordinación.', error);
+  });
+}
+
+registerSyncableStore({
+  id: 'coordinacion',
+  reloadFromStorage: () => {
+    useCoordinacionStore.getState().reloadFromStorage();
+    retryPendingCoordinationTrackingSafely();
+  },
+});
+
+retryPendingCoordinationTrackingSafely();
 
 registerSyncableStore({
   id: 'ayuda-escolar',
