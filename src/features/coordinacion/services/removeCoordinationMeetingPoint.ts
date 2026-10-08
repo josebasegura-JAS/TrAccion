@@ -7,7 +7,7 @@ import {
 } from '../domain/coordinacion';
 import { useCoordinacionStore } from '../store/useCoordinacionStore';
 import { persistCoordinationState, readCoordinationState } from './coordinationPersistence';
-import { meetingContext } from './coordinationMeetingTracking';
+import { meetingContext, queueCoordinationTrackingRemoval } from './coordinationMeetingTracking';
 
 type RemovePointResult = { ok: boolean; message: string };
 
@@ -48,6 +48,7 @@ export async function removeCoordinationMeetingPoint(pointId: string): Promise<R
   if (point.taskId) {
     const task = useTaskStore.getState().tasks.find((candidate) => candidate.id === point.taskId);
     if (task && !task.deletedAt) {
+      const trackingLabel = `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`;
       const trackingResult = await useTaskStore.getState().upsertCoordinationTracking({
         taskId: point.taskId,
         trackingId: `coordination:${meeting.id}:${point.id}`,
@@ -56,12 +57,18 @@ export async function removeCoordinationMeetingPoint(pointId: string): Promise<R
           module: 'coordinacion',
           recordId: meeting.id,
           pointId: point.id,
-          label: `Coordinación · ${coordinationMeetingDisplayTitle(meeting)} · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`,
+          label: trackingLabel,
         },
         closeTask: false,
       });
       if (!trackingResult.ok) {
-        trackingWarning = ` Aviso: el punto se ha quitado, pero no se ha podido limpiar su seguimiento en la tarea: ${trackingResult.message}`;
+        queueCoordinationTrackingRemoval({
+          meetingId: meeting.id,
+          pointId: point.id,
+          taskId: point.taskId,
+          label: trackingLabel,
+        });
+        trackingWarning = ` Aviso: el punto se ha quitado, pero no se ha podido limpiar su seguimiento en la tarea: ${trackingResult.message}. Se reintentará automáticamente.`;
       }
     }
   }
