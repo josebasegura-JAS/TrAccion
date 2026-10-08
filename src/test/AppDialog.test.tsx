@@ -7,17 +7,32 @@ describe('AppDialog', () => {
     cleanup();
   });
 
-  it('renderiza un alert con el título y mensaje, y un único botón de confirmación', () => {
+  it('usa Información y Cerrar como fallback de un aviso informativo', () => {
     const onConfirm = vi.fn();
     render(<AppDialog message="Operación completada." mode="alert" onConfirm={onConfirm} />);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Información' })).toBeInTheDocument();
     expect(screen.getByText('Operación completada.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /ok/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /cancelar/i })).not.toBeInTheDocument();
   });
 
-  it('renderiza un confirm con botones de cancelar y confirmar', () => {
+  it('diferencia los títulos de warning y error sin recurrir a Aviso', () => {
+    const { rerender } = render(
+      <AppDialog message="Revisa la configuración." mode="alert" onConfirm={vi.fn()} type="warning" />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Atención' })).toBeInTheDocument();
+
+    rerender(
+      <AppDialog message="No se ha podido completar la operación." mode="alert" onConfirm={vi.fn()} type="error" />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Error' })).toBeInTheDocument();
+  });
+
+  it('usa Continuar en confirmaciones no destructivas cuando el flujo no personaliza la acción', () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
     render(
@@ -29,11 +44,28 @@ describe('AppDialog', () => {
       />,
     );
 
+    expect(screen.getByRole('heading', { name: 'Confirmar' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /cancelar/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /aceptar/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continuar' })).toBeInTheDocument();
   });
 
-  it('respeta las etiquetas personalizadas de los botones', () => {
+  it('distingue las confirmaciones destructivas y evita el genérico Aceptar', () => {
+    render(
+      <AppDialog
+        danger
+        message="Esta acción puede provocar pérdida de información."
+        mode="confirm"
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Confirmar acción' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Aceptar' })).not.toBeInTheDocument();
+  });
+
+  it('respeta títulos y etiquetas personalizadas de negocio', () => {
     render(
       <AppDialog
         cancelLabel="Más tarde"
@@ -42,14 +74,16 @@ describe('AppDialog', () => {
         mode="confirm"
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
+        title="Actualizar TrAcción"
       />,
     );
 
+    expect(screen.getByRole('heading', { name: 'Actualizar TrAcción' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Más tarde' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /actualizar ahora/i })).toBeInTheDocument();
   });
 
-  it('sigue mostrando el botón de confirmar incluso con un mensaje muy largo (el contenido hace scroll, no el botón)', () => {
+  it('sigue mostrando la acción incluso con un mensaje muy largo', () => {
     const longMessage = Array.from({ length: 40 }, (_, index) => `Línea de aviso número ${index + 1}.`).join(
       '\n',
     );
@@ -57,12 +91,9 @@ describe('AppDialog', () => {
     render(<AppDialog message={longMessage} mode="alert" onConfirm={vi.fn()} />);
 
     const dialog = screen.getByRole('dialog');
-    // El panel del diálogo debe limitar su altura total (no crecer sin
-    // límite con el contenido), y el bloque de mensaje debe poder
-    // desplazarse dentro de ese límite en vez de desbordar la pantalla.
     expect(dialog.className).toContain('max-h-');
     expect(dialog.className).toContain('overflow-hidden');
-    expect(screen.getByRole('button', { name: /ok/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeInTheDocument();
     expect(screen.getByText(/Línea de aviso número 1\./)).toBeInTheDocument();
     expect(screen.getByText(/Línea de aviso número 40\./)).toBeInTheDocument();
   });
