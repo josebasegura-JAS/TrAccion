@@ -1,4 +1,5 @@
 import { writeRendererStorageCache } from '../../../services/persistence';
+import { SQLITE_RECORD_METADATA_KEY } from '../../../services/persistenceKeys';
 import { syncCoordinacionExcelBackup } from '../../../shared/export/coordinacionExcelBackup';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import {
@@ -27,6 +28,25 @@ function parseCoordinationState(value: string | null): CoordinationState | null 
   } catch {
     return null;
   }
+}
+
+function updateCoordinationSqliteMetadata(updatedAt: string | null): void {
+  const storedMetadata = window.localStorage.getItem(SQLITE_RECORD_METADATA_KEY);
+  let metadata: Record<string, string | null> = {};
+
+  if (storedMetadata) {
+    try {
+      const parsed: unknown = JSON.parse(storedMetadata);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        metadata = parsed as Record<string, string | null>;
+      }
+    } catch {
+      metadata = {};
+    }
+  }
+
+  metadata[COORDINATION_STORAGE_KEY] = updatedAt;
+  window.localStorage.setItem(SQLITE_RECORD_METADATA_KEY, JSON.stringify(metadata));
 }
 
 export async function removeCoordinationMeetingPoint(pointId: string): Promise<RemovePointResult> {
@@ -73,6 +93,7 @@ export async function removeCoordinationMeetingPoint(pointId: string): Promise<R
     };
   }
 
+  updateCoordinationSqliteMetadata(saveResult.currentUpdatedAt);
   writeRendererStorageCache(COORDINATION_STORAGE_KEY, serialized, 'sqlite');
   useCoordinacionStore.getState().reloadFromStorage();
 
