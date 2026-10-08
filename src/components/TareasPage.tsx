@@ -198,21 +198,21 @@ function CompactTaskSummaryCard({
 
   return (
     <div
-      className={`flex min-w-0 items-center gap-3 rounded-2xl border px-3.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_8px_20px_rgba(2,6,23,0.16)] ${toneMap.card}`}
+      className={`tareas-kpi-card flex min-w-0 items-center gap-3 rounded-2xl border px-3.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_8px_20px_rgba(2,6,23,0.16)] ${toneMap.card}`}
     >
       <span
-        className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border ${toneMap.icon}`}
+        className={`tareas-kpi-card__icon grid h-9 w-9 shrink-0 place-items-center rounded-full border ${toneMap.icon}`}
       >
         <Icon size={17} />
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[1.45rem] font-black leading-none text-metro-text">
+      <span className="tareas-kpi-card__content min-w-0 flex-1">
+        <span className="tareas-kpi-card__value block text-[1.45rem] font-black leading-none text-metro-text">
           {value}
         </span>
-        <span className={`mt-0.5 block truncate text-sm font-extrabold ${toneMap.label}`}>
+        <span className={`tareas-kpi-card__label mt-0.5 block truncate text-sm font-extrabold ${toneMap.label}`}>
           {label}
         </span>
-        <span className="mt-0.5 block truncate text-[11px] font-medium text-metro-muted">
+        <span className="tareas-kpi-card__detail mt-0.5 block truncate text-[11px] font-medium text-metro-muted">
           {detail}
         </span>
       </span>
@@ -679,7 +679,7 @@ export function TareasPage({
         title="Tareas"
       />
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5">
+      <div className="tareas-kpi-grid grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5">
         <CompactTaskSummaryCard
           detail="Total de tareas activas"
           icon={ListChecks}
