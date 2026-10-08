@@ -22,6 +22,7 @@ vi.mock('electron', () => ({
 }));
 
 const {
+  backupSqliteDatabase,
   backupTimestampForFileName,
   getDailyLocalBackupDatabasePath,
   getDailyLocalBackupDirectory,
@@ -70,6 +71,41 @@ describe('localBackups', () => {
 
   afterEach(() => {
     rmSync(userDataDir, { recursive: true, force: true });
+  });
+
+  it('backupSqliteDatabase usa la Online Backup API cuando está disponible', async () => {
+    const sourcePath = path.join(userDataDir, 'origen.sqlite');
+    const destinationPath = path.join(userDataDir, 'destino.sqlite');
+    writeFileSync(sourcePath, 'origen');
+    const backup = vi.fn(async (destination: string) => {
+      const { copyFile } = await import('node:fs/promises');
+      await copyFile(sourcePath, destination);
+    });
+
+    const mode = await backupSqliteDatabase({ backup } as never, sourcePath, destinationPath);
+
+    const { readFileSync } = await import('node:fs');
+    expect(mode).toBe('native');
+    expect(backup).toHaveBeenCalledWith(destinationPath);
+    expect(readFileSync(destinationPath, 'utf8')).toBe('origen');
+  });
+
+  it('backupSqliteDatabase vuelve a copyFile si el backup nativo falla', async () => {
+    const sourcePath = path.join(userDataDir, 'origen-fallback.sqlite');
+    const destinationPath = path.join(userDataDir, 'destino-fallback.sqlite');
+    writeFileSync(sourcePath, 'contenido-fallback');
+    const backup = vi.fn(async () => {
+      throw new Error('fallo intencionado');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const mode = await backupSqliteDatabase({ backup } as never, sourcePath, destinationPath);
+
+    const { readFileSync } = await import('node:fs');
+    expect(mode).toBe('copy');
+    expect(backup).toHaveBeenCalledTimes(1);
+    expect(readFileSync(destinationPath, 'utf8')).toBe('contenido-fallback');
+    warn.mockRestore();
   });
 
   it('las rutas de backup local cuelgan de la carpeta sqlite-local-backup dentro de userData', () => {

@@ -6,6 +6,7 @@ import {
   LOCAL_BACKUP_JSON_FILE_NAME,
   LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME,
 } from './backupReference.js';
+import type { Database } from 'better-sqlite3';
 import type { DatabasePreferences } from './databasePreferences.js';
 
 export { LOCAL_BACKUP_DATABASE_FILE_NAME, LOCAL_BACKUP_JSON_FILE_NAME, LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME };
@@ -109,6 +110,29 @@ export async function pruneShutdownLocalBackups(extension: 'sqlite' | 'json'): P
   );
 }
 
+/**
+ * Crea una instantánea consistente de la base SQLite usando la Online Backup API
+ * de SQLite. Si el backup nativo no está disponible o falla, conserva el
+ * comportamiento histórico mediante una copia física del fichero origen.
+ */
+export async function backupSqliteDatabase(
+  database: Database | null,
+  databasePath: string,
+  destinationPath: string,
+): Promise<'native' | 'copy'> {
+  if (database && typeof database.backup === 'function') {
+    try {
+      await database.backup(destinationPath);
+      return 'native';
+    } catch (error) {
+      console.warn('El backup nativo SQLite ha fallado; se usará la copia física de respaldo.', error);
+    }
+  }
+
+  await copyFile(databasePath, destinationPath);
+  return 'copy';
+}
+
 export async function pruneSharedSqliteBackups(databasePath: string): Promise<void> {
   const backupDirectory = path.dirname(databasePath);
   const entries = await readdir(backupDirectory).catch(() => []);
@@ -121,8 +145,12 @@ export async function pruneSharedSqliteBackups(databasePath: string): Promise<vo
   );
 }
 
-export async function writeSharedSqliteBackup(databasePath: string, timestamp: string): Promise<void> {
-  await copyFile(databasePath, getSharedSqliteBackupPath(databasePath, timestamp));
+export async function writeSharedSqliteBackup(
+  databasePath: string,
+  timestamp: string,
+  sourceSnapshotPath: string = databasePath,
+): Promise<void> {
+  await copyFile(sourceSnapshotPath, getSharedSqliteBackupPath(databasePath, timestamp));
   await pruneSharedSqliteBackups(databasePath);
 }
 
@@ -169,6 +197,7 @@ export async function writeDailyLocalBackup(
   databasePath: string,
   preferences: DatabasePreferences,
   getDailyLocalBackupWeekdayName: (date: Date) => string,
+  sourceSnapshotPath: string = databasePath,
 ): Promise<void> {
   if (!preferences.dailyLocalBackupEnabled) {
     return;
@@ -181,7 +210,7 @@ export async function writeDailyLocalBackup(
 
     const today = new Date();
     const todayWeekdayName = getDailyLocalBackupWeekdayName(today);
-    await copyFile(databasePath, getDailyLocalBackupDatabasePath(directory, todayWeekdayName));
+    await copyFile(sourceSnapshotPath, getDailyLocalBackupDatabasePath(directory, todayWeekdayName));
 
     await pruneDailyLocalBackups(directory, preferences.dailyLocalBackupRetentionDays, today, getDailyLocalBackupWeekdayName);
   } catch (error) {

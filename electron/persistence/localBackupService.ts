@@ -10,6 +10,7 @@ import {
   resolveLocalBackupReference,
 } from './backupReference.js';
 import {
+  backupSqliteDatabase,
   backupTimestampForFileName,
   getLocalBackupDatabasePath,
   getLocalBackupDirectory,
@@ -176,10 +177,11 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       await pruneRotatedLocalBackups('json');
 
       let coreSqliteBackupOk = true;
+      const liveSnapshotPath = getLocalBackupDatabasePath();
       try {
-        await copyFile(currentStatus.path, getLocalBackupDatabasePath());
+        await backupSqliteDatabase(currentDatabase, currentStatus.path, liveSnapshotPath);
         if (shouldRotateBackup) {
-          await copyFile(currentStatus.path, getRotatedLocalBackupDatabasePath(backupTimestamp));
+          await copyFile(liveSnapshotPath, getRotatedLocalBackupDatabasePath(backupTimestamp));
         }
         await pruneRotatedLocalBackups('sqlite');
       } catch (error) {
@@ -188,7 +190,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       }
 
       try {
-        await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
+        await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, liveSnapshotPath);
       } catch (error) {
         coreSqliteBackupOk = false;
         console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
@@ -196,7 +198,12 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
 
       try {
         const dailyBackupPreferences = await readDatabasePreferences();
-        await writeDailyLocalBackup(currentStatus.path, dailyBackupPreferences, getDailyLocalBackupWeekdayName);
+        await writeDailyLocalBackup(
+          currentStatus.path,
+          dailyBackupPreferences,
+          getDailyLocalBackupWeekdayName,
+          liveSnapshotPath,
+        );
       } catch (error) {
         console.warn('No se ha podido crear la copia diaria local SQLite.', error);
       }
@@ -209,9 +216,12 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           if (shouldRotateBackup) {
             await writeFile(path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.json`), serializedPayload, 'utf8');
           }
-          await copyFile(currentStatus.path, path.join(secondaryDir, LOCAL_BACKUP_DATABASE_FILE_NAME));
+          await copyFile(liveSnapshotPath, path.join(secondaryDir, LOCAL_BACKUP_DATABASE_FILE_NAME));
           if (shouldRotateBackup) {
-            await copyFile(currentStatus.path, path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.sqlite`));
+            await copyFile(
+              liveSnapshotPath,
+              path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.sqlite`),
+            );
           }
         }
       } catch (error) {
@@ -321,10 +331,9 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       const serializedPayload = JSON.stringify(payload, null, 2);
       const prepareMs = Date.now() - prepareStartedAt;
 
-      // Los cuatro respaldos son independientes. Antes se ejecutaban en serie y,
-      // sobre una SQLite alojada en red, el cierre acumulaba el coste de cada copia.
-      // Ejecutarlos en paralelo mantiene exactamente las mismas protecciones y hace
-      // que el cierre espere al respaldo más lento, no a la suma de todos ellos.
+      // Se crea una única instantánea SQLite consistente. El resto de copias de
+      // cierre se derivan de ella para no lanzar varios backups nativos simultáneos
+      // sobre la misma conexión. El JSON puede escribirse en paralelo.
       const jsonTask = (async () => {
         const startedAt = Date.now();
         await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
@@ -332,39 +341,52 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         return Date.now() - startedAt;
       })();
 
+      const shutdownSnapshotPath = getShutdownLocalBackupDatabasePath(backupTimestamp);
       const localSqliteTask = (async () => {
         const startedAt = Date.now();
         try {
-          await copyFile(currentStatus.path, getShutdownLocalBackupDatabasePath(backupTimestamp));
+          await backupSqliteDatabase(currentDatabase, currentStatus.path, shutdownSnapshotPath);
           await pruneShutdownLocalBackups('sqlite');
+          return { durationMs: Date.now() - startedAt, ok: true };
         } catch (error) {
           console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
+          return { durationMs: Date.now() - startedAt, ok: false };
         }
-        return Date.now() - startedAt;
       })();
 
       const sharedSqliteTask = (async () => {
         const startedAt = Date.now();
-        try {
-          await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
-        } catch (error) {
-          console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
+        const localSnapshot = await localSqliteTask;
+        if (localSnapshot.ok) {
+          try {
+            await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, shutdownSnapshotPath);
+          } catch (error) {
+            console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
+          }
         }
         return Date.now() - startedAt;
       })();
 
       const dailySqliteTask = (async () => {
         const startedAt = Date.now();
-        try {
-          const dailyBackupPreferences = await readDatabasePreferences();
-          await writeDailyLocalBackup(currentStatus.path, dailyBackupPreferences, getDailyLocalBackupWeekdayName);
-        } catch (error) {
-          console.warn('No se ha podido crear la copia diaria local SQLite de cierre.', error);
+        const localSnapshot = await localSqliteTask;
+        if (localSnapshot.ok) {
+          try {
+            const dailyBackupPreferences = await readDatabasePreferences();
+            await writeDailyLocalBackup(
+              currentStatus.path,
+              dailyBackupPreferences,
+              getDailyLocalBackupWeekdayName,
+              shutdownSnapshotPath,
+            );
+          } catch (error) {
+            console.warn('No se ha podido crear la copia diaria local SQLite de cierre.', error);
+          }
         }
         return Date.now() - startedAt;
       })();
 
-      const [jsonMs, localSqliteMs, sharedSqliteMs, dailySqliteMs] = await Promise.all([
+      const [jsonMs, localSqliteResult, sharedSqliteMs, dailySqliteMs] = await Promise.all([
         jsonTask,
         localSqliteTask,
         sharedSqliteTask,
@@ -375,7 +397,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         totalMs: Date.now() - totalStartedAt,
         prepareMs,
         jsonMs,
-        localSqliteMs,
+        localSqliteMs: localSqliteResult.durationMs,
         sharedSqliteMs,
         dailySqliteMs,
       };
