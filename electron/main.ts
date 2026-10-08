@@ -11,7 +11,7 @@ const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
 const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
 const shutdownHtmlPath = path.join(__dirname, '../build/icon/shutdown.html');
-const splashMinimumVisibleMs = 800;
+const splashMinimumVisibleMs = 2_000;
 const splashMaximumVisibleMs = 60_000;
 const shutdownPerformanceFileName = 'last-shutdown-performance.json';
 
