@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import {
   isPersistenceFeedbackSilent,
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from '../services/persistence';
 
-const DEFAULT_VISIBLE_MS = 1500;
+const DEFAULT_VISIBLE_MS = 1800;
 
 type InlineSaveFeedbackProps = {
   visibleMs?: number;
@@ -27,8 +27,8 @@ export function InlineSaveFeedback({ visibleMs = DEFAULT_VISIBLE_MS }: InlineSav
 
     const unsubscribe = subscribeToPersistenceFeedback((next: PersistenceFeedback) => {
       // El indicador global es el único responsable de "guardando" y "error".
-      // Este feedback inline queda reservado a la confirmación final para no
-      // duplicar mensajes ni regiones aria-live en la misma operación.
+      // Este feedback inline queda reservado a una confirmación final, breve y
+      // cercana a la acción que ha realizado el usuario.
       if (
         isPersistenceFeedbackSilent(next) ||
         next.kind !== 'saved' ||
@@ -63,13 +63,13 @@ export function InlineSaveFeedback({ visibleMs = DEFAULT_VISIBLE_MS }: InlineSav
     <span
       aria-atomic="true"
       aria-live="polite"
-      className="inline-flex max-w-[28rem] items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200"
+      className="inline-flex max-w-[18rem] items-center gap-1.5 px-1 text-xs font-semibold text-emerald-300"
       data-inline-save-feedback="true"
       role="status"
       title={message}
     >
-      <Check aria-hidden="true" size={14} />
-      <span className="truncate">{message}</span>
+      <CheckCircle2 aria-hidden="true" size={15} />
+      <span>Guardado</span>
     </span>
   );
 }
