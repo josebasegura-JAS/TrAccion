@@ -109,6 +109,30 @@ export function validateDraft(draft: HuelgaDraft): string | null {
   return null;
 }
 
+function normalizedTramosForCommunication(huelga: Pick<Huelga, 'tipo' | 'tramos'>): string {
+  if (huelga.tipo === 'jornada-completa') return '';
+  return huelga.tramos.map((tramo) => `${tramo.inicio}|${tramo.fin}`).join('||');
+}
+
+export function reconcilePreparedCommunications(
+  current: Huelga | null,
+  draft: HuelgaDraft,
+): Record<string, string> | undefined {
+  if (!current?.correosPreparadosPorZona) return current?.correosPreparadosPorZona;
+
+  const communicationChanged =
+    current.fecha !== draft.fecha ||
+    current.tipo !== draft.tipo ||
+    normalizedTramosForCommunication(current) !== normalizedTramosForCommunication(draft);
+
+  if (communicationChanged) return {};
+
+  const selectedIds = new Set(draft.circuitosZonaIds ?? []);
+  return Object.fromEntries(
+    Object.entries(current.correosPreparadosPorZona).filter(([zoneId]) => selectedIds.has(zoneId)),
+  );
+}
+
 export function resolveResidenceOverride(overrides: Record<string, string>, residencia: string, puesto: string): string {
   let current = residencia.trim(); const visited = new Set<string>();
   for (let index = 0; index < 20; index += 1) { const key = asignacionKey(current, puesto); if (visited.has(key)) break; visited.add(key); const next = overrides[key]?.trim(); if (!next || next === current) break; current = next; }
