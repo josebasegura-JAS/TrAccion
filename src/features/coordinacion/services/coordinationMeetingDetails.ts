@@ -1,6 +1,7 @@
 import { writeJsonStorageAsync } from '../../../services/persistence';
 import type { CoordinationMeeting, CoordinationState } from '../domain/coordinacion';
 import { COORDINATION_STORAGE_KEY, useCoordinacionStore } from '../store/useCoordinacionStore';
+import { existingTrackingPointIds, syncMeetingTracking } from './coordinationMeetingTracking';
 
 export type CoordinationMeetingDetailsDraft = Pick<
   CoordinationMeeting,
@@ -56,5 +57,19 @@ export async function updateCoordinationMeetingDetails(
   if (!result.ok) return { ok: false, message: result.message };
 
   useCoordinacionStore.setState(built.state);
-  return { ok: true, message: 'Datos de la reunión actualizados.' };
+  const updatedMeeting = built.state.meetings.find((meeting) => meeting.id === meetingId);
+  if (!updatedMeeting) return { ok: true, message: 'Datos de la reunión actualizados.' };
+
+  const pointIds = existingTrackingPointIds(updatedMeeting);
+  if (pointIds.length === 0) return { ok: true, message: 'Datos de la reunión actualizados.' };
+
+  const failures = await syncMeetingTracking(updatedMeeting, pointIds, { allowStatusOnly: true });
+  if (failures.length === 0) {
+    return { ok: true, message: 'Datos de la reunión y seguimientos vinculados actualizados.' };
+  }
+
+  return {
+    ok: true,
+    message: `Datos de la reunión actualizados. Quedan ${failures.length} seguimiento(s) pendiente(s) de sincronizar y se reintentará en el próximo guardado.`,
+  };
 }
