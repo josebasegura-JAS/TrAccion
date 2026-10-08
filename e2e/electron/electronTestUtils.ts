@@ -38,7 +38,40 @@ const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
 
 /** Crea una carpeta temporal aislada para usar como "unidad de red" compartida en tests. */
 export async function createSharedDatabaseDirectory(): Promise<string> {
-  return mkdtemp(path.join(tmpdir(), 'traccion-e2e-shared-db-'));
+  const directory = await mkdtemp(path.join(tmpdir(), 'traccion-e2e-shared-db-'));
+  const databasePath = path.join(directory, 'traccion.sqlite');
+  const { DatabaseSync } = await import('node:sqlite');
+  const db = new DatabaseSync(databasePath);
+  try {
+    db.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+      CREATE TABLE persisted_records (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'sqlite-primary',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE local_storage_backups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL
+      );
+      CREATE TABLE app_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
+      .run(1, new Date().toISOString());
+  } finally {
+    db.close();
+  }
+  return directory;
 }
 
 async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
@@ -101,6 +134,11 @@ export async function launchTraccionElectron(
   const page = await waitForMainWindow(app);
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible();
+  if (options.sharedDatabaseDirectory) {
+    await expect(
+      page.getByRole('button', { name: 'Estado de base de datos: SQLite activa en ruta compartida/personalizada' }).first(),
+    ).toBeVisible({ timeout: 20_000 });
+  }
 
   return {
     app,
@@ -117,7 +155,6 @@ export async function launchTraccionElectron(
     },
   };
 }
-
 
 export async function launchTraccionElectronWithIsolatedSharedDatabase(
   options: Omit<LaunchTraccionElectronOptions, 'sharedDatabaseDirectory'> = {},
