@@ -102,6 +102,11 @@ function equalJson(a: unknown, b: unknown): boolean {
 }
 
 async function migrateLegacyState(state: CoordinationState): Promise<PersistResult> {
+  // La primera escritura sigue validando el snapshot monolítico antiguo. De este modo
+  // la migración no puede arrancar desde una copia obsoleta y pisar cambios remotos.
+  const legacyResult = await writeJsonStorageAsync(LEGACY_COORDINATION_STORAGE_KEY, state);
+  if (!legacyResult.ok) return { ok: false, message: legacyResult.message };
+
   for (const meeting of state.meetings) {
     const result = await writeJsonStorageAsync(coordinationMeetingStorageKey(meeting.id), meeting);
     if (!result.ok) return { ok: false, message: result.message };
