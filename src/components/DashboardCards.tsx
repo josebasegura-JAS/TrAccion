@@ -11,10 +11,8 @@ import {
   FileText,
   Laptop,
   Landmark,
-  Plus,
   ShieldCheck,
   Sparkles,
-  Upload,
   UserRound,
   UsersRound,
   Utensils,
@@ -77,7 +75,7 @@ const priorityPill: Record<TaskPriority, string> = {
 const DASHBOARD_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
-    body: 'El Dashboard RRLL concentra las prioridades del día, próximos vencimientos, agenda y accesos rápidos a los módulos principales. No sustituye a cada módulo: resume la información que requiere atención.',
+    body: 'El Dashboard RRLL concentra las prioridades del día, próximos vencimientos, agenda e indicadores de los módulos principales. No sustituye a cada módulo: resume la información que requiere atención.',
   },
   {
     title: 'Indicadores superiores',
@@ -109,7 +107,7 @@ const DASHBOARD_HELP_SECTIONS: ModuleHelpSection[] = [
       'Revisar primero Pendiente de atención y las tarjetas con valores distintos de cero.',
       'Comprobar el calendario y Próximos hitos para anticipar fechas próximas.',
       'Entrar en Mis tareas prioritarias para ordenar el trabajo personal.',
-      'Usar los accesos rápidos superiores para crear o abrir directamente el módulo que necesites.',
+      'Abrir el módulo necesario desde sus tarjetas, paneles o desde la navegación principal de TrAcción.',
     ],
   },
 ];
@@ -507,7 +505,6 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
     [activeTasks, todayIso],
   );
 
-
   const taskStateDisplay = useMemo(() => taskSegments.filter((segment) => segment.value > 0), [taskSegments]);
   const totalTasksForDonut = Math.max(1, nonDeletedTasks.length);
   const moduleStatus = [
@@ -520,29 +517,8 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
   ];
 
   return (
-    <div className="dashboard-pro grid h-full min-h-[780px] grid-rows-[44px_92px_minmax(0,1fr)_minmax(0,0.9fr)] gap-3 overflow-visible">
-      <div className="grid grid-cols-6 gap-3">
-        {[
-          { label: 'Nueva tarea', icon: Plus, view: 'tareas' as const },
-          { label: 'Nueva sesión', icon: UsersRound, view: 'comite' as const },
-          { label: 'Nueva acta', icon: FileText, view: 'actas' as const },
-          { label: 'Importar plantilla', icon: Upload, view: 'plantilla' as const },
-          { label: 'Teletrabajo', icon: Laptop, view: 'teletrabajo' as const },
-          { label: 'Ticket Restaurante', icon: Utensils, view: 'ticket-restaurante' as const },
-        ].map((action) => (
-          <button
-            className="flex min-w-0 items-center justify-center gap-2 rounded-lg border border-sky-300/15 bg-gradient-to-b from-[#173b61] to-[#102944] px-3 text-[11px] font-bold text-slate-100 transition hover:border-sky-300/25 hover:from-[#1b456f] hover:to-[#12314f]"
-            key={action.label}
-            onClick={() => openRecord({ view: action.view })}
-            type="button"
-          >
-            <action.icon className="shrink-0" size={16} />
-            <span className="truncate">{action.label}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="grid min-h-0 grid-cols-6 gap-3">
+    <div className="dashboard-pro grid h-full min-h-0 grid-rows-[92px_minmax(0,1fr)_minmax(0,0.9fr)] gap-3 overflow-hidden">
+      <div className="dashboard-pro__metrics grid min-h-0 grid-cols-6 gap-3">
         <MetricCard
           detail={overdueTasks.length ? `${overdueTasks.length} vencidas` : `${upcomingTasks.length} vencen en 7 días`}
           icon={ClipboardList}
@@ -599,7 +575,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
         />
       </div>
 
-      <div className="grid min-h-0 grid-cols-[1.08fr_1.12fr_0.92fr] gap-2">
+      <div className="dashboard-pro__overview grid min-h-0 grid-cols-[1.08fr_1.12fr_0.92fr] gap-2">
         <DashboardPanel className="flex flex-col">
           <PanelTitle
             icon={BellRing}
@@ -711,10 +687,10 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
         </DashboardPanel>
       </div>
 
-      <div className="grid min-h-0 grid-cols-[1.1fr_0.92fr_1.08fr] gap-2">
+      <div className="dashboard-pro__secondary grid min-h-0 grid-cols-[1.1fr_0.92fr_1.08fr] gap-2">
         <DashboardPanel className="flex flex-col">
           <PanelTitle icon={ClipboardList} title="Mis tareas prioritarias" action={<div className="flex items-center gap-2">{currentResponsible && <span className="text-[10px] font-semibold text-slate-400">{myTasks.length} asignadas</span>}<button className="text-[10px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas', responsibleFilter: currentResponsible?.nombre || '__mine__' })} type="button">Ver todas</button></div>} />
-          <div className="grid min-h-0 flex-1 content-start divide-y divide-sky-200/7 overflow-hidden px-2">
+          <div className="dashboard-pro__priority-list grid min-h-0 flex-1 content-start divide-y divide-sky-200/7 px-2">
             {priorityTasks.length ? priorityTasks.map((task, index) => (
               <button className={`grid grid-cols-[14px_minmax(0,1fr)_56px_42px] items-center gap-2 px-1 py-1.5 text-left hover:bg-white/[0.025] ${index >= 4 ? 'dashboard-pro__large-only' : ''}`} key={task.id} onClick={() => openRecord({ view: 'tareas', recordId: task.id })} type="button">
                 <span className={`text-[12px] ${task.prioridad === 'critica' || task.prioridad === 'alta' ? 'text-red-400' : 'text-amber-300'}`}>⚑</span>
