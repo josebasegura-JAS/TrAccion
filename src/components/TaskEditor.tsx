@@ -291,16 +291,16 @@ export function TaskEditor({
                     : 'Criterio RRLL'}
                 </ActionButton>
               )}
+              <div className="min-w-0 flex-1" />
               <InlineSaveFeedback />
-              {saveStatus && (
+              {saveStatus && saveStatusIsError && (
                 <p
-                  className={`min-w-0 flex-1 truncate px-1 text-right text-[11px] font-semibold ${saveStatusIsError ? 'text-red-300' : 'text-emerald-300'}`}
+                  className="max-w-[24rem] truncate px-1 text-right text-[11px] font-semibold text-red-300"
                   title={saveStatus}
                 >
-                  {saveStatusIsError ? saveStatus : '✓ Guardado'}
+                  {saveStatus}
                 </p>
               )}
-              {!saveStatus && <div className="min-w-0 flex-1" />}
               <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">Cancelar</ActionButton>
               <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar</ActionButton>
             </div>
