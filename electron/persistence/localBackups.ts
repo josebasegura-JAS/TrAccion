@@ -115,14 +115,19 @@ export async function pruneShutdownLocalBackups(extension: 'sqlite' | 'json'): P
  * de SQLite. Si el backup nativo no está disponible o falla, conserva el
  * comportamiento histórico mediante una copia física del fichero origen.
  */
+type DatabaseWithBackup = Database & {
+  backup?: (destinationPath: string) => Promise<unknown>;
+};
+
 export async function backupSqliteDatabase(
   database: Database | null,
   databasePath: string,
   destinationPath: string,
 ): Promise<'native' | 'copy'> {
-  if (database && typeof database.backup === 'function') {
+  const databaseWithBackup = database as DatabaseWithBackup | null;
+  if (databaseWithBackup && typeof databaseWithBackup.backup === 'function') {
     try {
-      await database.backup(destinationPath);
+      await databaseWithBackup.backup(destinationPath);
       return 'native';
     } catch (error) {
       console.warn('El backup nativo SQLite ha fallado; se usará la copia física de respaldo.', error);
