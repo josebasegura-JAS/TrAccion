@@ -25,7 +25,7 @@ test('sin SQLite compartida mantiene la aplicación en modo consulta y bloquea l
     const taskButton = page.getByRole('button', { name: /Nueva tarea/ });
     await expect(taskButton).toBeVisible();
     await expect(taskButton.locator('xpath=ancestor::*[@inert][1]')).toHaveCount(1);
-    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await page.getByRole('button', { name: 'Ajustes', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Ajustes' })).toBeVisible();
   } finally {
     await close();
@@ -59,7 +59,7 @@ test('permite navegar por los módulos principales desde el menú lateral', asyn
       await navigateToModule(page, groupLabel, moduleLabel);
     }
 
-    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await page.getByRole('button', { name: 'Ajustes', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Ajustes' })).toBeVisible();
   } finally {
     await close();
@@ -134,7 +134,7 @@ test('las ayudas de todos los módulos abren como diálogo y no desbordan horizo
       await expect(helpButton).toBeFocused();
     }
 
-    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await page.getByRole('button', { name: 'Ajustes', exact: true }).click();
     const settingsHelp = page.getByRole('button', { name: /Abrir ayuda de/i }).first();
     await settingsHelp.click();
     const settingsDialog = page.getByRole('dialog');
