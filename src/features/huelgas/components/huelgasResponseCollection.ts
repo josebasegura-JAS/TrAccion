@@ -250,7 +250,7 @@ export async function parseHuelgaResponseWorkbook(buffer: ArrayBuffer): Promise<
         if (isMinimum) minRows += 1;
         if (isStrike) strikeRows += 1;
         if (isWorking && !isMinimum) workRows += 1;
-        if (isStrike && name) huelguistas.push({ empleado, nombre: name });
+        if (isStrike && name) huelguistas.push({ empleado: employee, nombre: name });
       }
 
       if (totalRows > 0) {
@@ -361,10 +361,7 @@ export async function downloadHuelgaResponseReport(
   strikeSheet.columns = [{ width: 28 }, { width: 16 }, { width: 42 }];
 
   const generated = await workbook.xlsx.writeBuffer();
-  const bytes = generated instanceof ArrayBuffer
-    ? generated
-    : generated.buffer.slice(generated.byteOffset, generated.byteOffset + generated.byteLength);
-  const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const blob = new Blob([generated], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const href = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = href;
