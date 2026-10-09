@@ -9,7 +9,7 @@ import {
 } from './employeeMaster';
 
 function employee(partial: Partial<Employee>): Employee {
-  return {
+  const base: Employee = {
     empleado: '',
     nombreApellidos: '',
     email: '',
@@ -29,13 +29,15 @@ function employee(partial: Partial<Employee>): Employee {
     poblacion: '',
     provincia: '',
     nif: '',
+    telefono1: '',
+    telefono2: '',
     dni: '',
     residenciaCast: '',
     residenciaEus: '',
     direccionTeletrabajo: '',
     deletedAt: null,
-    ...partial,
   };
+  return { ...base, ...partial };
 }
 
 describe('Plantilla como fuente maestra de personas', () => {
