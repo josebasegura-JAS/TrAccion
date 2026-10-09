@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOutlook2019PowerShellScript,
   buildOutlook2019VbsScript,
-} from './outlookDraftCompat';
+} from './outlookDraftCompat.js';
 
 const payload = {
   subject: 'Seguimiento huelga 17/03/2026',
