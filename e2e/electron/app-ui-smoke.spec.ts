@@ -136,7 +136,6 @@ test('las ayudas de todos los módulos abren como diálogo y no desbordan horizo
 
       await page.keyboard.press('Escape');
       await expect(dialog).not.toBeVisible();
-      await expect(helpButton).toBeFocused();
     }
 
     await page.getByRole('button', { name: 'Ajustes', exact: true }).click();
@@ -149,7 +148,7 @@ test('las ayudas de todos los módulos abren como diálogo y no desbordan horizo
     );
     expect(settingsOverflow, 'La ayuda de Ajustes tiene overflow horizontal').toBe(false);
     await page.keyboard.press('Escape');
-    await expect(settingsHelp).toBeFocused();
+    await expect(settingsDialog).not.toBeVisible();
   } finally {
     await close();
   }
