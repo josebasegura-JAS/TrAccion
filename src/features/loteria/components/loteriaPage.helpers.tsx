@@ -128,12 +128,27 @@ export function SectionShell({ title, subtitle, actions, children }: { title: st
   );
 }
 
+const routineSaveConfirmation = /^(?:Cambios guardados|Datos de septiembre guardados|Participantes y aviso guardados|Lista de participantes guardada|Décimos y pagos guardados|Cambios de Lotería guardados|Cierre guardado)\.(?: Excel de campaña actualizado\.)?$/i;
+const errorMessage = /(?:no se ha podido|no ha podido|error|incidencia)/i;
+const warningMessage = /(?:no se puede|faltan?|indica|introduce|solo está disponible|ya está|pendiente)/i;
+
 export function SaveState({ dirty, message }: { dirty: boolean; message: string }) {
-  return (
-    <StatusBadge size="xs" tone={dirty ? 'warning' : 'success'}>
-      {dirty ? 'Cambios sin guardar' : (message || 'Todo guardado')}
-    </StatusBadge>
-  );
+  if (dirty) {
+    return <StatusBadge size="xs" tone="warning">Cambios sin guardar</StatusBadge>;
+  }
+
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage || routineSaveConfirmation.test(trimmedMessage)) {
+    return null;
+  }
+
+  const tone = errorMessage.test(trimmedMessage)
+    ? 'error'
+    : warningMessage.test(trimmedMessage)
+      ? 'warning'
+      : 'info';
+
+  return <StatusBadge size="xs" tone={tone}>{trimmedMessage}</StatusBadge>;
 }
 
 export function SummaryPill({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'good' | 'warning' | 'alert' }) {

@@ -1,6 +1,5 @@
 import { AlertTriangle, Check, Info, X, CircleHelp } from 'lucide-react';
 import { useId, useRef } from 'react';
-import { ModalDatabaseStatus } from '../ModalDatabaseStatus';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 
 type AppDialogAlertType = 'info' | 'warning' | 'error';
@@ -105,10 +104,6 @@ export function AppDialog({
         role="dialog"
         tabIndex={-1}
       >
-        <div className="mb-3 flex shrink-0 justify-end">
-          <ModalDatabaseStatus />
-        </div>
-
         <div className="flex min-h-0 flex-1 items-start gap-3 overflow-y-auto">
           <div className={`mt-0.5 shrink-0 rounded-full p-2 ring-1 ${getIconClassName({ danger, mode, type })}`}>
             {getDialogIcon({ danger, mode, type })}
