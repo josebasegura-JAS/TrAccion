@@ -56,11 +56,11 @@ function hydrateMailFields(zona: HuelgaZona): HuelgaZona {
     responsableEmail: normalize(zona.responsableEmail) || defaults.responsableEmail || '',
     correoCc: normalize(zona.correoCc || '') || 'RELACIONES_LABORALES@metrobilbao.eus',
     correoActivo: true,
-    correoAsunto: normalize(zona.correoAsunto || '') || DEFAULT_HUELGA_MAIL_SUBJECT,
-    correoCuerpoHtml: !normalize(zona.correoCuerpoHtml || '') || isLegacyAssignmentMailBody(zona.correoCuerpoHtml) ? DEFAULT_HUELGA_MAIL_BODY : zona.correoCuerpoHtml,
-    correoPlazos: normalize(zona.correoPlazos || '') || defaultDeadlineForZone(zona.nombre),
-    correoInstruccionesHabituales: normalize(zona.correoInstruccionesHabituales || '') || defaults.correoInstruccionesHabituales || '',
-    plantillaExcelNombrePatron: normalize(zona.plantillaExcelNombrePatron || '') || defaults.plantillaExcelNombrePatron || `${zona.nombre} - Seguimiento huelga {{FECHA_HUELGA_ARCHIVO}}.xlsx`,
+    correoAsunto: zona.correoAsunto || DEFAULT_HUELGA_MAIL_SUBJECT,
+    correoCuerpoHtml: !zona.correoCuerpoHtml || isLegacyAssignmentMailBody(zona.correoCuerpoHtml) ? DEFAULT_HUELGA_MAIL_BODY : zona.correoCuerpoHtml,
+    correoPlazos: zona.correoPlazos || defaultDeadlineForZone(zona.nombre),
+    correoInstruccionesHabituales: zona.correoInstruccionesHabituales || defaults.correoInstruccionesHabituales || '',
+    plantillaExcelNombrePatron: zona.plantillaExcelNombrePatron || defaults.plantillaExcelNombrePatron || `${zona.nombre} - Seguimiento huelga {{FECHA_HUELGA_ARCHIVO}}.xlsx`,
     active: true,
   };
 }
