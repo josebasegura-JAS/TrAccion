@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3';
+import SqliteDatabase from 'better-sqlite3';
+import type { Database } from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -14,7 +15,7 @@ function createDatabase() {
   const directory = mkdtempSync(path.join(tmpdir(), 'traccion-ticket-atomic-'));
   tempDirectories.push(directory);
   const databasePath = path.join(directory, 'traccion.sqlite');
-  const db = new Database(databasePath);
+  const db = new SqliteDatabase(databasePath);
   db.exec(`
     CREATE TABLE ticket_restaurante_calendar_records (
       id TEXT PRIMARY KEY,
@@ -48,7 +49,7 @@ function statusFor(databasePath: string): AtomicTicketDatabaseStatus {
 }
 
 function seedRecord(
-  db: Database.Database,
+  db: Database,
   tableName: string,
   id: string,
   updatedAt: string,
@@ -107,7 +108,7 @@ describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
 
     expect(result.ok).toBe(true);
 
-    const check = new Database(databasePath, { readonly: true });
+    const check = new SqliteDatabase(databasePath, { readonly: true });
     expect(
       check.prepare('SELECT deleted_at FROM ticket_restaurante_calendar_records WHERE id = ?').get('cal-1'),
     ).toEqual({ deleted_at: deletedAt });
@@ -146,7 +147,7 @@ describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
     expect(result.ok).toBe(false);
     expect(result.failedRecordId).toBe('100');
 
-    const check = new Database(databasePath, { readonly: true });
+    const check = new SqliteDatabase(databasePath, { readonly: true });
     expect(
       check.prepare('SELECT updated_at, deleted_at FROM ticket_restaurante_calendar_records WHERE id = ?').get('cal-1'),
     ).toEqual({ updated_at: calendarUpdatedAt, deleted_at: null });
@@ -190,7 +191,7 @@ describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/fallo forzado/i);
 
-    const check = new Database(databasePath, { readonly: true });
+    const check = new SqliteDatabase(databasePath, { readonly: true });
     expect(
       check.prepare('SELECT updated_at, deleted_at FROM ticket_restaurante_calendar_records WHERE id = ?').get('cal-1'),
     ).toEqual({ updated_at: calendarUpdatedAt, deleted_at: null });
