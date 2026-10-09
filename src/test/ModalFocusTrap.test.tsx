@@ -95,7 +95,7 @@ describe('modal focus trap', () => {
     );
 
     const cancel = screen.getByRole('button', { name: 'Cancelar' });
-    const confirm = screen.getByRole('button', { name: 'Aceptar' });
+    const confirm = screen.getByRole('button', { name: 'Continuar' });
 
     await waitFor(() => expect(cancel).toHaveFocus());
     confirm.focus();
