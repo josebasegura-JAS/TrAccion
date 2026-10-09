@@ -2,6 +2,8 @@ import { HuelgasOverview } from './HuelgasOverview';
 import { HuelgaEditorModal } from './HuelgaEditorModal';
 import { HuelgasZonesModals } from './HuelgasZonesModals';
 import { HuelgasCollectionMailsModal } from './HuelgasCollectionMailsModal';
+import { HuelgasResponseCollectionModal } from './HuelgasResponseCollectionModal';
+import { useHuelgaResponseCollection } from './useHuelgaResponseCollection';
 import { useHuelgasPageController } from './useHuelgasPageController';
 
 export function HuelgasPage() {
@@ -51,6 +53,8 @@ export function HuelgasPage() {
     dialogNode,
   } = useHuelgasPageController();
 
+  const responseCollection = useHuelgaResponseCollection(huelgas, zonas);
+
   return (
     <div className="ui3-huelgas space-y-3">
       <HuelgasOverview
@@ -59,10 +63,12 @@ export function HuelgasPage() {
         nextHuelga={nextHuelga ?? null}
         zonas={zonas}
         generatingCollectionForId={generatingCollectionForId}
+        collectionStatusFor={responseCollection.collectionStatusFor}
         onOpenZones={openZones}
         onOpenNew={openNew}
         onOpenEdit={openEdit}
         onOpenCollectionMails={(huelga) => void openCollectionMails(huelga)}
+        onOpenResponseCollection={responseCollection.open}
         onRemove={(huelga) => void remove(huelga)}
       />
 
@@ -94,6 +100,24 @@ export function HuelgasPage() {
         onGenerateAll={() => void generateAllCollectionMails()}
       />
 
+      <HuelgasResponseCollectionModal
+        target={responseCollection.target}
+        responses={responseCollection.responses}
+        totals={responseCollection.totals}
+        receivedCount={responseCollection.receivedCount}
+        reviewedCount={responseCollection.reviewedCount}
+        dirty={responseCollection.dirty}
+        saving={responseCollection.saving}
+        importingZoneId={responseCollection.importingZoneId}
+        exporting={responseCollection.exporting}
+        onClose={() => void responseCollection.close()}
+        onImport={(zoneId, file) => void responseCollection.importResponse(zoneId, file)}
+        onChange={responseCollection.updateResponse}
+        onReview={(zoneId) => void responseCollection.markReviewed(zoneId)}
+        onSave={() => void responseCollection.save()}
+        onExport={() => void responseCollection.exportReport()}
+      />
+
       <HuelgaEditorModal
         open={editorOpen}
         editingId={editingId}
@@ -111,6 +135,7 @@ export function HuelgasPage() {
       />
 
       {dialogNode}
+      {responseCollection.dialogNode}
     </div>
   );
 }
