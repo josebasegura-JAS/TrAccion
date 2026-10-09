@@ -17,7 +17,10 @@ describe('plantillas Excel de comunicaciones de Huelgas', () => {
       expect(bytes.byteLength, circuito).toBeGreaterThan(1_000);
       expect(Array.from(bytes.slice(0, 2)), circuito).toEqual([0x50, 0x4b]);
 
-      const zip = await JSZip.loadAsync(buffer);
+      // En Vitest/Node, JSZip puede rechazar un ArrayBuffer procedente del entorno
+      // simulado aunque sus bytes sean correctos. Uint8Array es un tipo soportado
+      // de forma estable y valida exactamente el mismo contenido XLSX.
+      const zip = await JSZip.loadAsync(bytes);
       expect(zip.file('[Content_Types].xml'), circuito).not.toBeNull();
       expect(zip.folder('xl'), circuito).not.toBeNull();
     }
