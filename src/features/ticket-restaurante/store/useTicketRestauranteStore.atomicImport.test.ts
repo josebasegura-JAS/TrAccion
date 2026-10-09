@@ -110,7 +110,7 @@ describe('useTicketRestauranteStore importPeople atómico', () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain('ha cambiado mientras importabas');
-    expect(useTicketRestauranteStore.getState().calendars).toBe(calendarsBefore);
-    expect(useTicketRestauranteStore.getState().people).toBe(peopleBefore);
+    expect(useTicketRestauranteStore.getState().calendars).toStrictEqual(calendarsBefore);
+    expect(useTicketRestauranteStore.getState().people).toStrictEqual(peopleBefore);
   });
 });
