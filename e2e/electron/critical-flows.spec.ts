@@ -91,7 +91,7 @@ test('módulos críticos de auditoría abren sus acciones principales con SQLite
       await page.getByRole('button', { name: 'Configuración y administración' }).click();
       await expect(page.getByRole('button', { name: /^Puestos teletrabajables/ })).toBeVisible();
       await expect(page.getByRole('button', { name: /^Grupos de cobertura/ })).toBeVisible();
-      await page.getByRole('button', { name: /^Solicitudes/ }).first().click();
+      await page.getByRole('button').filter({ hasText: 'Solicitudes' }).first().click();
       await expect(page.getByRole('button', { name: 'Nueva solicitud' })).toBeVisible();
 
       await navigateToModule(page, 'Operativa diaria', 'Coordinación');
