@@ -1,7 +1,8 @@
-import { runSyncWithSilentPersistenceFeedback } from './persistence';
+import { runWithSilentPersistenceFeedback } from './persistence';
+
 export type SyncableStoreRegistration = {
   id: string;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => void | Promise<void>;
 };
 
 const syncableStores = new Map<string, SyncableStoreRegistration>();
@@ -14,37 +15,70 @@ export function getRegisteredSyncableStores(): SyncableStoreRegistration[] {
   return Array.from(syncableStores.values());
 }
 
-// Timers de debounce por store — evita recargar el mismo store varias veces
-// cuando el polling detecta cambios en múltiples claves del mismo módulo.
-const pendingReloadTimers = new Map<string, ReturnType<typeof setTimeout>>();
+type PendingReload = {
+  timer: ReturnType<typeof setTimeout>;
+  store: SyncableStoreRegistration;
+  silentPersistenceFeedback: boolean;
+  waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }>;
+};
+
+const pendingReloads = new Map<string, PendingReload>();
 const RELOAD_DEBOUNCE_MS = 50;
 
-export function reloadRegisteredSyncableStores(
-  storeIds?: string[],
-  options: { silentPersistenceFeedback?: boolean } = {},
-): void {
-  const requestedStoreIds = storeIds ? new Set(storeIds) : null;
-
-  getRegisteredSyncableStores().forEach((store) => {
-    if (requestedStoreIds && !requestedStoreIds.has(store.id)) {
-      return;
+function scheduleStoreReload(
+  store: SyncableStoreRegistration,
+  silentPersistenceFeedback: boolean,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const existing = pendingReloads.get(store.id);
+    if (existing) {
+      clearTimeout(existing.timer);
+      existing.store = store;
+      existing.silentPersistenceFeedback = silentPersistenceFeedback;
+      existing.waiters.push({ resolve, reject });
     }
 
-    // Cancelar recarga previa pendiente del mismo store
-    const existingTimer = pendingReloadTimers.get(store.id);
-    if (existingTimer !== undefined) {
-      clearTimeout(existingTimer);
-    }
+    const pending = existing ?? {
+      timer: 0 as unknown as ReturnType<typeof setTimeout>,
+      store,
+      silentPersistenceFeedback,
+      waiters: [{ resolve, reject }],
+    };
 
-    const timer = setTimeout(() => {
-      pendingReloadTimers.delete(store.id);
-      if (options.silentPersistenceFeedback) {
-        runSyncWithSilentPersistenceFeedback(store.reloadFromStorage);
-      } else {
-        store.reloadFromStorage();
-      }
+    pending.timer = setTimeout(() => {
+      pendingReloads.delete(store.id);
+      void (async () => {
+        try {
+          if (pending.silentPersistenceFeedback) {
+            await runWithSilentPersistenceFeedback(async () => {
+              await pending.store.reloadFromStorage();
+            });
+          } else {
+            await pending.store.reloadFromStorage();
+          }
+          pending.waiters.forEach((waiter) => waiter.resolve());
+        } catch (error) {
+          pending.waiters.forEach((waiter) => waiter.reject(error));
+        }
+      })();
     }, RELOAD_DEBOUNCE_MS);
 
-    pendingReloadTimers.set(store.id, timer);
+    pendingReloads.set(store.id, pending);
   });
+}
+
+export async function reloadRegisteredSyncableStores(
+  storeIds?: string[],
+  options: { silentPersistenceFeedback?: boolean } = {},
+): Promise<void> {
+  const requestedStoreIds = storeIds ? new Set(storeIds) : null;
+  const stores = getRegisteredSyncableStores().filter(
+    (store) => !requestedStoreIds || requestedStoreIds.has(store.id),
+  );
+
+  await Promise.all(
+    stores.map((store) =>
+      scheduleStoreReload(store, options.silentPersistenceFeedback === true),
+    ),
+  );
 }
