@@ -1,0 +1,27 @@
+name: PR14 sync current main
+
+on:
+  push:
+    branches:
+      - fix/huelgas-zone-masters-atomic
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Integrar main actual y limpiar sincronizador
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge origin/main --no-edit
+          git rm .github/workflows/pr14-sync-main.yml
+          git commit -m "chore: limpiar sincronizador temporal de PR14"
+          git push origin HEAD:fix/huelgas-zone-masters-atomic
