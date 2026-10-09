@@ -7,32 +7,37 @@ import {
 } from './importPeople';
 import type { TicketCalendar } from './ticketRestaurante';
 
-const employee = (overrides: Partial<Employee> = {}): Employee => ({
-  empleado: '00123',
-  nombreApellidos: 'García López María',
-  puestoNomina: 'Técnica',
-  puestoOrganizativo: '',
-  puestoEus: '',
-  residencia: '',
-  unidad: '',
-  nivelRetributivo: '',
-  direccionOrganizativa: '',
-  antiguedadPuesto: '',
-  sexo: '',
-  calle: '',
-  numero: '',
-  piso: '',
-  codigoPostal: '',
-  poblacion: '',
-  provincia: '',
-  nif: '12345678Z',
-  dni: '12345678Z',
-  residenciaCast: '',
-  residenciaEus: '',
-  direccionTeletrabajo: '',
-  deletedAt: null,
-  ...overrides,
-});
+const employee = (overrides: Partial<Employee> = {}): Employee => {
+  const base: Employee = {
+    empleado: '00123',
+    nombreApellidos: 'García López María',
+    email: '',
+    puestoNomina: 'Técnica',
+    puestoOrganizativo: '',
+    puestoEus: '',
+    residencia: '',
+    unidad: '',
+    nivelRetributivo: '',
+    direccionOrganizativa: '',
+    antiguedadPuesto: '',
+    sexo: '',
+    calle: '',
+    numero: '',
+    piso: '',
+    codigoPostal: '',
+    poblacion: '',
+    provincia: '',
+    nif: '12345678Z',
+    telefono1: '',
+    telefono2: '',
+    dni: '12345678Z',
+    residenciaCast: '',
+    residenciaEus: '',
+    direccionTeletrabajo: '',
+    deletedAt: null,
+  };
+  return { ...base, ...overrides };
+};
 
 const calendar: TicketCalendar = {
   id: 'calendar-1',
@@ -140,5 +145,4 @@ describe('ticket restaurante - Plantilla como fuente de personas', () => {
       activo: false,
     });
   });
-
 });
