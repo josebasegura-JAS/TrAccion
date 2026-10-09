@@ -98,6 +98,7 @@ export function buildOutlook2019PowerShellScript(
   payload: DraftPayload,
   attachmentPaths: string[],
 ): string {
+  const htmlBase64 = Buffer.from(payload.html, 'utf8').toString('base64');
   const lines = [
     "$ErrorActionPreference = 'Stop'",
     '$outlook = New-Object -ComObject Outlook.Application',
@@ -107,7 +108,7 @@ export function buildOutlook2019PowerShellScript(
     `$mail.To = ${psLiteral(payload.to.join(';'))}`,
     `$mail.CC = ${psLiteral(payload.cc.join(';'))}`,
     `$mail.BCC = ${psLiteral(payload.bcc.join(';'))}`,
-    `$mail.HTMLBody = ${psLiteral(payload.html)}`,
+    `$mail.HTMLBody = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psLiteral(htmlBase64)}))`,
   ];
   for (const attachmentPath of attachmentPaths) {
     lines.push(`$mail.Attachments.Add(${psLiteral(attachmentPath)}) | Out-Null`);
@@ -120,10 +121,21 @@ export function buildOutlook2019PowerShellScript(
   return lines.join('\n');
 }
 
-export function buildOutlook2019VbsScript(payload: DraftPayload, attachmentPaths: string[]): string {
+export function buildOutlook2019VbsScript(
+  payload: DraftPayload,
+  attachmentPaths: string[],
+  htmlPath: string,
+): string {
   const lines = [
     'Option Explicit',
-    'Dim OutlookApp, Mail',
+    'Dim OutlookApp, Mail, HtmlStream, HtmlBody',
+    'Set HtmlStream = CreateObject("ADODB.Stream")',
+    'HtmlStream.Type = 2',
+    'HtmlStream.Charset = "utf-8"',
+    'HtmlStream.Open',
+    `HtmlStream.LoadFromFile ${vbsLiteral(htmlPath)}`,
+    'HtmlBody = HtmlStream.ReadText',
+    'HtmlStream.Close',
     'Set OutlookApp = CreateObject("Outlook.Application")',
     'Set Mail = OutlookApp.CreateItem(0)',
     'Mail.BodyFormat = 2',
@@ -131,7 +143,7 @@ export function buildOutlook2019VbsScript(payload: DraftPayload, attachmentPaths
     `Mail.To = ${vbsLiteral(payload.to.join(';'))}`,
     `Mail.CC = ${vbsLiteral(payload.cc.join(';'))}`,
     `Mail.BCC = ${vbsLiteral(payload.bcc.join(';'))}`,
-    `Mail.HTMLBody = ${vbsLiteral(payload.html)}`,
+    'Mail.HTMLBody = HtmlBody',
   ];
   for (const attachmentPath of attachmentPaths) {
     lines.push(`Mail.Attachments.Add ${vbsLiteral(attachmentPath)}`);
@@ -180,7 +192,8 @@ async function runPowerShell(script: string): Promise<void> {
 
 async function runVbs(script: string, directory: string): Promise<void> {
   const scriptPath = path.join(directory, 'outlook-draft.vbs');
-  await writeFile(scriptPath, script, 'utf8');
+  const utf16WithBom = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(script, 'utf16le')]);
+  await writeFile(scriptPath, utf16WithBom);
   await new Promise<void>((resolve, reject) => {
     const child = spawn('cscript.exe', ['//NoLogo', scriptPath], { windowsHide: true });
     let stdout = '';
@@ -215,13 +228,15 @@ export async function createOutlookDraftCompat(payloadValue: unknown): Promise<D
       await writeFile(attachmentPath, attachment.buffer);
       attachmentPaths.push(attachmentPath);
     }
+    const htmlPath = path.join(tempRoot, 'body.html');
+    await writeFile(htmlPath, payload.html, 'utf8');
 
     const powerShellScript = buildOutlook2019PowerShellScript(payload, attachmentPaths);
     try {
       await runPowerShell(powerShellScript);
       return { ok: true, message: 'Borrador abierto en Outlook.' };
     } catch (powerShellError) {
-      const vbsScript = buildOutlook2019VbsScript(payload, attachmentPaths);
+      const vbsScript = buildOutlook2019VbsScript(payload, attachmentPaths, htmlPath);
       try {
         await runVbs(vbsScript, tempRoot);
         return { ok: true, message: 'Borrador abierto en Outlook.' };
