@@ -47,6 +47,10 @@ export interface SimpleJsonModuleRepositoryDependencies {
     operation: () => T,
     fallback: (status: SimpleDatabaseStatus, message: string) => T,
   ) => Promise<T>;
+  safeDatabaseMigrationOperation: <T>(
+    operation: () => T,
+    fallback: (status: SimpleDatabaseStatus, message: string) => T,
+  ) => Promise<T>;
   getSqliteStatus: () => SimpleDatabaseStatus;
   requireDatabase: () => Database;
   isUpdatedAtRow: (row: unknown) => row is { updated_at: string };
@@ -177,20 +181,66 @@ export function createSimpleJsonModuleRepository(
   saveIfUnchanged: (record: ConditionalSimpleJsonRecord) => Promise<SimpleJsonSaveResult>;
   saveManyIfUnchanged: (records: ConditionalSimpleJsonRecord[]) => Promise<SimpleJsonBatchSaveResult>;
 } {
-  return {
-    loadSnapshot: () => deps.safeDatabaseOperation(
-      () => {
-        const currentStatus = deps.getSqliteStatus();
-        if (!currentStatus.ready || currentStatus.phase !== 'active') {
-          return { status: currentStatus, records: [] };
-        }
+  // El objeto Database cambia cada vez que se activa/reabre una base. Un
+  // WeakSet por repositorio permite saber si ESTA conexión concreta ya fue
+  // preparada sin reutilizar el estado de otra base (A → B → A).
+  const migratedDatabases = new WeakSet<Database>();
 
-        const db = deps.requireDatabase();
-        db.transaction(() => maybeMigrateJsonModuleRecords(db, options))();
-        return { status: currentStatus, records: readActiveJsonRecords(db, options.tableName) };
-      },
-      (nextStatus) => ({ status: nextStatus, records: [] }),
-    ),
+  const ensureMigrationForDatabase = (db: Database): void => {
+    if (migratedDatabases.has(db)) {
+      return;
+    }
+
+    maybeMigrateJsonModuleRecords(db, options);
+    migratedDatabases.add(db);
+  };
+
+  return {
+    loadSnapshot: async () => {
+      const initialStatus = deps.getSqliteStatus();
+      if (!initialStatus.ready || initialStatus.phase !== 'active') {
+        return { status: initialStatus, records: [] };
+      }
+
+      const initialDatabase = deps.requireDatabase();
+      if (!migratedDatabases.has(initialDatabase)) {
+        const migrationStatus = await deps.safeDatabaseMigrationOperation(
+          () => {
+            const currentStatus = deps.getSqliteStatus();
+            if (
+              !currentStatus.ready ||
+              currentStatus.phase !== 'active' ||
+              deps.isDatabaseWriteBlockedByHeartbeat()
+            ) {
+              return currentStatus;
+            }
+
+            deps.assertDatabaseWritesAllowed();
+            const db = deps.requireDatabase();
+            db.transaction(() => ensureMigrationForDatabase(db))();
+            return currentStatus;
+          },
+          (nextStatus) => nextStatus,
+        );
+
+        if (!migrationStatus.ready || migrationStatus.phase !== 'active') {
+          return { status: migrationStatus, records: [] };
+        }
+      }
+
+      return deps.safeDatabaseOperation(
+        () => {
+          const currentStatus = deps.getSqliteStatus();
+          if (!currentStatus.ready || currentStatus.phase !== 'active') {
+            return { status: currentStatus, records: [] };
+          }
+
+          const db = deps.requireDatabase();
+          return { status: currentStatus, records: readActiveJsonRecords(db, options.tableName) };
+        },
+        (nextStatus) => ({ status: nextStatus, records: [] }),
+      );
+    },
 
     saveIfUnchanged: (record) => deps.safeDatabaseOperation(
       () => {
@@ -208,7 +258,7 @@ export function createSimpleJsonModuleRepository(
 
         const db = deps.requireDatabase();
         const result = db.transaction((): SimpleJsonSaveResult => {
-          maybeMigrateJsonModuleRecords(db, options);
+          ensureMigrationForDatabase(db);
           const saveResult = saveJsonModuleRecordInTransaction(db, record, currentStatus, options, deps);
           return saveResult.ok ? { ...saveResult, message: `${options.moduleLabel} guardado en SQLite.` } : saveResult;
         })();
@@ -256,7 +306,7 @@ export function createSimpleJsonModuleRepository(
         const db = deps.requireDatabase();
         try {
           const results = db.transaction((): SimpleJsonSaveResult[] => {
-            maybeMigrateJsonModuleRecords(db, options);
+            ensureMigrationForDatabase(db);
             return records.map((record) => {
               const saveResult = saveJsonModuleRecordInTransaction(db, record, currentStatus, options, deps);
               if (!saveResult.ok) {

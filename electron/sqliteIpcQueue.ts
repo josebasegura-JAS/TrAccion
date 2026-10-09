@@ -72,6 +72,26 @@ export function getCurrentSqliteIpcOperationName(): string | null {
   return sqliteIpcContext.getStore()?.operationName ?? null;
 }
 
+/**
+ * Ejecuta una suboperación SQLite con semántica de escritura aunque el IPC
+ * exterior esté clasificado como solo lectura. Se usa para preparaciones
+ * idempotentes (p. ej. migraciones legacy) que deben adquirir `.lockdir` sin
+ * convertir las lecturas posteriores en operaciones exclusivas.
+ */
+export function runCurrentSqliteIpcAsWrite<T>(
+  operation: QueuedIpcOperation<T>,
+): Promise<Awaited<T>> {
+  const currentContext = sqliteIpcContext.getStore();
+  const operationName = currentContext
+    ? `${currentContext.operationName}:migration`
+    : 'sqlite:migration';
+
+  return sqliteIpcContext.run(
+    { operationName, readOnly: false },
+    () => Promise.resolve().then(() => operation()),
+  ) as Promise<Awaited<T>>;
+}
+
 export function resolveSqliteIpcTimeoutMs(operationName: string): number {
   if (STARTUP_OPERATIONS.has(operationName)) {
     return STARTUP_OPERATION_TIMEOUT_MS;
