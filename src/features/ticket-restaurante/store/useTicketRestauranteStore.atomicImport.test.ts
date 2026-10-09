@@ -46,6 +46,8 @@ describe('useTicketRestauranteStore importPeople atómico', () => {
       value: {
         loadTicketRestauranteCalendarRecords: vi.fn(async () => ({ status: sqliteStatus, records: [] })),
         loadTicketRestaurantePersonRecords: vi.fn(async () => ({ status: sqliteStatus, records: [] })),
+        saveTicketRestauranteCalendarRecordIfUnchanged: vi.fn(),
+        saveTicketRestaurantePersonRecordIfUnchanged: vi.fn(),
         saveTicketRestauranteCalendarRecordsIfUnchanged: legacyCalendarBatch,
         saveTicketRestaurantePersonRecordsIfUnchanged: legacyPeopleBatch,
         importTicketRestaurantePeopleAtomically: atomicImport,
@@ -93,6 +95,8 @@ describe('useTicketRestauranteStore importPeople atómico', () => {
       value: {
         loadTicketRestauranteCalendarRecords: vi.fn(async () => ({ status: sqliteStatus, records: [] })),
         loadTicketRestaurantePersonRecords: vi.fn(async () => ({ status: sqliteStatus, records: [] })),
+        saveTicketRestauranteCalendarRecordIfUnchanged: vi.fn(),
+        saveTicketRestaurantePersonRecordIfUnchanged: vi.fn(),
         saveTicketRestauranteCalendarRecordsIfUnchanged: vi.fn(),
         saveTicketRestaurantePersonRecordsIfUnchanged: vi.fn(),
         importTicketRestaurantePeopleAtomically: atomicImport,
