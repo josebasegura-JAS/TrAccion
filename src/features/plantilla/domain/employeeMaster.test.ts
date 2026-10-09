@@ -12,6 +12,7 @@ function employee(partial: Partial<Employee>): Employee {
   return {
     empleado: '',
     nombreApellidos: '',
+    email: '',
     puestoNomina: '',
     puestoOrganizativo: '',
     puestoEus: '',
