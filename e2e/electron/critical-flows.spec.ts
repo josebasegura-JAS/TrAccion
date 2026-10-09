@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createSharedDatabaseDirectory, launchTraccionElectron, launchTraccionElectronWithIsolatedSharedDatabase, navigateToModule } from './electronTestUtils';
+import {
+  closeTraccionElectron,
+  createSharedDatabaseDirectory,
+  launchTraccionElectron,
+  launchTraccionElectronWithIsolatedSharedDatabase,
+  navigateToModule,
+} from './electronTestUtils';
 
 async function expectNoConsoleErrors(page: Page, action: () => Promise<void>): Promise<void> {
   const errors: string[] = [];
@@ -22,7 +28,6 @@ test('flujo crítico: crear una tarea desde UI y verificar que queda visible', a
 
       const dialog = page.getByRole('dialog', { name: 'Nueva tarea' });
       await dialog.getByLabel('Título').fill(taskTitle);
-      await dialog.getByLabel('Responsable').fill('RRLL');
       await dialog.getByRole('button', { name: 'Guardar' }).click();
 
       await expect(dialog).not.toBeVisible({ timeout: 10_000 });
@@ -47,11 +52,10 @@ test('persistencia crítica: una tarea sigue disponible después de cerrar y rea
 
     const dialog = firstLaunch.page.getByRole('dialog', { name: 'Nueva tarea' });
     await dialog.getByLabel('Título').fill(taskTitle);
-    await dialog.getByLabel('Responsable').fill('RRLL');
     await dialog.getByRole('button', { name: 'Guardar' }).click();
     await expect(firstLaunch.page.getByText(taskTitle, { exact: true }).first()).toBeVisible();
 
-    await firstLaunch.app.close();
+    await closeTraccionElectron(firstLaunch.app);
 
     const secondLaunch = await launchTraccionElectron({
       userDataDir: firstLaunch.userDataDir,
@@ -68,7 +72,7 @@ test('persistencia crítica: una tarea sigue disponible después de cerrar y rea
       await secondLaunch.close();
     }
   } catch (error) {
-    await firstLaunch.app.close().catch(() => undefined);
+    await closeTraccionElectron(firstLaunch.app).catch(() => undefined);
     await firstLaunch.cleanup();
     throw error;
   } finally {
@@ -83,9 +87,12 @@ test('módulos críticos de auditoría abren sus acciones principales con SQLite
   try {
     await expectNoConsoleErrors(page, async () => {
       await navigateToModule(page, 'Personas', 'Teletrabajo');
+      await expect(page.getByText('Proceso de Teletrabajo', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Configuración y administración' }).click();
+      await expect(page.getByRole('button', { name: /^Puestos teletrabajables/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Grupos de cobertura/ })).toBeVisible();
+      await page.getByRole('button', { name: /^Solicitudes/ }).first().click();
       await expect(page.getByRole('button', { name: 'Nueva solicitud' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Puestos Teletrabajo' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Grupos Cobertura' })).toBeVisible();
 
       await navigateToModule(page, 'Operativa diaria', 'Coordinación');
       await expect(page.getByRole('button', { name: 'Dirección' })).toBeVisible();
