@@ -10,6 +10,11 @@ import { STORAGE_KEY, type Huelga } from './huelgasPageModel';
 type AlertFn = ReturnType<typeof useAppDialog>['alert'];
 type ConfirmFn = ReturnType<typeof useAppDialog>['confirm'];
 
+export type HuelgaMailRecipients = {
+  to: string;
+  cc: string;
+};
+
 type UseHuelgaCollectionMailsParams = {
   alert: AlertFn;
   confirm: ConfirmFn;
@@ -27,6 +32,20 @@ function normalizeKey(value: string): string {
     .toLocaleLowerCase('es-ES')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+const DEFAULT_RECIPIENTS_BY_ZONE: Record<string, string> = {
+  'mm ariz': 'ilindosa@metrobilbao.eus; jgoicoechea@metrobilbao.eus; aalvarezv@metrobilbao.eus; jafernandez@metrobilbao.eus',
+  'mm sopela': 'lasorey@metrobilbao.eus; igarrido@metrobilbao.eus; uuliarte@metrobilbao.eus; jafernandez@metrobilbao.eus; ybalenciaga@metrobilbao.eus',
+  'gmo y linea': 'azenarruzabeitia@metrobilbao.eus',
+  instalaciones: 'ebardeci@metrobilbao.eus; jfgarcia@metrobilbao.eus; iloizaga@metrobilbao.eus; cflarrea@metrobilbao.eus; iarsuaga@metrobilbao.eus; fjrodriguezm@metrobilbao.eus; ipinero@metrobilbao.eus',
+  oacs: 'ailopez@metrobilbao.eus',
+  pmc: 'azenarruzabeitia@metrobilbao.eus; aayarza@metrobilbao.eus',
+  'jefatura de operaciones': 'jmulecia@metrobilbao.eus; psanchez@metrobilbao.eus',
+};
+
+function defaultRecipientsForZone(zona: HuelgaZona): string {
+  return DEFAULT_RECIPIENTS_BY_ZONE[normalizeKey(zona.nombre)] ?? zona.responsableEmail;
 }
 
 function splitRecipients(value: string): string[] {
@@ -62,6 +81,7 @@ export function useHuelgaCollectionMails({
   const [generatingCollectionForId, setGeneratingCollectionForId] = useState<string | null>(null);
   const [mailTargetId, setMailTargetId] = useState<string | null>(null);
   const [mailSpecificNotes, setMailSpecificNotes] = useState<Record<string, string>>({});
+  const [mailRecipientsByZone, setMailRecipientsByZone] = useState<Record<string, HuelgaMailRecipients>>({});
   const [mailPreviewZoneId, setMailPreviewZoneId] = useState<string | null>(null);
   const [mailTemplateZoneId, setMailTemplateZoneId] = useState<string | null>(null);
 
@@ -97,7 +117,7 @@ export function useHuelgaCollectionMails({
       ? huelga.circuitosZonaIds
       : zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => zona.id);
     const selected = zonas.filter((zona) => selectedIds.includes(zona.id) && zona.active && zona.correoActivo);
-    const incomplete = selected.filter((zona) => !zona.responsableEmail.trim() || !EMBEDDED_HUELGA_TEMPLATES[normalizeKey(zona.nombre)]);
+    const incomplete = selected.filter((zona) => !defaultRecipientsForZone(zona).trim() || !EMBEDDED_HUELGA_TEMPLATES[normalizeKey(zona.nombre)]);
 
     if (selected.length === 0) {
       await alert('Esta huelga no tiene ningún circuito de recogida activo.', {
@@ -115,6 +135,10 @@ export function useHuelgaCollectionMails({
     }
 
     setMailSpecificNotes(huelga.instruccionesCorreoPorZona ?? {});
+    setMailRecipientsByZone(Object.fromEntries(selected.map((zona) => [
+      zona.id,
+      { to: defaultRecipientsForZone(zona), cc: zona.correoCc || 'RELACIONES_LABORALES@metrobilbao.eus' },
+    ])));
     setMailPreviewZoneId(selected[0]?.id ?? null);
     setMailTargetId(huelga.id);
   };
@@ -124,6 +148,18 @@ export function useHuelgaCollectionMails({
     setMailTargetId(null);
     setMailPreviewZoneId(null);
     setMailSpecificNotes({});
+    setMailRecipientsByZone({});
+  };
+
+  const updateMailRecipients = (zoneId: string, field: keyof HuelgaMailRecipients, value: string) => {
+    setMailRecipientsByZone((current) => ({
+      ...current,
+      [zoneId]: {
+        to: current[zoneId]?.to ?? '',
+        cc: current[zoneId]?.cc ?? '',
+        [field]: value,
+      },
+    }));
   };
 
   const persistHuelga = async (updated: Huelga): Promise<boolean> => {
@@ -176,8 +212,12 @@ export function useHuelgaCollectionMails({
       if (!api) return 'La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.';
       const zona = zonas.find((item) => item.id === group.zonaId);
       if (!zona) return 'No se encuentra el circuito configurado.';
-      const to = splitRecipients(zona.responsableEmail);
-      if (to.length === 0) return 'El circuito no tiene destinatarios configurados.';
+      const recipientDraft = mailRecipientsByZone[group.zonaId] ?? {
+        to: defaultRecipientsForZone(zona),
+        cc: zona.correoCc || 'RELACIONES_LABORALES@metrobilbao.eus',
+      };
+      const to = splitRecipients(recipientDraft.to);
+      if (to.length === 0) return 'El circuito no tiene destinatarios en el campo Para.';
       const template = EMBEDDED_HUELGA_TEMPLATES[normalizeKey(zona.nombre)];
       if (!template) return 'No se encuentra la plantilla Excel incorporada para este circuito.';
       const rendered = renderGroupMail(group);
@@ -194,7 +234,7 @@ export function useHuelgaCollectionMails({
         subject: rendered.subject,
         html: rendered.html,
         to,
-        cc: splitRecipients(zona.correoCc),
+        cc: splitRecipients(recipientDraft.cc),
         bcc: [],
         attachments: [{ fileName, buffer }],
       });
@@ -297,6 +337,7 @@ export function useHuelgaCollectionMails({
     mailGroups,
     mailPreviewGroup,
     mailPreviewZoneId,
+    mailRecipientsByZone,
     mailSpecificNotes,
     mailTarget,
     mailTemplateZone,
@@ -305,5 +346,6 @@ export function useHuelgaCollectionMails({
     setMailPreviewZoneId,
     setMailSpecificNotes,
     setMailTemplateZoneId,
+    updateMailRecipients,
   };
 }

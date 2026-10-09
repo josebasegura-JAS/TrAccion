@@ -5,6 +5,7 @@ import { ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../compo
 import type { HuelgaCollectionGroup } from './huelgasCollectionExport';
 import type { HuelgaZona } from './huelgasZones';
 import { formatDate, type Huelga } from './huelgasPageModel';
+import type { HuelgaMailRecipients } from './useHuelgaCollectionMails';
 
 type MailPreview = { subject: string; html: string };
 
@@ -16,6 +17,8 @@ type Props = {
   setMailPreviewZoneId: (value: string | null) => void;
   mailPreviewGroup: HuelgaCollectionGroup | null;
   currentMailPreview: MailPreview | null;
+  mailRecipientsByZone: Record<string, HuelgaMailRecipients>;
+  onUpdateMailRecipients: (zoneId: string, field: keyof HuelgaMailRecipients, value: string) => void;
   mailSpecificNotes: Record<string, string>;
   setMailSpecificNotes: (updater: (current: Record<string, string>) => Record<string, string>) => void;
   generatingCollectionForId: string | null;
@@ -33,6 +36,8 @@ export function HuelgasCollectionMailsModal({
   setMailPreviewZoneId,
   mailPreviewGroup,
   currentMailPreview,
+  mailRecipientsByZone,
+  onUpdateMailRecipients,
   mailSpecificNotes,
   setMailSpecificNotes,
   generatingCollectionForId,
@@ -44,6 +49,9 @@ export function HuelgasCollectionMailsModal({
   if (!mailTarget) return null;
 
   const currentZona = mailPreviewGroup ? zonas.find((item) => item.id === mailPreviewGroup.zonaId) : null;
+  const currentRecipients = mailPreviewGroup && currentZona
+    ? mailRecipientsByZone[mailPreviewGroup.zonaId] ?? { to: currentZona.responsableEmail, cc: currentZona.correoCc }
+    : null;
 
   return (
     <ModalShell labelledBy="huelga-mails-title" onClose={closeCollectionMails} size="xl">
@@ -61,6 +69,7 @@ export function HuelgasCollectionMailsModal({
               const zona = zonas.find((item) => item.id === group.zonaId);
               const selected = group.zonaId === mailPreviewZoneId;
               const prepared = Boolean(mailTarget.correosPreparadosPorZona?.[group.zonaId]);
+              const recipients = mailRecipientsByZone[group.zonaId];
               return (
                 <button key={group.zonaId} className={`w-full rounded-xl border p-3 text-left transition ${selected ? 'border-metro-red bg-metro-red/10' : 'border-metro-border bg-metro-panel/45 hover:bg-metro-raised/40'}`} type="button" onClick={() => setMailPreviewZoneId(group.zonaId)}>
                   <div className="flex items-center justify-between gap-2">
@@ -68,6 +77,7 @@ export function HuelgasCollectionMailsModal({
                     <span className={`text-[11px] font-semibold ${prepared ? 'text-emerald-300' : 'text-metro-muted'}`}>{prepared ? 'Preparado' : 'Pendiente'}</span>
                   </div>
                   <p className="mt-1 truncate text-xs text-metro-muted">{zona?.responsableNombre || 'Sin responsable'}</p>
+                  <p className="mt-1 truncate text-[11px] text-metro-muted">{recipients?.to || zona?.responsableEmail || 'Sin destinatario'}</p>
                   <div className="mt-2 flex items-center gap-1.5 text-[11px] text-metro-muted"><FileSpreadsheet size={13} className="text-emerald-300" /> {zona?.plantillaExcelNombrePatron || 'Sin plantilla'}</div>
                 </button>
               );
@@ -76,18 +86,35 @@ export function HuelgasCollectionMailsModal({
         </aside>
 
         <div className="overflow-y-auto p-5">
-          {mailPreviewGroup && currentMailPreview && currentZona ? (
+          {mailPreviewGroup && currentMailPreview && currentZona && currentRecipients ? (
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-metro-border bg-metro-panel/50 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-metro-muted">Para</p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm font-semibold text-metro-text">{currentZona.responsableEmail || '—'}</p>
-                </div>
+                <label className="block rounded-xl border border-metro-border bg-metro-panel/50 p-3">
+                  <span className="text-[11px] uppercase tracking-wide text-metro-muted">Para</span>
+                  <textarea
+                    className="mt-1 min-h-16 w-full resize-y rounded-lg border border-metro-border bg-metro-panel px-2.5 py-2 text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+                    placeholder="correo1@metrobilbao.eus; correo2@metrobilbao.eus"
+                    value={currentRecipients.to}
+                    onChange={(event) => onUpdateMailRecipients(mailPreviewGroup.zonaId, 'to', event.target.value)}
+                  />
+                  <span className="mt-1 block text-[10px] text-metro-muted">Puedes separar varios destinatarios con ; o ,</span>
+                </label>
                 <div className="rounded-xl border border-metro-border bg-metro-panel/50 p-3">
                   <p className="text-[11px] uppercase tracking-wide text-metro-muted">Excel adjunto</p>
                   <p className="mt-1 text-sm font-semibold text-metro-text">{currentZona.plantillaExcelNombrePatron.replace('{{FECHA_HUELGA_ARCHIVO}}', mailTarget.fecha.split('-').reverse().join('-'))}</p>
+                  <p className="mt-1 text-[10px] text-metro-muted">Primera hoja: formato habitual · Segunda hoja: Personal en huelga</p>
                 </div>
               </div>
+
+              <label className="block rounded-xl border border-metro-border bg-metro-panel/50 p-3">
+                <span className="text-[11px] uppercase tracking-wide text-metro-muted">CC</span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-2.5 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                  placeholder="RELACIONES_LABORALES@metrobilbao.eus"
+                  value={currentRecipients.cc}
+                  onChange={(event) => onUpdateMailRecipients(mailPreviewGroup.zonaId, 'cc', event.target.value)}
+                />
+              </label>
 
               <label className="block space-y-1.5 text-sm font-medium text-metro-text">
                 Instrucciones específicas de esta huelga
@@ -110,7 +137,7 @@ export function HuelgasCollectionMailsModal({
       </div>
 
       <ModalFooter className="justify-between">
-        <p className="self-center text-xs text-metro-muted">TrAcción prepara los borradores; el envío final se realiza desde Outlook tras tu revisión.</p>
+        <p className="self-center text-xs text-metro-muted">Los destinatarios se precargan con los del circuito y puedes modificarlos solo para esta preparación.</p>
         <div className="flex gap-2">
           <ActionButton variant="secondary" iconOnly={false} onClick={closeCollectionMails}>Cerrar</ActionButton>
           {mailPreviewGroup ? (

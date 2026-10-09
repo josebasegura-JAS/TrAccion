@@ -32,6 +32,8 @@ export function HuelgasPage() {
     setMailPreviewZoneId,
     mailPreviewGroup,
     currentMailPreview,
+    mailRecipientsByZone,
+    updateMailRecipients,
     mailSpecificNotes,
     setMailSpecificNotes,
     closeCollectionMails,
@@ -91,6 +93,8 @@ export function HuelgasPage() {
         setMailPreviewZoneId={setMailPreviewZoneId}
         mailPreviewGroup={mailPreviewGroup}
         currentMailPreview={currentMailPreview}
+        mailRecipientsByZone={mailRecipientsByZone}
+        onUpdateMailRecipients={updateMailRecipients}
         mailSpecificNotes={mailSpecificNotes}
         setMailSpecificNotes={setMailSpecificNotes}
         generatingCollectionForId={generatingCollectionForId}
