@@ -85,9 +85,15 @@ export function resolveSqliteIpcTimeoutMs(operationName: string): number {
 function withTimeout<T>(promise: Promise<T>, ms: number, operationName: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutTimer = setTimeout(() => {
+      console.error(
+        `[sqlite-ipc-queue] ${operationName} superó el límite de ${ms} ms. ` +
+          'La operación subyacente no puede cancelarse de forma segura; ' +
+          'la cola permanecerá bloqueada hasta que termine.',
+      );
       reject(
         new Error(
-          `[sqlite-ipc-queue] ${operationName} superó el límite de ${ms} ms y se ha cancelado.`,
+          `[sqlite-ipc-queue] ${operationName} superó el límite de ${ms} ms. ` +
+            'El resultado es indeterminado; la operación puede seguir en curso.',
         ),
       );
     }, ms);
@@ -130,31 +136,32 @@ export function enqueueSqliteIpc<T>(
   const timeoutMs = resolveSqliteIpcTimeoutMs(operationName);
   const readOnly = isSqliteIpcReadOnlyOperation(operationName);
 
-  const queuedOperation = sqliteIpcQueue.then(async (): Promise<Awaited<T>> => {
+  let resolveObservedOperation!: (value: Awaited<T> | PromiseLike<Awaited<T>>) => void;
+  let rejectObservedOperation!: (reason?: unknown) => void;
+  const observedOperation = new Promise<Awaited<T>>((resolve, reject) => {
+    resolveObservedOperation = resolve;
+    rejectObservedOperation = reject;
+  });
+
+  const queueExecution = sqliteIpcQueue.then(async (): Promise<void> => {
     const queuedMs = Date.now() - startedAt;
     if (queuedMs > 100) {
       console.warn(`[sqlite-ipc-queue] ${operationName} esperó ${queuedMs} ms en cola.`);
     }
 
     const operationStartedAt = Date.now();
+    const operationPromise = sqliteIpcContext.run(
+      { operationName, readOnly },
+      () => Promise.resolve().then(() => operation()),
+    ) as Promise<Awaited<T>>;
+
+    void withTimeout(operationPromise, timeoutMs, operationName).then(
+      resolveObservedOperation,
+      rejectObservedOperation,
+    );
+
     try {
-      const result = await withTimeout(
-        sqliteIpcContext.run(
-          { operationName, readOnly },
-          () => Promise.resolve().then(() => operation()),
-        ),
-        timeoutMs,
-        operationName,
-      );
-      return result as Awaited<T>;
-    } catch (error) {
-      if (Date.now() - operationStartedAt >= timeoutMs) {
-        console.error(
-          `[sqlite-ipc-queue] ${operationName} se ha cancelado tras ${timeoutMs} ms ` +
-            '(posible problema de red); la cola continúa con el resto de operaciones.',
-        );
-      }
-      throw error;
+      await operationPromise;
     } finally {
       const operationMs = Date.now() - operationStartedAt;
       if (operationMs > 250 && operationMs < timeoutMs) {
@@ -163,6 +170,7 @@ export function enqueueSqliteIpc<T>(
     }
   });
 
-  sqliteIpcQueue = queuedOperation.catch(() => undefined);
-  return queuedOperation;
+  void queueExecution.catch(rejectObservedOperation);
+  sqliteIpcQueue = queueExecution.catch(() => undefined);
+  return observedOperation;
 }
