@@ -78,7 +78,7 @@ afterEach(() => {
 });
 
 describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
-  it('elimina calendario y personas asociadas en una sola transacción', () => {
+  it('elimina calendario y personas asociadas en una sola transacción', async () => {
     const { db, databasePath } = createDatabase();
     seedRecord(db, 'ticket_restaurante_calendar_records', 'cal-1', '2026-01-01T10:00:00.000Z');
     seedRecord(db, 'ticket_restaurante_person_records', '100', '2026-01-01T10:01:00.000Z');
@@ -86,7 +86,7 @@ describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
     db.close();
 
     const deletedAt = '2026-01-02T10:00:00.000Z';
-    const result = removeTicketRestauranteCalendarWithPeopleAtomically(statusFor(databasePath), {
+    const result = await removeTicketRestauranteCalendarWithPeopleAtomically(statusFor(databasePath), {
       calendar: {
         id: 'cal-1',
         value: deletedValue('cal-1', deletedAt),
@@ -121,7 +121,7 @@ describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
     check.close();
   });
 
-  it('si una persona tiene conflicto OCC no modifica tampoco el calendario', () => {
+  it('si una persona tiene conflicto OCC no modifica tampoco el calendario', async () => {
     const { db, databasePath } = createDatabase();
     const calendarUpdatedAt = '2026-01-01T10:00:00.000Z';
     const personUpdatedAt = '2026-01-01T10:01:00.000Z';
@@ -129,7 +129,7 @@ describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
     seedRecord(db, 'ticket_restaurante_person_records', '100', personUpdatedAt);
     db.close();
 
-    const result = removeTicketRestauranteCalendarWithPeopleAtomically(statusFor(databasePath), {
+    const result = await removeTicketRestauranteCalendarWithPeopleAtomically(statusFor(databasePath), {
       calendar: {
         id: 'cal-1',
         value: deletedValue('cal-1', '2026-01-02T10:00:00.000Z'),
@@ -157,7 +157,7 @@ describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
     check.close();
   });
 
-  it('revierte el calendario si falla una actualización después de empezar la transacción', () => {
+  it('revierte el calendario si falla una actualización después de empezar la transacción', async () => {
     const { db, databasePath } = createDatabase();
     const calendarUpdatedAt = '2026-01-01T10:00:00.000Z';
     const personUpdatedAt = '2026-01-01T10:01:00.000Z';
@@ -173,7 +173,7 @@ describe('removeTicketRestauranteCalendarWithPeopleAtomically', () => {
     `);
     db.close();
 
-    const result = removeTicketRestauranteCalendarWithPeopleAtomically(statusFor(databasePath), {
+    const result = await removeTicketRestauranteCalendarWithPeopleAtomically(statusFor(databasePath), {
       calendar: {
         id: 'cal-1',
         value: deletedValue('cal-1', '2026-01-02T10:00:00.000Z'),
