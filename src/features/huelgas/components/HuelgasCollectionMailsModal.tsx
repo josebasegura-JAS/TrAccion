@@ -48,7 +48,7 @@ export function HuelgasCollectionMailsModal({
   return (
     <ModalShell labelledBy="huelga-mails-title" onClose={closeCollectionMails} size="xl">
       <ModalHeader>
-        <ModalTitle id="huelga-mails-title" subtitle="Revisa los siete circuitos. Cada borrador se crea en Outlook con la plantilla Excel real de su área adjunta.">
+        <ModalTitle id="huelga-mails-title" subtitle="Puedes preparar un único circuito o todos. Cada borrador se crea en Outlook con la plantilla Excel real de su área adjunta.">
           Comunicaciones · {formatDate(mailTarget.fecha)}
         </ModalTitle>
         <ModalCloseButton onClick={closeCollectionMails} />
@@ -101,7 +101,6 @@ export function HuelgasCollectionMailsModal({
 
               <div className="flex flex-wrap justify-end gap-2">
                 <ActionButton variant="secondary" iconOnly={false} onClick={() => void saveMailSpecificNotes()}>Guardar instrucciones</ActionButton>
-                <ActionButton variant="primary" iconOnly={false} icon={MailPlus} loading={generatingCollectionForId === mailTarget.id} onClick={() => void generateSingleCollectionMail(mailPreviewGroup)}>Preparar este correo</ActionButton>
               </div>
             </div>
           ) : (
@@ -114,6 +113,9 @@ export function HuelgasCollectionMailsModal({
         <p className="self-center text-xs text-metro-muted">TrAcción prepara los borradores; el envío final se realiza desde Outlook tras tu revisión.</p>
         <div className="flex gap-2">
           <ActionButton variant="secondary" iconOnly={false} onClick={closeCollectionMails}>Cerrar</ActionButton>
+          {mailPreviewGroup ? (
+            <ActionButton variant="secondary" iconOnly={false} icon={MailPlus} loading={generatingCollectionForId === mailTarget.id} onClick={() => void generateSingleCollectionMail(mailPreviewGroup)}>Preparar solo este</ActionButton>
+          ) : null}
           <ActionButton variant="primary" iconOnly={false} icon={MailPlus} loading={generatingCollectionForId === mailTarget.id} onClick={() => void generateAllCollectionMails()}>Preparar todos</ActionButton>
         </div>
       </ModalFooter>

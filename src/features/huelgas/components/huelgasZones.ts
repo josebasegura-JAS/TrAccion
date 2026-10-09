@@ -52,9 +52,9 @@ function hydrateMailFields(zona: HuelgaZona): HuelgaZona {
   return {
     ...zona,
     nombre: canonicalName,
-    responsableNombre: zona.responsableNombre || defaults.responsableNombre || '',
-    responsableEmail: zona.responsableEmail || defaults.responsableEmail || '',
-    correoCc: zona.correoCc || 'RELACIONES_LABORALES@metrobilbao.eus',
+    responsableNombre: normalize(zona.responsableNombre) || defaults.responsableNombre || '',
+    responsableEmail: normalize(zona.responsableEmail) || defaults.responsableEmail || '',
+    correoCc: normalize(zona.correoCc || '') || 'RELACIONES_LABORALES@metrobilbao.eus',
     correoActivo: true,
     correoAsunto: zona.correoAsunto || DEFAULT_HUELGA_MAIL_SUBJECT,
     correoCuerpoHtml: !zona.correoCuerpoHtml || isLegacyAssignmentMailBody(zona.correoCuerpoHtml) ? DEFAULT_HUELGA_MAIL_BODY : zona.correoCuerpoHtml,
