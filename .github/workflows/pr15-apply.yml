@@ -20,6 +20,10 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      - name: Corregir aplicador
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; p=Path('.github/scripts/pr15_apply.py'); s=p.read_text(encoding='utf-8'); s=s.replace('    \" ) {\\n  return {\\n'.replace(' \"','\"'), '    \"} {\\n  return {\\n'); p.write_text(s, encoding='utf-8')"
       - name: Aplicar cambios
         shell: pwsh
         run: python .github/scripts/pr15_apply.py
