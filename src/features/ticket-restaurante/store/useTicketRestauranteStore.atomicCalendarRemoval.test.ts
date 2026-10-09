@@ -88,12 +88,10 @@ describe('useTicketRestauranteStore removeCalendar atómico', () => {
 
     expect(result.ok).toBe(true);
     expect(atomicRemove).toHaveBeenCalledTimes(1);
-    const payload = atomicRemove.mock.calls[0]?.[0];
-    expect(payload.calendar.id).toBe(calendar.id);
-    expect(payload.calendar.expectedUpdatedAt).toBe(calendar.updatedAt);
-    expect(payload.people).toHaveLength(1);
-    expect(payload.people[0]?.id).toBe(person.empleado);
-    expect(payload.people[0]?.expectedUpdatedAt).toBe(person.updatedAt);
+    expect(atomicRemove).toHaveBeenCalledWith({
+      calendar: expect.objectContaining({ id: calendar.id, expectedUpdatedAt: calendar.updatedAt }),
+      people: [expect.objectContaining({ id: person.empleado, expectedUpdatedAt: person.updatedAt })],
+    });
     expect(saveCalendar).not.toHaveBeenCalled();
     expect(savePeople).not.toHaveBeenCalled();
     expect(useTicketRestauranteStore.getState().calendars[0]?.deletedAt).toBeTruthy();
