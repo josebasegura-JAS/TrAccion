@@ -1,13 +1,14 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true,
-    "rootDir": "..",
-    "types": ["node", "vitest/globals"]
+    "noEmit": true
   },
   "include": [
-    "**/*.test.ts",
-    "**/*.test.cts"
+    "**/*.ts",
+    "**/*.cts",
+    "**/*.d.ts"
   ],
-  "exclude": []
+  "exclude": [
+    "preload.ts"
+  ]
 }
