@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 import { getDailyLocalBackupWeekdayName } from './maintenanceQueries.js';
