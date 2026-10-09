@@ -193,6 +193,10 @@ contextBridge.exposeInMainWorld('traccion', {
     calendar: { id: string; value: string; expectedUpdatedAt: string | null };
     people: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
   }) => ipcRenderer.invoke('ticket-restaurante-calendars:remove-with-people-atomically', payload),
+  importTicketRestaurantePeopleAtomically: (payload: {
+    calendars: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
+    people: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
+  }) => ipcRenderer.invoke('ticket-restaurante-people:import-atomically', payload),
   loadTicketRestaurantePersonRecords: () =>
     ipcRenderer.invoke('ticket-restaurante-people:load-records'),
   saveTicketRestaurantePersonRecordIfUnchanged: (record: {
