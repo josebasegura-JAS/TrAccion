@@ -1,7 +1,10 @@
 import SqliteDatabase from 'better-sqlite3';
 import type { Database } from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { DATABASE_HEARTBEAT_BLOCKED_MESSAGE } from './databaseLockManager.js';
+import {
+  createDatabaseLockManager,
+  DATABASE_HEARTBEAT_BLOCKED_MESSAGE,
+} from './databaseLockManager.js';
 
 export interface AtomicTicketDatabaseStatus {
   ready: boolean;
@@ -93,10 +96,10 @@ function updateRefreshMetadata(db: Database): void {
   ).run(token, updatedAt);
 }
 
-export function removeTicketRestauranteCalendarWithPeopleAtomically(
+export async function removeTicketRestauranteCalendarWithPeopleAtomically(
   status: AtomicTicketDatabaseStatus,
   payload: AtomicTicketCalendarRemovalPayload,
-): AtomicTicketCalendarRemovalResult {
+): Promise<AtomicTicketCalendarRemovalResult> {
   if (
     !status.ready ||
     status.phase !== 'active' ||
@@ -111,75 +114,84 @@ export function removeTicketRestauranteCalendarWithPeopleAtomically(
     };
   }
 
-  const db = new SqliteDatabase(status.path, { fileMustExist: true, timeout: 15_000 });
+  const operationOwnerId = `ticket-calendar-atomic-${randomUUID()}`;
+  const lockManager = createDatabaseLockManager({ getOwnerId: () => operationOwnerId });
 
   try {
-    const transaction = db.transaction((): AtomicTicketCalendarRemovalResult => {
-      const currentCalendarUpdatedAt = readUpdatedAt(
-        db,
-        'ticket_restaurante_calendar_records',
-        payload.calendar.id,
-      );
-      if (
-        currentCalendarUpdatedAt === null ||
-        currentCalendarUpdatedAt !== payload.calendar.expectedUpdatedAt
-      ) {
-        return {
-          ok: false,
-          status,
-          failedRecordId: payload.calendar.id,
-          message:
-            'El calendario ha sido modificado por otro usuario. Recarga antes de eliminarlo.',
-        };
-      }
+    return await lockManager.withDatabaseOperationLock(status.path, async () => {
+      const db = new SqliteDatabase(status.path, { fileMustExist: true, timeout: 15_000 });
 
-      for (const person of payload.people) {
-        const currentPersonUpdatedAt = readUpdatedAt(
-          db,
-          'ticket_restaurante_person_records',
-          person.id,
-        );
-        if (
-          currentPersonUpdatedAt === null ||
-          currentPersonUpdatedAt !== person.expectedUpdatedAt
-        ) {
+      try {
+        const transaction = db.transaction((): AtomicTicketCalendarRemovalResult => {
+          const currentCalendarUpdatedAt = readUpdatedAt(
+            db,
+            'ticket_restaurante_calendar_records',
+            payload.calendar.id,
+          );
+          if (
+            currentCalendarUpdatedAt === null ||
+            currentCalendarUpdatedAt !== payload.calendar.expectedUpdatedAt
+          ) {
+            return {
+              ok: false,
+              status,
+              failedRecordId: payload.calendar.id,
+              message:
+                'El calendario ha sido modificado por otro usuario. Recarga antes de eliminarlo.',
+            };
+          }
+
+          for (const person of payload.people) {
+            const currentPersonUpdatedAt = readUpdatedAt(
+              db,
+              'ticket_restaurante_person_records',
+              person.id,
+            );
+            if (
+              currentPersonUpdatedAt === null ||
+              currentPersonUpdatedAt !== person.expectedUpdatedAt
+            ) {
+              return {
+                ok: false,
+                status,
+                failedRecordId: person.id,
+                message:
+                  'Una persona asociada al calendario ha sido modificada por otro usuario. Recarga antes de eliminar el calendario.',
+              };
+            }
+          }
+
+          updateDeletedRecord(
+            db,
+            'ticket_restaurante_calendar_records',
+            payload.calendar,
+            'Calendario de Ticket Restaurante',
+          );
+          for (const person of payload.people) {
+            updateDeletedRecord(
+              db,
+              'ticket_restaurante_person_records',
+              person,
+              `Persona ${person.id} de Ticket Restaurante`,
+            );
+          }
+          updateRefreshMetadata(db);
+
           return {
-            ok: false,
+            ok: true,
             status,
-            failedRecordId: person.id,
             message:
-              'Una persona asociada al calendario ha sido modificada por otro usuario. Recarga antes de eliminar el calendario.',
+              payload.people.length === 0
+                ? 'Calendario eliminado de forma atómica.'
+                : `Calendario y ${payload.people.length} persona(s) asociada(s) eliminados de forma atómica.`,
           };
-        }
-      }
+        });
 
-      updateDeletedRecord(
-        db,
-        'ticket_restaurante_calendar_records',
-        payload.calendar,
-        'Calendario de Ticket Restaurante',
-      );
-      for (const person of payload.people) {
-        updateDeletedRecord(
-          db,
-          'ticket_restaurante_person_records',
-          person,
-          `Persona ${person.id} de Ticket Restaurante`,
-        );
+        return transaction();
+      } finally {
+        db.close();
       }
-      updateRefreshMetadata(db);
-
-      return {
-        ok: true,
-        status,
-        message:
-          payload.people.length === 0
-            ? 'Calendario eliminado de forma atómica.'
-            : `Calendario y ${payload.people.length} persona(s) asociada(s) eliminados de forma atómica.`,
-      };
     });
-
-    return transaction();
   } catch (error) {
     return {
       ok: false,
@@ -189,7 +201,5 @@ export function removeTicketRestauranteCalendarWithPeopleAtomically(
           ? `No se ha podido eliminar el calendario de Ticket Restaurante de forma atómica: ${error.message}`
           : 'No se ha podido eliminar el calendario de Ticket Restaurante de forma atómica.',
     };
-  } finally {
-    db.close();
   }
 }
