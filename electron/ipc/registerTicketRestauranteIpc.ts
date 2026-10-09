@@ -7,8 +7,12 @@ import { ipcMain } from 'electron';
 import { openExcelWorkbook } from '../documentOpener.js';
 import { buildTicketRestaurantLoadWorkbook, type TicketRestaurantLoadRow } from '../ticketRestaurantLoadWorkbook.js';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
+import {
+  removeTicketRestauranteCalendarWithPeopleAtomically,
+} from '../persistence/ticketRestauranteAtomicCalendarRemoval.js';
 import { validateConditionalJsonRecord, validateConditionalJsonRecordBatch } from './ipcHelpers.js';
 import {
+  getSqliteStatus,
   loadTicketRestauranteCalendarRecordsSnapshot,
   loadTicketRestaurantePersonRecordsSnapshot,
   loadTicketRestauranteAbsenceRecordsSnapshot,
@@ -52,6 +56,51 @@ export function registerTicketRestauranteIpc(): void {
 
     return enqueueSqliteIpc('ticket-restaurante-calendars:save-records-if-unchanged', () =>
       saveTicketRestauranteCalendarRecordsIfUnchanged(batch.records),
+    );
+  });
+  ipcMain.handle('ticket-restaurante-calendars:remove-with-people-atomically', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        message: 'Payload de eliminación atómica de calendario de Ticket Restaurante inválido.',
+      };
+    }
+
+    const candidate = payload as { calendar?: unknown; people?: unknown };
+    const calendar = validateConditionalJsonRecord(
+      candidate.calendar,
+      'Payload de calendario de Ticket Restaurante inválido.',
+    );
+    if (!calendar.ok) {
+      return {
+        ok: false,
+        status: calendar.result.status,
+        message: calendar.result.message,
+      };
+    }
+
+    const people = validateConditionalJsonRecordBatch(
+      { records: candidate.people },
+      'Payload de personas asociadas al calendario de Ticket Restaurante inválido.',
+    );
+    if (!people.ok) {
+      return {
+        ok: false,
+        status: people.result.status,
+        message: people.result.message,
+      };
+    }
+
+    return enqueueSqliteIpc('ticket-restaurante-calendars:remove-with-people-atomically', () =>
+      removeTicketRestauranteCalendarWithPeopleAtomically(getSqliteStatus(), {
+        calendar: {
+          id: calendar.id,
+          value: calendar.value,
+          expectedUpdatedAt: calendar.expectedUpdatedAt,
+        },
+        people: people.records,
+      }),
     );
   });
   ipcMain.handle('ticket-restaurante-people:load-records', () =>
