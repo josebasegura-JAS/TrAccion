@@ -32,11 +32,7 @@ describe('usePresupuestosStore concurrencia multiusuario', () => {
     });
   });
 
-  it('no aplica el cambio local cuando otro usuario ha modificado los presupuestos entre tanto (expectedUpdatedAt obsoleto)', async () => {
-    // El saver simula que otro usuario ha guardado un escenario justo antes:
-    // el expectedUpdatedAt que envía este cliente ya no coincide con el
-    // valor vigente, así que el guardado debe rechazarse y no debe crearse
-    // el escenario localmente.
+  it('no confirma el cambio cuando otro usuario ha modificado los presupuestos entre tanto', async () => {
     const saver = vi.fn(async () => ({
       ok: false,
       status: activeStatus(),
@@ -52,7 +48,7 @@ describe('usePresupuestosStore concurrencia multiusuario', () => {
       },
     });
 
-    const result = usePresupuestosStore.getState().upsertScenario({
+    const result = await usePresupuestosStore.getState().upsertScenario({
       name: 'Escenario 2026',
       year: 2026,
       ticketAmount: 11,
@@ -60,21 +56,31 @@ describe('usePresupuestosStore concurrencia multiusuario', () => {
     });
 
     expect(result.valid).toBe(true);
-    await vi.waitFor(() => expect(saver).toHaveBeenCalledTimes(1));
-
-    // Como el saver ha rechazado el guardado, el escenario no debe haberse
-    // confirmado en el estado del store (commitPresupuestosState no llama a
-    // set() si el guardado falla).
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('han cambiado');
+    expect(saver).toHaveBeenCalledTimes(1);
     expect(usePresupuestosStore.getState().scenarios).toHaveLength(0);
+    expect(usePresupuestosStore.getState().activeScenarioId).toBeNull();
   });
 
-  it('aplica el cambio local cuando expectedUpdatedAt coincide con el valor vigente', async () => {
-    const saver = vi.fn(async () => ({
-      ok: true,
-      status: activeStatus(),
-      currentUpdatedAt: '2026-06-17T08:10:00.000Z',
-      message: 'Presupuestos guardados.',
-    }));
+  it('aplica el cambio local solo después de que SQLite confirme el guardado', async () => {
+    let resolveSave: ((value: {
+      ok: boolean;
+      status: ReturnType<typeof activeStatus>;
+      currentUpdatedAt: string | null;
+      message: string;
+    }) => void) | null = null;
+    const saver = vi.fn(
+      () =>
+        new Promise<{
+          ok: boolean;
+          status: ReturnType<typeof activeStatus>;
+          currentUpdatedAt: string | null;
+          message: string;
+        }>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
 
     Object.defineProperty(window, 'traccion', {
       configurable: true,
@@ -84,17 +90,31 @@ describe('usePresupuestosStore concurrencia multiusuario', () => {
       },
     });
 
-    const result = usePresupuestosStore.getState().upsertScenario({
+    const pendingSave = usePresupuestosStore.getState().upsertScenario({
       name: 'Escenario 2026',
       year: 2026,
       ticketAmount: 11,
       notes: '',
     });
 
+    await vi.waitFor(() => expect(saver).toHaveBeenCalledTimes(1));
+    expect(usePresupuestosStore.getState().scenarios).toHaveLength(0);
+    expect(usePresupuestosStore.getState().activeScenarioId).toBeNull();
+
+    if (!resolveSave) throw new Error('El test no recibió el resolver del guardado SQLite.');
+    resolveSave({
+      ok: true,
+      status: activeStatus(),
+      currentUpdatedAt: '2026-06-17T08:10:00.000Z',
+      message: 'Presupuestos guardados.',
+    });
+
+    const result = await pendingSave;
     expect(result.valid).toBe(true);
-    await vi.waitFor(() => expect(usePresupuestosStore.getState().scenarios).toHaveLength(1));
-    expect(saver).toHaveBeenCalledTimes(1);
+    expect(result.ok).toBe(true);
+    expect(usePresupuestosStore.getState().scenarios).toHaveLength(1);
     expect(usePresupuestosStore.getState().activeScenarioId).toBe(result.id);
+    expect(usePresupuestosStore.getState().sqliteUpdatedAt).toBe('2026-06-17T08:10:00.000Z');
   });
 
   it('reloadFromStorage no sustituye las colecciones ni la selección activa si el contenido no ha cambiado', async () => {
@@ -125,18 +145,12 @@ describe('usePresupuestosStore concurrencia multiusuario', () => {
     usePresupuestosStore.getState().load();
     await vi.waitFor(() => expect(usePresupuestosStore.getState().scenarios).toHaveLength(1));
 
-    // Simulamos que el usuario tiene seleccionado manualmente este escenario.
     usePresupuestosStore.getState().setActiveScenario('scenario-1');
     const scenariosBeforeReload = usePresupuestosStore.getState().scenarios;
 
-    // El polling detecta un cambio (por ejemplo, nuestra propia escritura en
-    // otra pestaña), pero el contenido normalizado es idéntico al que ya
-    // tenemos en memoria.
     usePresupuestosStore.getState().reloadFromStorage();
     await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
 
-    // La referencia debe mantenerse intacta y la selección activa no debe
-    // haberse perdido.
     expect(usePresupuestosStore.getState().scenarios).toBe(scenariosBeforeReload);
     expect(usePresupuestosStore.getState().activeScenarioId).toBe('scenario-1');
   });
