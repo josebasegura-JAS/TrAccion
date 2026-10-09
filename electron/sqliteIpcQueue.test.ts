@@ -4,6 +4,7 @@ import {
   isCurrentSqliteIpcReadOnly,
   isSqliteIpcReadOnlyOperation,
   resolveSqliteIpcTimeoutMs,
+  runCurrentSqliteIpcAsWrite,
 } from './sqliteIpcQueue.js';
 
 describe('enqueueSqliteIpc', () => {
@@ -76,6 +77,22 @@ describe('enqueueSqliteIpc', () => {
 
     await vi.runAllTimersAsync();
     await expect(write).resolves.toBe(false);
+  });
+
+
+  it('permite que una migración dentro de un load adquiera semántica de escritura y restaura después el contexto read-only', async () => {
+    const operation = enqueueSqliteIpc('tasks:load-records', async () => {
+      const before = isCurrentSqliteIpcReadOnly();
+      const during = await runCurrentSqliteIpcAsWrite(async () => {
+        await Promise.resolve();
+        return isCurrentSqliteIpcReadOnly();
+      });
+      const after = isCurrentSqliteIpcReadOnly();
+      return { before, during, after };
+    });
+
+    await vi.runAllTimersAsync();
+    await expect(operation).resolves.toEqual({ before: true, during: false, after: true });
   });
 
   it('informa el timeout al llamador sin afirmar que la operación se haya cancelado', async () => {

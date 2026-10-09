@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
+import { runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import {
   createVolatileOwnerId,
   resolveStableOwnerId,
@@ -539,6 +540,13 @@ async function safeDatabaseOperation<T>(
   throw new Error('safeDatabaseOperation: estado inesperado.');
 }
 
+async function safeDatabaseMigrationOperation<T>(
+  operation: () => T,
+  fallback: (status: DatabaseStatus, message: string) => T,
+): Promise<T> {
+  return runCurrentSqliteIpcAsWrite(() => safeDatabaseOperation(operation, fallback));
+}
+
 export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   const currentStatus = getSqliteStatus();
   const checkedAt = new Date().toISOString();
@@ -731,6 +739,7 @@ function createJsonModuleRepository(
     },
     {
       safeDatabaseOperation,
+      safeDatabaseMigrationOperation,
       getSqliteStatus,
       requireDatabase,
       isUpdatedAtRow,
