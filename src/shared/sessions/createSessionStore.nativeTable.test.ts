@@ -5,20 +5,6 @@ import { PARITARIA_SESSION_CONFIG } from '../../features/paritaria/domain/parita
 import { useParitariaSessionStore } from '../../features/paritaria/store/useParitariaSessionStore';
 import type { ManagedSession, ManagedSessionDraft } from './session';
 
-/**
- * Tests del store completo (createManagedSessionStore) ejercitando la rama
- * de tabla SQLite nativa (hasSessionSqliteRepository === true), no el
- * fallback de blob compartido. createSessionStore.test.ts ya cubre bien el
- * fallback (mockeando saveLocalStorageRecordIfUnchanged); aquí se cubre el
- * "pegamento" que conecta el store con loadAllSessionRecordsFromSqlite /
- * saveSessionRecordToSqlite, que hasta ahora no tenía ningún test propio
- * aparte de las funciones de bajo nivel en sessionSqliteRepository.test.ts.
- *
- * Se prueban ambos módulos (Comité y Paritaria) porque usan la misma
- * factory pero bindings IPC distintos (loadComiteSessionRecords vs
- * loadParitariaSessionRecords) — un bug en cuál se llama para cuál no se
- * detectaría probando solo uno.
- */
 const timestamp = '2026-06-17T08:00:00.000Z';
 
 function session(overrides: Partial<ManagedSession> = {}): ManagedSession {
@@ -111,8 +97,6 @@ describe.each([
 
     expect(result.ok).toBe(true);
     expect(saver).toHaveBeenCalledTimes(1);
-    // loadAllSessionRecordsFromSqlite se llama dos veces: una para
-    // comprobar duplicados/estado previo, otra para recargar tras guardar.
     expect(loader.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -134,8 +118,6 @@ describe.each([
 
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/modificada por otro usuario/i);
-    // El conflicto se detecta comparando la lista ya cargada: el saver
-    // jamás debe llegar a invocarse.
     expect(saver).not.toHaveBeenCalled();
   });
 
@@ -168,7 +150,7 @@ describe.each([
   it('addTaskWithConcurrencyCheck añade el punto en la tabla nativa', async () => {
     const existingSession = session({ items: ['task-1'] });
     const loader = vi.fn(async () => recordsSnapshot([existingSession]));
-    const saver = vi.fn(async () => ({
+    const saver = vi.fn(async (_record: TraccionConditionalComiteSessionRecord) => ({
       ok: true,
       status: activeStatus(),
       currentUpdatedAt: '2026-06-17T09:00:00.000Z',
@@ -186,7 +168,7 @@ describe.each([
 
     expect(result.ok).toBe(true);
     expect(saver).toHaveBeenCalledTimes(1);
-    const savedCall = saver.mock.calls[0][0] as { id: string; value: string; expectedUpdatedAt: string | null };
+    const savedCall = saver.mock.calls[0][0];
     const savedValue = JSON.parse(savedCall.value) as ManagedSession;
     expect(savedValue.items).toEqual(['task-1', 'task-2']);
   });
@@ -215,16 +197,11 @@ describe.each([
     const nativeSession = session({ id: 'native-only-session' });
     const loader = vi.fn(async () => recordsSnapshot([nativeSession]));
 
-    // Deliberadamente no escribimos nada en localStorage: si load() cayera
-    // al blob compartido en vez de a la tabla nativa, la lista quedaría
-    // vacía y este test lo detectaría.
     Object.defineProperty(window, 'traccion', {
       configurable: true,
       value: { [loadKey]: loader, [saveKey]: vi.fn() },
     });
 
-    // load() es fire-and-forget (no devuelve Promise), así que hay que
-    // esperar a que el estado se actualice en vez de hacer await directo.
     useSessionStore.getState().load();
     await vi.waitFor(() => {
       expect(useSessionStore.getState().sessions.map((item) => item.id)).toContain('native-only-session');

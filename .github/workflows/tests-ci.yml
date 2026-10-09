@@ -83,6 +83,9 @@ jobs:
           & $eslint --version
           & $vitest --version
 
+      - name: Typecheck tests
+        run: npm run typecheck:tests
+
       - name: Lint
         run: npm run lint
 

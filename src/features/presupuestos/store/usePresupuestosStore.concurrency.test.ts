@@ -3,6 +3,13 @@ import { usePresupuestosStore } from './usePresupuestosStore';
 
 const timestamp = '2026-06-17T08:00:00.000Z';
 
+type SaveResult = {
+  ok: boolean;
+  status: ReturnType<typeof activeStatus>;
+  currentUpdatedAt: string | null;
+  message: string;
+};
+
 function activeStatus() {
   return { ready: true, phase: 'active' as const, message: 'SQLite activo' };
 }
@@ -64,21 +71,11 @@ describe('usePresupuestosStore concurrencia multiusuario', () => {
   });
 
   it('aplica el cambio local solo después de que SQLite confirme el guardado', async () => {
-    let resolveSave: ((value: {
-      ok: boolean;
-      status: ReturnType<typeof activeStatus>;
-      currentUpdatedAt: string | null;
-      message: string;
-    }) => void) | null = null;
+    const deferred: { resolve?: (value: SaveResult) => void } = {};
     const saver = vi.fn(
       () =>
-        new Promise<{
-          ok: boolean;
-          status: ReturnType<typeof activeStatus>;
-          currentUpdatedAt: string | null;
-          message: string;
-        }>((resolve) => {
-          resolveSave = resolve;
+        new Promise<SaveResult>((resolve) => {
+          deferred.resolve = resolve;
         }),
     );
 
@@ -101,8 +98,8 @@ describe('usePresupuestosStore concurrencia multiusuario', () => {
     expect(usePresupuestosStore.getState().scenarios).toHaveLength(0);
     expect(usePresupuestosStore.getState().activeScenarioId).toBeNull();
 
-    if (!resolveSave) throw new Error('El test no recibió el resolver del guardado SQLite.');
-    resolveSave({
+    if (!deferred.resolve) throw new Error('El test no recibió el resolver del guardado SQLite.');
+    deferred.resolve({
       ok: true,
       status: activeStatus(),
       currentUpdatedAt: '2026-06-17T08:10:00.000Z',

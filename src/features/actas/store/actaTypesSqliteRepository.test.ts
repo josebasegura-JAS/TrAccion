@@ -253,7 +253,7 @@ describe('actaTypesSqliteRepository', () => {
   });
 
   it('deleteActaTypeInSqlite marca deletedAt y reutiliza saveActaTypeToSqlite', async () => {
-    const saver = vi.fn(async () => ({
+    const saver = vi.fn(async (_record: TraccionConditionalActaTypeRecord) => ({
       ok: true,
       status: { ready: true, phase: 'active', message: 'SQLite activo' },
       message: 'Tipo de acta eliminado.',
@@ -268,7 +268,7 @@ describe('actaTypesSqliteRepository', () => {
     const result = await deleteActaTypeInSqlite(original, timestamp);
 
     expect(saver).toHaveBeenCalledTimes(1);
-    const callArg = saver.mock.calls[0][0] as { id: string; value: string; expectedUpdatedAt: string | null };
+    const callArg = saver.mock.calls[0][0];
     expect(callArg.id).toBe('acta-type-4');
     expect(callArg.expectedUpdatedAt).toBe(timestamp);
 

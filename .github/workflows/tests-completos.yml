@@ -65,6 +65,9 @@ jobs:
         shell: pwsh
         run: node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit
 
+      - name: TypeScript tests
+        run: npm run typecheck:tests
+
       - name: ESLint
         run: npm run lint
 

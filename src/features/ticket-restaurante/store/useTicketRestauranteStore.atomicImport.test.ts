@@ -62,12 +62,10 @@ describe('useTicketRestauranteStore importPeople atómico', () => {
     expect(useTicketRestauranteStore.getState().calendars).toHaveLength(0);
     expect(useTicketRestauranteStore.getState().people).toHaveLength(0);
 
-    const payload = atomicImport.mock.calls[0]?.[0];
-    expect(payload.calendars).toHaveLength(1);
-    expect(payload.people).toHaveLength(1);
-    expect(payload.calendars[0]?.expectedUpdatedAt).toBeNull();
-    expect(payload.people[0]?.id).toBe('100');
-    expect(payload.people[0]?.expectedUpdatedAt).toBeNull();
+    expect(atomicImport).toHaveBeenCalledWith({
+      calendars: [expect.objectContaining({ expectedUpdatedAt: null })],
+      people: [expect.objectContaining({ id: '100', expectedUpdatedAt: null })],
+    });
     expect(legacyCalendarBatch).not.toHaveBeenCalled();
     expect(legacyPeopleBatch).not.toHaveBeenCalled();
 

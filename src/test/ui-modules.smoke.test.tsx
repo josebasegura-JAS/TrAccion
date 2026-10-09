@@ -33,6 +33,12 @@ const successfulRecordLock: TraccionRecordLockResult = {
 function installExternalApiMocks(): void {
   window.traccion = {
     databaseStatus: vi.fn().mockResolvedValue(databaseStatus),
+    databaseHealthCheck: vi.fn().mockResolvedValue({
+      ok: true,
+      status: databaseStatus,
+      checkedAt: '2026-01-01T00:00:00.000Z',
+      message: 'Chequeo simulado',
+    }),
     getPersistedRecordsToken: vi.fn().mockResolvedValue({
       status: databaseStatus,
       refreshToken: null,

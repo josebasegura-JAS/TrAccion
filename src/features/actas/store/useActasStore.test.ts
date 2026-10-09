@@ -53,6 +53,9 @@ function task(overrides: Partial<Task> = {}): Task {
     observaciones: '',
     mail: '',
     documentLinks: [],
+    sessionDocumentCode: '',
+    sessionModule: '',
+    sessionDate: '',
     seguimiento: [],
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -61,7 +64,6 @@ function task(overrides: Partial<Task> = {}): Task {
     ...overrides,
   };
 }
-
 
 function installFakePersistedRecordsBackend(): void {
   const store = new Map<string, { value: string; updatedAt: string }>();

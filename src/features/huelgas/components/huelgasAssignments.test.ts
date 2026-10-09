@@ -39,6 +39,8 @@ function zona(id: string, nombre: string, responsableNombre = 'Responsable', res
     correoCuerpoHtml: '',
     correoPlazos: '',
     correoInstruccionesHabituales: '',
+    correoCc: '',
+    plantillaExcelNombrePatron: '',
     active: true,
     createdAt: now,
     updatedAt: now,

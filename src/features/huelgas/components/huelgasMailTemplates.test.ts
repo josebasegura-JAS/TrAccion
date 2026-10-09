@@ -20,6 +20,8 @@ const zona: HuelgaZona = {
   correoCuerpoHtml: '<p>{{AREAS}}</p><p>{{PUESTOS}}</p>{{COLECTIVOS}}<p>{{TOTAL_PERSONAS}}</p><p>{{INSTRUCCIONES_ESPECIFICAS}}</p>',
   correoPlazos: 'Antes de las 9:45',
   correoInstruccionesHabituales: '',
+  correoCc: '',
+  plantillaExcelNombrePatron: '',
   active: true,
   createdAt: now,
   updatedAt: now,

@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.cts",
+    "**/*.d.ts"
+  ],
+  "exclude": [
+    "preload.ts"
+  ]
+}

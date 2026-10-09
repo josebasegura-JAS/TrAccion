@@ -176,7 +176,7 @@ describe('actaSqliteRepository', () => {
   });
 
   it('deleteActaInSqlite marca deletedAt y reutiliza saveActaToSqlite', async () => {
-    const saver = vi.fn(async () => ({
+    const saver = vi.fn(async (_record: TraccionConditionalActaRecord) => ({
       ok: true,
       status: { ready: true, phase: 'active', message: 'SQLite activo' },
       message: 'Acta eliminada.',
@@ -191,7 +191,7 @@ describe('actaSqliteRepository', () => {
     const result = await deleteActaInSqlite(original, timestamp);
 
     expect(saver).toHaveBeenCalledTimes(1);
-    const callArg = saver.mock.calls[0][0] as { id: string; value: string; expectedUpdatedAt: string | null };
+    const callArg = saver.mock.calls[0][0];
     expect(callArg.id).toBe('acta-4');
     expect(callArg.expectedUpdatedAt).toBe(timestamp);
 

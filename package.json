@@ -18,6 +18,7 @@
     "update-manifest:write": "node scripts/write-update-manifest.mjs",
     "test": "vitest run --fileParallelism=false",
     "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.tests.json --noEmit && tsc -p electron/tsconfig.tests.json --noEmit",
     "test:e2e": "playwright test",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
@@ -27,7 +28,7 @@
     "test:e2e:electron:ci": "tsc -p electron/tsconfig.json && playwright test -c playwright.electron.config.ts",
     "test:ui": "npm run test:e2e:electron:ci",
     "test:critical": "npm run test && npm run test:ui",
-    "test:all": "npm run typecheck && npm run lint && npm run test && npm run test:ui"
+    "test:all": "npm run typecheck && npm run typecheck:tests && npm run lint && npm run test && npm run test:ui"
   },
   "dependencies": {
     "@kenjiuno/msgreader": "^1.15.0",
