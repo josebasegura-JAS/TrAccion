@@ -1,0 +1,10 @@
+Incremental Huelgas - arrastrar correo o Excel directamente
+
+Sustituir sobre la raíz del repositorio respetando las rutas.
+
+Cambios:
+- La zona de arrastre de Recogida acepta .msg, .xlsx y .xlsm.
+- Si se arrastra un Excel, TrAcción identifica automáticamente el circuito por el nombre del archivo.
+- Si el circuito ya estaba recibido, solicita confirmación antes de sustituirlo.
+- Si no puede identificar el circuito con seguridad, no importa nada y avisa para usar el botón manual del circuito.
+- Se mantiene sin cambios la importación de .msg y la importación manual por circuito.

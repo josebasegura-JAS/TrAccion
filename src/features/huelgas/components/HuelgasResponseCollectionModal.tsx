@@ -113,7 +113,7 @@ export function HuelgasResponseCollectionModal({
       <ModalHeader>
         <ModalTitle
           id="huelga-response-title"
-          subtitle="Arrastra el correo recibido de Outlook; TrAcción extrae el Excel, identifica el circuito y valida los datos. La importación manual queda disponible como alternativa."
+          subtitle="Arrastra el correo recibido de Outlook o directamente su Excel; TrAcción identifica el circuito y valida los datos. La importación manual por circuito sigue disponible."
         >
           Recogida de datos · {formatDate(target.fecha)}
         </ModalTitle>
@@ -150,7 +150,7 @@ export function HuelgasResponseCollectionModal({
           }}
         >
           <input
-            accept=".msg"
+            accept=".msg,.xlsx,.xlsm"
             className="hidden"
             disabled={importingMessage}
             type="file"
@@ -161,11 +161,14 @@ export function HuelgasResponseCollectionModal({
             }}
           />
           <div>
-            <Mail className="mx-auto mb-2 text-sky-300" size={26} />
+            <div className="mx-auto mb-2 flex w-fit items-center gap-2 text-sky-300">
+              <Mail size={24} />
+              <FileSpreadsheet size={24} />
+            </div>
             <p className="text-sm font-semibold text-metro-text">
-              {importingMessage ? 'Leyendo correo y Excel adjunto…' : 'Arrastra aquí el correo recibido desde Outlook'}
+              {importingMessage ? 'Procesando respuesta…' : 'Arrastra aquí el correo de Outlook o el Excel recibido'}
             </p>
-            <p className="mt-1 text-xs text-metro-muted">Formato .msg · también puedes hacer clic para seleccionarlo</p>
+            <p className="mt-1 text-xs text-metro-muted">Formatos .msg, .xlsx o .xlsm · también puedes hacer clic para seleccionarlo</p>
           </div>
         </label>
 

@@ -227,10 +227,63 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
 
   const importOutlookMessage = async (file: File) => {
     if (!target) return;
-    if (!/\.msg$/i.test(file.name)) {
-      await alert('Arrastra un correo de Outlook en formato .msg.', { title: 'Formato no válido', type: 'warning' });
+
+    if (/\.(xlsx|xlsm)$/i.test(file.name)) {
+      const selectedIds = new Set(circuitIdsFor(target, zonas));
+      const availableZones = zonas.filter((zona) => selectedIds.has(zona.id));
+      const zona = detectMessageZone(file.name, '', '', availableZones);
+
+      if (!zona) {
+        await alert(
+          `No se ha podido identificar con seguridad el circuito a partir del nombre “${file.name}”. Puedes usar el botón “Importar Excel” del circuito correspondiente.`,
+          { title: 'Circuito no identificado', type: 'warning' },
+        );
+        return;
+      }
+
+      const existing = draft[zona.id];
+      if (responseHasData(existing)) {
+        const replace = await confirm(
+          `${zona.nombre} ya figura como recibido (${existing?.sourceFileName || 'datos existentes'}). ¿Sustituirlo por ${file.name}?`,
+          {
+            title: 'Respuesta ya recibida',
+            confirmLabel: 'Sustituir',
+            cancelLabel: 'Conservar actual',
+          },
+        );
+        if (!replace) return;
+      }
+
+      setImportingMessage(true);
+      setImportingZoneId(zona.id);
+      try {
+        const imported = await importResponseBuffer(zona.id, file.name, await file.arrayBuffer());
+        if (imported) {
+          await alert(
+            `Excel incorporado automáticamente a ${zona.nombre}.`,
+            { title: 'Respuesta de huelga recibida', type: 'info' },
+          );
+        }
+      } catch (error) {
+        await alert(error instanceof Error ? error.message : 'No se ha podido procesar el Excel.', {
+          title: 'Error al importar',
+          type: 'error',
+        });
+      } finally {
+        setImportingZoneId(null);
+        setImportingMessage(false);
+      }
       return;
     }
+
+    if (!/\.msg$/i.test(file.name)) {
+      await alert(
+        'Arrastra un correo de Outlook (.msg) o un Excel de respuesta (.xlsx/.xlsm).',
+        { title: 'Formato no válido', type: 'warning' },
+      );
+      return;
+    }
+
     const inspectMessage = window.traccion?.inspectSchoolHelpMessage;
     if (!inspectMessage) {
       await alert('La lectura de correos de Outlook solo está disponible en la aplicación de escritorio.', {
