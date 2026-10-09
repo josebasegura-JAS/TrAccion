@@ -11,29 +11,35 @@ import {
 } from './vinculograma';
 
 function buildRecord(overrides: Partial<Vinculograma>): Vinculograma {
-  return {
+  const base: Vinculograma = {
     id: 'record-1',
     employeeNumber: '1',
     nombreCompleto: 'Persona Uno',
     linkedPerson: 'Persona vinculada',
     requestDate: '2026-01-01',
     expiryDate: '2029-01-01',
+    revokedAt: '',
+    revocationReason: '',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
-    ...overrides,
   };
+  return { ...base, ...overrides };
 }
 
 function buildEmployee(overrides: Partial<Employee>): Employee {
-  return {
+  const base: Employee = {
     empleado: '1',
     nombreApellidos: 'Persona Uno',
     email: '',
     puestoNomina: '',
     puestoOrganizativo: '',
+    puestoEus: '',
     residencia: '',
+    unidad: '',
     nivelRetributivo: '',
+    direccionOrganizativa: '',
+    antiguedadPuesto: '',
     sexo: '',
     calle: '',
     numero: '',
@@ -42,13 +48,15 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
     poblacion: '',
     provincia: '',
     nif: '',
+    telefono1: '',
+    telefono2: '',
     dni: '',
     residenciaCast: '',
     residenciaEus: '',
     direccionTeletrabajo: '',
     deletedAt: null,
-    ...overrides,
   };
+  return { ...base, ...overrides };
 }
 
 describe('vinculograma domain', () => {
