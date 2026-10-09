@@ -11,10 +11,17 @@ import {
   isHuelgaResponseCollections,
   parseHuelgaResponseWorkbook,
   responseHasData,
-  validateZoneResponse,
   type HuelgaResponseCollections,
   type HuelgaZoneResponse,
 } from './huelgasResponseCollection';
+import {
+  analyzeHuelgaResponseWorkbook,
+  fileCircuitMismatchWarning,
+  summarizeHuelgaValidation,
+  validateHuelgaCollection,
+  validateHuelgaZoneResponse,
+  type HuelgaValidationIssue,
+} from './huelgasResponseValidation';
 
 function circuitIdsFor(huelga: Huelga, zonas: HuelgaZona[]): string[] {
   if (huelga.circuitosZonaIds?.length) return huelga.circuitosZonaIds;
@@ -37,6 +44,12 @@ function ensureResponses(
   );
 }
 
+function issueMessage(issues: HuelgaValidationIssue[], maxItems = 8): string {
+  const visible = issues.slice(0, maxItems).map((item) => `• ${item.message}`);
+  if (issues.length > maxItems) visible.push(`• …y ${issues.length - maxItems} incidencia(s) más.`);
+  return visible.join('\n');
+}
+
 export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona[]) {
   const { alert, confirm, dialogNode } = useAppDialog();
   const [collections, setCollections] = useState<HuelgaResponseCollections>(() =>
@@ -54,6 +67,13 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
   const totals = useMemo(() => collectionTotals(responses), [responses]);
   const receivedCount = useMemo(() => responses.filter(responseHasData).length, [responses]);
   const reviewedCount = useMemo(() => responses.filter((response) => response.reviewed).length, [responses]);
+  const validationByZone = useMemo<Record<string, HuelgaValidationIssue[]>>(
+    () => Object.fromEntries(responses.map((response) => [response.zonaId, validateHuelgaZoneResponse(response)])),
+    [responses],
+  );
+  const collectionIssues = useMemo(() => validateHuelgaCollection(responses), [responses]);
+  const validationSummary = useMemo(() => summarizeHuelgaValidation(collectionIssues), [collectionIssues]);
+  const globalIssues = useMemo(() => collectionIssues.filter((item) => !item.zonaId), [collectionIssues]);
 
   const open = (huelga: Huelga) => {
     setTargetId(huelga.id);
@@ -87,25 +107,38 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
 
   const importResponse = async (zoneId: string, file: File) => {
     const current = draft[zoneId];
-    if (!current) return;
+    const currentZone = zonas.find((zona) => zona.id === zoneId);
+    if (!current || !currentZone) return;
     setImportingZoneId(zoneId);
     try {
-      const parsed = await parseHuelgaResponseWorkbook(await file.arrayBuffer());
+      const buffer = await file.arrayBuffer();
+      const [parsed, workbookFindings] = await Promise.all([
+        parseHuelgaResponseWorkbook(buffer),
+        analyzeHuelgaResponseWorkbook(buffer),
+      ]);
+      const mismatchWarning = fileCircuitMismatchWarning(file.name, currentZone, zonas);
+      const warnings = [...new Set([
+        ...parsed.warnings,
+        ...workbookFindings,
+        ...(mismatchWarning ? [mismatchWarning] : []),
+      ])];
       setDraft((responsesDraft) => ({
         ...responsesDraft,
         [zoneId]: {
           ...responsesDraft[zoneId],
           ...parsed,
+          warnings,
           sourceFileName: file.name,
           importedAt: new Date().toISOString(),
           reviewed: false,
         },
       }));
       setDirty(true);
-      if (parsed.warnings.length > 0) {
+      if (warnings.length > 0) {
+        const blocking = warnings.filter((message) => /^\s*\[ERROR\]/i.test(message));
         await alert(
-          `El Excel se ha importado, pero conviene revisar estos datos:\n${parsed.warnings.join('\n')}`,
-          { title: 'Importación parcial', type: 'warning' },
+          `${blocking.length > 0 ? 'Se han detectado inconsistencias que deben corregirse antes de validar el circuito.' : 'El Excel se ha importado, pero conviene revisar algunos datos.'}\n${warnings.map((message) => message.replace(/^\s*\[ERROR\]\s*/i, '• ')).join('\n')}`,
+          { title: blocking.length > 0 ? 'Inconsistencias detectadas' : 'Importación con avisos', type: 'warning' },
         );
       }
     } catch (error) {
@@ -146,16 +179,38 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
   const markReviewed = async (zoneId: string) => {
     const response = draft[zoneId];
     if (!response) return;
-    const warnings = validateZoneResponse(response);
-    if (warnings.length > 0) {
-      await alert(warnings.join('\n'), { title: 'Revisa los datos del circuito', type: 'warning' });
+    const issues = validateHuelgaZoneResponse(response);
+    const errors = issues.filter((item) => item.severity === 'error');
+    if (errors.length > 0) {
+      await alert(issueMessage(errors), { title: 'Corrige las inconsistencias del circuito', type: 'error' });
       return;
+    }
+    const warnings = issues.filter((item) => item.severity === 'warning');
+    if (warnings.length > 0) {
+      const accepted = await confirm(
+        `Quedan ${warnings.length} advertencia(s) no bloqueante(s):\n${issueMessage(warnings)}\n\n¿Confirmas que las has revisado?`,
+        {
+          title: 'Confirmar revisión del circuito',
+          confirmLabel: 'Sí, marcar revisado',
+          cancelLabel: 'Seguir revisando',
+        },
+      );
+      if (!accepted) return;
     }
     updateResponse(zoneId, 'reviewed', true);
   };
 
   const exportReport = async () => {
     if (!target) return;
+    const issues = validateHuelgaCollection(responses);
+    const errors = issues.filter((item) => item.severity === 'error');
+    if (errors.length > 0) {
+      await alert(
+        `No se puede generar la Excel maestra mientras existan errores o circuitos sin revisar.\n${issueMessage(errors)}`,
+        { title: 'Consolidación bloqueada', type: 'error' },
+      );
+      return;
+    }
     if (dirty) {
       const saved = await save();
       if (!saved) return;
@@ -187,6 +242,9 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     totals,
     receivedCount,
     reviewedCount,
+    validationByZone,
+    validationSummary,
+    globalIssues,
     dirty,
     saving,
     importingZoneId,
