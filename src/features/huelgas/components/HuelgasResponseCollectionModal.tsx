@@ -1,10 +1,11 @@
-import { CheckCircle2, FileSpreadsheet, Save, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleX, FileSpreadsheet, Save, Upload } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { formatDate, type Huelga } from './huelgasPageModel';
 import type { HuelgaZoneResponse } from './huelgasResponseCollection';
+import type { HuelgaValidationIssue, HuelgaValidationSummary } from './huelgasResponseValidation';
 
 function numberValue(value: number | null): string {
   return value === null ? '' : String(value);
@@ -34,12 +35,39 @@ function metricInput(
   );
 }
 
+function issuePanel(issues: HuelgaValidationIssue[]) {
+  if (issues.length === 0) return null;
+  const errors = issues.filter((item) => item.severity === 'error');
+  const warnings = issues.filter((item) => item.severity === 'warning');
+  return (
+    <div className="mt-3 space-y-2">
+      {errors.length > 0 && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-200">
+          <div className="mb-1 flex items-center gap-1.5 font-semibold"><CircleX size={14} /> Errores bloqueantes</div>
+          {errors.slice(0, 5).map((item, index) => <p key={`${item.message}-${index}`}>• {item.message}</p>)}
+          {errors.length > 5 && <p>• …y {errors.length - 5} error(es) más.</p>}
+        </div>
+      )}
+      {warnings.length > 0 && (
+        <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+          <div className="mb-1 flex items-center gap-1.5 font-semibold"><AlertTriangle size={14} /> Advertencias</div>
+          {warnings.slice(0, 5).map((item, index) => <p key={`${item.message}-${index}`}>• {item.message}</p>)}
+          {warnings.length > 5 && <p>• …y {warnings.length - 5} aviso(s) más.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type Props = {
   target: Huelga | null;
   responses: HuelgaZoneResponse[];
   totals: { personasTurno: number; serviciosMinimos: number; personasTrabajan: number; personasHuelga: number };
   receivedCount: number;
   reviewedCount: number;
+  validationByZone: Record<string, HuelgaValidationIssue[]>;
+  validationSummary: HuelgaValidationSummary;
+  globalIssues: HuelgaValidationIssue[];
   dirty: boolean;
   saving: boolean;
   importingZoneId: string | null;
@@ -58,6 +86,9 @@ export function HuelgasResponseCollectionModal({
   totals,
   receivedCount,
   reviewedCount,
+  validationByZone,
+  validationSummary,
+  globalIssues,
   dirty,
   saving,
   importingZoneId,
@@ -76,7 +107,7 @@ export function HuelgasResponseCollectionModal({
       <ModalHeader>
         <ModalTitle
           id="huelga-response-title"
-          subtitle="Importa los Excel recibidos, revisa los totales por circuito y genera el seguimiento consolidado."
+          subtitle="Importa los Excel recibidos, corrige inconsistencias, valida cada circuito y genera la Excel maestra."
         >
           Recogida de datos · {formatDate(target.fecha)}
         </ModalTitle>
@@ -93,18 +124,32 @@ export function HuelgasResponseCollectionModal({
           <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">Huelga</p><p className="mt-1 text-xl font-bold text-metro-text">{totals.personasHuelga}</p></div>
         </section>
 
+        {globalIssues.length > 0 && (
+          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-200">
+            <div className="mb-1 flex items-center gap-2 font-semibold"><CircleX size={15} /> Inconsistencias entre circuitos</div>
+            {globalIssues.map((item, index) => <p key={`${item.message}-${index}`}>• {item.message}</p>)}
+          </div>
+        )}
+
         <div className="space-y-3">
           {responses.map((response) => {
             const received = Boolean(response.sourceFileName || response.importedAt);
+            const zoneIssues = validationByZone[response.zonaId] ?? [];
+            const errorCount = zoneIssues.filter((item) => item.severity === 'error').length;
+            const warningCount = zoneIssues.filter((item) => item.severity === 'warning').length;
             return (
               <section key={response.zonaId} className="rounded-xl border border-metro-border bg-metro-panel/35 p-3.5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-metro-text">{response.zonaNombre}</h3>
-                      <StatusBadge tone={response.reviewed ? 'success' : received ? 'warning' : 'muted'} size="xs">
-                        {response.reviewed ? 'Revisado' : received ? 'Recibido' : 'Pendiente'}
+                      <StatusBadge
+                        tone={errorCount > 0 ? 'error' : response.reviewed ? 'success' : received ? 'warning' : 'muted'}
+                        size="xs"
+                      >
+                        {errorCount > 0 ? `${errorCount} error${errorCount === 1 ? '' : 'es'}` : response.reviewed ? 'Revisado' : received ? 'Recibido' : 'Pendiente'}
                       </StatusBadge>
+                      {errorCount === 0 && warningCount > 0 && <StatusBadge tone="warning" size="xs">{warningCount} aviso{warningCount === 1 ? '' : 's'}</StatusBadge>}
                     </div>
                     <p className="mt-1 truncate text-xs text-metro-muted">{response.sourceFileName || 'Sin fichero importado'}</p>
                   </div>
@@ -125,11 +170,7 @@ export function HuelgasResponseCollectionModal({
                   </label>
                 </div>
 
-                {response.warnings.length > 0 && (
-                  <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
-                    {response.warnings.join(' · ')}
-                  </div>
-                )}
+                {issuePanel(zoneIssues)}
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {metricInput(response, 'personasTurno', 'Personas con turno', onChange)}
@@ -158,7 +199,7 @@ export function HuelgasResponseCollectionModal({
                       disabled={response.reviewed}
                       onClick={() => onReview(response.zonaId)}
                     >
-                      {response.reviewed ? 'Datos revisados' : 'Marcar revisado'}
+                      {response.reviewed ? 'Datos revisados' : 'Validar circuito'}
                     </ActionButton>
                   </div>
                 </div>
@@ -169,10 +210,28 @@ export function HuelgasResponseCollectionModal({
       </div>
 
       <ModalFooter className="justify-between">
-        <p className="self-center text-xs text-metro-muted">{dirty ? 'Hay cambios sin guardar.' : 'Cambios guardados.'}</p>
+        <div className="self-center text-xs">
+          <p className="text-metro-muted">{dirty ? 'Hay cambios sin guardar.' : 'Cambios guardados.'}</p>
+          {validationSummary.errors > 0 ? (
+            <p className="mt-0.5 text-red-300">{validationSummary.errors} bloqueo{validationSummary.errors === 1 ? '' : 's'} · la Excel maestra no se puede generar todavía.</p>
+          ) : validationSummary.warnings > 0 ? (
+            <p className="mt-0.5 text-amber-300">{validationSummary.warnings} advertencia{validationSummary.warnings === 1 ? '' : 's'} revisada{validationSummary.warnings === 1 ? '' : 's'}; no bloquean la exportación.</p>
+          ) : (
+            <p className="mt-0.5 text-emerald-300">Validación completa: datos preparados para consolidar.</p>
+          )}
+        </div>
         <div className="flex gap-2">
           <ActionButton variant="secondary" iconOnly={false} onClick={onClose}>Cerrar</ActionButton>
-          <ActionButton variant="secondary" icon={FileSpreadsheet} iconOnly={false} loading={exporting} onClick={onExport}>Exportar seguimiento</ActionButton>
+          <ActionButton
+            variant="secondary"
+            icon={FileSpreadsheet}
+            iconOnly={false}
+            loading={exporting}
+            disabled={validationSummary.errors > 0}
+            onClick={onExport}
+          >
+            Generar Excel maestra
+          </ActionButton>
           <ActionButton variant="primary" icon={Save} iconOnly={false} loading={saving} disabled={!dirty} onClick={onSave}>Guardar</ActionButton>
         </div>
       </ModalFooter>
