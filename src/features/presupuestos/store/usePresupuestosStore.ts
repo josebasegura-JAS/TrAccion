@@ -31,6 +31,14 @@ export type BudgetManualItemDraft = Pick<BudgetManualItem, 'scenarioId' | 'conce
 export type BudgetTicketGroupDraft = Pick<BudgetTicketGroup, 'scenarioId' | 'name' | 'peopleCount' | 'ticketCalendar' | 'absenceRate' | 'ticketAmount' | 'calculationType' | 'manualTickets' | 'annualTickets' | 'manualMonthlyAmount' | 'notes'>;
 export type BudgetActualDraft = Pick<BudgetActual, 'year' | 'month' | 'block' | 'concept' | 'amount' | 'notes'>;
 
+export interface PresupuestosActionResult {
+  ok: boolean;
+  message?: string;
+}
+
+export type PresupuestosValidationActionResult = BudgetValidationResult &
+  PresupuestosActionResult & { id?: string };
+
 interface PresupuestosStoreState {
   scenarios: BudgetScenario[];
   manualItems: BudgetManualItem[];
@@ -41,20 +49,19 @@ interface PresupuestosStoreState {
   load: () => void;
   reloadFromStorage: () => void;
   setActiveScenario: (scenarioId: string) => void;
-  upsertScenario: (draft: BudgetScenarioDraft, scenarioId?: string) => BudgetValidationResult & { id?: string };
-  saveScenarioSimulation: (scenarioId: string, scenarioDraft: BudgetScenarioDraft, manualDrafts: Array<{ id: string; draft: BudgetManualItemDraft }>) => BudgetValidationResult;
-  duplicateScenario: (scenarioId: string) => string | null;
-  removeScenario: (scenarioId: string) => void;
-  upsertManualItem: (draft: BudgetManualItemDraft, itemId?: string) => BudgetValidationResult & { id?: string };
-  removeManualItem: (itemId: string) => void;
-  upsertTicketGroup: (draft: BudgetTicketGroupDraft, groupId?: string) => BudgetValidationResult & { id?: string };
-  removeTicketGroup: (groupId: string) => void;
-  upsertActual: (draft: BudgetActualDraft, actualId?: string) => BudgetValidationResult & { id?: string };
-  removeActual: (actualId: string) => void;
-  selectScenarioForExecution: (scenarioId: string) => void;
-  finalizeScenarioBudget: (scenarioId: string, amounts: Record<string, number>) => void;
+  upsertScenario: (draft: BudgetScenarioDraft, scenarioId?: string) => Promise<PresupuestosValidationActionResult>;
+  saveScenarioSimulation: (scenarioId: string, scenarioDraft: BudgetScenarioDraft, manualDrafts: Array<{ id: string; draft: BudgetManualItemDraft }>) => Promise<BudgetValidationResult & PresupuestosActionResult>;
+  duplicateScenario: (scenarioId: string) => Promise<PresupuestosActionResult & { id: string | null }>;
+  removeScenario: (scenarioId: string) => Promise<PresupuestosActionResult>;
+  upsertManualItem: (draft: BudgetManualItemDraft, itemId?: string) => Promise<PresupuestosValidationActionResult>;
+  removeManualItem: (itemId: string) => Promise<PresupuestosActionResult>;
+  upsertTicketGroup: (draft: BudgetTicketGroupDraft, groupId?: string) => Promise<PresupuestosValidationActionResult>;
+  removeTicketGroup: (groupId: string) => Promise<PresupuestosActionResult>;
+  upsertActual: (draft: BudgetActualDraft, actualId?: string) => Promise<PresupuestosValidationActionResult>;
+  removeActual: (actualId: string) => Promise<PresupuestosActionResult>;
+  selectScenarioForExecution: (scenarioId: string) => Promise<PresupuestosActionResult>;
+  finalizeScenarioBudget: (scenarioId: string, amounts: Record<string, number>) => Promise<PresupuestosActionResult>;
 }
-
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -93,27 +100,31 @@ async function persist(state: Pick<PresupuestosStoreState, 'scenarios' | 'manual
 
 type PresupuestosPatch = Partial<Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId' | 'sqliteUpdatedAt'>>;
 
-function commitPresupuestosState(
+async function commitPresupuestosState(
   set: (partial: PresupuestosPatch) => void,
   nextState: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals'>,
   patch: PresupuestosPatch,
   expectedSqliteUpdatedAt: string | null,
-): void {
-  void (async () => {
-    try {
-      const sqliteResult = hasPresupuestosSqliteRepository()
-        ? await savePresupuestosToSqlite(nextState, expectedSqliteUpdatedAt)
-        : null;
-      if (sqliteResult && !sqliteResult.ok) {
-        console.warn(sqliteResult.message);
-        return;
-      }
-      await persist(nextState);
-      set({ ...patch, sqliteUpdatedAt: sqliteResult?.currentUpdatedAt ?? expectedSqliteUpdatedAt });
-    } catch (error) {
-      console.warn('Presupuestos no guardado en SQLite.', error);
+): Promise<PresupuestosActionResult> {
+  try {
+    const sqliteResult = hasPresupuestosSqliteRepository()
+      ? await savePresupuestosToSqlite(nextState, expectedSqliteUpdatedAt)
+      : null;
+    if (sqliteResult && !sqliteResult.ok) {
+      return { ok: false, message: sqliteResult.message };
     }
-  })();
+    await persist(nextState);
+    set({ ...patch, sqliteUpdatedAt: sqliteResult?.currentUpdatedAt ?? expectedSqliteUpdatedAt });
+    return {
+      ok: true,
+      message: sqliteResult?.message ?? 'Presupuestos guardados correctamente.',
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'No se han podido guardar los presupuestos.';
+    console.warn('Presupuestos no guardado en SQLite.', error);
+    return { ok: false, message };
+  }
 }
 
 function isScenario(value: unknown): value is BudgetScenario {
@@ -254,10 +265,6 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       .catch((error) => console.warn('Presupuestos no cargado desde SQLite.', error));
   },
   reloadFromStorage: () => {
-    // Compara las colecciones de datos (no activeScenarioId, que es selección
-    // de UI, ni sqliteUpdatedAt, que es metadato técnico) antes de actualizar
-    // el estado, para no perder la selección activa del usuario ni provocar
-    // un re-render cuando el contenido normalizado no ha cambiado realmente.
     const applyIfChanged = (
       nextState: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId' | 'sqliteUpdatedAt'>,
     ) => {
@@ -280,9 +287,6 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       });
     };
 
-    // Si hay repositorio SQLite disponible, es la única fuente de verdad: no
-    // se aplica primero la lectura legacy de localStorage, que podría estar
-    // vacía o desactualizada y pisaría momentáneamente el estado correcto.
     if (hasPresupuestosSqliteRepository()) {
       void loadStateFromSqlite()
         .then((sqliteState) => {
@@ -297,10 +301,12 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     applyIfChanged(loadState());
   },
   setActiveScenario: (scenarioId) => set({ activeScenarioId: scenarioId }),
-  upsertScenario: (draft, scenarioId) => {
+  upsertScenario: async (draft, scenarioId) => {
     const normalized = normalizeScenarioDraft(draft);
     const validation = validateBudgetScenario(normalized);
-    if (!validation.valid) return validation;
+    if (!validation.valid) {
+      return { ...validation, ok: false, message: validation.errors.join(' ') };
+    }
     const id = scenarioId ?? createId('budget-scenario');
     const timestamp = nowIso();
     const state = get();
@@ -319,21 +325,33 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const scenarios = previous
       ? state.scenarios.map((item) => (item.id === id ? scenario : item))
       : [...state.scenarios, scenario];
-    commitPresupuestosState(set, { ...state, scenarios }, { scenarios, activeScenarioId: id }, state.sqliteUpdatedAt);
-    return { ...validation, id };
+    const committed = await commitPresupuestosState(
+      set,
+      { ...state, scenarios },
+      { scenarios, activeScenarioId: id },
+      state.sqliteUpdatedAt,
+    );
+    return { ...validation, ...committed, id: committed.ok ? id : undefined };
   },
-  saveScenarioSimulation: (scenarioId, scenarioDraft, manualDrafts) => {
+  saveScenarioSimulation: async (scenarioId, scenarioDraft, manualDrafts) => {
     const normalizedScenario = normalizeScenarioDraft(scenarioDraft);
     const scenarioValidation = validateBudgetScenario(normalizedScenario);
-    if (!scenarioValidation.valid) return scenarioValidation;
+    if (!scenarioValidation.valid) {
+      return { ...scenarioValidation, ok: false, message: scenarioValidation.errors.join(' ') };
+    }
 
     const normalizedManualDrafts = manualDrafts.map(({ id, draft }) => ({ id, draft: normalizeManualDraft(draft) }));
     const manualErrors = normalizedManualDrafts.flatMap(({ draft }) => validateBudgetManualItem(draft).errors);
-    if (manualErrors.length > 0) return { valid: false, errors: manualErrors };
+    if (manualErrors.length > 0) {
+      return { valid: false, errors: manualErrors, ok: false, message: manualErrors.join(' ') };
+    }
 
     const state = get();
     const previousScenario = state.scenarios.find((scenario) => scenario.id === scenarioId && !scenario.deletedAt);
-    if (!previousScenario) return { valid: false, errors: ['No se ha encontrado el escenario que se está simulando.'] };
+    if (!previousScenario) {
+      const message = 'No se ha encontrado el escenario que se está simulando.';
+      return { valid: false, errors: [message], ok: false, message };
+    }
     const timestamp = nowIso();
     const updatedScenario: BudgetScenario = {
       ...previousScenario,
@@ -351,20 +369,20 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       };
     });
     const scenarios = state.scenarios.map((scenario) => scenario.id === scenarioId ? updatedScenario : scenario);
-    commitPresupuestosState(
+    const committed = await commitPresupuestosState(
       set,
       { ...state, scenarios, manualItems },
       { scenarios, manualItems, activeScenarioId: scenarioId },
       state.sqliteUpdatedAt,
     );
-    return { valid: true, errors: [] };
+    return { valid: committed.ok, errors: committed.ok ? [] : [committed.message ?? 'No se ha podido guardar la simulación.'], ...committed };
   },
-  duplicateScenario: (scenarioId) => {
+  duplicateScenario: async (scenarioId) => {
     const id = createId('budget-scenario');
     const timestamp = nowIso();
     const state = get();
     const scenario = state.scenarios.find((item) => item.id === scenarioId && !item.deletedAt);
-    if (!scenario) return null;
+    if (!scenario) return { ok: false, id: null, message: 'No se ha encontrado el escenario.' };
     const duplicate: BudgetScenario = {
       ...scenario,
       id,
@@ -404,19 +422,19 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
         })),
     ];
     const scenarios = [...state.scenarios, duplicate];
-    commitPresupuestosState(
+    const committed = await commitPresupuestosState(
       set,
       { ...state, scenarios, manualItems, ticketGroups },
       { scenarios, manualItems, ticketGroups, activeScenarioId: id },
       state.sqliteUpdatedAt,
     );
-    return id;
+    return { ...committed, id: committed.ok ? id : null };
   },
-  removeScenario: (scenarioId) => {
+  removeScenario: async (scenarioId) => {
     const state = get();
     const timestamp = nowIso();
     const target = state.scenarios.find((scenario) => scenario.id === scenarioId && !scenario.deletedAt);
-    if (!target) return;
+    if (!target) return { ok: false, message: 'No se ha encontrado el escenario.' };
 
     const scenarios = state.scenarios.map((scenario) =>
       scenario.id === scenarioId ? { ...scenario, deletedAt: timestamp, updatedAt: timestamp } : scenario,
@@ -436,17 +454,19 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
         ? scenarios.find((scenario) => !scenario.deletedAt)?.id ?? null
         : state.activeScenarioId;
 
-    commitPresupuestosState(
+    return commitPresupuestosState(
       set,
       { ...state, scenarios, manualItems, ticketGroups },
       { scenarios, manualItems, ticketGroups, activeScenarioId: nextActiveScenarioId },
       state.sqliteUpdatedAt,
     );
   },
-  upsertManualItem: (draft, itemId) => {
+  upsertManualItem: async (draft, itemId) => {
     const normalized = normalizeManualDraft(draft);
     const validation = validateBudgetManualItem(normalized);
-    if (!validation.valid) return validation;
+    if (!validation.valid) {
+      return { ...validation, ok: false, message: validation.errors.join(' ') };
+    }
     const id = itemId ?? createId('budget-manual');
     const timestamp = nowIso();
     const state = get();
@@ -464,21 +484,28 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const manualItems = previous
       ? state.manualItems.map((item) => (item.id === id ? manualItem : item))
       : [...state.manualItems, manualItem];
-    commitPresupuestosState(set, { ...state, manualItems }, { manualItems }, state.sqliteUpdatedAt);
-    return { ...validation, id };
+    const committed = await commitPresupuestosState(
+      set,
+      { ...state, manualItems },
+      { manualItems },
+      state.sqliteUpdatedAt,
+    );
+    return { ...validation, ...committed, id: committed.ok ? id : undefined };
   },
-  removeManualItem: (itemId) => {
+  removeManualItem: async (itemId) => {
     const state = get();
     const timestamp = nowIso();
     const manualItems = state.manualItems.map((item) =>
       item.id === itemId ? { ...item, deletedAt: timestamp, updatedAt: timestamp } : item,
     );
-    commitPresupuestosState(set, { ...state, manualItems }, { manualItems }, state.sqliteUpdatedAt);
+    return commitPresupuestosState(set, { ...state, manualItems }, { manualItems }, state.sqliteUpdatedAt);
   },
-  upsertTicketGroup: (draft, groupId) => {
+  upsertTicketGroup: async (draft, groupId) => {
     const normalized = normalizeTicketDraft(draft);
     const validation = validateBudgetTicketGroup(normalized);
-    if (!validation.valid) return validation;
+    if (!validation.valid) {
+      return { ...validation, ok: false, message: validation.errors.join(' ') };
+    }
     const id = groupId ?? createId('budget-ticket');
     const timestamp = nowIso();
     const state = get();
@@ -496,20 +523,27 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const ticketGroups = previous
       ? state.ticketGroups.map((group) => (group.id === id ? ticketGroup : group))
       : [...state.ticketGroups, ticketGroup];
-    commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups }, state.sqliteUpdatedAt);
-    return { ...validation, id };
+    const committed = await commitPresupuestosState(
+      set,
+      { ...state, ticketGroups },
+      { ticketGroups },
+      state.sqliteUpdatedAt,
+    );
+    return { ...validation, ...committed, id: committed.ok ? id : undefined };
   },
-  removeTicketGroup: (groupId) => {
+  removeTicketGroup: async (groupId) => {
     const state = get();
     const timestamp = nowIso();
     const ticketGroups = state.ticketGroups.map((group) =>
       group.id === groupId ? { ...group, deletedAt: timestamp, updatedAt: timestamp } : group,
     );
-    commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups }, state.sqliteUpdatedAt);
+    return commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups }, state.sqliteUpdatedAt);
   },
-  upsertActual: (draft, actualId) => {
+  upsertActual: async (draft, actualId) => {
     const validation = validateBudgetActual(draft);
-    if (!validation.valid) return validation;
+    if (!validation.valid) {
+      return { ...validation, ok: false, message: validation.errors.join(' ') };
+    }
     const id = actualId ?? createId('budget-actual');
     const timestamp = nowIso();
     const state = get();
@@ -524,21 +558,26 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const actuals = previous
       ? state.actuals.map((item) => (item.id === id ? actual : item))
       : [...state.actuals, actual];
-    commitPresupuestosState(set, { ...state, actuals }, { actuals }, state.sqliteUpdatedAt);
-    return { ...validation, id };
+    const committed = await commitPresupuestosState(
+      set,
+      { ...state, actuals },
+      { actuals },
+      state.sqliteUpdatedAt,
+    );
+    return { ...validation, ...committed, id: committed.ok ? id : undefined };
   },
-  removeActual: (actualId) => {
+  removeActual: async (actualId) => {
     const state = get();
     const timestamp = nowIso();
     const actuals = state.actuals.map((actual) =>
       actual.id === actualId ? { ...actual, deletedAt: timestamp, updatedAt: timestamp } : actual,
     );
-    commitPresupuestosState(set, { ...state, actuals }, { actuals }, state.sqliteUpdatedAt);
+    return commitPresupuestosState(set, { ...state, actuals }, { actuals }, state.sqliteUpdatedAt);
   },
-  selectScenarioForExecution: (scenarioId) => {
+  selectScenarioForExecution: async (scenarioId) => {
     const state = get();
     const selected = state.scenarios.find((scenario) => scenario.id === scenarioId && !scenario.deletedAt);
-    if (!selected) return;
+    if (!selected) return { ok: false, message: 'No se ha encontrado el escenario.' };
     const timestamp = nowIso();
     const scenarios = state.scenarios.map((scenario) =>
       scenario.year === selected.year && !scenario.deletedAt
@@ -550,9 +589,14 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
           }
         : scenario,
     );
-    commitPresupuestosState(set, { ...state, scenarios }, { scenarios, activeScenarioId: scenarioId }, state.sqliteUpdatedAt);
+    return commitPresupuestosState(
+      set,
+      { ...state, scenarios },
+      { scenarios, activeScenarioId: scenarioId },
+      state.sqliteUpdatedAt,
+    );
   },
-  finalizeScenarioBudget: (scenarioId, amounts) => {
+  finalizeScenarioBudget: async (scenarioId, amounts) => {
     const state = get();
     const timestamp = nowIso();
     const normalizedAmounts = Object.fromEntries(
@@ -563,6 +607,6 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
         ? { ...scenario, finalBudgetAmounts: normalizedAmounts, finalizedAt: timestamp, updatedAt: timestamp }
         : scenario,
     );
-    commitPresupuestosState(set, { ...state, scenarios }, { scenarios }, state.sqliteUpdatedAt);
+    return commitPresupuestosState(set, { ...state, scenarios }, { scenarios }, state.sqliteUpdatedAt);
   },
 }));
