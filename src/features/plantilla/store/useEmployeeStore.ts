@@ -40,7 +40,7 @@ interface EmployeeState {
   isLoading: boolean;
   lastLoadedAt: number | null;
   load: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   createWithConcurrencyCheck: (draft: EmployeeDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
   updateWithConcurrencyCheck: (empleado: string, draft: EmployeeDraft, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   updateEmail: (empleado: string, email: string) => Promise<{ ok: boolean; message: string }>;
@@ -506,8 +506,8 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       });
     })().catch(() => set({ isLoading: false }));
   },
-  reloadFromStorage: () => {
-    void (async () => {
+  reloadFromStorage: async () => {
+    try {
       const employees = await readEmployeesShared();
       const jobPositionTranslations = readJobPositionTranslations();
       set((state) => {
@@ -531,7 +531,10 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
           lastLoadedAt: Date.now(),
         };
       });
-    })().catch(() => set({ isLoading: false }));
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
   },
   createWithConcurrencyCheck: async (draft) => {
     try {

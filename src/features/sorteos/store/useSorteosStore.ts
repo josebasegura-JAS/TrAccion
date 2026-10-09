@@ -43,7 +43,7 @@ interface SorteosStoreState {
   visibleDrawId: string;
   visibleResult: SorteosDraw | null;
   load: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   createDraw: (draft: SorteosDraft, people: SorteosPerson[]) => SorteosValidationResult;
   createDrawWithConcurrencyCheck: (
     draft: SorteosDraft,
@@ -446,7 +446,7 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
     const exclusions = readArray(EXCLUSIONS_STORAGE_KEY, isExclusion);
     set({ draws, exclusions, visibleDrawId: '', visibleResult: null });
   },
-  reloadFromStorage: () => {
+  reloadFromStorage: async () => {
     // Compara contenido antes de actualizar el estado: si el poll detecta un
     // cambio de updatedAt pero el contenido normalizado es idéntico al que ya
     // tenemos (por ejemplo, porque el cambio lo hicimos nosotros mismos), no
@@ -473,18 +473,18 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
     };
 
     if (hasSorteosSqliteRepository()) {
-      void loadDirectSorteosSnapshot()
-        .then((snapshot) => {
-          if (snapshot) {
-            applySnapshot(snapshot.draws, snapshot.exclusions);
-          }
-        })
-        .catch(() => {
-          applySnapshot(
-            sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw)),
-            readArray(EXCLUSIONS_STORAGE_KEY, isExclusion),
-          );
-        });
+      try {
+        const snapshot = await loadDirectSorteosSnapshot();
+        if (snapshot) {
+          applySnapshot(snapshot.draws, snapshot.exclusions);
+        }
+      } catch (error) {
+        applySnapshot(
+          sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw)),
+          readArray(EXCLUSIONS_STORAGE_KEY, isExclusion),
+        );
+        throw error;
+      }
       return;
     }
 

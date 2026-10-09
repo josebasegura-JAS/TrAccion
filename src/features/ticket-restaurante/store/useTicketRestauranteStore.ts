@@ -74,7 +74,7 @@ interface TicketRestauranteState {
   config: TicketRestaurantConfig;
   manutenciones: TicketManutencion[];
   load: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   createCalendar: (draft: TicketCalendarDraft) => Promise<string>;
   updateCalendar: (
     id: string,
@@ -385,20 +385,20 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         console.warn('Ticket Restaurante: no se ha podido cargar desde SQLite.', error),
       );
   },
-  reloadFromStorage: () => {
+  reloadFromStorage: async () => {
     const syncSnapshot = readTicketRestauranteSnapshot();
     if (!areTicketSnapshotsEquivalent(get(), syncSnapshot)) {
       set(syncSnapshot);
     }
-    void loadTicketRestauranteStateFromSqliteOrStorage()
-      .then((nextSnapshot) => {
-        if (!areTicketSnapshotsEquivalent(get(), nextSnapshot)) {
-          set(nextSnapshot);
-        }
-      })
-      .catch((error) =>
-        console.warn('Ticket Restaurante: no se ha podido recargar desde SQLite.', error),
-      );
+    try {
+      const nextSnapshot = await loadTicketRestauranteStateFromSqliteOrStorage();
+      if (!areTicketSnapshotsEquivalent(get(), nextSnapshot)) {
+        set(nextSnapshot);
+      }
+    } catch (error) {
+      console.warn('Ticket Restaurante: no se ha podido recargar desde SQLite.', error);
+      throw error;
+    }
   },
   createCalendar: async (draft) => {
     const id = createId('ticket-calendar');

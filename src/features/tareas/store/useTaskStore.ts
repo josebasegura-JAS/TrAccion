@@ -25,7 +25,7 @@ interface TaskStateStore {
   isLoadingHistoricalTasks: boolean;
   filters: TaskFilters;
   load: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   loadHistoricalTasks: () => Promise<void>;
   createWithConcurrencyCheck: (draft: TaskDraft, seguimientoText?: string) => Promise<TaskUpdateResult>;
   createManyFromImport: (
@@ -83,7 +83,7 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
       }));
     });
   },
-  reloadFromStorage: () => {
+  reloadFromStorage: async () => {
     if (!hasTaskSqliteRepository()) {
       const tasks = import.meta.env.MODE === 'test' ? readTasks() : [];
       set((state) => ({
@@ -93,13 +93,12 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
       return;
     }
 
-    void readTasksForStore('active').then((tasks) => {
-      set((state) => ({
-        tasks,
-        selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
-        historicalTasksLoaded: false,
-      }));
-    });
+    const tasks = await readTasksForStore('active');
+    set((state) => ({
+      tasks,
+      selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
+      historicalTasksLoaded: false,
+    }));
   },
 
   loadHistoricalTasks: async () => {

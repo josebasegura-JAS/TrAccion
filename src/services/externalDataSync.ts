@@ -109,8 +109,8 @@ function ensureSyncableStoresRegistered(): Promise<unknown> {
   return syncableStoreRegistrationsPromise;
 }
 
-function reloadIntegratedStores(storeIds?: string[]): void {
-  reloadRegisteredSyncableStores(storeIds, { silentPersistenceFeedback: true });
+async function reloadIntegratedStores(storeIds?: string[]): Promise<void> {
+  await reloadRegisteredSyncableStores(storeIds, { silentPersistenceFeedback: true });
 }
 
 function canPollStatus(status: TraccionDatabaseStatus): boolean {
@@ -244,7 +244,7 @@ async function pollOnce(): Promise<void> {
 
     if (changedDirectStoreIds.length > 0 && !hasPersistedRecordsChanged) {
       updateSeenTokens(tokenSnapshot);
-      reloadIntegratedStores(changedDirectStoreIds);
+      await reloadIntegratedStores(changedDirectStoreIds);
       const appliedAt = new Date().toISOString();
       setState({
         status: 'applied',
@@ -270,7 +270,7 @@ async function pollOnce(): Promise<void> {
     const changedLegacyStoreIds = collectChangedLegacyStores(snapshot);
     applyPersistedRecordsSnapshotToLocalStorage(snapshot);
     updateSeenTokens(snapshot);
-    reloadIntegratedStores(changedLegacyStoreIds ?? undefined);
+    await reloadIntegratedStores(changedLegacyStoreIds ?? undefined);
     const appliedAt = new Date().toISOString();
     setState({
       status: 'applied',
@@ -313,7 +313,7 @@ export async function forceExternalDataRefreshAfterRecovery(): Promise<void> {
   // Todos los stores se fuerzan a releer su fuente SQLite. Algunos módulos
   // mantienen una copia efímera de representación en sessionStorage, pero nunca se usa
   // como fuente autoritativa para recuperar una caída.
-  reloadIntegratedStores();
+  await reloadIntegratedStores();
 
   const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
   if (!canPollStatus(tokenSnapshot.status)) {
