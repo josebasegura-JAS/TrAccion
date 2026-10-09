@@ -1,4 +1,5 @@
-import { AlertTriangle, CheckCircle2, CircleX, FileSpreadsheet, Save, Upload } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, CheckCircle2, CircleX, FileSpreadsheet, Mail, Save, Upload } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
@@ -71,9 +72,11 @@ type Props = {
   dirty: boolean;
   saving: boolean;
   importingZoneId: string | null;
+  importingMessage: boolean;
   exporting: boolean;
   onClose: () => void;
   onImport: (zoneId: string, file: File) => void;
+  onImportMessage: (file: File) => void;
   onChange: (zoneId: string, field: keyof HuelgaZoneResponse, value: HuelgaZoneResponse[keyof HuelgaZoneResponse]) => void;
   onReview: (zoneId: string) => void;
   onSave: () => void;
@@ -92,14 +95,17 @@ export function HuelgasResponseCollectionModal({
   dirty,
   saving,
   importingZoneId,
+  importingMessage,
   exporting,
   onClose,
   onImport,
+  onImportMessage,
   onChange,
   onReview,
   onSave,
   onExport,
 }: Props) {
+  const [dropActive, setDropActive] = useState(false);
   if (!target) return null;
 
   return (
@@ -107,7 +113,7 @@ export function HuelgasResponseCollectionModal({
       <ModalHeader>
         <ModalTitle
           id="huelga-response-title"
-          subtitle="Importa los Excel recibidos, corrige inconsistencias, valida cada circuito y genera la Excel maestra."
+          subtitle="Arrastra el correo recibido de Outlook; TrAcción extrae el Excel, identifica el circuito y valida los datos. La importación manual queda disponible como alternativa."
         >
           Recogida de datos · {formatDate(target.fecha)}
         </ModalTitle>
@@ -116,13 +122,58 @@ export function HuelgasResponseCollectionModal({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <section className="mb-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">Recibidos</p><p className="mt-1 text-xl font-bold text-metro-text">{receivedCount}/{responses.length}</p></div>
-          <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">Revisados</p><p className="mt-1 text-xl font-bold text-metro-text">{reviewedCount}/{responses.length}</p></div>
+          <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">Recibidos</p><p className="mt-1 text-xl font-bold text-emerald-300">{receivedCount}/{responses.length}</p></div>
+          <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">Pendientes</p><p className="mt-1 text-xl font-bold text-amber-300">{Math.max(0, responses.length - receivedCount)}</p></div>
           <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">Con turno</p><p className="mt-1 text-xl font-bold text-metro-text">{totals.personasTurno}</p></div>
           <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">SS.MM.</p><p className="mt-1 text-xl font-bold text-metro-text">{totals.serviciosMinimos}</p></div>
           <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">Trabajan</p><p className="mt-1 text-xl font-bold text-metro-text">{totals.personasTrabajan}</p></div>
           <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3"><p className="text-[11px] uppercase text-metro-muted">Huelga</p><p className="mt-1 text-xl font-bold text-metro-text">{totals.personasHuelga}</p></div>
         </section>
+
+        <label
+          className={`mb-4 flex min-h-28 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed px-5 py-4 text-center transition ${
+            dropActive
+              ? 'border-sky-400 bg-sky-500/10'
+              : 'border-metro-border bg-metro-panel/25 hover:border-sky-400/60 hover:bg-sky-500/5'
+          } ${importingMessage ? 'pointer-events-none opacity-70' : ''}`}
+          onDragEnter={(event) => { event.preventDefault(); setDropActive(true); }}
+          onDragOver={(event) => { event.preventDefault(); setDropActive(true); }}
+          onDragLeave={(event) => {
+            event.preventDefault();
+            if (event.currentTarget === event.target) setDropActive(false);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDropActive(false);
+            const file = event.dataTransfer.files?.[0];
+            if (file) onImportMessage(file);
+          }}
+        >
+          <input
+            accept=".msg"
+            className="hidden"
+            disabled={importingMessage}
+            type="file"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onImportMessage(file);
+              event.target.value = '';
+            }}
+          />
+          <div>
+            <Mail className="mx-auto mb-2 text-sky-300" size={26} />
+            <p className="text-sm font-semibold text-metro-text">
+              {importingMessage ? 'Leyendo correo y Excel adjunto…' : 'Arrastra aquí el correo recibido desde Outlook'}
+            </p>
+            <p className="mt-1 text-xs text-metro-muted">Formato .msg · también puedes hacer clic para seleccionarlo</p>
+          </div>
+        </label>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-metro-muted">
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-semibold text-emerald-300">Verde · recibido</span>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 font-semibold text-amber-300">Amarillo · pendiente</span>
+          <span>Los errores de contenido se muestran aparte y deben corregirse antes de validar.</span>
+        </div>
 
         {globalIssues.length > 0 && (
           <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-200">
@@ -138,20 +189,26 @@ export function HuelgasResponseCollectionModal({
             const errorCount = zoneIssues.filter((item) => item.severity === 'error').length;
             const warningCount = zoneIssues.filter((item) => item.severity === 'warning').length;
             return (
-              <section key={response.zonaId} className="rounded-xl border border-metro-border bg-metro-panel/35 p-3.5">
+              <section
+                key={response.zonaId}
+                className={`rounded-xl border p-3.5 ${
+                  received
+                    ? 'border-emerald-500/35 bg-emerald-500/[0.06]'
+                    : 'border-amber-500/35 bg-amber-500/[0.06]'
+                }`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-metro-text">{response.zonaNombre}</h3>
-                      <StatusBadge
-                        tone={errorCount > 0 ? 'error' : response.reviewed ? 'success' : received ? 'warning' : 'muted'}
-                        size="xs"
-                      >
-                        {errorCount > 0 ? `${errorCount} error${errorCount === 1 ? '' : 'es'}` : response.reviewed ? 'Revisado' : received ? 'Recibido' : 'Pendiente'}
+                      <StatusBadge tone={received ? 'success' : 'warning'} size="xs">
+                        {received ? 'Recibido' : 'Pendiente'}
                       </StatusBadge>
+                      {response.reviewed && <StatusBadge tone="success" size="xs">Revisado</StatusBadge>}
+                      {errorCount > 0 && <StatusBadge tone="error" size="xs">{errorCount} error{errorCount === 1 ? '' : 'es'}</StatusBadge>}
                       {errorCount === 0 && warningCount > 0 && <StatusBadge tone="warning" size="xs">{warningCount} aviso{warningCount === 1 ? '' : 's'}</StatusBadge>}
                     </div>
-                    <p className="mt-1 truncate text-xs text-metro-muted">{response.sourceFileName || 'Sin fichero importado'}</p>
+                    <p className="mt-1 truncate text-xs text-metro-muted">{response.sourceFileName || 'Esperando respuesta'}</p>
                   </div>
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:bg-metro-raised/50">
                     <Upload size={15} />
@@ -159,7 +216,7 @@ export function HuelgasResponseCollectionModal({
                     <input
                       accept=".xlsx,.xlsm"
                       className="hidden"
-                      disabled={Boolean(importingZoneId)}
+                      disabled={Boolean(importingZoneId) || importingMessage}
                       type="file"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
@@ -196,7 +253,7 @@ export function HuelgasResponseCollectionModal({
                       variant={response.reviewed ? 'secondary' : 'primary'}
                       icon={CheckCircle2}
                       iconOnly={false}
-                      disabled={response.reviewed}
+                      disabled={response.reviewed || !received}
                       onClick={() => onReview(response.zonaId)}
                     >
                       {response.reviewed ? 'Datos revisados' : 'Validar circuito'}
@@ -211,7 +268,7 @@ export function HuelgasResponseCollectionModal({
 
       <ModalFooter className="justify-between">
         <div className="self-center text-xs">
-          <p className="text-metro-muted">{dirty ? 'Hay cambios sin guardar.' : 'Cambios guardados.'}</p>
+          <p className="text-metro-muted">{dirty ? 'Hay cambios sin guardar.' : 'Cambios guardados.'} · Revisados {reviewedCount}/{responses.length}</p>
           {validationSummary.errors > 0 ? (
             <p className="mt-0.5 text-red-300">{validationSummary.errors} bloqueo{validationSummary.errors === 1 ? '' : 's'} · la Excel maestra no se puede generar todavía.</p>
           ) : validationSummary.warnings > 0 ? (

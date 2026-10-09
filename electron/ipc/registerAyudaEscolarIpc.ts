@@ -9,7 +9,7 @@ interface SchoolHelpInspection {
   senderEmail: string;
   subject: string;
   receivedAt: string;
-  attachments: Array<{ name: string; size: number }>;
+  attachments: Array<{ name: string; size: number; contentBase64?: string }>;
 }
 
 interface SchoolHelpResult {
@@ -86,7 +86,20 @@ try {
   $attachments = @()
   for ($i = 1; $i -le $mail.Attachments.Count; $i++) {
     $att = $mail.Attachments.Item($i)
-    $attachments += [PSCustomObject]@{ name = [string]$att.FileName; size = [int64]$att.Size }
+    $name = [string]$att.FileName
+    $size = [int64]$att.Size
+    $contentBase64 = ''
+    $extension = [IO.Path]::GetExtension($name).ToLowerInvariant()
+    if (($extension -eq '.xlsx' -or $extension -eq '.xlsm') -and $size -le 20971520) {
+      $tempAttachment = Join-Path ([IO.Path]::GetTempPath()) ('traccion-huelga-' + [Guid]::NewGuid().ToString('N') + $extension)
+      try {
+        $att.SaveAsFile($tempAttachment)
+        $contentBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($tempAttachment))
+      } finally {
+        Remove-Item -LiteralPath $tempAttachment -Force -ErrorAction SilentlyContinue
+      }
+    }
+    $attachments += [PSCustomObject]@{ name = $name; size = $size; contentBase64 = $contentBase64 }
   }
   [PSCustomObject]@{
     senderName = [string]$mail.SenderName
@@ -171,7 +184,12 @@ async function inspectSchoolHelpMessage(fileName: string, buffer: ArrayBuffer): 
       receivedAt: String(raw.receivedAt ?? '').trim(),
       attachments: attachmentArray.map((item) => {
         const attachment = item as Record<string, unknown>;
-        return { name: String(attachment.name ?? 'adjunto'), size: Number(attachment.size ?? 0) };
+        const contentBase64 = String(attachment.contentBase64 ?? '').trim();
+        return {
+          name: String(attachment.name ?? 'adjunto'),
+          size: Number(attachment.size ?? 0),
+          ...(contentBase64 ? { contentBase64 } : {}),
+        };
       }),
     };
     return { ok: true, message: 'Correo leído correctamente.', inspection };
