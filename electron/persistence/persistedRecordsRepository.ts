@@ -55,6 +55,23 @@ export interface ConditionalPersistedRecordSaveResult {
   message: string;
 }
 
+export interface ConditionalPersistedRecordsBatchSaveResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  currentUpdatedAt: string | null;
+  failedRecordKey?: string;
+  message: string;
+}
+
+class PersistedRecordsBatchConflictError extends Error {
+  constructor(
+    readonly key: string,
+    readonly currentUpdatedAt: string | null,
+  ) {
+    super('Persisted records OCC conflict');
+  }
+}
+
 type SafeDatabaseOperation = <T>(
   operation: () => T,
   fallback: (status: DatabaseStatus, message: string) => T,
@@ -241,6 +258,129 @@ export function createPersistedRecordsRepository(deps: PersistedRecordsRepositor
     );
   }
 
+
+  async function savePersistedRecordsIfUnchanged(
+    records: ConditionalPersistedStorageRecord[],
+  ): Promise<ConditionalPersistedRecordsBatchSaveResult> {
+    return deps.safeDatabaseOperation(
+      () => {
+        const currentStatus = deps.getSqliteStatus();
+        if (
+          !currentStatus.ready ||
+          currentStatus.phase !== 'active' ||
+          deps.isDatabaseWriteBlockedByHeartbeat()
+        ) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt: null,
+            message:
+              currentStatus.message ??
+              'SQLite no está activo. No se permite guardar sin base compartida.',
+          };
+        }
+
+        if (records.length === 0) {
+          return {
+            ok: true,
+            status: currentStatus,
+            currentUpdatedAt: null,
+            message: 'No hay datos que guardar.',
+          };
+        }
+
+        const uniqueKeys = new Set(records.map((record) => record.key));
+        if (uniqueKeys.size !== records.length) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt: null,
+            message: 'El guardado atómico contiene claves duplicadas.',
+          };
+        }
+
+        deps.assertDatabaseWritesAllowed();
+        const db = deps.requireDatabase();
+
+        try {
+          const now = db.transaction(() => {
+            const currentUpdatedAtByKey = new Map<string, string | null>();
+
+            // OCC de todo el lote antes de la primera escritura. Si una sola
+            // clave cambió, no se modifica ninguna de las demás.
+            for (const record of records) {
+              const row = db
+                .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+                .get(record.key);
+              const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+              currentUpdatedAtByKey.set(record.key, currentUpdatedAt);
+              if (currentUpdatedAt !== record.expectedUpdatedAt) {
+                throw new PersistedRecordsBatchConflictError(record.key, currentUpdatedAt);
+              }
+            }
+
+            const updatedAt = new Date().toISOString();
+            for (const record of records) {
+              const currentUpdatedAt = currentUpdatedAtByKey.get(record.key) ?? null;
+              if (currentUpdatedAt === null) {
+                db.prepare(
+                  `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
+                   VALUES (?, ?, 'sqlite-primary', ?, ?)`,
+                ).run(record.key, record.value, updatedAt, updatedAt);
+              } else {
+                const updateResult = db
+                  .prepare(
+                    `UPDATE persisted_records
+                     SET value_json = ?, source = 'sqlite-primary', updated_at = ?
+                     WHERE key = ? AND updated_at = ?`,
+                  )
+                  .run(record.value, updatedAt, record.key, currentUpdatedAt);
+                if (updateResult.changes !== 1) {
+                  const latest = db
+                    .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+                    .get(record.key);
+                  throw new PersistedRecordsBatchConflictError(
+                    record.key,
+                    isUpdatedAtRow(latest) ? latest.updated_at : null,
+                  );
+                }
+              }
+            }
+
+            updateRefreshMetadata(db, updatedAt);
+            return updatedAt;
+          })();
+
+          deps.enqueueLocalBackup(`save-batch:${records.length}`);
+          return {
+            ok: true,
+            status: currentStatus,
+            currentUpdatedAt: now,
+            message: 'Guardado atómico confirmado en SQLite compartido.',
+          };
+        } catch (error) {
+          if (error instanceof PersistedRecordsBatchConflictError) {
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: error.currentUpdatedAt,
+              failedRecordKey: error.key,
+              message:
+                'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+            };
+          }
+          throw error;
+        }
+      },
+      (nextStatus, message) => ({
+        ok: false,
+        status: nextStatus,
+        currentUpdatedAt: null,
+        message,
+      }),
+    );
+  }
+
   async function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): Promise<DatabaseStatus> {
     const currentStatus = deps.getSqliteStatus();
     if (
@@ -396,6 +536,7 @@ export function createPersistedRecordsRepository(deps: PersistedRecordsRepositor
     updateRefreshMetadata,
     savePersistedRecord,
     savePersistedRecordIfUnchanged,
+    savePersistedRecordsIfUnchanged,
     migrateLocalStorageSnapshot,
     getPersistedRecordSnapshot,
     loadPersistedRecordsHydrationSnapshot,

@@ -70,6 +70,11 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('database:save-local-storage-record-if-unchanged', record),
+  saveLocalStorageRecordsIfUnchanged: (records: Array<{
+    key: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('database:save-local-storage-records-if-unchanged', { records }),
   loadLoteriaRecords: () => ipcRenderer.invoke('loteria:load-records'),
   saveLoteriaSnapshotIfUnchanged: (payload: {
     year: number;

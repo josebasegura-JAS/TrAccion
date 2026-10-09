@@ -28,6 +28,7 @@ import {
   restoreLocalBackup,
   savePersistedRecord,
   savePersistedRecordIfUnchanged,
+  savePersistedRecordsIfUnchanged,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
   clearSecondaryBackupDirectory,
@@ -335,6 +336,44 @@ export function registerCoreDatabaseIpc(): void {
         value,
         expectedUpdatedAt,
       }),
+    );
+  });
+  ipcMain.handle('database:save-local-storage-records-if-unchanged', (_event, payload: unknown) => {
+    const candidate = payload as { records?: unknown } | null;
+    if (!candidate || !Array.isArray(candidate.records)) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de guardado atómico inválido.',
+      };
+    }
+
+    const records = candidate.records;
+    const valid = records.every((item) => {
+      if (!item || typeof item !== 'object') return false;
+      const record = item as { key?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+      return (
+        typeof record.key === 'string' &&
+        Boolean(record.key.trim()) &&
+        typeof record.value === 'string' &&
+        (typeof record.expectedUpdatedAt === 'string' || record.expectedUpdatedAt === null)
+      );
+    });
+
+    if (!valid) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de guardado atómico inválido.',
+      };
+    }
+
+    return enqueueSqliteIpc('database:save-local-storage-records-if-unchanged', () =>
+      savePersistedRecordsIfUnchanged(
+        records as Array<{ key: string; value: string; expectedUpdatedAt: string | null }>,
+      ),
     );
   });
   ipcMain.handle('recordLock:acquire', (_event, payload: unknown) => {

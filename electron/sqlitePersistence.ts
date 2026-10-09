@@ -655,6 +655,7 @@ const {
   updateRefreshMetadata,
   savePersistedRecord,
   savePersistedRecordIfUnchanged,
+  savePersistedRecordsIfUnchanged,
   migrateLocalStorageSnapshot,
   getPersistedRecordSnapshot,
   loadPersistedRecordsHydrationSnapshot,
@@ -665,6 +666,7 @@ const {
 export {
   savePersistedRecord,
   savePersistedRecordIfUnchanged,
+  savePersistedRecordsIfUnchanged,
   migrateLocalStorageSnapshot,
   getPersistedRecordSnapshot,
   loadPersistedRecordsHydrationSnapshot,
