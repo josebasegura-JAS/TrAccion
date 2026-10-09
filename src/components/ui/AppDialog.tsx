@@ -49,6 +49,21 @@ function getIconClassName({ danger, mode, type }: Pick<AppDialogProps, 'danger' 
   return 'bg-blue-950/30 text-metro-info ring-blue-400/30';
 }
 
+function getDefaultTitle(mode: AppDialogProps['mode'], type: AppDialogAlertType, danger: boolean): string {
+  if (mode === 'confirm') {
+    return danger ? 'Confirmar acción' : 'Confirmar';
+  }
+
+  if (type === 'error') return 'Error';
+  if (type === 'warning') return 'Atención';
+  return 'Información';
+}
+
+function getDefaultConfirmLabel(mode: AppDialogProps['mode'], danger: boolean): string {
+  if (mode === 'alert') return 'Cerrar';
+  return danger ? 'Confirmar' : 'Continuar';
+}
+
 export function AppDialog({
   cancelLabel = 'Cancelar',
   confirmLabel,
@@ -71,8 +86,8 @@ export function AppDialog({
     onConfirm();
   });
 
-  const resolvedTitle = title ?? (mode === 'confirm' ? 'Confirmar acción' : 'Aviso');
-  const resolvedConfirmLabel = confirmLabel ?? (mode === 'confirm' ? 'Aceptar' : 'OK');
+  const resolvedTitle = title ?? getDefaultTitle(mode, type, danger);
+  const resolvedConfirmLabel = confirmLabel ?? getDefaultConfirmLabel(mode, danger);
   const panelClassName = danger
     ? 'border-red-400/30 bg-red-950/20 shadow-red-950/20'
     : 'border-metro-border bg-metro-surface shadow-black/40';
