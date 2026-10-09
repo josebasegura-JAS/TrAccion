@@ -42,6 +42,10 @@ import {
   saveTicketRestauranteManutencionesToSqlite,
 } from './ticketRestauranteSqliteRepository';
 import {
+  hasAtomicTicketCalendarRemoval,
+  removeTicketCalendarWithPeopleAtomically,
+} from './ticketRestauranteAtomicRemoval';
+import {
   isTicketCalendar,
   isTicketManutencion,
   isTicketPerson,
@@ -220,10 +224,6 @@ function areTicketSnapshotsEquivalent(
   );
 }
 
-// Mapas en memoria id -> updatedAt SQLite, usados para hacer comprobaciones
-// de concurrencia (OCC) al editar/eliminar calendarios y personas sin que la
-// UI tenga que gestionar el token de versión explícitamente. La clave de
-// `people` es `empleado` (no hay id propio en TicketPerson).
 let calendarSqliteUpdatedAt = new Map<string, string>();
 let personSqliteUpdatedAt = new Map<string, string>();
 let absenceSqliteUpdatedAt = new Map<string, string>();
@@ -246,12 +246,6 @@ function updateManutencionSqliteUpdatedAtMap(manutenciones: readonly TicketManut
   manutencionSqliteUpdatedAt = new Map(manutenciones.map((row) => [row.id, row.updatedAt]));
 }
 
-/**
- * Carga calendarios desde SQLite si el repositorio está activo. Si la tabla
- * está vacía (primer arranque tras esta migración), siembra desde
- * localStorage en un único guardado por lotes para no perder los calendarios
- * ya en uso.
- */
 async function loadTicketCalendarsPreferringSqlite(): Promise<TicketCalendar[]> {
   if (!hasTicketRestauranteCalendarsSqliteRepository()) {
     return import.meta.env.MODE === 'test'
@@ -301,10 +295,6 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
 
   const sqliteRecord = await loadTicketRestauranteConfigRecordFromSqlite();
   if (sqliteRecord === null) {
-    // La configuración es un singleton y necesita existir también en SQLite
-    // para disponer de token OCC desde el primer guardado. Si la tabla está
-    // vacía (base nueva o migración), sembramos el valor por defecto en la
-    // fuente autoritativa compartida en lugar de depender de localStorage.
     const seedResult = await saveTicketRestauranteConfigToSqlite(
       JSON.stringify(DEFAULT_TICKET_RESTAURANT_CONFIG),
       null,
@@ -314,8 +304,6 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
       return DEFAULT_TICKET_RESTAURANT_CONFIG;
     }
 
-    // Si otro equipo ganó la carrera de inicialización, releemos para tomar
-    // su token y contenido en vez de caer a una copia local.
     const seededRecord = await loadTicketRestauranteConfigRecordFromSqlite();
     if (seededRecord) {
       configSqliteUpdatedAt = seededRecord.updatedAt;
@@ -356,10 +344,6 @@ async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutenc
   return manutenciones;
 }
 
-/**
- * Carga calendars + people + absences + config (preferentemente desde
- * SQLite), sin utilizar localStorage como fuente alternativa.
- */
 async function loadTicketRestauranteStateFromSqliteOrStorage(): Promise<TicketRestauranteSnapshot> {
   const [calendars, people, absences, config, manutenciones] = await Promise.all([
     loadTicketCalendarsPreferringSqlite(),
@@ -400,10 +384,6 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
       );
   },
   reloadFromStorage: () => {
-    // Compara contenido antes de actualizar el estado para evitar el
-    // re-render (y el parpadeo asociado) cuando el poll detecta cambio de
-    // updatedAt pero el contenido normalizado ya coincide con el que
-    // tenemos en memoria.
     const syncSnapshot = readTicketRestauranteSnapshot();
     if (!areTicketSnapshotsEquivalent(get(), syncSnapshot)) {
       set(syncSnapshot);
@@ -538,6 +518,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     if (!previous) {
       return { ok: false, message: 'No se ha encontrado el calendario.' };
     }
+
     const removedCalendar = { ...previous, activo: false, updatedAt, deletedAt: updatedAt };
     const affectedPeople = state.people.filter(
       (person) => person.calendarId === id && !person.deletedAt,
@@ -550,69 +531,45 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     }));
 
     if (hasTicketRestauranteCalendarsSqliteRepository()) {
-      const expectedUpdatedAt = calendarSqliteUpdatedAt.get(id) ?? null;
-      const saveResult = await saveTicketRestauranteCalendarToSqlite(
-        removedCalendar,
-        JSON.stringify(removedCalendar),
-        expectedUpdatedAt,
-      );
-      if (saveResult) {
-        if (!saveResult.ok) {
-          return {
-            ok: false,
-            message:
-              saveResult.message ??
-              'Este calendario ha sido modificado por otro usuario. Recarga antes de continuar.',
-          };
-        }
-        if (saveResult.currentUpdatedAt) {
-          calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
-        }
-
-        let people = state.people;
-        if (removedPeople.length > 0 && hasTicketRestaurantePeopleSqliteRepository()) {
-          const peopleSaveResult = await saveTicketRestaurantePeopleToSqlite(
-            removedPeople.map((person) => ({
-              id: person.empleado,
-              serializedValue: JSON.stringify(person),
-              expectedUpdatedAt: personSqliteUpdatedAt.get(person.empleado) ?? null,
-            })),
-          );
-          if (peopleSaveResult?.ok) {
-            removedPeople.forEach((person) => personSqliteUpdatedAt.delete(person.empleado));
-            const removedByEmployee = new Map(
-              removedPeople.map((person) => [person.empleado, person]),
-            );
-            people = state.people.map((person) => removedByEmployee.get(person.empleado) ?? person);
-          } else {
-            console.warn(
-              'Ticket Restaurante: el calendario se eliminó pero algunas personas asociadas no se han podido actualizar en SQLite.',
-              peopleSaveResult?.message,
-            );
-          }
-        } else if (removedPeople.length > 0) {
-          people = state.people.map((person) => {
-            const removed = removedPeople.find(
-              (item) =>
-                normalizeTicketEmployeeNumber(item.empleado) ===
-                normalizeTicketEmployeeNumber(person.empleado),
-            );
-            return removed ?? person;
-          });
-          writeJsonStorageAsync(PEOPLE_STORAGE_KEY, people).catch((error) =>
-            console.warn(
-              'Ticket Restaurante: no se ha podido persistir personas tras eliminar calendario.',
-              error,
-            ),
-          );
-        }
-
-        const calendars = state.calendars.map((calendar) =>
-          calendar.id === id ? removedCalendar : calendar,
-        );
-        set({ calendars, people });
-        return { ok: true };
+      if (!hasTicketRestaurantePeopleSqliteRepository() || !hasAtomicTicketCalendarRemoval()) {
+        return {
+          ok: false,
+          message:
+            'La eliminación atómica de Ticket Restaurante no está disponible. Recarga o reinicia TrAcción antes de continuar.',
+        };
       }
+
+      const result = await removeTicketCalendarWithPeopleAtomically(
+        {
+          id,
+          serializedValue: JSON.stringify(removedCalendar),
+          expectedUpdatedAt: calendarSqliteUpdatedAt.get(id) ?? null,
+        },
+        removedPeople.map((person) => ({
+          id: person.empleado,
+          serializedValue: JSON.stringify(person),
+          expectedUpdatedAt: personSqliteUpdatedAt.get(person.empleado) ?? null,
+        })),
+      );
+
+      if (!result?.ok) {
+        return {
+          ok: false,
+          message:
+            result?.message ??
+            'No se ha podido eliminar el calendario de Ticket Restaurante de forma atómica.',
+        };
+      }
+
+      calendarSqliteUpdatedAt.delete(id);
+      removedPeople.forEach((person) => personSqliteUpdatedAt.delete(person.empleado));
+      const removedByEmployee = new Map(removedPeople.map((person) => [person.empleado, person]));
+      const calendars = state.calendars.map((calendar) =>
+        calendar.id === id ? removedCalendar : calendar,
+      );
+      const people = state.people.map((person) => removedByEmployee.get(person.empleado) ?? person);
+      set({ calendars, people });
+      return { ok: true };
     }
 
     const calendars = state.calendars.map((calendar) =>
@@ -672,10 +629,6 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     const state = get();
 
     if (hasTicketRestauranteAbsencesSqliteRepository()) {
-      // saveAbsences reemplaza el listado activo completo: las ausencias que
-      // ya no están presentes se marcan deletedAt en el mismo batch (igual
-      // que el soft-delete de removeAbsence), y las presentes se guardan con
-      // su expectedUpdatedAt individual para no perder conflictos de OCC.
       const now = nowIso();
       const nextIds = new Set(absences.map((absence) => absence.id));
       const removedAbsences = state.absences.filter(
@@ -738,9 +691,6 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           };
         }
         absenceSqliteUpdatedAt.delete(id);
-        // El tombstone queda persistido en SQLite, pero no debe permanecer
-        // en el estado activo del renderer: así cualquier cálculo posterior
-        // se recompone inmediatamente con el listado real de ausencias.
         const absences = state.absences.filter((absence) => absence.id !== id);
         set({ absences });
         return { ok: true };
