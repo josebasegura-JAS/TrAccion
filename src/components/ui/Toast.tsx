@@ -21,9 +21,13 @@ import {
   type ToastTone,
 } from './toastContext';
 
-const DEFAULT_DURATION_MS = 4_500;
+const DEFAULT_DURATION_BY_TONE: Record<ToastTone, number> = {
+  success: 3_000,
+  info: 4_500,
+  warning: 6_000,
+  error: 8_000,
+};
 const MAX_VISIBLE_TOASTS = 4;
-
 
 const toneClassName: Record<ToastTone, string> = {
   error: 'border-red-400/40 bg-red-950/95 text-red-50',
@@ -31,6 +35,10 @@ const toneClassName: Record<ToastTone, string> = {
   success: 'border-emerald-400/35 bg-slate-950/95 text-emerald-50',
   warning: 'border-amber-400/40 bg-slate-950/95 text-amber-50',
 };
+
+function toastSignature(tone: ToastTone, message: string, options?: ToastOptions): string {
+  return `${tone}\u0000${options?.title?.trim() ?? ''}\u0000${message.trim()}`;
+}
 
 function ToastIcon({ tone }: { tone: ToastTone }) {
   const props = { 'aria-hidden': true, className: 'mt-0.5 shrink-0', size: 18 } as const;
@@ -44,10 +52,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const nextIdRef = useRef(1);
   const timeoutRefs = useRef(new Map<number, number>());
+  const signatureToIdRef = useRef(new Map<string, number>());
+  const idToSignatureRef = useRef(new Map<number, string>());
+
+  const forgetToast = useCallback((id: number) => {
+    const signature = idToSignatureRef.current.get(id);
+    if (signature && signatureToIdRef.current.get(signature) === id) {
+      signatureToIdRef.current.delete(signature);
+    }
+    idToSignatureRef.current.delete(id);
+  }, []);
 
   useEffect(() => () => {
     timeoutRefs.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     timeoutRefs.current.clear();
+    signatureToIdRef.current.clear();
+    idToSignatureRef.current.clear();
   }, []);
 
   const dismiss = useCallback((id: number) => {
@@ -56,21 +76,56 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(timeoutId);
       timeoutRefs.current.delete(id);
     }
+    forgetToast(id);
     setItems((current) => current.filter((item) => item.id !== id));
-  }, []);
+  }, [forgetToast]);
 
   const push = useCallback((tone: ToastTone, message: string, options?: ToastOptions) => {
-    const id = nextIdRef.current++;
-    setItems((current) => [...current, { id, message, options, tone }].slice(-MAX_VISIBLE_TOASTS));
+    const signature = toastSignature(tone, message, options);
+    const existingId = signatureToIdRef.current.get(signature);
+    const id = existingId ?? nextIdRef.current++;
 
-    const durationMs = Math.max(1_500, options?.durationMs ?? DEFAULT_DURATION_MS);
+    if (existingId !== undefined) {
+      const existingTimeout = timeoutRefs.current.get(existingId);
+      if (existingTimeout !== undefined) {
+        window.clearTimeout(existingTimeout);
+        timeoutRefs.current.delete(existingId);
+      }
+    }
+
+    signatureToIdRef.current.set(signature, id);
+    idToSignatureRef.current.set(id, signature);
+
+    setItems((current) => {
+      const refreshed = [
+        ...current.filter((item) => item.id !== id),
+        { id, message, options, tone },
+      ];
+      const visible = refreshed.slice(-MAX_VISIBLE_TOASTS);
+      const visibleIds = new Set(visible.map((item) => item.id));
+
+      for (const item of current) {
+        if (visibleIds.has(item.id)) continue;
+        const timeoutId = timeoutRefs.current.get(item.id);
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId);
+          timeoutRefs.current.delete(item.id);
+        }
+        forgetToast(item.id);
+      }
+
+      return visible;
+    });
+
+    const durationMs = Math.max(1_500, options?.durationMs ?? DEFAULT_DURATION_BY_TONE[tone]);
     const timeoutId = window.setTimeout(() => {
       timeoutRefs.current.delete(id);
+      forgetToast(id);
       setItems((current) => current.filter((item) => item.id !== id));
     }, durationMs);
     timeoutRefs.current.set(id, timeoutId);
     return id;
-  }, []);
+  }, [forgetToast]);
 
   const api = useMemo<ToastApi>(() => ({
     dismiss,
