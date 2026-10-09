@@ -33,6 +33,7 @@ import {
   getDatabasePathForDirectory,
   readDatabasePreferences,
 } from './databasePreferences.js';
+import { validateSqliteBackupForRestore } from './sqliteBackupValidation.js';
 
 export interface PersistedStorageRecord {
   key: string;
@@ -566,6 +567,16 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       };
     }
     const targetDatabasePath = getDatabasePathForDirectory(configuredDirectory.directoryPath);
+
+    try {
+      const databasePreferences = await readDatabasePreferences();
+      validateSqliteBackupForRestore(backupPath, {
+        expectedDatabaseUuid: databasePreferences.expectedDatabaseUuid,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'El respaldo SQLite no ha superado la validación previa.';
+      return { ok: false, status: currentStatus, message };
+    }
 
     try {
       await mkdir(path.dirname(targetDatabasePath), { recursive: true });
