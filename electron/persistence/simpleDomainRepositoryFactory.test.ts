@@ -84,6 +84,57 @@ describe('createSimpleDomainRepository', () => {
 
     expect(getters[0]).not.toBe(getters[1]);
   });
+
+  it('revalida la migración al cambiar A → B → A y no deja B sin migrar', async () => {
+    let activeDatabase = 'A';
+    const databasesAlreadyMigrated = new Set<string>();
+    const migrationChecks: string[] = [];
+    const actualMigrations: string[] = [];
+
+    const createJsonModuleRepository = vi.fn(
+      (
+        _tableName: string,
+        _legacyKey: string,
+        _moduleLabel: string,
+        getMigrationDone: () => boolean,
+        setMigrationDone: (value: boolean) => void,
+      ) => {
+        const ensureMigration = () => {
+          if (getMigrationDone()) return;
+          migrationChecks.push(activeDatabase);
+          if (!databasesAlreadyMigrated.has(activeDatabase)) {
+            databasesAlreadyMigrated.add(activeDatabase);
+            actualMigrations.push(activeDatabase);
+          }
+          setMigrationDone(true);
+        };
+
+        return {
+          loadSnapshot: vi.fn(async () => {
+            ensureMigration();
+            return { status: {} as never, records: [] };
+          }),
+          saveIfUnchanged: vi.fn(async () => {
+            ensureMigration();
+            return { ok: true, status: {} as never, currentUpdatedAt: null, message: 'ok' };
+          }),
+          saveManyIfUnchanged: vi.fn(),
+        };
+      },
+    );
+
+    const api = createSimpleDomainRepository(createJsonModuleRepository, 't', 'k', 'L');
+    await api.loadSnapshot();
+
+    activeDatabase = 'B';
+    await api.saveIfUnchanged({ id: '1', value: '{}', expectedUpdatedAt: null });
+
+    activeDatabase = 'A';
+    await api.loadSnapshot();
+
+    expect(migrationChecks).toEqual(['A', 'B', 'A']);
+    expect(actualMigrations).toEqual(['A', 'B']);
+  });
 });
 
 describe('createBatchDomainRepository', () => {
@@ -147,5 +198,41 @@ describe('createBatchDomainRepository', () => {
     createBatchDomainRepository(createJsonModuleRepository, 't', 'k', 'L');
 
     expect(capturedGetMigrationDone?.()).toBe(false);
+  });
+
+  it('invalida también la caché antes del guardado batch al cambiar de base', async () => {
+    const observedMigrationState: boolean[] = [];
+    let getMigrationDoneRef: (() => boolean) | null = null;
+    let setMigrationDoneRef: ((value: boolean) => void) | null = null;
+
+    const createJsonModuleRepository = vi.fn(
+      (
+        _tableName: string,
+        _legacyKey: string,
+        _moduleLabel: string,
+        getMigrationDone: () => boolean,
+        setMigrationDone: (value: boolean) => void,
+      ) => {
+        getMigrationDoneRef = getMigrationDone;
+        setMigrationDoneRef = setMigrationDone;
+        return {
+          loadSnapshot: vi.fn(),
+          saveIfUnchanged: vi.fn(),
+          saveManyIfUnchanged: vi.fn(async () => {
+            observedMigrationState.push(getMigrationDone());
+            setMigrationDone(true);
+            return { ok: true, status: {} as never, results: [], message: 'ok' };
+          }),
+        };
+      },
+    );
+
+    const api = createBatchDomainRepository(createJsonModuleRepository, 't', 'k', 'L');
+    setMigrationDoneRef?.(true);
+    expect(getMigrationDoneRef?.()).toBe(true);
+
+    await api.saveManyIfUnchanged([{ id: '1', value: '{}', expectedUpdatedAt: null }]);
+
+    expect(observedMigrationState).toEqual([false]);
   });
 });

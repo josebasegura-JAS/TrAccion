@@ -35,9 +35,40 @@ export interface BatchDomainRepositoryApi extends SimpleDomainRepositoryApi {
 }
 
 /**
+ * El antiguo flag de migración quedaba ligado a la vida del proceso, no a la
+ * conexión SQLite. Tras trabajar con la base A podía quedarse a true y hacer
+ * que una base B recién activada omitiera su migración legacy.
+ *
+ * No disponemos aquí de la conexión concreta (la resuelve la fachada de
+ * sqlitePersistence dentro de createJsonModuleRepository), así que antes de
+ * cada operación invalidamos únicamente esta caché de migración. La capa SQL
+ * comprueba de forma idempotente si la tabla ya contiene datos antes de leer
+ * el registro legacy; por tanto no repite escrituras ya aplicadas, pero sí
+ * vuelve a evaluar correctamente la base que esté activa en ese momento.
+ */
+function createMigrationState(): {
+  getMigrationDone: () => boolean;
+  setMigrationDone: (value: boolean) => void;
+  invalidate: () => void;
+} {
+  let migrationDone = false;
+
+  return {
+    getMigrationDone: () => migrationDone,
+    setMigrationDone: (value) => {
+      migrationDone = value;
+    },
+    invalidate: () => {
+      migrationDone = false;
+    },
+  };
+}
+
+/**
  * Factoría compartida para los módulos de dominio "simples": una tabla,
- * sin guardado por lotes, con su propio flag de migración encapsulado (en
- * vez de una variable suelta a nivel de módulo en sqlitePersistence.ts).
+ * sin guardado por lotes. La comprobación de migración se invalida antes de
+ * cada operación para que nunca se reutilice el estado de una conexión SQLite
+ * anterior.
  * No cubre Presupuestos (transacción combinada sobre 4 tablas, sin pasar
  * por createJsonModuleRepository en absoluto): ese módulo tiene forma
  * propia y se extrae aparte.
@@ -48,21 +79,25 @@ export function createSimpleDomainRepository(
   legacyKey: string,
   moduleLabel: string,
 ): SimpleDomainRepositoryApi {
-  let migrationDone = false;
+  const migrationState = createMigrationState();
 
   const repository = createJsonModuleRepository(
     tableName,
     legacyKey,
     moduleLabel,
-    () => migrationDone,
-    (value) => {
-      migrationDone = value;
-    },
+    migrationState.getMigrationDone,
+    migrationState.setMigrationDone,
   );
 
   return {
-    loadSnapshot: () => repository.loadSnapshot(),
-    saveIfUnchanged: (record) => repository.saveIfUnchanged(record),
+    loadSnapshot: () => {
+      migrationState.invalidate();
+      return repository.loadSnapshot();
+    },
+    saveIfUnchanged: (record) => {
+      migrationState.invalidate();
+      return repository.saveIfUnchanged(record);
+    },
   };
 }
 
@@ -78,21 +113,28 @@ export function createBatchDomainRepository(
   legacyKey: string,
   moduleLabel: string,
 ): BatchDomainRepositoryApi {
-  let migrationDone = false;
+  const migrationState = createMigrationState();
 
   const repository = createJsonModuleRepository(
     tableName,
     legacyKey,
     moduleLabel,
-    () => migrationDone,
-    (value) => {
-      migrationDone = value;
-    },
+    migrationState.getMigrationDone,
+    migrationState.setMigrationDone,
   );
 
   return {
-    loadSnapshot: () => repository.loadSnapshot(),
-    saveIfUnchanged: (record) => repository.saveIfUnchanged(record),
-    saveManyIfUnchanged: (records) => repository.saveManyIfUnchanged(records),
+    loadSnapshot: () => {
+      migrationState.invalidate();
+      return repository.loadSnapshot();
+    },
+    saveIfUnchanged: (record) => {
+      migrationState.invalidate();
+      return repository.saveIfUnchanged(record);
+    },
+    saveManyIfUnchanged: (records) => {
+      migrationState.invalidate();
+      return repository.saveManyIfUnchanged(records);
+    },
   };
 }
