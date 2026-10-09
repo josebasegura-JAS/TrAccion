@@ -83,13 +83,13 @@ describe('backup Excel de Coordinación', () => {
     ]);
 
     const directionWorkbook = new ExcelJS.Workbook();
-    await directionWorkbook.xlsx.load(Buffer.from(new Uint8Array(saved[0].buffer)));
+    await directionWorkbook.xlsx.load(saved[0].buffer);
     expect(directionWorkbook.worksheets.map((sheet) => sheet.name)).toEqual(['Resumen', 'Histórico', 'Pendientes']);
     expect(String(directionWorkbook.getWorksheet('Resumen')?.getCell('A1').value)).toContain('COORDINACIÓN DIRECCIÓN');
     expect(String(directionWorkbook.getWorksheet('Resumen')?.getCell('F2').value)).toContain('Actualizado:');
 
     const unionWorkbook = new ExcelJS.Workbook();
-    await unionWorkbook.xlsx.load(Buffer.from(new Uint8Array(saved[2].buffer)));
+    await unionWorkbook.xlsx.load(saved[2].buffer);
     expect(unionWorkbook.worksheets.map((sheet) => sheet.name)).toEqual(['Resumen', 'Histórico', 'Pendientes', 'Compromisos']);
     expect(unionWorkbook.getWorksheet('Compromisos')?.getCell('G5').value).toBe('Vencido');
   });
