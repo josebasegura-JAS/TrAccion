@@ -25,11 +25,15 @@ function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSo
     tipoSolicitud: 'nueva',
     diasTeletrabajo: ['martes'],
     fechaSolicitud: '2026-01-01',
+    fechaOrdenador: '2026-01-02',
+    fechaCascos: '2026-01-03',
     periodo: '2026-2027',
     observaciones: '',
     validacionSeguridadInformatica: false,
     validacionPrevencion: false,
     validacionJefatura: false,
+    validacionDireccion: false,
+    revisado: false,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
@@ -143,14 +147,18 @@ describe('teletrabajo domain', () => {
 });
 
 function buildEmployee(overrides: Partial<Employee>): Employee {
-  return {
+  const base: Employee = {
     empleado: '100',
     nombreApellidos: 'Persona Plantilla',
     email: '',
     puestoNomina: 'Puesto Nómina Plantilla',
     puestoOrganizativo: 'Puesto Organizativo Plantilla',
+    puestoEus: '',
     residencia: 'Bilbao',
+    unidad: '',
     nivelRetributivo: 'N1',
+    direccionOrganizativa: '',
+    antiguedadPuesto: '',
     sexo: 'M',
     calle: 'Calle Plantilla',
     numero: '1',
@@ -159,13 +167,15 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
     poblacion: 'Bilbao',
     provincia: 'Bizkaia',
     nif: '12345678Z',
+    telefono1: '',
+    telefono2: '',
     dni: '12345678Z',
     residenciaCast: 'Bilbao',
     residenciaEus: 'Bilbo',
     direccionTeletrabajo: 'Calle Plantilla 1, 2, 48001 Bilbao Bizkaia',
     deletedAt: null,
-    ...overrides,
   };
+  return { ...base, ...overrides };
 }
 
 describe('importador de encuesta de teletrabajo', () => {
@@ -362,11 +372,12 @@ describe('generación Word de teletrabajo', () => {
       },
     ];
     const docx = zipDocx(entries);
+    const docxBuffer = new Uint8Array(docx).buffer as ArrayBuffer;
 
-    await expect(detectTeletrabajoWordMarkers(docx.buffer)).resolves.toEqual([
+    await expect(detectTeletrabajoWordMarkers(docxBuffer)).resolves.toEqual([
       'martes',
       'nombreApellidos',
     ]);
-    await expect(unzipDocx(docx.buffer)).resolves.toHaveLength(1);
+    await expect(unzipDocx(docxBuffer)).resolves.toHaveLength(1);
   });
 });
