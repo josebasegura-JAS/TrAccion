@@ -122,9 +122,9 @@ test('las ayudas de todos los módulos abren como diálogo y no desbordan horizo
 
     for (const [groupLabel, moduleLabel] of modules) {
       await navigateToModule(page, groupLabel, moduleLabel);
-      const helpButton = page.getByRole('button', { name: /Abrir ayuda de/i }).first();
+      const helpButton = page.getByRole('button', { name: `Abrir ayuda de ${moduleLabel}` }).first();
       await expect(helpButton).toBeVisible();
-      await helpButton.click();
+      await helpButton.evaluate((element) => (element as HTMLButtonElement).click());
 
       const dialog = page.getByRole('dialog');
       await expect(dialog).toBeVisible();
