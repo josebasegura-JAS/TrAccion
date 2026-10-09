@@ -24,6 +24,17 @@ describe('ToastProvider', () => {
     expect(screen.queryByText('Exportación completada')).not.toBeInTheDocument();
   });
 
+  it('no apila dos notificaciones idénticas de la misma operación', () => {
+    render(<ToastProvider><Trigger /></ToastProvider>);
+    const trigger = screen.getByRole('button', { name: 'success' });
+
+    fireEvent.click(trigger);
+    fireEvent.click(trigger);
+
+    expect(screen.getAllByText('Exportación completada')).toHaveLength(1);
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
   it('anuncia errores de forma assertive', () => {
     render(<ToastProvider><Trigger /></ToastProvider>);
     fireEvent.click(screen.getByRole('button', { name: 'error' }));

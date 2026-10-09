@@ -7,7 +7,7 @@ import {
 } from '../services/persistence';
 
 const SAVED_VISIBLE_MS = 1600;
-const ERROR_VISIBLE_MS = 4000;
+const ERROR_VISIBLE_MS = 7000;
 const SLOW_SAVE_MS = 3000;
 const MAX_OPERATION_VISIBLE_MS = 30000;
 const UNKNOWN_OPERATION_KEY = '__global__';
@@ -134,9 +134,15 @@ export function GlobalBusyIndicator() {
     : state.kind === 'error'
       ? 'El cambio no se ha guardado.'
       : null;
+  const isError = state.kind === 'error';
 
   return (
-    <div className={`global-busy-indicator global-busy-indicator--${state.kind}`} role="status" aria-live="polite" aria-label={label}>
+    <div
+      aria-label={label}
+      aria-live={isError ? 'assertive' : 'polite'}
+      className={`global-busy-indicator global-busy-indicator--${state.kind}`}
+      role={isError ? 'alert' : 'status'}
+    >
       <div className="global-busy-indicator__panel">
         <span className="global-busy-indicator__icon" aria-hidden="true">
           {state.kind === 'saving' ? <Database size={18} className="global-busy-indicator__database" /> : null}
