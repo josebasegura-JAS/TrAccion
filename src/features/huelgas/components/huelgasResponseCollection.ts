@@ -128,7 +128,7 @@ function parseInteger(value: string): number | null {
 
 function includesAny(value: string, aliases: string[]): boolean {
   const normalized = normalize(value);
-  return aliases.some((alias) => normalized.includes(alias));
+  return aliases.some((alias) => normalized.includes(normalize(alias)));
 }
 
 const LABEL_ALIASES = {
@@ -143,18 +143,20 @@ const HEADER_ALIASES = {
   nombre: ['nombre y apellidos', 'nombre apellidos', 'nombre'],
   minimo: ['servicio minimo', 'servicio mínimo', 'servicios minimos', 'servicios mínimos', 'ssmm'],
   situacion: ['situacion', 'situación', 'estado'],
-  observaciones: ['observaciones', 'observacion', 'observación'],
 };
 
 function findHeaderIndex(texts: string[], aliases: string[]): number {
-  return texts.findIndex((text) => aliases.some((alias) => normalize(text) === normalize(alias)));
+  const normalizedAliases = aliases.map(normalize);
+  return texts.findIndex((text) => normalizedAliases.includes(normalize(text)));
 }
 
-function nextNumericValue(
-  sheet: { getCell: (row: number, column: number) => { text: string }; actualColumnCount: number; actualRowCount: number },
-  row: number,
-  column: number,
-): number | null {
+type SheetReader = {
+  getCell: (row: number, column: number) => { text: string };
+  actualColumnCount: number;
+  actualRowCount: number;
+};
+
+function nextNumericValue(sheet: SheetReader, row: number, column: number): number | null {
   for (let offset = 1; offset <= 5; offset += 1) {
     if (column + offset <= sheet.actualColumnCount) {
       const parsed = parseInteger(sheet.getCell(row, column + offset).text);
@@ -172,10 +174,7 @@ function nextNumericValue(
   return null;
 }
 
-function scanLabelMetric(
-  sheet: { getCell: (row: number, column: number) => { text: string }; actualColumnCount: number; actualRowCount: number },
-  aliases: string[],
-): number | null {
+function scanLabelMetric(sheet: SheetReader, aliases: string[]): number | null {
   for (let row = 1; row <= Math.min(sheet.actualRowCount, 120); row += 1) {
     for (let column = 1; column <= Math.min(sheet.actualColumnCount, 40); column += 1) {
       const text = sheet.getCell(row, column).text;
@@ -250,7 +249,7 @@ export async function parseHuelgaResponseWorkbook(buffer: ArrayBuffer): Promise<
         if (isMinimum) minRows += 1;
         if (isStrike) strikeRows += 1;
         if (isWorking && !isMinimum) workRows += 1;
-        if (isStrike && name) huelguistas.push({ empleado, nombre: name });
+        if (isStrike && name) huelguistas.push({ empleado: employee, nombre: name });
       }
 
       if (totalRows > 0) {
@@ -310,6 +309,15 @@ export function collectionTotals(responses: HuelgaZoneResponse[]) {
   };
 }
 
+function workbookBufferToArrayBuffer(value: unknown): ArrayBuffer {
+  if (value instanceof ArrayBuffer) return value;
+  if (ArrayBuffer.isView(value)) {
+    const view = value as ArrayBufferView;
+    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+  }
+  throw new Error('No se ha podido convertir el Excel generado a un fichero válido.');
+}
+
 export async function downloadHuelgaResponseReport(
   fecha: string,
   sindicatos: string[],
@@ -360,11 +368,8 @@ export async function downloadHuelgaResponseReport(
   strikeSheet.getRow(1).font = { bold: true };
   strikeSheet.columns = [{ width: 28 }, { width: 16 }, { width: 42 }];
 
-  const generated = await workbook.xlsx.writeBuffer();
-  const bytes = generated instanceof ArrayBuffer
-    ? generated
-    : generated.buffer.slice(generated.byteOffset, generated.byteOffset + generated.byteLength);
-  const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const bytes = workbookBufferToArrayBuffer(await workbook.xlsx.writeBuffer());
+  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const href = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = href;
