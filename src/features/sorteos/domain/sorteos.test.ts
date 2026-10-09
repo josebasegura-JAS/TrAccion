@@ -18,14 +18,18 @@ import {
 const timestamp = '2026-06-06T00:00:00.000Z';
 
 function employee(overrides: Partial<Employee> = {}): Employee {
-  return {
+  const base: Employee = {
     empleado: '1001',
     nombreApellidos: 'Ana García López',
     email: '',
     puestoNomina: '',
     puestoOrganizativo: '',
+    puestoEus: '',
     residencia: '',
+    unidad: '',
     nivelRetributivo: '',
+    direccionOrganizativa: '',
+    antiguedadPuesto: '',
     sexo: '',
     calle: '',
     numero: '',
@@ -34,13 +38,15 @@ function employee(overrides: Partial<Employee> = {}): Employee {
     poblacion: '',
     provincia: '',
     nif: '',
+    telefono1: '',
+    telefono2: '',
     dni: '',
     residenciaCast: '',
     residenciaEus: '',
     direccionTeletrabajo: '',
     deletedAt: null,
-    ...overrides,
   };
+  return { ...base, ...overrides };
 }
 
 function exclusion(overrides: Partial<SorteosExclusion> = {}): SorteosExclusion {
