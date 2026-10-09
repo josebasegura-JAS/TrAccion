@@ -6,10 +6,9 @@ import {
   validateZoneResponse,
 } from './huelgasResponseCollection';
 
-function toArrayBuffer(value: ExcelJS.Buffer): ArrayBuffer {
+function toArrayBuffer(value: ArrayBuffer | Uint8Array): ArrayBuffer {
   if (value instanceof ArrayBuffer) return value;
-  const view = value as Uint8Array;
-  return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
 }
 
 describe('Huelgas — recogida de respuestas', () => {
