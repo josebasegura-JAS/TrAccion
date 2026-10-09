@@ -45,6 +45,12 @@ function renderTemplateFileName(pattern: string, fecha: string): string {
   return pattern.split('{{FECHA_HUELGA_ARCHIVO}}').join(fileDate(fecha));
 }
 
+function outlookDraftApi() {
+  if (window.traccion?.createOutlookDraft) return window.traccion.createOutlookDraft;
+  if (window.rrllOutlook?.createDraft) return window.rrllOutlook.createDraft;
+  return null;
+}
+
 export function useHuelgaCollectionMails({
   alert,
   confirm,
@@ -164,31 +170,41 @@ export function useHuelgaCollectionMails({
   };
 
   const createCollectionMail = async (group: HuelgaCollectionGroup): Promise<string | null> => {
-    if (!mailTarget) return 'No se encuentra la convocatoria.';
-    const api = window.traccion?.createOutlookDraft;
-    if (!api) return 'La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.';
-    const zona = zonas.find((item) => item.id === group.zonaId);
-    if (!zona) return 'No se encuentra el circuito configurado.';
-    const to = splitRecipients(zona.responsableEmail);
-    if (to.length === 0) return 'El circuito no tiene destinatarios configurados.';
-    const template = EMBEDDED_HUELGA_TEMPLATES[normalizeKey(zona.nombre)];
-    if (!template) return 'No se encuentra la plantilla Excel incorporada para este circuito.';
-    const rendered = renderGroupMail(group);
-    if (!rendered) return 'No se ha podido renderizar la plantilla de correo.';
+    try {
+      if (!mailTarget) return 'No se encuentra la convocatoria.';
+      const api = outlookDraftApi();
+      if (!api) return 'La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.';
+      const zona = zonas.find((item) => item.id === group.zonaId);
+      if (!zona) return 'No se encuentra el circuito configurado.';
+      const to = splitRecipients(zona.responsableEmail);
+      if (to.length === 0) return 'El circuito no tiene destinatarios configurados.';
+      const template = EMBEDDED_HUELGA_TEMPLATES[normalizeKey(zona.nombre)];
+      if (!template) return 'No se encuentra la plantilla Excel incorporada para este circuito.';
+      const rendered = renderGroupMail(group);
+      if (!rendered) return 'No se ha podido renderizar la plantilla de correo.';
 
-    const fileName = renderTemplateFileName(zona.plantillaExcelNombrePatron || template.fileNamePattern, mailTarget.fecha);
-    const result = await api({
-      subject: rendered.subject,
-      html: rendered.html,
-      to,
-      cc: splitRecipients(zona.correoCc),
-      bcc: [],
-      attachments: [{
-        fileName,
-        buffer: await embeddedTemplateForDate(template, mailTarget.fecha),
-      }],
-    });
-    return result.ok ? null : result.message;
+      const fileName = renderTemplateFileName(
+        zona.plantillaExcelNombrePatron || template.fileNamePattern,
+        mailTarget.fecha,
+      );
+      const buffer = await embeddedTemplateForDate(template, mailTarget.fecha);
+      if (buffer.byteLength === 0) return `La plantilla Excel de ${group.zonaNombre} se ha generado vacía.`;
+
+      const result = await api({
+        subject: rendered.subject,
+        html: rendered.html,
+        to,
+        cc: splitRecipients(zona.correoCc),
+        bcc: [],
+        attachments: [{ fileName, buffer }],
+      });
+      if (!result?.ok) return result?.message || 'Outlook no ha confirmado la apertura del borrador.';
+      return null;
+    } catch (error) {
+      return error instanceof Error
+        ? `Error al preparar el correo: ${error.message}`
+        : 'Error desconocido al generar el Excel o abrir Outlook.';
+    }
   };
 
   const markPrepared = async (zoneIds: string[]) => {
@@ -221,7 +237,7 @@ export function useHuelgaCollectionMails({
         return;
       }
       await markPrepared([group.zonaId]);
-      await alert(`Borrador de Outlook preparado para ${group.zonaNombre} con su Excel adjunto.`, {
+      await alert(`Borrador de Outlook abierto para ${group.zonaNombre} con su Excel adjunto.`, {
         title: 'Correo preparado',
         type: 'info',
       });
@@ -264,7 +280,7 @@ export function useHuelgaCollectionMails({
       });
       return;
     }
-    await alert(`Se han preparado ${created} borrador${created === 1 ? '' : 'es'} de Outlook con sus Excel adjuntos.`, {
+    await alert(`Se han abierto ${created} borrador${created === 1 ? '' : 'es'} de Outlook con sus Excel adjuntos.`, {
       title: 'Comunicaciones preparadas',
       type: 'info',
     });

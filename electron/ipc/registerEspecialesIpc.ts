@@ -5,7 +5,7 @@
  */
 import { ipcMain } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
-import { createOutlookDraft } from '../outlookIntegration.js';
+import { createOutlookDraftCompat } from '../outlookDraftCompat.js';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from '../msgParser.js';
 import { validateConditionalJsonRecord } from './ipcHelpers.js';
 import { loadEspecialesRecipientRecordsSnapshot, saveEspecialesRecipientRecordIfUnchanged } from '../sqlitePersistence.js';
@@ -29,7 +29,7 @@ export function registerEspecialesIpc(): void {
     );
   });
   ipcMain.handle('especiales:create-outlook-draft', async (_event, payload: unknown) =>
-    createOutlookDraft(payload),
+    createOutlookDraftCompat(payload),
   );
   ipcMain.handle('msg:parseOutlookMsg', async (_event, payload: unknown) => {
     try {
