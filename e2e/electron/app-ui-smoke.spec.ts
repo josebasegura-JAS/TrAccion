@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { launchTraccionElectron, launchTraccionElectronWithIsolatedSharedDatabase, navigateToModule } from './electronTestUtils';
+import {
+  expectNoAppShellError,
+  launchTraccionElectron,
+  launchTraccionElectronWithIsolatedSharedDatabase,
+  navigateToModule,
+} from './electronTestUtils';
 
 test('arranca en Inicio y muestra estructura principal sin error de render', async () => {
   const { page, close } = await launchTraccionElectron();
@@ -8,8 +13,8 @@ test('arranca en Inicio y muestra estructura principal sin error de render', asy
     await expect(page).toHaveTitle(/TrAcción/);
     await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Inicio' })).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByRole('button', { name: /Estado de base de datos:/ })).toBeVisible();
-    await expect(page.getByText('No se ha podido mostrar TrAcción')).toHaveCount(0);
+    await expect(page.getByText('Edición bloqueada', { exact: true })).toBeVisible();
+    await expectNoAppShellError(page);
   } finally {
     await close();
   }

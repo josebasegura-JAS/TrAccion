@@ -19,6 +19,7 @@ export type LaunchTraccionElectronOptions = {
 };
 
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
+const READ_ONLY_BANNER_TEXT = 'Base compartida no disponible: edición bloqueada';
 
 export async function createSharedDatabaseDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), 'traccion-e2e-shared-db-'));
@@ -93,6 +94,14 @@ export async function closeTraccionElectron(app: ElectronApplication): Promise<v
   await app.close().catch(() => undefined);
 }
 
+async function expectSharedDatabaseReady(page: Page): Promise<void> {
+  // El antiguo botón "Estado de base de datos" ya no forma parte del header.
+  // El contrato visible actual es: no existe banner de solo lectura y el header
+  // termina mostrando el estado sincronizado una vez SQLite está activa.
+  await expect(page.getByText('Actualizado', { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('alert').filter({ hasText: READ_ONLY_BANNER_TEXT })).toHaveCount(0);
+}
+
 export async function launchTraccionElectron(
   options: LaunchTraccionElectronOptions = {},
 ): Promise<ElectronTestApp> {
@@ -122,9 +131,7 @@ export async function launchTraccionElectron(
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible();
   if (options.sharedDatabaseDirectory) {
-    await expect(
-      page.getByRole('button', { name: 'Estado de base de datos: SQLite activa en ruta compartida/personalizada' }).first(),
-    ).toBeVisible({ timeout: 20_000 });
+    await expectSharedDatabaseReady(page);
   }
 
   return {
@@ -173,7 +180,7 @@ export async function launchTraccionElectronWithIsolatedSharedDatabase(
 }
 
 export async function expectNoAppShellError(page: Page): Promise<void> {
-  await expect(page.getByText('No se ha podido mostrar TrAccion')).toHaveCount(0);
+  await expect(page.getByText('No se ha podido mostrar TrAcción')).toHaveCount(0);
 }
 
 export async function openNavigationGroup(page: Page, groupLabel: string): Promise<void> {
