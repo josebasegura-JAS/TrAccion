@@ -1,0 +1,46 @@
+name: PR14 apply atomic huelgas masters
+
+on:
+  push:
+    branches:
+      - fix/huelgas-zone-masters-atomic
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Aplicar cambios
+        shell: pwsh
+        run: |
+          python .github/scripts/pr14_prepare.py
+          python .github/scripts/pr14_apply.py
+          Remove-Item .github/scripts/pr14_prepare.py
+          Remove-Item .github/scripts/pr14_apply.py
+          Remove-Item .github/workflows/pr14-apply.yml
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test atómico persisted records
+        run: npx vitest run electron/persistence/persistedRecordsAtomicBatch.test.ts --fileParallelism=false
+      - name: Commit final
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(huelgas): guardar zonas y áreas de forma atómica"
+          git push origin HEAD:fix/huelgas-zone-masters-atomic
