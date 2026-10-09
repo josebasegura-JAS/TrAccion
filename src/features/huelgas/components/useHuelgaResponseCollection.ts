@@ -23,9 +23,40 @@ import {
   type HuelgaValidationIssue,
 } from './huelgasResponseValidation';
 
+const INTERNAL_SSGG_ZONE_ID = 'zona-ssgg-interno';
+
+const INTERNAL_SSGG_ZONE: HuelgaZona = {
+  id: INTERNAL_SSGG_ZONE_ID,
+  nombre: 'Servicios Generales (SSGG)',
+  responsableNombre: 'Recogida interna RRLL',
+  responsableEmail: '',
+  correoCc: '',
+  correoActivo: false,
+  correoAsunto: '',
+  correoCuerpoHtml: '',
+  correoPlazos: '',
+  correoInstruccionesHabituales: '',
+  plantillaExcelNombrePatron: 'SSCC - Seguimiento huelga {{FECHA_HUELGA_ARCHIVO}}.xlsx',
+  active: true,
+  createdAt: 'internal',
+  updatedAt: 'internal',
+};
+
+function collectionZones(zonas: HuelgaZona[]): HuelgaZona[] {
+  return zonas.some((zona) => zona.id === INTERNAL_SSGG_ZONE_ID)
+    ? zonas
+    : [...zonas, INTERNAL_SSGG_ZONE];
+}
+
+function isInternalSsgg(zoneId: string): boolean {
+  return zoneId === INTERNAL_SSGG_ZONE_ID;
+}
+
 function circuitIdsFor(huelga: Huelga, zonas: HuelgaZona[]): string[] {
-  if (huelga.circuitosZonaIds?.length) return huelga.circuitosZonaIds;
-  return zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => zona.id);
+  const configured = huelga.circuitosZonaIds?.length
+    ? huelga.circuitosZonaIds
+    : zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => zona.id);
+  return [...new Set([...configured, INTERNAL_SSGG_ZONE_ID])];
 }
 
 function ensureResponses(
@@ -35,7 +66,7 @@ function ensureResponses(
 ): Record<string, HuelgaZoneResponse> {
   const selected = new Set(circuitIdsFor(huelga, zonas));
   return Object.fromEntries(
-    zonas
+    collectionZones(zonas)
       .filter((zona) => selected.has(zona.id))
       .map((zona) => {
         const current = existing?.[zona.id];
@@ -70,6 +101,9 @@ function zoneAliases(zona: HuelgaZona): string[] {
   if (name === 'oacs' || name.includes('oac')) aliases.push('oacs', 'oac');
   if (name === 'pmc' || name.includes('pmc')) aliases.push('pmc');
   if (name.includes('jefatura') && name.includes('operaciones')) aliases.push('jefatura de operaciones', 'jefatura operaciones');
+  if (name.includes('servicios generales') || name.includes('ssgg')) {
+    aliases.push('servicios generales', 'ssgg', 'sscc', 'servicios centrales');
+  }
   return [...new Set(aliases.map(normalizeSearchText).filter((item) => item.length >= 3))];
 }
 
@@ -168,24 +202,48 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
   };
 
   const updateResponse = <K extends keyof HuelgaZoneResponse>(zoneId: string, field: K, value: HuelgaZoneResponse[K]) => {
-    setDraft((current) => ({
-      ...current,
-      [zoneId]: { ...current[zoneId], [field]: value, reviewed: field === 'reviewed' ? Boolean(value) : false },
-    }));
+    setDraft((current) => {
+      const previous = current[zoneId];
+      if (!previous) return current;
+      const internalDefaults = isInternalSsgg(zoneId) && field !== 'reviewed'
+        ? {
+            sourceFileName: previous.sourceFileName || 'Registro interno RRLL',
+            importedAt: previous.importedAt || new Date().toISOString(),
+            serviciosMinimos: previous.serviciosMinimos ?? 0,
+            personasHuelga: previous.personasHuelga ?? 0,
+          }
+        : {};
+      return {
+        ...current,
+        [zoneId]: {
+          ...previous,
+          ...internalDefaults,
+          [field]: value,
+          reviewed: field === 'reviewed' ? Boolean(value) : false,
+        },
+      };
+    });
     setDirty(true);
   };
 
   const importResponseBuffer = async (zoneId: string, fileName: string, buffer: ArrayBuffer): Promise<boolean> => {
     const current = draft[zoneId];
-    const currentZone = zonas.find((zona) => zona.id === zoneId);
+    const allZones = collectionZones(zonas);
+    const currentZone = allZones.find((zona) => zona.id === zoneId);
     if (!current || !currentZone) return false;
     const [parsed, workbookFindings] = await Promise.all([
       parseHuelgaResponseWorkbook(buffer),
       analyzeHuelgaResponseWorkbook(buffer),
     ]);
-    const mismatchWarning = fileCircuitMismatchWarning(fileName, currentZone, zonas);
+    const mismatchWarning = fileCircuitMismatchWarning(fileName, currentZone, allZones);
+    const normalizedParsed = {
+      ...parsed,
+      serviciosMinimos: parsed.serviciosMinimos ?? 0,
+      personasHuelga: parsed.personasHuelga ?? 0,
+    };
+    const optionalMissingPattern = /total de (servicios mínimos|personas en huelga)/i;
     const warnings = [...new Set([
-      ...parsed.warnings,
+      ...parsed.warnings.filter((message) => !optionalMissingPattern.test(message)),
       ...workbookFindings,
       ...(mismatchWarning ? [mismatchWarning] : []),
     ])];
@@ -193,7 +251,7 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
       ...responsesDraft,
       [zoneId]: {
         ...responsesDraft[zoneId],
-        ...parsed,
+        ...normalizedParsed,
         warnings,
         sourceFileName: fileName,
         importedAt: new Date().toISOString(),
@@ -225,12 +283,12 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     }
   };
 
-  const importOutlookMessage = async (file: File) => {
+  const importSingleDroppedFile = async (file: File) => {
     if (!target) return;
 
     if (/\.(xlsx|xlsm)$/i.test(file.name)) {
       const selectedIds = new Set(circuitIdsFor(target, zonas));
-      const availableZones = zonas.filter((zona) => selectedIds.has(zona.id));
+      const availableZones = collectionZones(zonas).filter((zona) => selectedIds.has(zona.id));
       const zona = detectMessageZone(file.name, '', '', availableZones);
 
       if (!zona) {
@@ -306,7 +364,7 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
       }
 
       const selectedIds = new Set(circuitIdsFor(target, zonas));
-      const availableZones = zonas.filter((zona) => selectedIds.has(zona.id));
+      const availableZones = collectionZones(zonas).filter((zona) => selectedIds.has(zona.id));
       const unresolved: string[] = [];
       const duplicatedZones = new Set<string>();
       const matches: Array<{ attachment: HuelgaMailAttachment; zona: HuelgaZona }> = [];
@@ -370,6 +428,23 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
       });
     } finally {
       setImportingMessage(false);
+    }
+  };
+
+  const importOutlookMessage = async (input: File | File[]) => {
+    const files = Array.isArray(input) ? input : [input];
+    const validFiles = files.filter((file) => /\.(msg|xlsx|xlsm)$/i.test(file.name));
+    const invalidFiles = files.filter((file) => !/\.(msg|xlsx|xlsm)$/i.test(file.name));
+
+    if (invalidFiles.length > 0) {
+      await alert(
+        `Se ignorarán formatos no admitidos: ${invalidFiles.map((file) => file.name).join(', ')}.`,
+        { title: 'Algunos archivos no se procesarán', type: 'warning' },
+      );
+    }
+
+    for (const file of validFiles) {
+      await importSingleDroppedFile(file);
     }
   };
 

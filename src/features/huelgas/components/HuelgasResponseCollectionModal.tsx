@@ -76,7 +76,7 @@ type Props = {
   exporting: boolean;
   onClose: () => void;
   onImport: (zoneId: string, file: File) => void;
-  onImportMessage: (file: File) => void;
+  onImportMessage: (file: File | File[]) => void;
   onChange: (zoneId: string, field: keyof HuelgaZoneResponse, value: HuelgaZoneResponse[keyof HuelgaZoneResponse]) => void;
   onReview: (zoneId: string) => void;
   onSave: () => void;
@@ -113,7 +113,7 @@ export function HuelgasResponseCollectionModal({
       <ModalHeader>
         <ModalTitle
           id="huelga-response-title"
-          subtitle="Arrastra el correo recibido de Outlook o directamente su Excel; TrAcción identifica el circuito y valida los datos. La importación manual por circuito sigue disponible."
+          subtitle="Arrastra uno o varios correos de Outlook o Excel; TrAcción identifica cada circuito y valida los datos. SSGG se recoge internamente, sin correo."
         >
           Recogida de datos · {formatDate(target.fecha)}
         </ModalTitle>
@@ -145,18 +145,19 @@ export function HuelgasResponseCollectionModal({
           onDrop={(event) => {
             event.preventDefault();
             setDropActive(false);
-            const file = event.dataTransfer.files?.[0];
-            if (file) onImportMessage(file);
+            const files = Array.from(event.dataTransfer.files ?? []);
+            if (files.length > 0) onImportMessage(files);
           }}
         >
           <input
             accept=".msg,.xlsx,.xlsm"
             className="hidden"
             disabled={importingMessage}
+            multiple
             type="file"
             onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) onImportMessage(file);
+              const files = Array.from(event.target.files ?? []);
+              if (files.length > 0) onImportMessage(files);
               event.target.value = '';
             }}
           />
@@ -166,9 +167,9 @@ export function HuelgasResponseCollectionModal({
               <FileSpreadsheet size={24} />
             </div>
             <p className="text-sm font-semibold text-metro-text">
-              {importingMessage ? 'Procesando respuesta…' : 'Arrastra aquí el correo de Outlook o el Excel recibido'}
+              {importingMessage ? 'Procesando respuesta…' : 'Arrastra aquí uno o varios correos de Outlook o Excel'}
             </p>
-            <p className="mt-1 text-xs text-metro-muted">Formatos .msg, .xlsx o .xlsm · también puedes hacer clic para seleccionarlo</p>
+            <p className="mt-1 text-xs text-metro-muted">Formatos .msg, .xlsx o .xlsm · admite selección múltiple</p>
           </div>
         </label>
 
@@ -187,7 +188,16 @@ export function HuelgasResponseCollectionModal({
 
         <div className="space-y-3">
           {responses.map((response) => {
-            const received = Boolean(response.sourceFileName || response.importedAt);
+            const received = Boolean(
+              response.sourceFileName ||
+              response.importedAt ||
+              response.personasTurno !== null ||
+              response.personasTrabajan !== null ||
+              response.serviciosMinimos !== null ||
+              response.personasHuelga !== null ||
+              response.observaciones.trim(),
+            );
+            const internalSsgg = response.zonaId === 'zona-ssgg-interno';
             const zoneIssues = validationByZone[response.zonaId] ?? [];
             const errorCount = zoneIssues.filter((item) => item.severity === 'error').length;
             const warningCount = zoneIssues.filter((item) => item.severity === 'warning').length;
@@ -211,7 +221,14 @@ export function HuelgasResponseCollectionModal({
                       {errorCount > 0 && <StatusBadge tone="error" size="xs">{errorCount} error{errorCount === 1 ? '' : 'es'}</StatusBadge>}
                       {errorCount === 0 && warningCount > 0 && <StatusBadge tone="warning" size="xs">{warningCount} aviso{warningCount === 1 ? '' : 's'}</StatusBadge>}
                     </div>
-                    <p className="mt-1 truncate text-xs text-metro-muted">{response.sourceFileName || 'Esperando respuesta'}</p>
+                    <p className="mt-1 truncate text-xs text-metro-muted">
+                      {response.sourceFileName || (internalSsgg ? 'Recogida interna RRLL · sin correo' : 'Esperando respuesta')}
+                    </p>
+                    {internalSsgg && (
+                      <p className="mt-1 text-[11px] text-sky-300">
+                        Puedes adjuntar tu Excel SSCC/SSGG o introducir los totales manualmente. SS.MM. y huelga vacíos se consideran 0.
+                      </p>
+                    )}
                   </div>
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:bg-metro-raised/50">
                     <Upload size={15} />
