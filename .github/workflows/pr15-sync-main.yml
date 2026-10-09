@@ -1,0 +1,29 @@
+name: PR15 sync current main
+
+on:
+  push:
+    branches:
+      - fix/sqlite-readonly-migrations
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Sincronizar con main y limpiar workflow temporal
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge origin/main --no-edit
+          rm .github/workflows/pr15-sync-main.yml
+          git add -A
+          git commit -m "chore: limpiar sincronizador temporal de PR15"
+          git push
