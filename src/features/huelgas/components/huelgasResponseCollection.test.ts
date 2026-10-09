@@ -11,8 +11,8 @@ import {
 } from './huelgasResponseValidation';
 
 function toArrayBuffer(value: ArrayBuffer | Uint8Array): ArrayBuffer {
-  if (value instanceof ArrayBuffer) return value;
-  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  return Uint8Array.from(bytes) as unknown as ArrayBuffer;
 }
 
 function validResponse(zoneId: string, zoneName: string) {
