@@ -92,6 +92,40 @@ describe('enqueueSqliteIpc', () => {
     await expect(nextOperation).resolves.toBe('ok');
   });
 
+  it('documenta que una operación puede terminar después del timeout mientras la siguiente ya se ha ejecutado', async () => {
+    const events: string[] = [];
+    let finishFirst: (() => void) | undefined;
+
+    const firstOperation = enqueueSqliteIpc('operacion-lenta', async () => {
+      events.push('primera-inicio');
+      await new Promise<void>((resolve) => {
+        finishFirst = resolve;
+      });
+      events.push('primera-fin');
+      return 'primera';
+    });
+    const firstRejection = firstOperation.catch((error: unknown) => error);
+
+    const secondOperation = enqueueSqliteIpc('segunda-operacion', async () => {
+      events.push('segunda');
+      return 'segunda';
+    });
+
+    await vi.advanceTimersByTimeAsync(12_000);
+
+    const error = await firstRejection;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('operacion-lenta');
+    await expect(secondOperation).resolves.toBe('segunda');
+    expect(events).toEqual(['primera-inicio', 'segunda']);
+
+    expect(finishFirst).toBeTypeOf('function');
+    finishFirst?.();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(events).toEqual(['primera-inicio', 'segunda', 'primera-fin']);
+  });
+
   it('una lectura de arranque no se cancela prematuramente a los 10-12 s', async () => {
     const startupOperation = enqueueSqliteIpc(
       'database:get-persisted-records-token',
