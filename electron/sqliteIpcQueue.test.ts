@@ -78,25 +78,35 @@ describe('enqueueSqliteIpc', () => {
     await expect(write).resolves.toBe(false);
   });
 
-  it('si una operación ordinaria se queda colgada, la cancela a los 12 s y deja avanzar la cola', async () => {
-    const hungOperation = enqueueSqliteIpc('operacion-colgada', () => new Promise(() => {}));
-    const hungRejection = hungOperation.catch((error: unknown) => error);
-
-    const nextOperation = enqueueSqliteIpc('siguiente-operacion', async () => 'ok');
+  it('informa el timeout al llamador sin afirmar que la operación se haya cancelado', async () => {
+    let finishOperation: (() => void) | undefined;
+    const timedOutOperation = enqueueSqliteIpc(
+      'operacion-lenta',
+      () =>
+        new Promise<void>((resolve) => {
+          finishOperation = resolve;
+        }),
+    );
+    const timeoutResult = timedOutOperation.catch((error: unknown) => error);
 
     await vi.advanceTimersByTimeAsync(12_000);
 
-    const error = await hungRejection;
+    const error = await timeoutResult;
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain('operacion-colgada');
-    await expect(nextOperation).resolves.toBe('ok');
+    expect((error as Error).message).toContain('operacion-lenta');
+    expect((error as Error).message).toContain('resultado es indeterminado');
+    expect((error as Error).message).not.toContain('cancelado');
+
+    expect(finishOperation).toBeTypeOf('function');
+    finishOperation?.();
+    await vi.advanceTimersByTimeAsync(0);
   });
 
-  it('documenta que una operación puede terminar después del timeout mientras la siguiente ya se ha ejecutado', async () => {
+  it('mantiene la serialización cuando una operación termina después del timeout', async () => {
     const events: string[] = [];
     let finishFirst: (() => void) | undefined;
 
-    const firstOperation = enqueueSqliteIpc('operacion-lenta', async () => {
+    const firstOperation = enqueueSqliteIpc('operacion-lenta-serializada', async () => {
       events.push('primera-inicio');
       await new Promise<void>((resolve) => {
         finishFirst = resolve;
@@ -115,31 +125,49 @@ describe('enqueueSqliteIpc', () => {
 
     const error = await firstRejection;
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain('operacion-lenta');
-    await expect(secondOperation).resolves.toBe('segunda');
-    expect(events).toEqual(['primera-inicio', 'segunda']);
+    expect((error as Error).message).toContain('operacion-lenta-serializada');
+    expect(events).toEqual(['primera-inicio']);
 
     expect(finishFirst).toBeTypeOf('function');
     finishFirst?.();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(events).toEqual(['primera-inicio', 'segunda', 'primera-fin']);
+    await expect(secondOperation).resolves.toBe('segunda');
+    expect(events).toEqual(['primera-inicio', 'primera-fin', 'segunda']);
   });
 
-  it('una lectura de arranque no se cancela prematuramente a los 10-12 s', async () => {
+  it('una lectura de arranque no expira prematuramente a los 10-12 s', async () => {
+    let finishStartup: (() => void) | undefined;
+    let startupSettled = false;
     const startupOperation = enqueueSqliteIpc(
       'database:get-persisted-records-token',
-      () => new Promise(() => {}),
+      () =>
+        new Promise<void>((resolve) => {
+          finishStartup = resolve;
+        }),
     );
     const startupRejection = startupOperation.catch((error: unknown) => error);
+    void startupOperation.then(
+      () => {
+        startupSettled = true;
+      },
+      () => {
+        startupSettled = true;
+      },
+    );
 
     await vi.advanceTimersByTimeAsync(12_000);
     expect(resolveSqliteIpcTimeoutMs('database:get-persisted-records-token')).toBe(30_000);
+    expect(startupSettled).toBe(false);
 
     await vi.advanceTimersByTimeAsync(18_000);
     const error = await startupRejection;
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain('30000 ms');
+
+    expect(finishStartup).toBeTypeOf('function');
+    finishStartup?.();
+    await vi.advanceTimersByTimeAsync(0);
   });
 
   it('si una operación falla, la cola sigue funcionando para la siguiente', async () => {
