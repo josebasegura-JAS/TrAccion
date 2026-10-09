@@ -313,19 +313,19 @@ export function PresupuestosPage() {
     );
   }, [actuals, calendars, cutoffMonth, manualItems, people, selectedScenario, ticketGroups]);
 
-  const saveScenario = () => {
-    const result = upsertScenario(scenarioDraft);
-    if (!result.valid || !result.id) {
-      setMessage(result.errors.join(' '));
+  const saveScenario = async () => {
+    const result = await upsertScenario(scenarioDraft);
+    if (!result.valid || !result.ok || !result.id) {
+      setMessage(result.message ?? result.errors.join(' '));
       return;
     }
     setActiveScenario(result.id);
     setScenarioDraft(emptyScenarioDraft(scenarioDraft.year));
-    setMessage('Escenario creado. Ya puedes simularlo.');
+    setMessage('Escenario creado y guardado. Ya puedes simularlo.');
     setStage('simulate');
   };
 
-  const saveSimulation = () => {
+  const saveSimulation = async (): Promise<boolean> => {
     if (!activeScenario) return false;
     const manualDrafts = activeManualItems.flatMap((item) => {
       const edit = manualEdits[item.id];
@@ -344,7 +344,7 @@ export function PresupuestosPage() {
         },
       }];
     });
-    const result = saveScenarioSimulation(
+    const result = await saveScenarioSimulation(
       activeScenario.id,
       {
         name: activeScenario.name,
@@ -358,29 +358,33 @@ export function PresupuestosPage() {
       },
       manualDrafts,
     );
-    if (!result.valid) {
-      setMessage(result.errors.join(' '));
+    if (!result.valid || !result.ok) {
+      setMessage(result.message ?? result.errors.join(' '));
       return false;
     }
     setMessage('Simulación guardada. Los importes se recalculan automáticamente mientras editas.');
     return true;
   };
 
-  const addManualItem = () => {
+  const addManualItem = async () => {
     if (!activeScenario) return;
-    const result = upsertManualItem({ ...manualDraft, scenarioId: activeScenario.id });
-    if (!result.valid) {
-      setMessage(result.errors.join(' '));
+    const result = await upsertManualItem({ ...manualDraft, scenarioId: activeScenario.id });
+    if (!result.valid || !result.ok) {
+      setMessage(result.message ?? result.errors.join(' '));
       return;
     }
     setManualDraft(emptyManualDraft(activeScenario.id));
-    setMessage('Partida añadida.');
+    setMessage('Partida añadida y guardada.');
   };
 
-  const chooseScenario = (scenario: BudgetScenario) => {
-    selectScenarioForExecution(scenario.id);
+  const chooseScenario = async (scenario: BudgetScenario) => {
+    const result = await selectScenarioForExecution(scenario.id);
+    if (!result.ok) {
+      setMessage(result.message ?? 'No se ha podido seleccionar el escenario.');
+      return;
+    }
     setActiveScenario(scenario.id);
-    setMessage(`${scenario.name} seleccionado como escenario a ejecutar para ${scenario.year}.`);
+    setMessage(`${scenario.name} seleccionado y guardado como escenario a ejecutar para ${scenario.year}.`);
   };
 
   const confirmAndRemoveScenario = async (scenario: BudgetScenario) => {
@@ -410,7 +414,11 @@ export function PresupuestosPage() {
       if (!secondConfirmed) return;
     }
 
-    removeScenario(scenario.id);
+    const result = await removeScenario(scenario.id);
+    if (!result.ok) {
+      setMessage(result.message ?? 'No se ha podido eliminar el escenario.');
+      return;
+    }
     setMessage(
       isFinalized
         ? `Presupuesto definitivo "${scenario.name}" eliminado.`
@@ -420,22 +428,26 @@ export function PresupuestosPage() {
     if (activeScenarioId === scenario.id) setStage('scenario');
   };
 
-  const finalizeBudget = () => {
+  const finalizeBudget = async () => {
     if (!selectedScenario) return;
-    finalizeScenarioBudget(selectedScenario.id, finalAmounts);
+    const result = await finalizeScenarioBudget(selectedScenario.id, finalAmounts);
+    if (!result.ok) {
+      setMessage(result.message ?? 'No se ha podido guardar el presupuesto definitivo.');
+      return;
+    }
     setMessage('Presupuesto definitivo guardado. El seguimiento contra real utilizará estos importes.');
     setStage('execute');
   };
 
-  const saveActual = () => {
+  const saveActual = async () => {
     if (!selectedScenario) return;
-    const result = upsertActual({ ...actualDraft, year: selectedScenario.year });
-    if (!result.valid) {
-      setMessage(result.errors.join(' '));
+    const result = await upsertActual({ ...actualDraft, year: selectedScenario.year });
+    if (!result.valid || !result.ok) {
+      setMessage(result.message ?? result.errors.join(' '));
       return;
     }
     setActualDraft(emptyActualDraft(selectedScenario.year));
-    setMessage('Importe ejecutado añadido.');
+    setMessage('Importe ejecutado añadido y guardado.');
   };
 
   const exportSimulation = async (scenario: BudgetScenario, useLiveValues = false) => {
@@ -539,7 +551,10 @@ export function PresupuestosPage() {
                           <p className="mt-0.5 text-xs text-metro-muted">{euro(total.total)} · ticket {euro(scenario.ticketAmount)}</p>
                         </div>
                         <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => { setActiveScenario(scenario.id); setStage('simulate'); }}>Abrir</ActionButton>
-                        <ActionButton size="sm" variant="duplicate" onClick={() => duplicateScenario(scenario.id)} title="Duplicar escenario" iconOnly />
+                        <ActionButton size="sm" variant="duplicate" onClick={async () => {
+                          const result = await duplicateScenario(scenario.id);
+                          setMessage(result.ok ? `Escenario "${scenario.name}" duplicado.` : (result.message ?? 'No se ha podido duplicar el escenario.'));
+                        }} title="Duplicar escenario" iconOnly />
                         <ActionButton size="sm" variant="delete" onClick={() => confirmAndRemoveScenario(scenario)} title={scenario.finalizedAt ? 'Eliminar presupuesto definitivo' : 'Eliminar escenario'} iconOnly />
                       </div>
                     );
@@ -663,7 +678,10 @@ export function PresupuestosPage() {
                             <div className="flex h-8 items-center justify-end rounded-lg border border-metro-border bg-metro-panel px-2 font-bold text-metro-text">{euro(calculatedAmount)}</div>
                           )}
                           <div className="flex h-8 items-center justify-end text-[11px] font-bold text-metro-muted">{edit.calculationMode === 'breakdown' ? `${edit.subitems.length} subpart.` : 'Anual'}</div>
-                          <button className="grid h-8 w-8 place-items-center rounded-lg text-red-300 transition hover:bg-red-500/10" onClick={() => removeManualItem(item.id)} title="Eliminar partida" type="button"><Trash2 size={14} /></button>
+                          <button className="grid h-8 w-8 place-items-center rounded-lg text-red-300 transition hover:bg-red-500/10" onClick={async () => {
+                            const result = await removeManualItem(item.id);
+                            if (!result.ok) setMessage(result.message ?? 'No se ha podido eliminar la partida.');
+                          }} title="Eliminar partida" type="button"><Trash2 size={14} /></button>
                         </div>
                         <Input className="mt-2 h-8" aria-label="Observaciones de la partida" placeholder="Observaciones (opcional)" value={edit.notes} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, notes: event.target.value } })} />
                         {edit.calculationMode === 'breakdown' ? (
@@ -700,7 +718,7 @@ export function PresupuestosPage() {
             <div className="flex flex-wrap justify-end gap-2">
               <ActionButton iconOnly={false} variant="secondary" onClick={() => exportSimulation(activeScenario, true)}><FileSpreadsheet size={15} /> Exportar simulación</ActionButton>
               <ActionButton iconOnly={false} variant="save" onClick={saveSimulation}>Guardar simulación</ActionButton>
-              <ActionButton iconOnly={false} variant="primary" onClick={() => { if (saveSimulation()) { setComparisonYear(activeScenario.year); setStage('compare'); } }}>Comparar escenarios <ChevronRight size={15} /></ActionButton>
+              <ActionButton iconOnly={false} variant="primary" onClick={async () => { if (await saveSimulation()) { setComparisonYear(activeScenario.year); setStage('compare'); } }}>Comparar escenarios <ChevronRight size={15} /></ActionButton>
             </div>
           </div>
         )
@@ -792,7 +810,10 @@ export function PresupuestosPage() {
                 <div className="mt-3 flex justify-end"><ActionButton iconOnly={false} size="sm" variant="add" onClick={saveActual}>Añadir ejecutado</ActionButton></div>
                 <div className="mt-3 max-h-[220px] overflow-y-auto rounded-xl border border-metro-border">
                   {actuals.filter((actual) => !actual.deletedAt && actual.year === selectedScenario.year).slice().sort((a, b) => b.month - a.month).map((actual) => (
-                    <div key={actual.id} className="flex items-center gap-2 border-b border-metro-border/70 px-3 py-2 last:border-b-0"><span className="w-20 text-xs text-metro-muted">{MONTH_NAMES[actual.month - 1]}</span><span className="min-w-0 flex-1 truncate text-xs text-metro-text">{actual.concept}</span><strong className="text-xs text-metro-text">{euro(actual.amount)}</strong><button className="text-red-300" type="button" onClick={() => removeActual(actual.id)}><Trash2 size={13} /></button></div>
+                    <div key={actual.id} className="flex items-center gap-2 border-b border-metro-border/70 px-3 py-2 last:border-b-0"><span className="w-20 text-xs text-metro-muted">{MONTH_NAMES[actual.month - 1]}</span><span className="min-w-0 flex-1 truncate text-xs text-metro-text">{actual.concept}</span><strong className="text-xs text-metro-text">{euro(actual.amount)}</strong><button className="text-red-300" type="button" onClick={async () => {
+                      const result = await removeActual(actual.id);
+                      if (!result.ok) setMessage(result.message ?? 'No se ha podido eliminar el importe ejecutado.');
+                    }}><Trash2 size={13} /></button></div>
                   ))}
                 </div>
               </Panel>
