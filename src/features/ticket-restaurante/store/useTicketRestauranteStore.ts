@@ -31,9 +31,7 @@ import {
   loadTicketRestauranteAbsenceRecordsFromSqlite,
   loadTicketRestauranteConfigRecordFromSqlite,
   loadTicketRestauranteManutencionRecordsFromSqlite,
-  saveTicketRestauranteCalendarsToSqlite,
   saveTicketRestauranteCalendarToSqlite,
-  saveTicketRestaurantePeopleToSqlite,
   saveTicketRestaurantePersonToSqlite,
   saveTicketRestauranteAbsencesToSqlite,
   saveTicketRestauranteAbsenceToSqlite,
@@ -45,6 +43,10 @@ import {
   hasAtomicTicketCalendarRemoval,
   removeTicketCalendarWithPeopleAtomically,
 } from './ticketRestauranteAtomicRemoval';
+import {
+  hasAtomicTicketPeopleImport,
+  importTicketPeopleAtomically,
+} from './ticketRestauranteAtomicImport';
 import {
   isTicketCalendar,
   isTicketManutencion,
@@ -824,41 +826,34 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
       hasTicketRestauranteCalendarsSqliteRepository() &&
       hasTicketRestaurantePeopleSqliteRepository()
     ) {
-      if (newCalendars.length > 0) {
-        const calendarsSaveResult = await saveTicketRestauranteCalendarsToSqlite(
-          newCalendars.map((calendar) => ({
-            id: calendar.id,
-            serializedValue: JSON.stringify(calendar),
-            expectedUpdatedAt: null,
-          })),
-        );
-        if (!calendarsSaveResult?.ok) {
-          return {
-            ...result,
-            ok: false,
-            message:
-              calendarsSaveResult?.message ??
-              'No se han podido crear los calendarios nuevos en SQLite.',
-          };
-        }
+      if (!hasAtomicTicketPeopleImport()) {
+        return {
+          ...result,
+          ok: false,
+          message:
+            'La importación atómica de Ticket Restaurante no está disponible. Recarga o reinicia TrAcción antes de continuar.',
+        };
       }
 
-      if (updatedPeople.length > 0) {
-        const peopleSaveResult = await saveTicketRestaurantePeopleToSqlite(
-          updatedPeople.map((person) => ({
-            id: person.empleado,
-            serializedValue: JSON.stringify(person),
-            expectedUpdatedAt: personSqliteUpdatedAt.get(person.empleado) ?? null,
-          })),
-        );
-        if (!peopleSaveResult?.ok) {
-          return {
-            ...result,
-            ok: false,
-            message:
-              peopleSaveResult?.message ?? 'No se han podido importar las personas en SQLite.',
-          };
-        }
+      const importResult = await importTicketPeopleAtomically(
+        newCalendars.map((calendar) => ({
+          id: calendar.id,
+          serializedValue: JSON.stringify(calendar),
+          expectedUpdatedAt: null,
+        })),
+        updatedPeople.map((person) => ({
+          id: person.empleado,
+          serializedValue: JSON.stringify(person),
+          expectedUpdatedAt: personSqliteUpdatedAt.get(person.empleado) ?? null,
+        })),
+      );
+      if (!importResult?.ok) {
+        return {
+          ...result,
+          ok: false,
+          message:
+            importResult?.message ?? 'No se han podido importar las personas en SQLite de forma atómica.',
+        };
       }
 
       updateCalendarSqliteUpdatedAtMap(calendars);

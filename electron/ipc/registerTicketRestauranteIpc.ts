@@ -10,6 +10,9 @@ import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import {
   removeTicketRestauranteCalendarWithPeopleAtomically,
 } from '../persistence/ticketRestauranteAtomicCalendarRemoval.js';
+import {
+  importTicketRestaurantePeopleAtomically,
+} from '../persistence/ticketRestauranteAtomicPeopleImport.js';
 import { validateConditionalJsonRecord, validateConditionalJsonRecordBatch } from './ipcHelpers.js';
 import {
   getSqliteStatus,
@@ -99,6 +102,38 @@ export function registerTicketRestauranteIpc(): void {
           value: calendar.value,
           expectedUpdatedAt: calendar.expectedUpdatedAt,
         },
+        people: people.records,
+      }),
+    );
+  });
+  ipcMain.handle('ticket-restaurante-people:import-atomically', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        message: 'Payload de importación atómica de Ticket Restaurante inválido.',
+      };
+    }
+
+    const candidate = payload as { calendars?: unknown; people?: unknown };
+    const calendars = validateConditionalJsonRecordBatch(
+      { records: candidate.calendars },
+      'Payload de calendarios de importación de Ticket Restaurante inválido.',
+    );
+    if (!calendars.ok) {
+      return { ok: false, status: calendars.result.status, message: calendars.result.message };
+    }
+    const people = validateConditionalJsonRecordBatch(
+      { records: candidate.people },
+      'Payload de personas de importación de Ticket Restaurante inválido.',
+    );
+    if (!people.ok) {
+      return { ok: false, status: people.result.status, message: people.result.message };
+    }
+
+    return enqueueSqliteIpc('ticket-restaurante-people:import-atomically', () =>
+      importTicketRestaurantePeopleAtomically(getSqliteStatus(), {
+        calendars: calendars.records,
         people: people.records,
       }),
     );
