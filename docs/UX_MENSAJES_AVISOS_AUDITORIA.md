@@ -104,6 +104,28 @@ Se evitarán variantes innecesarias como `Cambios guardados`, `Datos almacenados
 - Eliminar éxitos persistentes redundantes.
 - Mantener visibles los errores accionables y conflictos multiusuario.
 
+## Revisión transversal final
+
+Se ha revisado el flujo de feedback de las pantallas accesibles desde la aplicación principal y de los componentes comunes que las alimentan. La revisión incluye Tareas, Coordinación, Ajustes, Plantilla, Ticket Restaurante, Teletrabajo, Lotería, Sorteos, Huelgas, Actas, Comité, Paritaria, Presupuestos, Criterios RRLL, Especiales, Licencias y Excedencias, Vinculograma y Ayuda Escolar, además de los componentes compartidos de guardado, diálogo, aviso, toast y estado de base de datos.
+
+La conclusión es que no debe aplicarse una sustitución global de todos los `status` por toast. En varios módulos esos estados representan progreso, validaciones, conflictos multiusuario, bloqueos o incidencias que deben permanecer visibles. La limpieza debe hacerse por semántica del mensaje, no por el nombre de la variable.
+
+### Decisiones finales
+
+- Los éxitos rutinarios de guardado no deben permanecer como estado fijo de pantalla.
+- Los errores, validaciones y advertencias que requieren una acción del usuario deben seguir visibles.
+- Los resultados puntuales de exportación, importación, generación documental o Outlook pueden mantenerse como feedback temporal o contextual.
+- Los conflictos multiusuario y problemas de conexión/base de datos deben conservar sus canales persistentes y accionables.
+- La información técnica de SQLite no debe aparecer dentro de diálogos funcionales normales.
+- En Lotería, el estado fijo `Todo guardado` se considera ruido: sin cambios ni incidencias no se muestra nada; con cambios se muestra `Cambios sin guardar`; errores y resultados relevantes siguen siendo visibles.
+
+### Cambios de cierre aplicados
+
+- `Lotería`: `SaveState` deja de mostrar `Todo guardado` y filtra confirmaciones rutinarias de guardado para evitar éxitos persistentes redundantes.
+- `Lotería`: se mantiene `Cambios sin guardar` mientras el borrador difiere de lo persistido y se conservan incidencias y resultados puntuales relevantes.
+- `Lotería`: se añaden pruebas para ausencia de estado en reposo, cambios pendientes, confirmación rutinaria, errores y resultados puntuales.
+- `AppDialog`: se elimina `ModalDatabaseStatus` del interior de todos los diálogos. El estado de base de datos queda reservado a zonas de diagnóstico o a incidencias reales de infraestructura.
+
 ## Criterios de aceptación final
 
 - Una acción normal genera como máximo una respuesta visual principal.
@@ -112,3 +134,4 @@ Se evitarán variantes innecesarias como `Cambios guardados`, `Datos almacenados
 - Los errores no desaparecen antes de poder leerse o actuar sobre ellos.
 - Los mensajes técnicos de SQLite no aparecen en operaciones correctas de uso diario.
 - Los diálogos indican claramente qué ocurrirá al pulsar su botón principal.
+- Las pantallas en reposo no muestran confirmaciones de éxito permanentes sin aportar información útil.
