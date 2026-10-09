@@ -35,7 +35,7 @@ describe('taskEditorModel', () => {
       id: 'task-1',
       titulo: 'Revisar calendario',
       descripcion: 'Detalle',
-      tipo: 'tarea',
+      tipo: 'interna',
       fase: 'tarea',
       estado: 'pendiente',
       prioridad: 'media',
@@ -48,7 +48,12 @@ describe('taskEditorModel', () => {
       observaciones: '',
       mail: 'Contenido del correo',
       documentLinks: [{ id: 'doc-1', nombre: 'a.pdf', ruta: 'Z:/a.pdf', createdAt: '2026-09-25T08:00:00.000Z' }],
+      sessionDocumentCode: '',
+      sessionModule: '',
+      sessionDate: '',
       seguimiento: [],
+      deletedAt: null,
+      closedAt: null,
     };
 
     expect(toDraft(task)).toMatchObject({
