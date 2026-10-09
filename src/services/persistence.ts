@@ -358,6 +358,138 @@ export async function writeSharedStorageItemAsync(
   }
 }
 
+
+export interface WriteSharedStorageItemsResult extends WriteSharedStorageItemResult {
+  failedKey?: string;
+}
+
+export async function writeSharedStorageItemsAtomicallyAsync(
+  records: TraccionStorageRecord[],
+): Promise<WriteSharedStorageItemsResult> {
+  if (records.length === 0) {
+    return { ok: true, message: 'No hay datos que guardar.', updatedAt: null };
+  }
+
+  if (records.some((record) => !isPersistedStorageKey(record.key))) {
+    return {
+      ok: false,
+      message: 'El guardado atómico solo admite datos compartidos persistidos en SQLite.',
+      updatedAt: null,
+    };
+  }
+
+  if (import.meta.env.MODE === 'test') {
+    for (const record of records) writeRendererStorageCache(record.key, record.value, 'localStorage');
+    return { ok: true, message: 'Guardado local atómico en test.', updatedAt: null };
+  }
+
+  const blockReason = shouldBlockSharedWrite();
+  const feedbackKey = records.map((record) => record.key).join(', ');
+  if (blockReason) {
+    const message = `${blockReason} Datos afectados: ${feedbackKey}.`;
+    emitPersistenceFeedback({
+      kind: 'error',
+      updatedAt: new Date().toISOString(),
+      key: feedbackKey,
+      message,
+    });
+    return { ok: false, message, updatedAt: null };
+  }
+
+  const saver = window.traccion?.saveLocalStorageRecordsIfUnchanged;
+  if (!saver) {
+    const message =
+      'El guardado atómico no está disponible. Recarga o reinicia TrAcción antes de continuar.';
+    emitPersistenceFeedback({
+      kind: 'error',
+      updatedAt: new Date().toISOString(),
+      key: feedbackKey,
+      message,
+    });
+    return { ok: false, message, updatedAt: null };
+  }
+
+  emitPersistenceFeedback({
+    kind: 'saving',
+    updatedAt: new Date().toISOString(),
+    key: feedbackKey,
+    message: 'Guardando datos relacionados en SQLite...',
+  });
+  await waitForNextPaint();
+
+  try {
+    const recordsWithTokens = await Promise.all(
+      records.map(async (record) => ({
+        ...record,
+        expectedUpdatedAt: await resolveExpectedUpdatedAtForWrite(
+          record.key,
+          window.localStorage.getItem(record.key),
+        ),
+      })),
+    );
+    const result = await saver(recordsWithTokens);
+    publishDatabaseStatus(result.status);
+
+    if (
+      !result.ok ||
+      !result.status.ready ||
+      result.status.phase !== 'active' ||
+      result.status.isDefaultPath !== false
+    ) {
+      throw new Error(result.message ?? 'No se ha confirmado el guardado atómico en SQLite compartido.');
+    }
+
+    for (const record of records) {
+      updateSqliteRecordMetadata(record.key, result.currentUpdatedAt);
+      writeRendererStorageCache(record.key, record.value, 'sqlite');
+    }
+
+    const message = `Guardado atómico en SQLite ${formatPersistenceTime()}`;
+    emitPersistenceFeedback({
+      kind: 'saved',
+      updatedAt: new Date().toISOString(),
+      key: feedbackKey,
+      message,
+    });
+    return { ok: true, message, updatedAt: result.currentUpdatedAt };
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Error de guardado SQLite: los datos relacionados no se han confirmado.';
+
+    if (isConcurrencyConflictMessage(message)) {
+      emitPersistenceFeedback({
+        kind: 'saved',
+        updatedAt: new Date().toISOString(),
+        key: feedbackKey,
+        message: 'Conflicto de versión detectado; no se ha sobrescrito ningún dato compartido.',
+      });
+      return {
+        ok: false,
+        message:
+          'Cambio no guardado — otro usuario modificó estos datos. Recarga la página para ver la versión actual antes de volver a editar.',
+        updatedAt: null,
+      };
+    }
+
+    if (!isTemporarySqliteLockMessage(message)) {
+      emitPersistenceFeedback({
+        kind: 'error',
+        updatedAt: new Date().toISOString(),
+        key: feedbackKey,
+        message: `${message} No se ha guardado ninguno de los datos relacionados.`,
+      });
+    }
+
+    return {
+      ok: false,
+      message: `${message} No se ha guardado ninguno de los datos relacionados.`,
+      updatedAt: null,
+    };
+  }
+}
+
 function getRendererStorageCacheValue(key: string): string | null {
   return isPersistedStorageKey(key) && import.meta.env.MODE !== 'test'
     ? window.sessionStorage.getItem(key)
@@ -438,6 +570,14 @@ export async function writeJsonStorageAsync<T>(
   value: T,
 ): Promise<WriteSharedStorageItemResult> {
   return writeSharedStorageItemAsync(key, JSON.stringify(value));
+}
+
+export async function writeJsonStorageItemsAtomicallyAsync(
+  entries: Array<{ key: string; value: unknown }>,
+): Promise<WriteSharedStorageItemsResult> {
+  return writeSharedStorageItemsAtomicallyAsync(
+    entries.map(({ key, value }) => ({ key, value: JSON.stringify(value) })),
+  );
 }
 
 interface AppliedPersistedRecordsStats {
