@@ -112,9 +112,11 @@ export function HuelgasPage() {
         dirty={responseCollection.dirty}
         saving={responseCollection.saving}
         importingZoneId={responseCollection.importingZoneId}
+        importingMessage={responseCollection.importingMessage}
         exporting={responseCollection.exporting}
         onClose={() => void responseCollection.close()}
         onImport={(zoneId, file) => void responseCollection.importResponse(zoneId, file)}
+        onImportMessage={(file) => void responseCollection.importOutlookMessage(file)}
         onChange={responseCollection.updateResponse}
         onReview={(zoneId) => void responseCollection.markReviewed(zoneId)}
         onSave={() => void responseCollection.save()}
