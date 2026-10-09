@@ -34,6 +34,7 @@ import {
   readDatabasePreferences,
 } from './databasePreferences.js';
 import { validateSqliteBackupForRestore } from './sqliteBackupValidation.js';
+import { restoreValidatedSqliteBackup } from './sqliteRestoreRollback.js';
 
 export interface PersistedStorageRecord {
   key: string;
@@ -578,40 +579,24 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       return { ok: false, status: currentStatus, message };
     }
 
-    try {
-      await mkdir(path.dirname(targetDatabasePath), { recursive: true });
+    const restoreResult = await restoreValidatedSqliteBackup({
+      backupPath,
+      targetDatabasePath,
+      directoryPath: configuredDirectory.directoryPath,
+      isDefaultPath: configuredDirectory.isDefaultPath,
+      currentStatus,
+      dependencies,
+    });
 
-      await dependencies.withDatabaseOperationLock(targetDatabasePath, async () => {
-        if (currentStatus.ready) {
-          await dependencies.backupExistingDatabase(currentStatus.path);
-        } else {
-          await copyFile(targetDatabasePath, `${targetDatabasePath}.backup-${backupTimestampForFileName()}`).catch(
-            () => undefined,
-          );
-        }
-
-        await dependencies.closeDatabaseAndReleaseLock();
-        await unlink(`${targetDatabasePath}-wal`).catch(() => undefined);
-        await unlink(`${targetDatabasePath}-shm`).catch(() => undefined);
-        await copyFile(backupPath, targetDatabasePath);
-      });
-
-      const nextStatus = await dependencies.activateDatabase(
-        configuredDirectory.directoryPath,
-        configuredDirectory.isDefaultPath,
-        null,
-      );
+    if (restoreResult.ok) {
       enqueueLocalBackup(`restore:${safeFileName}`);
-
-      return {
-        ok: nextStatus.ready && nextStatus.phase === 'active',
-        status: nextStatus,
-        message: 'Copia SQLite restaurada. Reinicia o recarga la app para aplicar los datos recuperados.',
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se ha podido restaurar el respaldo SQLite.';
-      return { ok: false, status: dependencies.getStatus(), message };
     }
+
+    return {
+      ok: restoreResult.ok,
+      status: restoreResult.status,
+      message: restoreResult.message,
+    };
   };
 
   return {
