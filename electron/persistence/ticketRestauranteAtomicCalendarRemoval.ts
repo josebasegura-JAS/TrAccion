@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3';
+import SqliteDatabase from 'better-sqlite3';
+import type { Database } from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { DATABASE_HEARTBEAT_BLOCKED_MESSAGE } from './databaseLockManager.js';
 
@@ -52,7 +53,7 @@ function parseDeletedRecordMeta(value: string, label: string): RecordMeta {
   return { updatedAt: candidate.updatedAt, deletedAt: candidate.deletedAt };
 }
 
-function readUpdatedAt(db: Database.Database, tableName: string, id: string): string | null {
+function readUpdatedAt(db: Database, tableName: string, id: string): string | null {
   const row = db.prepare(`SELECT updated_at FROM ${tableName} WHERE id = ?`).get(id);
   if (!row || typeof row !== 'object' || typeof (row as { updated_at?: unknown }).updated_at !== 'string') {
     return null;
@@ -61,7 +62,7 @@ function readUpdatedAt(db: Database.Database, tableName: string, id: string): st
 }
 
 function updateDeletedRecord(
-  db: Database.Database,
+  db: Database,
   tableName: string,
   record: AtomicTicketRecordMutation,
   label: string,
@@ -80,7 +81,7 @@ function updateDeletedRecord(
   }
 }
 
-function updateRefreshMetadata(db: Database.Database): void {
+function updateRefreshMetadata(db: Database): void {
   const updatedAt = new Date().toISOString();
   const token = `${updatedAt}:ticket-calendar-atomic:${randomUUID()}`;
   db.prepare(
@@ -110,7 +111,7 @@ export function removeTicketRestauranteCalendarWithPeopleAtomically(
     };
   }
 
-  const db = new Database(status.path, { fileMustExist: true, timeout: 15_000 });
+  const db = new SqliteDatabase(status.path, { fileMustExist: true, timeout: 15_000 });
 
   try {
     const transaction = db.transaction((): AtomicTicketCalendarRemovalResult => {
