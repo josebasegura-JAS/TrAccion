@@ -527,14 +527,18 @@ export function TareasPage({
         id: 'estado',
         header: 'Estado',
         accessor: (task) => task.estado,
-        render: (task) => (
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${(TASK_STATE_PILL[task.estado] ?? 'border-metro-border bg-metro-panel text-metro-text')}`}
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${(TASK_STATE_DOT[task.estado] ?? 'bg-slate-400')}`} />
-            {taskStates.find((state) => state.id === task.estado)?.nombre ?? TASK_STATE_LABELS[task.estado] ?? task.estado}
-          </span>
-        ),
+        render: (task) => {
+          const label = taskStates.find((state) => state.id === task.estado)?.nombre ?? TASK_STATE_LABELS[task.estado] ?? task.estado;
+          const isTratarConRosa = label.trim().toLocaleLowerCase('es-ES') === 'tratar con rosa';
+          return (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${isTratarConRosa ? 'border-pink-400/50 bg-pink-400/15 text-pink-200' : (TASK_STATE_PILL[task.estado] ?? 'border-metro-border bg-metro-panel text-metro-text')}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${isTratarConRosa ? 'bg-pink-400' : (TASK_STATE_DOT[task.estado] ?? 'bg-slate-400')}`} />
+              {label}
+            </span>
+          );
+        },
         width: 122,
         minWidth: 98,
         maxWidth: 180,
