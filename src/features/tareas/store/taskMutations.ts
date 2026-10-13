@@ -1,5 +1,5 @@
 import { buildAuditChanges, buildUpdateSummary, enqueueAuditEvent } from '../../../shared/audit/auditTrail';
-import { isTaskClosed, type Task, type TaskDraft, type TaskSeguimientoEntry } from '../domain/task';
+import { isTaskClosed, type Task, type TaskDraft, type TaskSeguimientoEntry, type TaskQuickAction } from '../domain/task';
 
 const TASK_AUDIT_LABELS = {
   titulo: 'Título', descripcion: 'Descripción', tipo: 'Tipo', fase: 'Fase', estado: 'Estado', prioridad: 'Prioridad',
@@ -74,7 +74,7 @@ function resolvePhaseBeforeClose(task: Task, draft: TaskDraft): string | undefin
   return previousPhase || undefined;
 }
 
-export function buildUpdatedTask(task: Task, draft: TaskDraft, seguimientoText: string | undefined): Task {
+export function buildUpdatedTask(task: Task, draft: TaskDraft, seguimientoText: string | undefined, quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo'>): Task {
   const now = new Date().toISOString();
   registerTaskUpdateAudit(task, draft);
   return {
@@ -83,7 +83,7 @@ export function buildUpdatedTask(task: Task, draft: TaskDraft, seguimientoText: 
     createdBy: task.createdBy ?? draft.createdBy,
     phaseBeforeClose: resolvePhaseBeforeClose(task, draft),
     ...buildAssignmentNoticeFields(task.id, task.responsable, draft.responsable, now, task.assignmentNoticeId, task.assignmentNoticeAt),
-    seguimiento: [...buildSeguimiento(seguimientoText, now), ...task.seguimiento],
+    seguimiento: [...buildSeguimiento(seguimientoText, now).map((entry) => ({ ...entry, quickActions: quickAction ? [{ id: now, titulo: quickAction.titulo, fechaObjetivo: quickAction.fechaObjetivo, createdAt: now }] : [] })), ...task.seguimiento],
     closedAt: resolveClosedAt(task, draft, now),
     updatedAt: now,
   };
