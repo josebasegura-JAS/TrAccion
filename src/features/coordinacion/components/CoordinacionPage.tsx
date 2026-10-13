@@ -226,7 +226,10 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
       const freshTasks = area === 'direccion'
         ? await (async () => {
           if (!hasTaskSqliteRepository()) throw new Error('No está disponible la conexión SQLite de Tareas.');
-          const records = await readTasksForStore('active');
+          // Consultar todas las tareas: el filtro SQLite 'active' puede excluir estados
+          // personalizados como «Tratar con Rosa». La selección de tareas vigentes
+          // (sin cerrar ni eliminar) se realiza en directionMeetingTasks.
+          const records = await readTasksForStore('all');
           // Un fallo de lectura no debe convertirse silenciosamente en una reunión sin puntos.
           if (records.length === 0 && tasks.length > 0) throw new Error('No se pudieron recuperar las tareas desde SQLite. Reintenta la operación.');
           return records;
