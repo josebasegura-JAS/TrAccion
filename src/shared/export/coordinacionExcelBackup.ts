@@ -529,7 +529,7 @@ export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[
         cleanupPrefix: definition.cleanupPrefix,
         buffer: toArrayBuffer(raw as ArrayBuffer | Uint8Array),
       });
-      if (!result.ok) failures.push(`${definition.fileName}: ${result.message}`);
+      if (result) failures.push(`${definition.fileName}: ${result}`);
     }
     return failures.length > 0
       ? `Datos guardados en TrAcción, pero no se han podido actualizar todos los Excel de Coordinación: ${failures.join(' | ')}`
