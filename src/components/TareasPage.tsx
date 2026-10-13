@@ -575,7 +575,22 @@ export function TareasPage({
         id: 'fase',
         header: 'Fase',
         accessor: (task) => task.fase,
-        render: (task) => task.fase,
+        render: (task) => {
+          const fase = task.fase.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const isComite = /\bcomite\b/.test(fase);
+          const isParitaria = /\bparitaria\b/.test(fase);
+          return (
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              {(isComite || isParitaria) && (
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 shrink-0 rounded-full ${isComite ? 'bg-blue-500' : 'bg-slate-400'}`}
+                />
+              )}
+              <span className="truncate" title={task.fase}>{task.fase}</span>
+            </span>
+          );
+        },
         width: 110,
         minWidth: 90,
         maxWidth: 230,
