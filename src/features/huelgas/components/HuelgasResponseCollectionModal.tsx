@@ -60,6 +60,72 @@ function issuePanel(issues: HuelgaValidationIssue[]) {
   );
 }
 
+
+const SHIFT_LABELS = { noche: 'Noche', manana: 'Mañana', tarde: 'Tarde' } as const;
+
+function detailSum(detail: NonNullable<HuelgaZoneResponse['generalDetail']>, metric: 'personasTurno' | 'serviciosMinimos' | 'trabajan' | 'huelga') {
+  return detail.reduce((sum, row) => sum + row[metric].hombres + row[metric].mujeres, 0);
+}
+
+function importedDetailPanel(response: HuelgaZoneResponse) {
+  const detail = response.generalDetail ?? [];
+  const hasImport = Boolean(response.importedAt && response.sourceFileName);
+  if (!hasImport && detail.length === 0) return null;
+  if (detail.length === 0) {
+    return (
+      <div className="mt-3 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+        <strong>Reimportación necesaria.</strong> Se conservan los totales, pero no el desglose por turno, colectivo y sexo. Sustituye el Excel para generar el seguimiento histórico.
+      </div>
+    );
+  }
+  const metrics = [
+    { key: 'personasTurno', label: 'Con turno', expected: response.personasTurno },
+    { key: 'serviciosMinimos', label: 'SS.MM.', expected: response.serviciosMinimos },
+    { key: 'trabajan', label: 'Trabajan', expected: response.personasTrabajan },
+    { key: 'huelga', label: 'Huelga', expected: response.personasHuelga },
+  ] as const;
+  const mismatches = metrics.filter(({ key, expected }) => expected !== null && detailSum(detail, key) !== expected);
+  return (
+    <details className="mt-3 rounded-lg border border-metro-border bg-metro-panel/35 p-3" open={mismatches.length > 0}>
+      <summary className="cursor-pointer text-xs font-semibold text-metro-text">
+        Desglose importado · {detail.length} filas por colectivo y turno
+        {mismatches.length > 0 ? ' · Totales por revisar' : ' · Ver detalle'}
+      </summary>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-[11px] text-metro-text">
+          <thead><tr className="border-b border-metro-border text-metro-muted">
+            <th className="px-2 py-2">Turno</th><th className="px-2 py-2">Colectivo</th>
+            {metrics.map(({ key, label }) => <th className="px-2 py-2 text-right" colSpan={3} key={key}>{label} (H / M / Total)</th>)}
+          </tr></thead>
+          <tbody>
+            {detail.map((row, index) => (
+              <tr className="border-b border-metro-border/50" key={`${row.turno}-${row.colectivo}-${index}`}>
+                <td className="px-2 py-1.5">{SHIFT_LABELS[row.turno]}</td>
+                <td className="px-2 py-1.5">{row.colectivo}</td>
+                {metrics.map(({ key }) => (
+                  <td className="px-2 py-1.5 text-right tabular-nums" colSpan={3} key={key}>
+                    {row[key].hombres} / {row[key].mujeres} / <strong>{row[key].hombres + row[key].mujeres}</strong>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          <tfoot><tr className="font-semibold">
+            <td className="px-2 py-2" colSpan={2}>Totales del desglose</td>
+            {metrics.map(({ key }) => <td className="px-2 py-2 text-right tabular-nums" colSpan={3} key={key}>{detailSum(detail, key)}</td>)}
+          </tr></tfoot>
+        </table>
+      </div>
+      {mismatches.length > 0 && (
+        <p className="mt-2 text-xs text-amber-300">
+          Atención: los totales del desglose no coinciden con los totales generales en {mismatches.map((item) => item.label).join(', ')}. Comprueba el Excel antes de exportar.
+        </p>
+      )}
+      <p className="mt-2 text-[11px] text-metro-muted">Origen: {response.sourceFileName} · Importado: {response.importedAt ? new Date(response.importedAt).toLocaleString('es-ES') : 'Sin fecha'}</p>
+    </details>
+  );
+}
+
 type Props = {
   target: Huelga | null;
   responses: HuelgaZoneResponse[];
@@ -250,6 +316,7 @@ export function HuelgasResponseCollectionModal({
                 </div>
 
                 {issuePanel(zoneIssues)}
+                {importedDetailPanel(response)}
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {metricInput(response, 'personasTurno', 'Personas con turno', onChange)}
