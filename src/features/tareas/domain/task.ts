@@ -16,6 +16,14 @@ export interface TaskSeguimientoSource {
   label: string;
 }
 
+export interface TaskQuickAction {
+  id: string;
+  titulo: string;
+  fechaObjetivo?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
 export interface TaskSeguimientoEntry {
   /**
    * Identificador estable del seguimiento.
@@ -29,6 +37,7 @@ export interface TaskSeguimientoEntry {
   texto: string;
   /** Origen navegable cuando el seguimiento nace de otro módulo. */
   source?: TaskSeguimientoSource;
+  quickActions?: TaskQuickAction[];
 }
 
 export interface TaskDocumentLink {

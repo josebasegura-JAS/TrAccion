@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { emitPersistenceFeedback } from '../../../services/persistence';
 import { hasTaskSqliteRepository } from './taskSqliteRepository';
-import { isTaskClosed, type Task, type TaskDraft } from '../domain/task';
+import { isTaskClosed, type Task, type TaskDraft, type TaskQuickAction } from '../domain/task';
 import { firstActiveTaskId, normalizeTask } from './taskNormalization';
 import { readTasks, readTasksForStore, TASKS_STORAGE_KEY, type TaskUpdateResult } from './taskPersistence';
 import { closeTasksFromSessionPersisted } from './taskSessionClosure';
@@ -36,6 +36,7 @@ interface TaskStateStore {
     draft: TaskDraft,
     seguimientoText: string | undefined,
     expectedUpdatedAt: string | null,
+    quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo'>,
   ) => Promise<TaskUpdateResult>;
   removeWithConcurrencyCheck: (
     id: string,
@@ -132,8 +133,8 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
     createManyTasksFromImport(drafts, get(), set, () =>
       get().reloadFromStorage(),
     ),
-  updateWithConcurrencyCheck: (id, draft, seguimientoText, expectedUpdatedAt) =>
-    updateTaskWithConcurrencyCheck(id, draft, seguimientoText, expectedUpdatedAt, set),
+  updateWithConcurrencyCheck: (id, draft, seguimientoText, expectedUpdatedAt, quickAction) =>
+    updateTaskWithConcurrencyCheck(id, draft, seguimientoText, expectedUpdatedAt, set, quickAction),
   removeWithConcurrencyCheck: (id, expectedUpdatedAt) =>
     removeTaskWithConcurrencyCheck(id, expectedUpdatedAt, set),
   upsertCoordinationTracking: (mutation) =>

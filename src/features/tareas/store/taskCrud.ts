@@ -1,7 +1,7 @@
 import { emitPersistenceFeedback } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { enqueueAuditEvent } from '../../../shared/audit/auditTrail';
-import { CLOSED_TASK_PHASE, isTaskClosed, type Task, type TaskDraft, type TaskSeguimientoSource } from '../domain/task';
+import { CLOSED_TASK_PHASE, isTaskClosed, type Task, type TaskDraft, type TaskQuickAction, type TaskSeguimientoSource } from '../domain/task';
 import {
   firstActiveTaskId,
   normalizeTask,
@@ -261,6 +261,7 @@ export async function updateTaskWithConcurrencyCheck(
   seguimientoText: string | undefined,
   expectedUpdatedAt: string | null,
   setState: SetTaskCrudState,
+  quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo'>,
 ): Promise<TaskUpdateResult> {
   try {
     if (hasTaskSqliteRepository()) {
@@ -271,7 +272,7 @@ export async function updateTaskWithConcurrencyCheck(
         return { ok: false, message: 'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.' };
       }
 
-      const updatedTask = normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText));
+      const updatedTask = normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText, quickAction));
       const saveResult = await persistTaskDirectly(updatedTask, expectedUpdatedAt);
       if (!saveResult.ok) return saveResult;
       setState((state) => {
@@ -288,7 +289,7 @@ export async function updateTaskWithConcurrencyCheck(
       parseRecords: parseTasksSnapshot,
       getRecordId: (record) => record.id,
       getRecordUpdatedAt: (record) => record.updatedAt,
-      updateRecord: (latestTask) => normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText)),
+      updateRecord: (latestTask) => normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText, quickAction)),
       missingMessage: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
       conflictMessage: 'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
     });
