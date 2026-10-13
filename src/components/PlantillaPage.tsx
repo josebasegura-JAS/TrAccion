@@ -3,6 +3,8 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Download,
   Languages,
   Layers3,
@@ -207,9 +209,11 @@ export function PlantillaPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-metro-border bg-[#102238]/90 px-3 py-2.5">
           <span className="text-[11px] font-medium text-slate-400">{sortedEmployees.length === 0 ? 'Sin registros' : `Mostrando ${pageStart + 1}–${pageEnd} de ${sortedEmployees.length} personas`}</span>
           <div className="flex items-center gap-2">
+            <button aria-label="Primera página" title="Ir a la primera página" className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel text-slate-300 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" disabled={safeCurrentPage <= 1} onClick={() => setCurrentPage(1)} type="button"><ChevronsLeft size={15} /></button>
             <button aria-label="Página anterior" className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel text-slate-300 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" disabled={safeCurrentPage <= 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} type="button"><ChevronLeft size={15} /></button>
             <span className="min-w-[74px] text-center text-[11px] font-bold text-slate-300">{safeCurrentPage} / {totalPages}</span>
             <button aria-label="Página siguiente" className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel text-slate-300 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" disabled={safeCurrentPage >= totalPages} onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} type="button"><ChevronRight size={15} /></button>
+            <button aria-label="Última página" title="Ir a la última página" className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel text-slate-300 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" disabled={safeCurrentPage >= totalPages} onClick={() => setCurrentPage(totalPages)} type="button"><ChevronsRight size={15} /></button>
             <select aria-label="Registros por página" className="h-8 rounded-lg border border-metro-border bg-metro-panel px-2 text-[11px] font-semibold text-slate-300 outline-none focus:border-sky-300/40" onChange={(event) => setPageSize(Number(event.target.value))} value={pageSize}><option value={10}>10 por página</option><option value={25}>25 por página</option><option value={50}>50 por página</option></select>
           </div>
         </div>

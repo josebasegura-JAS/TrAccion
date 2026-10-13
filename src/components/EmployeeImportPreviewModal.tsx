@@ -340,7 +340,7 @@ function ConflictRow({
           onClick={() => onChange(employeeId, change.field, 'keep')}
           type="button"
         >
-          <span className="block text-[10px] uppercase tracking-wide">Mantener actual</span>
+          <span className="block text-[10px] uppercase tracking-wide">Base de datos actual · Mantener</span>
           <span className="block truncate font-semibold" title={displayValue(change.previous)}>{displayValue(change.previous)}</span>
         </button>
         <button
@@ -348,7 +348,7 @@ function ConflictRow({
           onClick={() => onChange(employeeId, change.field, 'source')}
           type="button"
         >
-          <span className="block text-[10px] uppercase tracking-wide">Usar Zerkos</span>
+          <span className="block text-[10px] uppercase tracking-wide">Excel Zerkos · Importar</span>
           <span className="block truncate font-semibold" title={displayValue(change.next)}>{displayValue(change.next)}</span>
         </button>
       </div>
@@ -550,16 +550,22 @@ function GenericImportPreviewModal({
                 <ActionButton iconOnly={false} onClick={() => setAllResolutions('source')} size="sm" variant="secondary">Usar todos los importados</ActionButton>
               </div>
             </div>
-            <div className="max-h-48 overflow-y-auto border-t border-metro-border/60 pt-1">
+            <div className="max-h-72 space-y-2 overflow-y-auto border-t border-metro-border/60 pt-2">
               {conflicts.map(({ employee, field, previous, next }) => (
-                <div className="grid grid-cols-[minmax(150px,0.8fr)_minmax(180px,1fr)_auto] items-center gap-2 border-b border-metro-border/50 py-1.5 text-[11px] last:border-b-0" key={`${employee.empleado}-${field}`}>
-                  <div className="min-w-0"><span className="font-bold text-metro-text">{employee.empleado}</span><span className="text-metro-muted"> · {FIELD_LABELS[field]}</span></div>
-                  <div className="min-w-0 truncate text-metro-muted" title={`Actual: ${displayValue(previous)} · Importado: ${displayValue(next)}`}>
-                    <span className="text-metro-text">{displayValue(previous)}</span> → {displayValue(next)}
+                <div className="rounded-lg border border-metro-border/60 bg-metro-surface/40 p-2 text-[11px]" key={`${employee.empleado}-${field}`}>
+                  <div className="mb-1.5 font-semibold text-metro-text">
+                    {employee.empleado} · {existingById.get(employee.empleado.trim())?.nombreApellidos || employee.nombreApellidos || 'Nombre no disponible'}
+                    <span className="ml-2 text-metro-muted">Campo: {FIELD_LABELS[field]}</span>
                   </div>
-                  <div className="flex gap-1">
-                    <button className={`rounded px-2 py-1 ${resolutionFor(employee.empleado, field) === 'keep' ? 'bg-emerald-400/15 font-bold text-emerald-200' : 'text-metro-muted'}`} onClick={() => setResolution(employee.empleado, field, 'keep')} type="button">Mantener actual</button>
-                    <button className={`rounded px-2 py-1 ${resolutionFor(employee.empleado, field) === 'source' ? 'bg-amber-400/15 font-bold text-amber-200' : 'text-metro-muted'}`} onClick={() => setResolution(employee.empleado, field, 'source')} type="button">Usar importado</button>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button type="button" onClick={() => setResolution(employee.empleado, field, 'keep')} className={`min-w-0 rounded-md border px-2 py-2 text-left ${resolutionFor(employee.empleado, field) === 'keep' ? 'border-emerald-400/60 bg-emerald-400/10' : 'border-metro-border'}`}>
+                      <span className="block text-[10px] font-bold uppercase text-metro-muted">Base de datos actual · Mantener</span>
+                      <span className="block break-words font-semibold text-metro-text">{displayValue(previous)}</span>
+                    </button>
+                    <button type="button" onClick={() => setResolution(employee.empleado, field, 'source')} className={`min-w-0 rounded-md border px-2 py-2 text-left ${resolutionFor(employee.empleado, field) === 'source' ? 'border-blue-400/60 bg-blue-400/10' : 'border-metro-border'}`}>
+                      <span className="block text-[10px] font-bold uppercase text-metro-muted">Valor del Excel · Importar</span>
+                      <span className="block break-words font-semibold text-metro-text">{displayValue(next)}</span>
+                    </button>
                   </div>
                 </div>
               ))}
