@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BriefcaseBusiness, Mail, Plus, Search } from 'lucide-react';
+import { BriefcaseBusiness, FileSpreadsheet, Mail, Plus, Search } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildActividadMail, type ActividadExterna, type ActividadExternaEstado } from '../domain/actividadExterna';
 import { useActividadesExternasStore } from '../store/useActividadesExternasStore';
+import { syncActividadesExternasExcelBackup } from '../services/actividadesExternasExcelBackup';
 
 const today = () => {
   const date = new Date();
@@ -74,7 +75,8 @@ export function ActividadesExternasPage() {
     <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 font-semibold text-metro-text"><BriefcaseBusiness size={17}/> Solicitudes de compatibilidad</h2>
-        <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/> Nueva solicitud</button>
+        <div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-text disabled:opacity-50"><FileSpreadsheet size={14}/> Actualizar Excel</button>
+        <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/> Nueva solicitud</button></div>
       </div>
       {creating && <form className="mb-3 space-y-3 rounded-xl border border-metro-border bg-metro-surface p-3" onSubmit={(event) => {
         event.preventDefault();
