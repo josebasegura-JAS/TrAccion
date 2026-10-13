@@ -129,7 +129,7 @@ describe('sessionSqliteRepository', () => {
       const result = await deleteSessionRecordInSqlite('comite', 'traccion.v1.comite.sessions', 'session-1', currentValue, timestamp);
 
       expect(saver).toHaveBeenCalledTimes(1);
-      const callArg = saver.mock.calls[0][0];
+      const callArg = (saver as unknown as { mock: { calls: Array<[{ id: string; expectedUpdatedAt: string | null; value: string }]> } }).mock.calls[0][0];
       expect(callArg.id).toBe('session-1');
       expect(callArg.expectedUpdatedAt).toBe(timestamp);
       const sentValue = JSON.parse(callArg.value) as { id: string; title: string; deletedAt: string; updatedAt: string };
@@ -150,7 +150,7 @@ describe('sessionSqliteRepository', () => {
 
       await deleteSessionRecordInSqlite('comite', 'traccion.v1.comite.sessions', 'session-1', 'no-es-json', null);
 
-      const callArg = saver.mock.calls[0][0];
+      const callArg = (saver as unknown as { mock: { calls: Array<[{ id: string; expectedUpdatedAt: string | null; value: string }]> } }).mock.calls[0][0];
       const sentValue = JSON.parse(callArg.value) as { deletedAt: string; updatedAt: string };
       expect(sentValue.deletedAt).toBeTruthy();
       expect(sentValue.updatedAt).toBe(sentValue.deletedAt);

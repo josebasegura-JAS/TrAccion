@@ -294,7 +294,7 @@ describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () =
     });
 
     expect(createResult.ok).toBe(true);
-    expect(storedPerson?.id).toBe('1');
+    expect((storedPerson as ReturnType<typeof buildSqliteRecord> | null)?.id).toBe('1');
 
     const updateResult = await useTicketRestauranteStore.getState().upsertPerson({
       empleado: '00001',
@@ -335,7 +335,7 @@ describe('useTicketRestauranteStore — absences y config con repositorio SQLite
   });
 
   it('saveAbsences reemplaza el listado completo en un solo batch, marcando deletedAt en las que ya no están presentes', async () => {
-    const store: Record<string, ReturnType<typeof buildSqliteRecord>> = {};
+    const store: Record<string, ReturnType<typeof buildSqliteRecord> & { deletedAt: string | null }> = {};
     const initialAbsence = {
       id: 'absence-1',
       empleado: '00001',

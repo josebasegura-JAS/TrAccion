@@ -180,7 +180,7 @@ describe('plantilla import', () => {
       ['empleado;nombreApellidos;residencia;nif\n100;Ane Bilbao Actualizada;Sopela Taller;72451233H'],
       'plantilla.csv',
       { type: 'text/csv' },
-    );
+    ) as unknown as File;
 
     await useEmployeeStore.getState().importExcel(makeFile());
 
