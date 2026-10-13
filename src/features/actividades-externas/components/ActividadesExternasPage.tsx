@@ -32,9 +32,9 @@ export function ActividadesExternasPage() {
   useEffect(() => { loadEmployees(); load(); }, [loadEmployees, load]);
   const employee = employees.find((item) => item.empleado === employeeId && !item.deletedAt);
   const employeeSuggestions = useMemo(() => {
-    const query = employeeQuery.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+    const query = employeeQuery.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (!query) return [];
-    return employees.filter((item) => !item.deletedAt && [item.empleado, item.nombreApellidos].some((value) => value.toLocaleLowerCase('es').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').includes(query))).slice(0, 10);
+    return employees.filter((item) => !item.deletedAt && [item.empleado, item.nombreApellidos].some((value) => value.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(query))).slice(0, 10);
   }, [employees, employeeQuery]);
   const visible = useMemo(() => records.filter((item) =>
     (statusFilter === 'todos' || item.estado === statusFilter)
