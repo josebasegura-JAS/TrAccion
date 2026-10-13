@@ -253,7 +253,7 @@ describe('actaTypesSqliteRepository', () => {
   });
 
   it('deleteActaTypeInSqlite marca deletedAt y reutiliza saveActaTypeToSqlite', async () => {
-    const saver = vi.fn(async (_record: TraccionConditionalActaTypeRecord) => ({
+    const saver = vi.fn(async () => ({
       ok: true,
       status: { ready: true, phase: 'active', message: 'SQLite activo' },
       message: 'Tipo de acta eliminado.',
