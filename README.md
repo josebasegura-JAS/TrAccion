@@ -18,7 +18,7 @@ TrAcción incluye actualmente, entre otros:
 - Huelgas.
 - Ayuda Escolar.
 - Lotería y Sorteos.
-- Vinculograma.
+- Vinculograma y Actividades Externas.
 - Especiales.
 - Criterios RRLL.
 - Ajustes y mantenimiento de la aplicación.
