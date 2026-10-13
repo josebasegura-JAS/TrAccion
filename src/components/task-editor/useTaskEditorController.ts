@@ -84,6 +84,9 @@ export function useTaskEditorController({
   const [showCircuitPicker, setShowCircuitPicker] = useState(false);
   const [customAreaTarget, setCustomAreaTarget] = useState('');
   const [trackingText, setTrackingText] = useState(initialTrackingText);
+  const [quickActionEnabled, setQuickActionEnabled] = useState(false);
+  const [quickActionTitle, setQuickActionTitle] = useState('');
+  const [quickActionDate, setQuickActionDate] = useState('');
   const [trackingDate, setTrackingDate] = useState(todayIsoDate);
   const [trackingUser, setTrackingUser] = useState(getActiveUser);
   const [manualDocumentPath, setManualDocumentPath] = useState('');
@@ -203,6 +206,9 @@ export function useTaskEditorController({
     setShowCircuitPicker(false);
     setCustomAreaTarget('');
     setTrackingText('');
+    setQuickActionEnabled(false);
+    setQuickActionTitle('');
+    setQuickActionDate('');
     setTrackingDate(nextTrackingDate);
     setRecoveryBaseline({
       draft: nextDraft,
@@ -321,6 +327,11 @@ export function useTaskEditorController({
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    if (quickActionEnabled && (!trackingText.trim() || !quickActionTitle.trim())) {
+      setSaveStatus('Para crear una acción pendiente debes escribir el seguimiento y la actuación.');
+      setSaveStatusIsError(true);
+      return;
+    }
     setSaveStatus('');
     setSaveStatusIsError(false);
 
@@ -356,7 +367,7 @@ export function useTaskEditorController({
       return;
     }
 
-    const result = await updateTask(task.id, draft, seguimientoForSave, loadedUpdatedAt);
+    const result = await updateTask(task.id, draft, seguimientoForSave, loadedUpdatedAt, quickActionEnabled ? { titulo: quickActionTitle.trim(), fechaObjetivo: quickActionDate || undefined } : undefined);
     if (!result.ok) {
       setSaveStatus(result.message);
       setSaveStatusIsError(true);
@@ -391,6 +402,9 @@ export function useTaskEditorController({
     }
 
     setTrackingText('');
+    setQuickActionEnabled(false);
+    setQuickActionTitle('');
+    setQuickActionDate('');
     setTrackingDate(nextTrackingDate);
     clearRecoveryDraft();
     setSaveStatus(coordinationResult.ok
@@ -827,6 +841,12 @@ export function useTaskEditorController({
     trackingItems,
     trackingText,
     trackingUser,
+    quickActionEnabled,
+    setQuickActionEnabled,
+    quickActionTitle,
+    setQuickActionTitle,
+    quickActionDate,
+    setQuickActionDate,
     unionCircuitOptions,
   };
 }
