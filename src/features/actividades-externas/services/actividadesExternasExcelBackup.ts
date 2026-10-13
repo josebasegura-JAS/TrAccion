@@ -25,7 +25,7 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
       { header: 'Fecha comunicación', key: 'fechaComunicacion', width: 24 },
       { header: 'Correo', key: 'email', width: 38 },
     ];
-    const safe = (value: string) => /^[\\s]*[=+@-]/.test(value) ? `'${value}` : value;
+    const safe = (value: string) => /^\s*[=+@-]/.test(value) ? `'${value}` : value;
     [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).forEach((record) => {
       sheet.addRow({
         empleado: safe(record.empleado),
