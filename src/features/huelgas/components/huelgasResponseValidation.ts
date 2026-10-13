@@ -72,6 +72,63 @@ export function validateHuelgaZoneResponse(response: HuelgaZoneResponse): Huelga
     }
   }
 
+  // Los cuatro conceptos son excluyentes excepto que servicios mínimos, trabajan
+  // y huelga están todos contenidos en personas con turno.
+  // Validar por sexo y por combinación turno/colectivo, no solo los totales del circuito.
+  const detail = response.generalDetail ?? [];
+  const seenDetails = new Set<string>();
+  const detailTotals = {
+    personasTurno: 0,
+    serviciosMinimos: 0,
+    trabajan: 0,
+    huelga: 0,
+  };
+  for (const row of detail) {
+    const key = `${row.turno}::${normalize(row.colectivo)}`;
+    if (seenDetails.has(key)) {
+      issues.push(issue('error',
+        `Desglose duplicado: ${row.colectivo}, turno ${row.turno}. Revisa la importación antes de validar.`,
+        response.zonaId));
+    }
+    seenDetails.add(key);
+
+    for (const sex of ['hombres', 'mujeres'] as const) {
+      const turno = row.personasTurno[sex];
+      const minimos = row.serviciosMinimos[sex];
+      const trabajan = row.trabajan[sex];
+      const huelga = row.huelga[sex];
+      const classified = minimos + trabajan + huelga;
+      if (![turno, minimos, trabajan, huelga].every((value) => Number.isInteger(value) && value >= 0)) {
+        issues.push(issue('error',
+          `Valores no válidos en ${row.colectivo}, ${row.turno}, ${sex}: deben ser enteros no negativos.`,
+          response.zonaId));
+      } else if (turno !== classified) {
+        issues.push(issue('error',
+          `${row.colectivo} · ${row.turno} · ${sex}: con turno (${turno}) debe ser igual a trabajan (${trabajan}) + servicios mínimos (${minimos}) + huelga (${huelga}) = ${classified}. Servicios mínimos NO cuenta en trabajan.`,
+          response.zonaId));
+      }
+    }
+    for (const field of ['personasTurno', 'serviciosMinimos', 'trabajan', 'huelga'] as const) {
+      detailTotals[field] += row[field].hombres + row[field].mujeres;
+    }
+  }
+
+  if (detail.length > 0) {
+    const totals = [
+      { label: 'Personas con turno', value: response.personasTurno, detail: detailTotals.personasTurno },
+      { label: 'Servicios mínimos', value: response.serviciosMinimos, detail: detailTotals.serviciosMinimos },
+      { label: 'Personas que trabajan', value: response.personasTrabajan, detail: detailTotals.trabajan },
+      { label: 'Personas en huelga', value: response.personasHuelga, detail: detailTotals.huelga },
+    ];
+    for (const total of totals) {
+      if (total.value !== null && total.value !== total.detail) {
+        issues.push(issue('error',
+          `${total.label}: total general ${total.value} frente a suma del desglose por sexo y turno ${total.detail}. Corrige el valor o el desglose.`,
+          response.zonaId));
+      }
+    }
+  }
+
   const employees = new Map<string, string[]>();
   for (const person of response.huelguistas) {
     const employee = person.empleado.trim();
@@ -239,6 +296,9 @@ export async function analyzeHuelgaResponseWorkbook(buffer: ArrayBuffer): Promis
         }
         if (isStrike && isMinimum) {
           findings.push(`[ERROR] ${worksheet.name}: ${employee || name} figura simultáneamente en huelga y como servicio mínimo.`);
+        }
+        if (isMinimum && isWorking) {
+          findings.push(`[ERROR] ${worksheet.name}: ${employee || name} figura como servicio mínimo y como trabajador ordinario a la vez. Los servicios mínimos están incluidos en personas con turno, pero NO en personas que trabajan.`);
         }
       }
       break;
