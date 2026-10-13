@@ -81,6 +81,7 @@ type Props = {
   onReview: (zoneId: string) => void;
   onSave: () => void;
   onExport: () => void;
+  onExportGrouped: () => void;
 };
 
 export function HuelgasResponseCollectionModal({
@@ -104,6 +105,7 @@ export function HuelgasResponseCollectionModal({
   onReview,
   onSave,
   onExport,
+  onExportGrouped,
 }: Props) {
   const [dropActive, setDropActive] = useState(false);
   if (!target) return null;
@@ -308,6 +310,16 @@ export function HuelgasResponseCollectionModal({
             onClick={onExport}
           >
             Generar Excel maestra
+          </ActionButton>
+          <ActionButton
+            variant="secondary"
+            icon={FileSpreadsheet}
+            iconOnly={false}
+            loading={exporting}
+            disabled={validationSummary.errors > 0}
+            onClick={onExportGrouped}
+          >
+            Generar Excel agrupada
           </ActionButton>
           <ActionButton variant="primary" icon={Save} iconOnly={false} loading={saving} disabled={!dirty} onClick={onSave}>Guardar</ActionButton>
         </div>

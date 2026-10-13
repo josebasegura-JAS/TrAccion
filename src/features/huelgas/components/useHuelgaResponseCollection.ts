@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { downloadHuelgaGroupedReport } from './huelgasGroupedReport';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
 import type { HuelgaZona } from './huelgasZones';
@@ -525,6 +526,31 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     }
   };
 
+  const exportGroupedReport = async () => {
+    if (!target) return;
+    const errors = validateHuelgaCollection(responses).filter((item) => item.severity === 'error');
+    if (errors.length > 0) {
+      await alert(`No se puede generar el informe agrupado mientras existan errores.\n${issueMessage(errors)}`, {
+        title: 'Informe agrupado bloqueado', type: 'error',
+      });
+      return;
+    }
+    if (dirty && !(await save())) return;
+    setExporting(true);
+    try {
+      await downloadHuelgaGroupedReport(target.fecha);
+      await alert('Guarda este informe junto a la Excel maestra de la misma fecha, sin renombrarla. Abre ambos archivos en Excel y permite actualizar vínculos para recalcular las cifras.', {
+        title: 'Informe agrupado generado', type: 'info',
+      });
+    } catch (error) {
+      await alert(error instanceof Error ? error.message : 'No se ha podido generar el informe agrupado.', {
+        title: 'Error al exportar', type: 'error',
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const collectionStatusFor = (huelga: Huelga) => {
     const selectedIds = circuitIdsFor(huelga, zonas);
     const stored = collections[huelga.id]?.responses ?? {};
@@ -555,6 +581,7 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     save,
     markReviewed,
     exportReport,
+    exportGroupedReport,
     collectionStatusFor,
     dialogNode,
   };

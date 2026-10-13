@@ -125,6 +125,7 @@ export function HuelgasPage() {
         onReview={(zoneId) => void responseCollection.markReviewed(zoneId)}
         onSave={() => void responseCollection.save()}
         onExport={() => void responseCollection.exportReport()}
+        onExportGrouped={() => void responseCollection.exportGroupedReport()}
       />
 
       <HuelgaEditorModal
