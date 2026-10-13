@@ -89,30 +89,12 @@ jobs:
                   'createRecordLockService(dependencies)',
                   'createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0])',
               )
-              text = text.replace(
-                  'expect(capturedGetMigrationDone?.()).toBe(false);',
-                  'expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(false);',
-              )
-              text = text.replace(
-                  'capturedSetMigrationDone?.(true);',
-                  '(capturedSetMigrationDone as unknown as (value: boolean) => void)(true);',
-              )
-              text = text.replace(
-                  'expect(capturedGetMigrationDone?.()).toBe(true);',
-                  'expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(true);',
-              )
-              text = text.replace(
-                  'setMigrationDoneRef?.(true);',
-                  '(setMigrationDoneRef as unknown as (value: boolean) => void)(true);',
-              )
-              text = text.replace(
-                  'expect(getMigrationDoneRef?.()).toBe(true);',
-                  'expect((getMigrationDoneRef as unknown as () => boolean)()).toBe(true);',
-              )
-              text = text.replace(
-                  'releaseLockAttempt?.();',
-                  '(releaseLockAttempt as unknown as () => void)();',
-              )
+              text = text.replace('expect(capturedGetMigrationDone?.()).toBe(false);', 'expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(false);')
+              text = text.replace('capturedSetMigrationDone?.(true);', '(capturedSetMigrationDone as unknown as (value: boolean) => void)(true);')
+              text = text.replace('expect(capturedGetMigrationDone?.()).toBe(true);', 'expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(true);')
+              text = text.replace('setMigrationDoneRef?.(true);', '(setMigrationDoneRef as unknown as (value: boolean) => void)(true);')
+              text = text.replace('expect(getMigrationDoneRef?.()).toBe(true);', 'expect((getMigrationDoneRef as unknown as () => boolean)()).toBe(true);')
+              text = text.replace('releaseLockAttempt?.();', '(releaseLockAttempt as unknown as () => void)();')
               path.write_text(text, encoding='utf-8')
 
           path = Path('electron/persistence/simpleJsonModuleRepository.migration.test.ts')
@@ -132,7 +114,13 @@ jobs:
           path.write_text(path.read_text(encoding='utf-8').replace('      const dbPath = db.name;', "      const dbPath = (db as unknown as { name: string }).name;"), encoding='utf-8')
 
           path = Path('electron/persistence/presupuestosRepository.test.ts')
-          text = path.read_text(encoding='utf-8').replace(
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '    safeDatabaseOperation: async <T>(operation: () => T) => operation(),',
+              '    safeDatabaseOperation: vi.fn(async (operation: () => unknown) => operation()),',
+          )
+          text = text.replace('createPresupuestosRepository(deps)', 'createPresupuestosRepository(deps as Parameters<typeof createPresupuestosRepository>[0])')
+          text = text.replace(
               '    expect(deps.createJsonModuleRepository).toHaveBeenCalledTimes(4);\n    const calls = deps.createJsonModuleRepository.mock.calls;',
               "    const createRepositoryMock = deps.createJsonModuleRepository as ReturnType<typeof vi.fn>;\n    expect(createRepositoryMock).toHaveBeenCalledTimes(4);\n    const calls = createRepositoryMock.mock.calls;",
           )
@@ -154,6 +142,14 @@ jobs:
               '  const prepare = vi.fn((sql: string) => { void sql; return { get, all, run }; });',
           )
           path.write_text(text, encoding='utf-8')
+
+          path = Path('electron/appUpdate.test.ts')
+          text = path.read_text(encoding='utf-8')
+          old = "    const current = path.win32.join('C:\\\\', 'Users', 'usuario', 'Desktop', 'Traccion 1.1.exe');\n    expect(path.win32.normalize(buildInstalledExecutablePath(current, '1.1.82') ?? '')).toBe(\n      path.win32.join('C:\\\\', 'Users', 'usuario', 'Desktop', 'Traccion 1.1.exe'),\n    );"
+          new = "    const current = path.join('Users', 'usuario', 'Desktop', 'Traccion 1.1.exe');\n    expect(buildInstalledExecutablePath(current, '1.1.82')).toBe(\n      path.join('Users', 'usuario', 'Desktop', 'Traccion 1.1.exe'),\n    );"
+          if old not in text:
+              raise SystemExit('No se ha localizado el caso multiplataforma de appUpdate')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
 
           Path('.github/workflows/temporary-ci-fix.yml').unlink()
           Path('.ci-kick').unlink(missing_ok=True)
