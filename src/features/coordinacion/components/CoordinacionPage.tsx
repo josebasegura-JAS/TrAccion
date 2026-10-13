@@ -1,5 +1,5 @@
 import { isTaskClosed } from '../../tareas/domain/task';
-import { Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Pencil, Plus, RotateCcw, Search, Trash2, UsersRound } from 'lucide-react';
+import { Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileSpreadsheet, Pencil, Plus, RotateCcw, Search, Trash2, UsersRound } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TaskEditor } from '../../../components/TaskEditor';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -66,6 +66,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const loadConfig = useConfiguracionStore((state) => state.load);
   const [area, setArea] = useState<CoordinationArea>('direccion');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activePointId, setActivePointId] = useState<string | null>(null);
   const [date, setDate] = useState(todayIso());
   const [meetingTitle, setMeetingTitle] = useState('');
   const [areaName, setAreaName] = useState('');
@@ -440,37 +441,70 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           {selected.status === 'open' && <ActionButton icon={CheckCircle2} iconOnly={false} onClick={() => void handleClose()} size="sm" variant="primary">Guardar y cerrar reunión</ActionButton>}
         </div>
       </div>
-      <div className="ui-section p-3">
-        <div className="mb-3 flex items-center justify-between"><h3 className="font-bold text-metro-text">Guion de reunión</h3><span className="text-xs font-semibold text-metro-muted">{selected.points.length} puntos</span></div>
-        <div className="space-y-3">
-          {selected.points.map((point, index) => (
-            <CoordinationPointEditor
-              index={index}
-              isUnion={isUnion}
-              key={point.id}
-              meetingOpen={selected.status === 'open'}
-              onConvertToTask={(pointId) => setTaskCreation({ pointId })}
-              onDelete={(pointId, title) => void handleDeleteManualPoint(pointId, title)}
-              onDraftChange={handlePointDraftChange}
-              onRemoteConflictChange={handlePointRemoteConflictChange}
-              point={point}
-            />
-          ))}
-          {selected.points.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">La reunión todavía no tiene puntos.</p>}
-        </div>
-        {selected.status === 'open' && <div className="mt-4 space-y-3">
-          <div className="flex gap-2"><Input className="min-w-0 flex-1" density="compact" onChange={(event) => setNewPoint(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleAddManual(); }} placeholder="Añadir otro punto al guion..." value={newPoint}/><ActionButton icon={Plus} iconOnly={false} onClick={() => void handleAddManual()} size="sm" variant="primary">Crear punto</ActionButton></div>
-          <div className="ui-subsection p-3">
-            <p className="text-xs font-bold text-metro-text">Añadir una tarea abierta</p>
-            <p className="mt-1 text-xs text-metro-muted">Puedes incorporar cualquier tarea activa aunque no estuviera marcada previamente para esta reunión.</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(160px,0.7fr)_minmax(220px,1.3fr)_auto]">
+      <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(240px,0.32fr)_minmax(0,1fr)]">
+        <aside className="ui-section min-w-0 self-start p-3 lg:sticky lg:top-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-metro-text">Puntos de la reunión</h3>
+            <span className="text-xs text-metro-muted">{selected.points.length}</span>
+          </div>
+          <nav aria-label="Puntos de la reunión" className="max-h-[60vh] space-y-1 overflow-y-auto">
+            {selected.points.map((point, index) => {
+              const active = (activePointId && selected.points.some((candidate) => candidate.id === activePointId)
+                ? activePointId : selected.points[0]?.id) === point.id;
+              return <button
+                aria-current={active ? 'true' : undefined}
+                className={`flex w-full items-start gap-2 rounded-lg border px-3 py-3 text-left transition-colors ${active ? 'border-metro-red bg-metro-red/10' : 'border-metro-border hover:border-metro-red/60 hover:bg-metro-panel'}`}
+                key={point.id}
+                onClick={() => setActivePointId(point.id)}
+                type="button"
+              >
+                <span className="rounded-md bg-metro-surface px-2 py-1 text-xs font-bold text-metro-muted">{index + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-bold text-metro-text">{point.title}</span>
+                  <span className="mt-1 block text-[11px] text-metro-muted">{point.origin === 'task' ? 'Tarea de referencia' : 'Punto manual'} · {coordinationPointStatusLabel(point.status)}</span>
+                </span>
+                <ChevronRight className="mt-1 shrink-0 text-metro-muted" size={14}/>
+              </button>;
+            })}
+          </nav>
+          {selected.points.length === 0 && <p className="py-4 text-center text-xs text-metro-muted">No hay puntos todavía.</p>}
+          {selected.status === 'open' && <div className="mt-3 space-y-2 border-t border-metro-border pt-3">
+            <div className="flex gap-2">
+              <Input className="min-w-0 flex-1" density="compact" onChange={(event) => setNewPoint(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleAddManual(); }} placeholder="Nuevo punto..." value={newPoint}/>
+              <ActionButton icon={Plus} iconOnly onClick={() => void handleAddManual()} size="sm" variant="primary" title="Añadir punto"/>
+            </div>
+          </div>}
+        </aside>
+        <div className="min-w-0 space-y-3">
+          {selected.points.map((point, index) => {
+            const active = (activePointId && selected.points.some((candidate) => candidate.id === activePointId)
+              ? activePointId : selected.points[0]?.id) === point.id;
+            return <div className={active ? '' : 'hidden'} key={point.id}>
+              <CoordinationPointEditor
+                index={index}
+                isUnion={isUnion}
+                meetingOpen={selected.status === 'open'}
+                onConvertToTask={(pointId) => setTaskCreation({ pointId })}
+                onDelete={(pointId, title) => void handleDeleteManualPoint(pointId, title)}
+                onDraftChange={handlePointDraftChange}
+                onRemoteConflictChange={handlePointRemoteConflictChange}
+                point={point}
+              />
+            </div>;
+          })}
+          {selected.status === 'open' && <div className="ui-section space-y-3 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-metro-text">Tareas de la reunión</h3>
+              <ActionButton icon={Plus} iconOnly={false} onClick={() => setTaskCreation({ pointId: activePointId ?? selected.points[0]?.id ?? null })} size="sm" variant="secondary">Crear tarea desde el punto</ActionButton>
+            </div>
+            <p className="text-xs text-metro-muted">Añade una tarea existente al guion o crea una nueva vinculada al punto seleccionado.</p>
+            <div className="grid gap-2 sm:grid-cols-[minmax(120px,0.7fr)_minmax(180px,1.3fr)_auto]">
               <Input className="min-w-0" density="compact" onChange={(event) => { setTaskSearch(event.target.value); setTaskToAdd(''); }} placeholder="Buscar tarea..." value={taskSearch}/>
               <Select className="min-w-0" density="compact" onChange={(event) => setTaskToAdd(event.target.value)} value={taskToAdd}><option value="">{availableTasks.length ? 'Selecciona una tarea activa' : 'No hay tareas coincidentes'}</option>{availableTasks.map((task) => <option key={task.id} value={task.id}>{task.titulo}{task.responsable ? ` · ${task.responsable}` : ''}</option>)}</Select>
               <ActionButton disabled={!taskToAdd} iconOnly={false} onClick={() => void handleAddTask()} size="sm" variant="secondary">Añadir tarea</ActionButton>
             </div>
-          </div>
-          <ActionButton icon={Plus} iconOnly={false} onClick={() => setTaskCreation({ pointId: null })} size="sm" variant="secondary">Crear nueva tarea desde la reunión</ActionButton>
-        </div>}
+          </div>}
+        </div>
       </div>
       <FloatingSaveAction
         onSave={handleSaveMeeting}
