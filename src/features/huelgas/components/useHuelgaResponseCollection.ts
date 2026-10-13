@@ -227,6 +227,23 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     setDirty(true);
   };
 
+  const removeImport = async (zoneId: string) => {
+    const previous = draft[zoneId];
+    if (!previous?.importedAt) return;
+    const accepted = await confirm(`¿Eliminar la importación de ${previous.zonaNombre} (${previous.sourceFileName})? Se borrarán sus cifras y desglose. Deberás guardar los cambios.`, {
+      title: 'Eliminar importación',
+      confirmLabel: 'Eliminar importación',
+      cancelLabel: 'Cancelar',
+      danger: true,
+    });
+    if (!accepted) return;
+    setDraft((current) => ({
+      ...current,
+      [zoneId]: emptyZoneResponse(zoneId, current[zoneId]?.zonaNombre ?? previous.zonaNombre),
+    }));
+    setDirty(true);
+  };
+
   const importResponseBuffer = async (zoneId: string, fileName: string, buffer: ArrayBuffer): Promise<boolean> => {
     const current = draft[zoneId];
     const allZones = collectionZones(zonas);
@@ -577,6 +594,7 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     close,
     updateResponse,
     importResponse,
+    removeImport,
     importOutlookMessage,
     save,
     markReviewed,
