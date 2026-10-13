@@ -59,6 +59,7 @@ export function TaskEditor({
     editingTrackingText,
     handleAddDocument,
     handleDeleteTracking,
+    completeQuickAction,
     handleCloseTask,
     handleImportMailFile,
     handleOpenCriterionRrll,
@@ -112,6 +113,7 @@ export function TaskEditor({
     trackingItems,
     trackingText,
     trackingUser,
+    quickActionEnabled, setQuickActionEnabled, quickActionTitle, setQuickActionTitle, quickActionDate, setQuickActionDate,
     unionCircuitOptions,
   } = useTaskEditorController({ task, mode, onDone, initialDraft, initialTrackingText, onCreated });
 
