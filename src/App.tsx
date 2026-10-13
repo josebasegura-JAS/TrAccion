@@ -41,6 +41,7 @@ const TareasPage = lazy(() => import('./components/TareasPage').then((m) => ({ d
 const CoordinacionPage = lazy(() => import('./features/coordinacion/components/CoordinacionPage').then((m) => ({ default: m.CoordinacionPage })));
 const TeletrabajoPage = lazy(() => import('./components/TeletrabajoPage').then((m) => ({ default: m.TeletrabajoPage })));
 const TicketRestaurantePage = lazy(() => import('./features/ticket-restaurante/components/TicketRestaurantePage').then((m) => ({ default: m.TicketRestaurantePage })));
+const ActividadesExternasPage = lazy(() => import('./features/actividades-externas/components/ActividadesExternasPage').then((m) => ({ default: m.ActividadesExternasPage })));
 const VinculogramaPage = lazy(() => import('./features/vinculograma/components/VinculogramaPage').then((m) => ({ default: m.VinculogramaPage })));
 const AyudaEscolarPage = lazy(() => import('./features/ayuda-escolar/components/AyudaEscolarPage').then((m) => ({ default: m.AyudaEscolarPage })));
 
@@ -88,6 +89,7 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   sorteos: 'Cargando Sorteos...',
   loteria: 'Cargando Lotería...',
   vinculograma: 'Cargando Vinculograma...',
+  'actividades-externas': 'Cargando Actividades Externas...',
   especiales: 'Cargando Especiales...',
   ajustes: 'Cargando Ajustes...',
 };
@@ -297,6 +299,7 @@ export function App() {
                     {activeView === 'sorteos' && <SorteosPage />}
                     {activeView === 'loteria' && <LoteriaPage />}
                     {activeView === 'vinculograma' && <VinculogramaPage />}
+                    {activeView === 'actividades-externas' && <ActividadesExternasPage />}
                     {activeView === 'especiales' && <EspecialesPage />}
                     {activeView === 'ajustes' && <AjustesPage />}
                   </Suspense>
