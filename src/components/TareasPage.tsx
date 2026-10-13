@@ -417,9 +417,9 @@ export function TareasPage({
     if (responsibleFilter === '__unassigned__') return quickFiltered.filter((task) => !task.responsable.trim());
     if (responsibleFilter === '__mine__') {
       if (!currentResponsible) return [];
-      return base.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === currentResponsible.nombre.trim().toLocaleLowerCase('es'));
+      return quickFiltered.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === currentResponsible.nombre.trim().toLocaleLowerCase('es'));
     }
-    return base.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === responsibleFilter.trim().toLocaleLowerCase('es'));
+    return quickFiltered.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === responsibleFilter.trim().toLocaleLowerCase('es'));
   }, [currentResponsible, filters, responsibleFilter, tasks, quickActionsOnly]);
 
   const historicTasks = useMemo(
