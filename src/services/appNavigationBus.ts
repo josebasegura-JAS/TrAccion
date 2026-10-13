@@ -3,6 +3,7 @@ import type { AppView } from '../navigation/navigation';
 export interface AppNavigationBusTarget {
   view: AppView;
   recordId?: string;
+  pointId?: string;
 }
 
 const APP_NAVIGATION_EVENT = 'traccion:app-navigation';
