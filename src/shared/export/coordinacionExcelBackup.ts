@@ -1,3 +1,4 @@
+import { saveExcelBackupWithRetry } from './saveExcelBackupWithRetry';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import type {
   CoordinationArea,
@@ -522,7 +523,7 @@ export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[
         .sort((a, b) => a.date.localeCompare(b.date));
       const workbook = createWorkbook(ExcelJS, definition, scopedMeetings, updatedAt);
       const raw = await workbook.xlsx.writeBuffer();
-      const result = await window.traccion.saveOperationalExcelBackup({
+      const result = await saveExcelBackupWithRetry({
         directory,
         fileName: definition.fileName,
         cleanupPrefix: definition.cleanupPrefix,
