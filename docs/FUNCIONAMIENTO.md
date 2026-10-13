@@ -121,6 +121,10 @@ Coordinación contempla tres ámbitos diferenciados: **Dirección**, **Otras ár
 
 ### 7.2. Dirección
 
+- Al crear una reunión, se incorporan sin duplicados las tareas abiertas marcadas para trasladar a Dirección y las clasificadas como «Tratar con Rosa» en estado o fase.
+- Los puntos vinculados a tareas conservan la referencia a la tarea de origen para su seguimiento.
+
+
 Las tareas identificadas para trasladar a Dirección pueden incorporarse al guion de la reunión. El guion puede completarse con puntos manuales.
 
 ### 7.3. Otras áreas
@@ -308,6 +312,15 @@ La exportación Excel resume la información necesaria para la recogida/gestión
 
 ---
 
+### 12.6. Recogida y validación de respuestas
+
+- La recogida admite ficheros Excel y correos Outlook cuando el circuito lo permite; la aplicación identifica el circuito y presenta los datos importados para revisión.
+- Los totales por sexo, colectivo y turno deben cuadrar con las reglas del proceso. Los servicios mínimos no se cuentan como personas que trabajan.
+- Los errores bloqueantes se explican en pantalla. Las celdas H/M implicadas y los totales discrepantes se destacan visualmente para facilitar la corrección.
+- La validación de un circuito no debe confundirse con la mera recepción de su fichero.
+
+---
+
 ## 13. Ayuda Escolar
 
 ### 13.1. Entrada desde Outlook
@@ -359,6 +372,18 @@ El módulo debe permitir distinguir y consultar la documentación ya enviada/reg
 - Representa relaciones/vínculos entre personas o elementos según el modelo del módulo.
 - Las relaciones son información estructurada, no meramente visual: la representación gráfica debe derivarse de los datos almacenados.
 - Modificar la vista no debe alterar relaciones salvo que el usuario ejecute una acción de edición explícita.
+
+---
+
+## 16 bis. Actividades Externas
+
+- El alta parte de una persona activa de Plantilla, localizable por número de empleado o nombre y apellidos. Se registran la actividad, la fecha de solicitud y si es remunerada.
+- La solicitud comienza pendiente y puede resolverse únicamente como **autorizada** o **denegada**. Las observaciones son opcionales al autorizar y obligatorias al denegar.
+- Editar permite corregir la actividad, la fecha y el carácter remunerado, manteniendo la identidad de la persona y el historial de resolución y comunicación. Eliminar requiere confirmación.
+- El borrador de Outlook incluye la resolución y las observaciones. Abrirlo no equivale a haberlo enviado: la confirmación de envío es una acción separada.
+- Las operaciones se guardan en SQLite compartida con comprobación de concurrencia para evitar sobrescribir una modificación ajena.
+- En Ajustes se configura la carpeta del Excel espejo `Actividades_Externas.xlsx`. Se regenera al crear, editar, eliminar, resolver o cambiar la comunicación y puede actualizarse manualmente.
+- El Excel es una representación secundaria de los registros, no la fuente de verdad. Si falla su escritura, se informa sin revertir un cambio confirmado en SQLite.
 
 ---
 
