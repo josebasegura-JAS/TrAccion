@@ -150,7 +150,7 @@ describe.each([
   it('addTaskWithConcurrencyCheck añade el punto en la tabla nativa', async () => {
     const existingSession = session({ items: ['task-1'] });
     const loader = vi.fn(async () => recordsSnapshot([existingSession]));
-    const saver = vi.fn(async (_record: TraccionConditionalComiteSessionRecord) => ({
+    const saver = vi.fn(async () => ({
       ok: true,
       status: activeStatus(),
       currentUpdatedAt: '2026-06-17T09:00:00.000Z',

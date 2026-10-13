@@ -176,7 +176,7 @@ describe('actaSqliteRepository', () => {
   });
 
   it('deleteActaInSqlite marca deletedAt y reutiliza saveActaToSqlite', async () => {
-    const saver = vi.fn(async (_record: TraccionConditionalActaRecord) => ({
+    const saver = vi.fn(async () => ({
       ok: true,
       status: { ready: true, phase: 'active', message: 'SQLite activo' },
       message: 'Acta eliminada.',

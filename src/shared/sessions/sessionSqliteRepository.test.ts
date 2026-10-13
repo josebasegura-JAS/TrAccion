@@ -117,7 +117,7 @@ describe('sessionSqliteRepository', () => {
 
   describe('deleteSessionRecordInSqlite', () => {
     it('marca deletedAt en el value_json y reutiliza saveSessionRecordToSqlite', async () => {
-      const saver = vi.fn(async (_record: TraccionConditionalComiteSessionRecord) => ({
+      const saver = vi.fn(async () => ({
         ok: true,
         status: { ready: true, phase: 'active', message: 'SQLite activo' },
         currentUpdatedAt: '2026-06-19T00:00:00.000Z',
@@ -140,7 +140,7 @@ describe('sessionSqliteRepository', () => {
     });
 
     it('si el value actual no es JSON válido, guarda solo deletedAt/updatedAt', async () => {
-      const saver = vi.fn(async (_record: TraccionConditionalComiteSessionRecord) => ({
+      const saver = vi.fn(async () => ({
         ok: true,
         status: { ready: true, phase: 'active', message: 'SQLite activo' },
         currentUpdatedAt: '2026-06-19T00:00:00.000Z',
