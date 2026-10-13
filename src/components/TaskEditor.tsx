@@ -184,6 +184,13 @@ export function TaskEditor({
                 trackingItems={trackingItems}
                 trackingText={trackingText}
                 trackingUser={trackingUser}
+                quickActionEnabled={quickActionEnabled}
+                setQuickActionEnabled={setQuickActionEnabled}
+                quickActionTitle={quickActionTitle}
+                setQuickActionTitle={setQuickActionTitle}
+                quickActionDate={quickActionDate}
+                setQuickActionDate={setQuickActionDate}
+                onCompleteQuickAction={completeQuickAction}
               />
 
               {!isCreate && task && <TaskLinksSection task={liveTask ?? task} />}
