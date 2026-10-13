@@ -24,7 +24,7 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
     const createdAt = now();
     const record: ActividadExterna = {
       ...draft, actividad: draft.actividad.trim(), id: crypto.randomUUID(),
-      estado: 'pendiente', motivoDenegacion: '', fechaResolucion: null,
+      estado: 'pendiente', motivoDenegacion: '', observacionesResolucion: '', fechaResolucion: null,
       comunicacion: 'pendiente', fechaComunicacion: null, createdAt, updatedAt: createdAt,
     };
     try {
@@ -47,7 +47,7 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
         updateRecord: (latest) => {
           if (latest.estado !== 'pendiente') throw new Error('La solicitud ya ha sido resuelta por otro usuario.');
           const stamp = now();
-          return { ...latest, estado, motivoDenegacion: estado === 'denegada' ? motivo.trim() : '',
+          return { ...latest, estado, observacionesResolucion: motivo.trim(), motivoDenegacion: estado === 'denegada' ? motivo.trim() : '',
             fechaResolucion: stamp, comunicacion: 'pendiente', updatedAt: stamp };
         },
         missingMessage: 'Solicitud no encontrada.', conflictMessage: 'Otro usuario ha modificado la solicitud. Recarga antes de continuar.',
