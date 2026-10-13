@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, UserRound } from 'lucide-react';
 import { Input, Select } from '../ui/Field';
 import { TASK_PRIORITIES, TASK_TYPES, type Task, type TaskDraft } from '../../features/tareas/domain/task';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
@@ -30,7 +30,17 @@ export function TaskGeneralFields({
   const stateOptions = taskStates.filter((state) => state.active || state.id === draft.estado);
   const createdBy = task?.createdBy?.trim() || draft.createdBy?.trim() || 'Creador no registrado';
   return (
-    <TaskEditorSection icon={FileText} title="Datos de la tarea">
+    <TaskEditorSection
+      icon={FileText}
+      title="Datos de la tarea"
+      action={
+        <span className="inline-flex min-w-0 max-w-[55%] items-center gap-1.5 text-[11px] text-metro-muted" title={`Creada por: ${createdBy}`}>
+          <UserRound className="shrink-0" size={13} />
+          <span className="shrink-0">Creada por:</span>
+          <span className="truncate font-semibold text-metro-text">{createdBy}</span>
+        </span>
+      }
+    >
       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-12">
         <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Tipo
           <Select className="h-8 rounded-lg px-2 text-xs" value={draft.tipo} onChange={(e) => setDraft((c) => ({ ...c, tipo: e.target.value as TaskDraft['tipo'] }))}>{TASK_TYPES.map((v) => <option key={v}>{v}</option>)}</Select>
@@ -62,12 +72,6 @@ export function TaskGeneralFields({
             setDraft((current) => ({ ...current, createdAt: nextDate ? `${nextDate}${suffix}` : current.createdAt }));
           }} />
         </label>
-        <div className="text-[11px] font-semibold text-metro-muted lg:col-span-2">
-          Creada por
-          <div className="flex h-8 items-center truncate rounded-lg border border-metro-border bg-black/10 px-2 text-xs font-medium text-metro-text" title={createdBy}>
-            {createdBy}
-          </div>
-        </div>
         <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Fecha límite
           <Input className="h-8 rounded-lg px-2 text-xs" type="date" value={draft.fechaLimite} onChange={(e) => setDraft((c) => ({ ...c, fechaLimite: e.target.value }))} />
         </label>
