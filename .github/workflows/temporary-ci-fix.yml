@@ -1,0 +1,116 @@
+name: Temporary CI fixture repair
+
+on:
+  push:
+    branches:
+      - fix/restore-ci-tests-20261013
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Repair stale test fixtures
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace(path, old, new, count=None):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              actual = text.count(old)
+              expected = count if count is not None else 1
+              if actual != expected:
+                  raise SystemExit(f'{path}: expected {expected} occurrences, found {actual}: {old!r}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          # Teletrabajo: TeletrabajoSolicitud ya no contiene email; Employee sí
+          # exige email y teléfonos en los fixtures de Plantilla.
+          for path in [
+              'src/features/teletrabajo/domain/exportDireccion.test.ts',
+              'src/features/teletrabajo/domain/semaforo.test.ts',
+          ]:
+              replace(path, "    nombreApellidos: 'Persona Base',\n    email: '',\n    puestoNomina:", "    nombreApellidos: 'Persona Base',\n    puestoNomina:")
+              replace(path, "    nombreApellidos: 'Persona Base',\n    puestoNomina:", "    nombreApellidos: 'Persona Base',\n    email: '',\n    puestoNomina:", count=2)
+              # El reemplazo anterior afecta también al builder de solicitud; dejar email solo en Employee.
+              text = Path(path).read_text(encoding='utf-8')
+              first = text.find("    nombreApellidos: 'Persona Base',\n    email: '',\n    puestoNomina:")
+              if first < 0:
+                  raise SystemExit(f'{path}: no se pudo localizar el primer email temporal')
+              text = text[:first] + text[first:].replace("    nombreApellidos: 'Persona Base',\n    email: '',\n    puestoNomina:", "    nombreApellidos: 'Persona Base',\n    puestoNomina:", 1)
+              employee_marker = "function buildEmployee(overrides: Partial<Employee>): Employee {\n  return {\n    empleado: '100',\n    nombreApellidos: 'Persona Base',\n"
+              if employee_marker not in text:
+                  raise SystemExit(f'{path}: builder Employee no encontrado')
+              text = text.replace(employee_marker, employee_marker + "    email: '',\n", 1)
+              text = text.replace("    nif: '',\n    dni:", "    nif: '',\n    telefono1: '',\n    telefono2: '',\n    dni:", 1)
+              Path(path).write_text(text, encoding='utf-8')
+
+          path = Path('src/features/teletrabajo/domain/teletrabajo.test.ts')
+          text = path.read_text(encoding='utf-8')
+          old = "    validacionJefatura: false,\n    createdAt:"
+          if text.count(old) != 1:
+              raise SystemExit('teletrabajo.test.ts: validaciones fixture no localizadas')
+          text = text.replace(old, "    validacionJefatura: false,\n    validacionDireccion: false,\n    revisado: false,\n    createdAt:", 1)
+          old = "    residencia: 'Bilbao',\n    nivelRetributivo: 'N1',"
+          if text.count(old) != 1:
+              raise SystemExit('teletrabajo.test.ts: Employee fixture no localizado')
+          text = text.replace(old, "    residencia: 'Bilbao',\n    unidad: '',\n    nivelRetributivo: 'N1',\n    direccionOrganizativa: '',\n    antiguedadPuesto: '',", 1)
+          old = "    nif: '12345678Z',\n    dni:"
+          if text.count(old) != 1:
+              raise SystemExit('teletrabajo.test.ts: NIF fixture no localizado')
+          text = text.replace(old, "    nif: '12345678Z',\n    telefono1: '',\n    telefono2: '',\n    dni:", 1)
+          path.write_text(text, encoding='utf-8')
+
+          # Ticket Restaurante: el mock debe reflejar que deletedAt puede pasar de null a timestamp.
+          path = Path('src/features/ticket-restaurante/store/useTicketRestauranteStore.concurrency.test.ts')
+          text = path.read_text(encoding='utf-8')
+          old = "  function buildSqliteRecord(value: unknown, updatedAt: string) {"
+          if text.count(old) != 2:
+              raise SystemExit(f'Ticket: se esperaban 2 helpers buildSqliteRecord y hay {text.count(old)}')
+          new = "  function buildSqliteRecord(value: unknown, updatedAt: string): { id: string; value: string; createdAt: string; updatedAt: string; deletedAt: string | null } {"
+          text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
+
+          # ExcelJS/Node 22: cast explícito intermedio para compatibilidad de Buffer genérico.
+          path = Path('src/shared/export/coordinacionExcelBackup.test.ts')
+          text = path.read_text(encoding='utf-8')
+          old = ")) as Parameters<typeof"
+          if text.count(old) != 2:
+              raise SystemExit(f'Backup: se esperaban 2 casts y hay {text.count(old)}')
+          text = text.replace(old, ")) as unknown as Parameters<typeof")
+          path.write_text(text, encoding='utf-8')
+
+          # El workflow es solo un vehículo temporal para aplicar el parche.
+          Path('.github/workflows/temporary-ci-fix.yml').unlink()
+
+      - name: Install dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Validate
+        run: |
+          npm run typecheck:tests
+          npm run typecheck
+          npm run lint
+          npm test -- --run
+          npm run build
+      - name: Commit repaired tests
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/features/teletrabajo/domain/exportDireccion.test.ts \
+                  src/features/teletrabajo/domain/semaforo.test.ts \
+                  src/features/teletrabajo/domain/teletrabajo.test.ts \
+                  src/features/ticket-restaurante/store/useTicketRestauranteStore.concurrency.test.ts \
+                  src/shared/export/coordinacionExcelBackup.test.ts \
+                  .github/workflows/temporary-ci-fix.yml
+          git commit -m "test: align CI fixtures with current types"
+          git push origin HEAD:fix/restore-ci-tests-20261013
