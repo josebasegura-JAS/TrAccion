@@ -57,7 +57,8 @@ export function isTaskInSessionPhase(
   task: Pick<Task, 'fase' | 'estado' | 'deletedAt'>,
   taskPhase: string,
 ): boolean {
-  return !task.deletedAt && !isTaskClosed(task) && task.fase.trim().toLowerCase() === taskPhase;
+  const normalizePhase = (value: string) => value.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return !task.deletedAt && !isTaskClosed(task) && normalizePhase(task.fase) === normalizePhase(taskPhase);
 }
 
 export function formatManagedSessionDate(date: string): string {
