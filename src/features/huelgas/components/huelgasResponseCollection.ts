@@ -712,7 +712,6 @@ export async function downloadHuelgaResponseReport(
   workbook.creator = 'TrAcción';
   workbook.modified = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
-  workbook.calcProperties.forceFullCalc = true;
 
   const sheet = workbook.worksheets[0];
   if (!sheet) throw new Error('No se ha podido cargar la plantilla histórica de seguimiento de huelga.');
