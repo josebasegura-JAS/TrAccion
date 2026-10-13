@@ -96,23 +96,13 @@ async function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
   return exportOpenTasksWord(snapshot.records);
 }
 
-async function showOpenTasksExcelFailure(message: string): Promise<void> {
+function showOpenTasksExcelFailure(message: string): void {
   if (lastOpenTasksExcelFailureMessage === message) return;
   lastOpenTasksExcelFailureMessage = message;
-
-  const browserWindow = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed());
-  const options = {
-    type: 'warning' as const,
-    title: 'Copia Excel de tareas no actualizada',
-    message: 'La tarea se ha guardado, pero la copia Excel no se ha actualizado.',
-    detail: `${message}\n\nSi el Excel está abierto, ciérralo y vuelve a guardar una tarea o pulsa «Excel compartido» para reintentar.`,
-    buttons: ['Aceptar'],
-    defaultId: 0,
-  };
-  if (browserWindow) {
-    await dialog.showMessageBox(browserWindow, options);
-  } else {
-    await dialog.showMessageBox(options);
+  for (const browserWindow of BrowserWindow.getAllWindows()) {
+    if (!browserWindow.isDestroyed()) {
+      browserWindow.webContents.send('tasks:excel-backup-failed', message);
+    }
   }
 }
 
