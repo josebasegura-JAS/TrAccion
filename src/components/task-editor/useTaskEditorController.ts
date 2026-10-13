@@ -564,6 +564,19 @@ export function useTaskEditorController({
     return true;
   };
 
+  const completeQuickAction = async (trackingId: string, actionId: string) => {
+    const latest = await verifyTrackingMutationCanProceed();
+    if (!latest) return;
+    const now = new Date().toISOString();
+    const next = latest.seguimiento.map((entry, index) => {
+      if (resolveTrackingId(entry, index, latest.id) !== trackingId) return entry;
+      return { ...entry, quickActions: entry.quickActions?.map((action) =>
+        action.id === actionId ? { ...action, completedAt: now } : action,
+      ) };
+    });
+    await persistTrackingMutation(latest, next, 'Acción marcada como realizada.', 'Acción pendiente completada');
+  };
+
   const startTrackingEdit = (entry: TaskSeguimientoEntry, index: number) => {
     if (!task || isFormReadOnly) return;
     const decoded = decodeTracking(entry.texto, entry.fechaHora);
@@ -788,6 +801,7 @@ export function useTaskEditorController({
     editingTrackingText,
     handleAddDocument,
     handleDeleteTracking,
+    completeQuickAction,
     handleImportMailFile,
     handleOpenCriterionRrll,
     handleSaveTrackingEdit,
