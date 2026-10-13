@@ -41,7 +41,7 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
     info.alignment = { vertical: 'middle' };
     sheet.getRow(2).height = 23;
     sheet.getRow(3).height = 10;
-    sheet.getRow(4).values = sheet.columns.map((column) => column.header ?? '');
+    sheet.getRow(4).values = ['Nº empleado', 'Nombre y apellidos', 'Actividad externa', 'Fecha solicitud', 'Remunerada', 'Estado', 'Observaciones resolución', 'Fecha resolución', 'Comunicación', 'Fecha comunicación', 'Correo'];
     const safe = (value: string) => /^\s*[=+@-]/.test(value) ? `'${value}` : value;
     [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).forEach((record) => {
       sheet.addRow({
