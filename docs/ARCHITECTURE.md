@@ -244,6 +244,20 @@ La documentación tiene responsabilidades distintas:
 
 Un cambio funcional relevante debe revisar las cinco superficies que correspondan. No duplicar explicaciones extensas entre documentos: enlazar al documento propietario.
 
+### 15.1. Ayuda contextual en la cabecera
+
+- `PageHeader` registra las secciones mediante `helpSections` en `moduleHelpRegistry`; la cabecera global muestra el botón «?» solo si hay contenido registrado.
+- Indicar únicamente `helpSubtitle` **no** activa la ayuda: los nuevos módulos deben proporcionar secciones operativas reales.
+- Los textos de ayuda deben corresponder al flujo implementado y actualizarse con las modificaciones funcionales.
+
+### 15.2. Actividades Externas y Excel espejo
+
+- El módulo usa la clave compartida `traccion.v1.actividadesExternas.records` y los helpers `saveNewSharedArrayRecord`, `saveSharedArrayRecord` y `deleteSharedArrayRecord`.
+- Las actualizaciones y eliminaciones verifican `expectedUpdatedAt` para impedir escrituras sobre registros modificados por otros usuarios.
+- `syncActividadesExternasExcelBackup` genera el libro con ExcelJS y lo entrega al IPC existente `saveOperationalExcelBackup`, usando la ruta `rutaExportacionActividadesExternas` de Ajustes.
+- La escritura del Excel es posterior al guardado SQLite. Un fallo de la copia debe comunicarse al usuario, sin fingir que la operación primaria ha fallado ni deshacer datos confirmados.
+- Los borradores de Outlook se preparan con `createOutlookDraft`. Preparar el borrador y confirmar el envío son estados diferentes.
+
 ## 16. Actualización y versionado
 
 TrAcción usa versión técnica `MAJOR.MINOR.PATCH`. `MAJOR.MINOR` identifica la rama visible de distribución y `PATCH` cada build.

@@ -44,6 +44,14 @@ export const AJUSTES_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Excel espejo de Actividades Externas',
+    items: [
+      'Configura la carpeta compartida en la que se guardará «Actividades_Externas.xlsx». La ruta debe ser accesible desde los equipos que utilizan TrAcción.',
+      'El módulo actualiza el Excel después de los cambios y permite regenerarlo con «Actualizar Excel». El Excel es una copia de consulta; la base SQLite sigue siendo la fuente de verdad.',
+      'Si modificas la ruta, guarda los cambios en Ajustes y regenera el Excel desde Actividades Externas.',
+    ],
+  },
+  {
     title: 'Fases de tareas',
     items: [
       'Define las fases disponibles para clasificar las tareas del módulo Tareas (por ejemplo, las fases que alimentan Comité y Paritaria).',

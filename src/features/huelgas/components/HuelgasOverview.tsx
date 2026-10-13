@@ -33,6 +33,8 @@ const HUELGAS_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'El importador intenta reconocer automáticamente personas con turno, servicios mínimos, personas que trabajan y personas en huelga.',
       'Si un fichero tiene un formato distinto o ha sido modificado, los valores se pueden completar o corregir manualmente antes de validarlo.',
+      'Las incoherencias entre con turno, servicios mínimos, trabajan y huelga se explican en los errores bloqueantes. Las casillas implicadas se resaltan en ámbar y las filas afectadas muestran un indicador rojo.',
+      'Comprueba también los totales generales frente al desglose por colectivo y turno. Las advertencias desaparecen al corregir los datos; no valides un circuito con errores bloqueantes.',
     ],
   },
 ];

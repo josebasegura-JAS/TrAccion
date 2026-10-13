@@ -1,11 +1,54 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BriefcaseBusiness, FileSpreadsheet, Mail, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useAppDialog } from '../../../hooks/useAppDialog';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildActividadMail, type ActividadExterna, type ActividadExternaEstado } from '../domain/actividadExterna';
 import { useActividadesExternasStore } from '../store/useActividadesExternasStore';
 import { syncActividadesExternasExcelBackup } from '../services/actividadesExternasExcelBackup';
+
+const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Alta y búsqueda',
+    ordered: true,
+    items: [
+      'Pulsa «Nueva solicitud» y busca a la persona por número de empleado, nombre o apellidos. Selecciona una sugerencia de Plantilla.',
+      'Describe la actividad, indica la fecha de solicitud y marca si es remunerada. Al guardar queda pendiente de resolución.',
+    ],
+  },
+  {
+    title: 'Resolución',
+    items: [
+      'Autorizar y Denegar abren un diálogo de confirmación con observaciones. Para denegar es obligatorio indicar el motivo; para autorizar es opcional.',
+      'Las observaciones se conservan en el registro y se incluyen en el borrador de correo correspondiente.',
+      'Una solicitud ya resuelta no vuelve a resolverse desde los botones de pendiente.',
+    ],
+  },
+  {
+    title: 'Edición y eliminación',
+    items: [
+      'Editar permite corregir actividad, fecha y carácter remunerado; conserva la persona, la resolución y el estado de comunicación.',
+      'Eliminar pide confirmación y borra la solicitud de la base compartida. Comprueba los datos antes de confirmar.',
+      'Si otro usuario ha modificado la solicitud, TrAcción evita sobrescribirla y solicita recargar.',
+    ],
+  },
+  {
+    title: 'Outlook y envío',
+    items: [
+      '«Preparar correo en Outlook» abre un borrador dirigido al correo almacenado en la solicitud. Revisa el destinatario y el texto antes de enviarlo.',
+      'Abrir un borrador no confirma el envío: usa «Confirmar envío manualmente» solo después de enviarlo realmente.',
+    ],
+  },
+  {
+    title: 'Excel espejo y Ajustes',
+    items: [
+      'En Ajustes configura la carpeta compartida del Excel de Actividades Externas. La aplicación genera «Actividades_Externas.xlsx» con todas las solicitudes.',
+      'El Excel se actualiza al crear, editar, eliminar, resolver o modificar la comunicación. «Actualizar Excel» permite regenerarlo manualmente.',
+      'Si falla la actualización del Excel, se muestra un aviso; el guardado ya confirmado en SQLite no se deshace. Comprueba la ruta y regenera el Excel.',
+    ],
+  },
+];
 
 const today = () => {
   const date = new Date();
@@ -81,7 +124,7 @@ export function ActividadesExternasPage() {
     finally { setBusy(false); }
   };
   return <section className="space-y-3">
-    <PageHeader title="Actividades Externas" helpSubtitle="Solicitudes de compatibilidad, resolución y comunicaciones." />
+    <PageHeader title="Actividades Externas" helpSections={ACTIVIDADES_EXTERNAS_HELP_SECTIONS} helpSubtitle="Solicitudes de compatibilidad, resolución y comunicaciones." />
     <div className="grid grid-cols-3 gap-2">
       {(['pendiente', 'autorizada', 'denegada'] as const).map((status) => <div key={status} className="rounded-xl border border-metro-border bg-metro-panel p-3">
         <div className="text-xs text-metro-muted">{label(status)}</div><div className="text-2xl font-bold text-metro-text">{count(status)}</div>
