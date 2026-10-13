@@ -5,6 +5,7 @@ import { useConfiguracionStore } from '../../configuracion/store/useConfiguracio
 import type { Task } from '../../tareas/domain/task';
 import { coordinationMeetingDisplayTitle, formatCoordinationDate, type UnionMeetingType } from '../domain/coordinacion';
 import { useCoordinacionStore } from '../store/useCoordinacionStore';
+import { CoordinationMeetingArchive } from './CoordinationMeetingArchive';
 
 function isActiveTask(task: Task): boolean {
   return !task.deletedAt && !isTaskClosed(task);
@@ -107,10 +108,10 @@ export function SindicatosCoordinationPanel({
 
       <section className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <div className="mb-3 flex items-center justify-between"><div><h3 className="font-bold text-metro-text">Histórico · {selectedUnion}</h3><p className="mt-1 text-xs text-metro-muted">Reuniones y asuntos tratados con este sindicato.</p></div><History className="text-metro-muted" size={19}/></div>
-        <div className="space-y-2">{unionMeetings.map((meeting) => {
+        <div className="space-y-2"><CoordinationMeetingArchive key={selectedUnion} meetings={unionMeetings} scope={`sindicatos:${selectedUnion}`} renderMeeting={(meeting) => {
           const pending = meeting.points.filter((point) => point.status !== 'tratado').length;
-          return <button className="flex w-full items-center justify-between gap-3 rounded-xl border border-metro-border bg-metro-panel px-3 py-3 text-left hover:border-metro-red" key={meeting.id} onClick={() => onOpenMeeting(meeting.id)} type="button"><span className="min-w-0"><strong className="flex min-w-0 items-center gap-2 text-sm text-metro-text"><CalendarDays className="shrink-0" size={14}/><span className="truncate">{coordinationMeetingDisplayTitle(meeting)}</span></strong><span className="mt-1 block truncate text-xs text-metro-muted">{formatCoordinationDate(meeting.date)} · {meeting.meetingType === 'urgente' ? 'Urgente' : meeting.meetingType === 'seguimiento' ? 'Seguimiento' : 'Ordinaria'} · {meeting.points.length} asuntos</span></span><span className="flex shrink-0 items-center gap-2">{pending > 0 && <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300"><Clock3 size={12}/>{pending}</span>}<span className={`rounded-full px-2 py-1 text-[11px] font-bold ${meeting.status === 'closed' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>{meeting.status === 'closed' ? 'Cerrada' : 'Abierta'}</span></span></button>;
-        })}{unionMeetings.length === 0 && <div className="rounded-xl border border-dashed border-metro-border p-6 text-center"><CheckSquare2 className="mx-auto mb-2 text-metro-muted" size={24}/><p className="text-sm text-metro-muted">Todavía no hay reuniones con {selectedUnion}.</p></div>}</div>
+          return <button className="flex w-full items-center justify-between gap-3 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-left hover:border-metro-red" onClick={() => onOpenMeeting(meeting.id)} type="button"><span className="min-w-0"><strong className="flex min-w-0 items-center gap-2 text-sm text-metro-text"><CalendarDays className="shrink-0" size={14}/><span className="truncate">{coordinationMeetingDisplayTitle(meeting)}</span></strong><span className="mt-1 block truncate text-xs text-metro-muted">{formatCoordinationDate(meeting.date)} · {meeting.meetingType === 'urgente' ? 'Urgente' : meeting.meetingType === 'seguimiento' ? 'Seguimiento' : 'Ordinaria'} · {meeting.points.length} asuntos</span></span><span className="flex shrink-0 items-center gap-2">{pending > 0 && <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300"><Clock3 size={12}/>{pending}</span>}<span className={`rounded-full px-2 py-1 text-[11px] font-bold ${meeting.status === 'closed' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>{meeting.status === 'closed' ? 'Cerrada' : 'Abierta'}</span></span></button>;
+        }}/></div>
       </section>
     </div>}
   </div>;
