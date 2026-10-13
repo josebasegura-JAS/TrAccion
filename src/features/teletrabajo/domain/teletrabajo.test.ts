@@ -25,6 +25,8 @@ function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSo
     tipoSolicitud: 'nueva',
     diasTeletrabajo: ['martes'],
     fechaSolicitud: '2026-01-01',
+    fechaOrdenador: '',
+    fechaCascos: '',
     periodo: '2026-2027',
     observaciones: '',
     validacionSeguridadInformatica: false,
@@ -147,6 +149,7 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
     empleado: '100',
     nombreApellidos: 'Persona Plantilla',
     email: '',
+    puestoEus: '',
     puestoNomina: 'Puesto Nómina Plantilla',
     puestoOrganizativo: 'Puesto Organizativo Plantilla',
     residencia: 'Bilbao',
@@ -363,10 +366,10 @@ describe('generación Word de teletrabajo', () => {
     ];
     const docx = zipDocx(entries);
 
-    await expect(detectTeletrabajoWordMarkers(docx.buffer)).resolves.toEqual([
+    await expect(detectTeletrabajoWordMarkers(docx.buffer.slice(docx.byteOffset, docx.byteOffset + docx.byteLength) as ArrayBuffer)).resolves.toEqual([
       'martes',
       'nombreApellidos',
     ]);
-    await expect(unzipDocx(docx.buffer)).resolves.toHaveLength(1);
+    await expect(unzipDocx(docx.buffer.slice(docx.byteOffset, docx.byteOffset + docx.byteLength) as ArrayBuffer)).resolves.toHaveLength(1);
   });
 });
