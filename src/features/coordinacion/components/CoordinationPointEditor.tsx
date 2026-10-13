@@ -1,4 +1,4 @@
-import { ArrowRight, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, Bold, Italic, List, ListOrdered, Plus, Trash2 } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -49,6 +49,7 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
   const [draft, setDraft] = useState<CoordinationPointDraft>(() => pointToDraft(point));
   const [hasRemoteConflict, setHasRemoteConflict] = useState(false);
   const sourcePointRef = useRef(point);
+  const selectionRef = useRef({ start: 0, end: 0 });
   const { alert, confirm, dialogNode } = useAppDialog();
 
   useEffect(() => {
@@ -94,6 +95,21 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
     const next = { ...draft, ...patch };
     setDraft(next);
     onDraftChange(point.id, next, pointDraftIsDirty(point, next));
+  };
+
+  const formatResult = (format: 'bold' | 'italic' | 'bullet' | 'number') => {
+    if (!meetingOpen || hasRemoteConflict) return;
+    const { start, end } = selectionRef.current;
+    const text = draft.result;
+    const safeStart = Math.min(start, text.length);
+    const safeEnd = Math.min(Math.max(end, safeStart), text.length);
+    const selected = text.slice(safeStart, safeEnd);
+    let formatted = '';
+    if (format === 'bold') formatted = `**${selected || 'texto'}**`;
+    else if (format === 'italic') formatted = `*${selected || 'texto'}*`;
+    else formatted = selected.split('\\n').map((line, index) => `${format === 'bullet' ? '- ' : `${index + 1}. `}${line}`).join('\\n');
+    updateDraft({ result: text.slice(0, safeStart) + formatted + text.slice(safeEnd) });
+    selectionRef.current = { start: safeStart + formatted.length, end: safeStart + formatted.length };
   };
 
   return (
@@ -194,15 +210,38 @@ export const CoordinationPointEditor = memo(function CoordinationPointEditor({
           Tus cambios locales se conservan en pantalla, pero no se pueden guardar sobre la nueva versión. Recarga este punto para continuar.
         </Notice>
       )}
-      <Field className="mt-3" density="compact" label="Resultado / acuerdos">
+      <div className="mt-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.12em] text-metro-muted" htmlFor={`coord-result-${point.id}`}>Resultado / acuerdos</label>
+          <span className="text-[11px] text-metro-muted">Formato Markdown</span>
+        </div>
+        <div aria-label="Formato de acuerdos" className="flex items-center gap-1 rounded-t-lg border border-metro-border bg-metro-panel px-2 py-1">
+          {([
+            { kind: 'bold', label: 'Negrita', Icon: Bold },
+            { kind: 'italic', label: 'Cursiva', Icon: Italic },
+            { kind: 'bullet', label: 'Lista con viñetas', Icon: List },
+            { kind: 'number', label: 'Lista numerada', Icon: ListOrdered },
+          ] as const).map(({ kind, label, Icon }) => <button
+            aria-label={label}
+            className="rounded-md p-2 text-metro-text hover:bg-metro-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-metro-red disabled:opacity-40"
+            disabled={!meetingOpen || hasRemoteConflict}
+            key={kind}
+            onClick={() => formatResult(kind)}
+            title={label}
+            type="button"
+          ><Icon size={16}/></button>)}
+        </div>
         <Textarea
-          className="min-h-20"
+          aria-label="Resultado / acuerdos"
+          className="min-h-56 rounded-t-none border-t-0 leading-relaxed"
           disabled={!meetingOpen}
+          id={`coord-result-${point.id}`}
           onChange={(event) => updateDraft({ result: event.target.value })}
+          onSelect={(event) => { selectionRef.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }}
           value={draft.result}
-          placeholder="Decisión, actuación acordada y siguiente paso..."
+          placeholder="Escribe aquí lo tratado, los acuerdos y los próximos pasos..."
         />
-      </Field>
+      </div>
       {isUnion && (
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <Field density="compact" label="Responsable del siguiente paso">
