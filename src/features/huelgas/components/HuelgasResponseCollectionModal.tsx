@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, CircleX, FileSpreadsheet, Mail, Save, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleX, FileSpreadsheet, Mail, Save, Trash2, Upload } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
@@ -67,7 +67,10 @@ function detailSum(detail: NonNullable<HuelgaZoneResponse['generalDetail']>, met
   return detail.reduce((sum, row) => sum + row[metric].hombres + row[metric].mujeres, 0);
 }
 
-function importedDetailPanel(response: HuelgaZoneResponse) {
+function importedDetailPanel(
+  response: HuelgaZoneResponse,
+  onChange: (zoneId: string, field: keyof HuelgaZoneResponse, value: HuelgaZoneResponse[keyof HuelgaZoneResponse]) => void,
+) {
   const detail = response.generalDetail ?? [];
   const hasImport = Boolean(response.importedAt && response.sourceFileName);
   if (!hasImport && detail.length === 0) return null;
@@ -84,6 +87,12 @@ function importedDetailPanel(response: HuelgaZoneResponse) {
     { key: 'trabajan', label: 'Trabajan', expected: response.personasTrabajan },
     { key: 'huelga', label: 'Huelga', expected: response.personasHuelga },
   ] as const;
+  const updateDetail = (index: number, key: 'personasTurno' | 'serviciosMinimos' | 'trabajan' | 'huelga', sex: 'hombres' | 'mujeres', value: string) => {
+    const next = detail.map((item, position) => position === index
+      ? { ...item, [key]: { ...item[key], [sex]: Math.max(0, Number.parseInt(value, 10) || 0) } }
+      : item);
+    onChange(response.zonaId, 'generalDetail', next);
+  };
   const mismatches = metrics.filter(({ key, expected }) => expected !== null && detailSum(detail, key) !== expected);
   return (
     <details className="mt-3 rounded-lg border border-metro-border bg-metro-panel/35 p-3" open={mismatches.length > 0}>
@@ -104,7 +113,15 @@ function importedDetailPanel(response: HuelgaZoneResponse) {
                 <td className="px-2 py-1.5">{row.colectivo}</td>
                 {metrics.map(({ key }) => (
                   <td className="px-2 py-1.5 text-right tabular-nums" colSpan={3} key={key}>
-                    {row[key].hombres} / {row[key].mujeres} / <strong>{row[key].hombres + row[key].mujeres}</strong>
+                    <div className="flex items-center justify-end gap-1">
+                      {(['hombres', 'mujeres'] as const).map((sex) => (
+                        <label className="flex items-center gap-1" key={sex} title={sex === 'hombres' ? 'Hombres' : 'Mujeres'}>
+                          <span className="text-metro-muted">{sex === 'hombres' ? 'H' : 'M'}</span>
+                          <input aria-label={`${row.colectivo} ${SHIFT_LABELS[row.turno]} ${key} ${sex}`} className="w-12 rounded border border-metro-border bg-metro-panel px-1 py-1 text-right" min={0} type="number" value={row[key][sex]} onChange={(event) => updateDetail(index, key, sex, event.target.value)} />
+                        </label>
+                      ))}
+                      <strong className="w-7 text-right">{row[key].hombres + row[key].mujeres}</strong>
+                    </div>
                   </td>
                 ))}
               </tr>
@@ -116,6 +133,16 @@ function importedDetailPanel(response: HuelgaZoneResponse) {
           </tr></tfoot>
         </table>
       </div>
+      <p className="mt-2 text-[11px] text-metro-muted">H y M son editables. Corrige las cifras del Excel y después revisa los totales generales inferiores.</p>
+      {mismatches.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {mismatches.map(({ key, label, expected }) => (
+            <p className="rounded border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-xs text-amber-200" key={key}>
+              {label}: desglose {detailSum(detail, key)} frente a total general {expected}. Revisa las celdas H/M o corrige el total general.
+            </p>
+          ))}
+        </div>
+      )}
       {mismatches.length > 0 && (
         <p className="mt-2 text-xs text-amber-300">
           Atención: los totales del desglose no coinciden con los totales generales en {mismatches.map((item) => item.label).join(', ')}. Comprueba el Excel antes de exportar.
@@ -145,6 +172,7 @@ type Props = {
   onImportMessage: (file: File | File[]) => void;
   onChange: (zoneId: string, field: keyof HuelgaZoneResponse, value: HuelgaZoneResponse[keyof HuelgaZoneResponse]) => void;
   onReview: (zoneId: string) => void;
+  onRemove: (zoneId: string) => void;
   onSave: () => void;
   onExport: () => void;
   onExportGrouped: () => void;
@@ -169,6 +197,7 @@ export function HuelgasResponseCollectionModal({
   onImportMessage,
   onChange,
   onReview,
+  onRemove,
   onSave,
   onExport,
   onExportGrouped,
@@ -316,7 +345,12 @@ export function HuelgasResponseCollectionModal({
                 </div>
 
                 {issuePanel(zoneIssues)}
-                {importedDetailPanel(response)}
+                {importedDetailPanel(response, onChange)}
+                {response.importedAt && (
+                  <div className="mt-2 flex justify-end">
+                    <ActionButton variant="delete" icon={Trash2} iconOnly={false} onClick={() => onRemove(response.zonaId)}>Eliminar importación</ActionButton>
+                  </div>
+                )}
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {metricInput(response, 'personasTurno', 'Personas con turno', onChange)}
