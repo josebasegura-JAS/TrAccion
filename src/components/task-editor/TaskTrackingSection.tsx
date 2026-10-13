@@ -26,6 +26,7 @@ export function TaskTrackingSection({
   trackingUser,
   trackingText,
   setTrackingText,
+  quickActionEnabled, setQuickActionEnabled, quickActionTitle, setQuickActionTitle, quickActionDate, setQuickActionDate, onCompleteQuickAction,
 }: {
   task: Task | null;
   trackingItems: TaskSeguimientoEntry[];
@@ -45,6 +46,13 @@ export function TaskTrackingSection({
   trackingUser: string;
   trackingText: string;
   setTrackingText: Dispatch<SetStateAction<string>>;
+  quickActionEnabled: boolean;
+  setQuickActionEnabled: Dispatch<SetStateAction<boolean>>;
+  quickActionTitle: string;
+  setQuickActionTitle: Dispatch<SetStateAction<string>>;
+  quickActionDate: string;
+  setQuickActionDate: Dispatch<SetStateAction<string>>;
+  onCompleteQuickAction: (trackingId: string, actionId: string) => Promise<void>;
 }) {
   return (
     <TaskEditorSection icon={MessageSquare} title="Seguimiento" action={<CountBadge tone="muted">{trackingItems.length} seguimientos</CountBadge>}>
@@ -72,6 +80,7 @@ export function TaskTrackingSection({
                     <div className="flex items-center gap-2 truncate text-xs font-semibold text-slate-300"><UserRound size={13} className="text-sky-300" /><span className="truncate">{decoded.user}</span></div>
                     <div className="min-w-0">
                       <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-300">{decoded.text}</p>
+                      {entry.quickActions?.map((action) => <label key={action.id} className="mt-2 flex items-center gap-2 rounded border border-metro-border px-2 py-1 text-xs text-metro-text"><input type="checkbox" checked={Boolean(action.completedAt)} disabled={isFormReadOnly || Boolean(action.completedAt)} onChange={() => void onCompleteQuickAction(trackingId, action.id)} /><span className={action.completedAt ? 'line-through opacity-60' : 'font-semibold'}>{action.titulo}</span>{action.fechaObjetivo && <span className="ml-auto text-metro-muted">{action.fechaObjetivo}</span>}</label>)}
                       {entry.source?.module === 'coordinacion' ? (
                         <button
                           className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-sky-400/20 px-2 py-1 text-[10px] font-bold text-sky-300 transition hover:bg-sky-500/10"
@@ -102,6 +111,8 @@ export function TaskTrackingSection({
           <div className="flex items-end pb-1 text-[11px] font-medium text-slate-400"><Info className="mr-1.5 shrink-0 text-sky-300" size={14} />La fecha se propone con la del sistema, pero puedes corregirla antes de guardar.</div>
         </div>
         <label className="mt-2 block text-xs font-semibold text-metro-muted">Registrar seguimiento<Textarea className="min-h-20" placeholder="Escribe aquí el seguimiento de la tarea..." value={trackingText} onChange={(e) => setTrackingText(e.target.value)} /></label>
+        <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-metro-text"><input type="checkbox" checked={quickActionEnabled} disabled={isFormReadOnly} onChange={(event) => setQuickActionEnabled(event.target.checked)}/>Crear acción pendiente vinculada a este seguimiento</label>
+        {quickActionEnabled && <div className="mt-2 grid gap-2 rounded-lg border border-metro-border p-3 sm:grid-cols-[1fr_170px]"><label className="text-xs text-metro-muted">¿Qué hay que hacer?<Input value={quickActionTitle} onChange={(event) => setQuickActionTitle(event.target.value)} placeholder="Ej.: Convocar reunión con Operaciones" /></label><label className="text-xs text-metro-muted">Fecha objetivo (opcional)<Input type="date" value={quickActionDate} onChange={(event) => setQuickActionDate(event.target.value)} /></label></div>}
         {trackingText.trim() && <p className="mt-1 text-[11px] font-semibold text-sky-300">Este seguimiento se añadirá al pulsar Guardar.</p>}
       </div>
     </TaskEditorSection>
