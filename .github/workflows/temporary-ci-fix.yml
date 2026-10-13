@@ -24,64 +24,41 @@ jobs:
         run: |
           from pathlib import Path
 
+          # Renderer test fixtures that drifted from current domain types.
           for filename in [
               'src/features/teletrabajo/domain/exportDireccion.test.ts',
               'src/features/teletrabajo/domain/semaforo.test.ts',
           ]:
               path = Path(filename)
               text = path.read_text(encoding='utf-8')
-              obsolete = "    nombreApellidos: 'Persona Base',\n    email: '',\n    puestoNomina:"
-              if text.count(obsolete) != 1:
-                  raise SystemExit(f'{filename}: email obsoleto de solicitud no localizado')
-              text = text.replace(obsolete, "    nombreApellidos: 'Persona Base',\n    puestoNomina:", 1)
-
+              text = text.replace("    nombreApellidos: 'Persona Base',\n    email: '',\n    puestoNomina:", "    nombreApellidos: 'Persona Base',\n    puestoNomina:", 1)
               marker = "function buildEmployee(overrides: Partial<Employee>): Employee {"
               before, sep, employee = text.partition(marker)
-              if not sep:
-                  raise SystemExit(f'{filename}: buildEmployee no encontrado')
-              employee_name = "    nombreApellidos: 'Persona Base',\n"
-              if employee.count(employee_name) < 1:
-                  raise SystemExit(f'{filename}: nombre de Employee no encontrado')
-              employee = employee.replace(employee_name, employee_name + "    email: '',\n", 1)
-              nif_marker = "    nif: '',\n    dni:"
-              if employee.count(nif_marker) < 1:
-                  raise SystemExit(f'{filename}: NIF de Employee no encontrado')
-              employee = employee.replace(nif_marker, "    nif: '',\n    telefono1: '',\n    telefono2: '',\n    dni:", 1)
+              employee = employee.replace("    nombreApellidos: 'Persona Base',\n", "    nombreApellidos: 'Persona Base',\n    email: '',\n", 1)
+              employee = employee.replace("    nif: '',\n    dni:", "    nif: '',\n    telefono1: '',\n    telefono2: '',\n    dni:", 1)
               path.write_text(before + sep + employee, encoding='utf-8')
 
           path = Path('src/features/teletrabajo/domain/teletrabajo.test.ts')
           text = path.read_text(encoding='utf-8')
-          old = "    validacionJefatura: false,\n    createdAt:"
-          if text.count(old) != 1:
-              raise SystemExit('teletrabajo.test.ts: validaciones fixture no localizadas')
-          text = text.replace(old, "    validacionJefatura: false,\n    validacionDireccion: false,\n    revisado: false,\n    createdAt:", 1)
-          old = "    residencia: 'Bilbao',\n    nivelRetributivo: 'N1',"
-          if text.count(old) != 1:
-              raise SystemExit('teletrabajo.test.ts: Employee fixture no localizado')
-          text = text.replace(old, "    residencia: 'Bilbao',\n    unidad: '',\n    nivelRetributivo: 'N1',\n    direccionOrganizativa: '',\n    antiguedadPuesto: '',", 1)
-          old = "    nif: '12345678Z',\n    dni:"
-          if text.count(old) != 1:
-              raise SystemExit('teletrabajo.test.ts: NIF fixture no localizado')
-          text = text.replace(old, "    nif: '12345678Z',\n    telefono1: '',\n    telefono2: '',\n    dni:", 1)
+          text = text.replace("    validacionJefatura: false,\n    createdAt:", "    validacionJefatura: false,\n    validacionDireccion: false,\n    revisado: false,\n    createdAt:", 1)
+          text = text.replace("    residencia: 'Bilbao',\n    nivelRetributivo: 'N1',", "    residencia: 'Bilbao',\n    unidad: '',\n    nivelRetributivo: 'N1',\n    direccionOrganizativa: '',\n    antiguedadPuesto: '',", 1)
+          text = text.replace("    nif: '12345678Z',\n    dni:", "    nif: '12345678Z',\n    telefono1: '',\n    telefono2: '',\n    dni:", 1)
           path.write_text(text, encoding='utf-8')
 
           path = Path('src/features/ticket-restaurante/store/useTicketRestauranteStore.concurrency.test.ts')
           text = path.read_text(encoding='utf-8')
-          old = "  function buildSqliteRecord(value: unknown, updatedAt: string) {"
-          if text.count(old) != 3:
-              raise SystemExit(f'Ticket: se esperaban 3 helpers buildSqliteRecord y hay {text.count(old)}')
-          new = "  function buildSqliteRecord(value: unknown, updatedAt: string): { id: string; value: string; createdAt: string; updatedAt: string; deletedAt: string | null } {"
-          text = text.replace(old, new)
+          text = text.replace(
+              "  function buildSqliteRecord(value: unknown, updatedAt: string) {",
+              "  function buildSqliteRecord(value: unknown, updatedAt: string): { id: string; value: string; createdAt: string; updatedAt: string; deletedAt: string | null } {",
+          )
           path.write_text(text, encoding='utf-8')
 
           path = Path('src/shared/export/coordinacionExcelBackup.test.ts')
-          text = path.read_text(encoding='utf-8')
-          old = ")) as Parameters<typeof"
-          if text.count(old) != 2:
-              raise SystemExit(f'Backup: se esperaban 2 casts y hay {text.count(old)}')
-          text = text.replace(old, ")) as unknown as Parameters<typeof")
+          text = path.read_text(encoding='utf-8').replace(")) as Parameters<typeof", ")) as unknown as Parameters<typeof")
           path.write_text(text, encoding='utf-8')
 
+          # Electron tests are executed by Vitest/Vite; use Bundler resolution for their
+          # test-only typecheck while preserving strict mode inherited from tsconfig.json.
           Path('electron/tsconfig.tests.json').write_text('''{
             "extends": "./tsconfig.json",
             "compilerOptions": {
@@ -89,16 +66,45 @@ jobs:
               "module": "ESNext",
               "moduleResolution": "Bundler"
             },
-            "include": [
-              "**/*.ts",
-              "**/*.cts",
-              "**/*.d.ts"
-            ],
-            "exclude": [
-              "preload.ts"
-            ]
+            "include": ["**/*.ts", "**/*.cts", "**/*.d.ts"],
+            "exclude": ["preload.ts"]
           }\n''', encoding='utf-8')
 
+          # Common stale Electron test mocks: keep strict typing, but make generic
+          # infrastructure callbacks genuinely generic instead of vi.fn<unknown>.
+          for path in Path('electron').rglob('*.test.ts'):
+              text = path.read_text(encoding='utf-8')
+              text = text.replace(
+                  "safeDatabaseOperation: vi.fn(async (operation: () => unknown) => operation()),",
+                  "safeDatabaseOperation: async <T>(operation: () => T) => operation(),",
+              )
+              text = text.replace(
+                  "withDatabaseOperationLock: vi.fn(async (_path: string, operation: () => Promise<unknown>) => operation()),",
+                  "withDatabaseOperationLock: async <T>(_path: string, operation: () => Promise<T>) => operation(),",
+              )
+              text = text.replace("let db: Database.Database;", "let db: InstanceType<typeof Database>;")
+              text = text.replace(
+                  "status: { ready: true, engine: 'sqlite', phase: 'active' }",
+                  "status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' }",
+              )
+              text = text.replace(
+                  "const createJsonModuleRepository = vi.fn(() => repository);",
+                  "const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);",
+              )
+              path.write_text(text, encoding='utf-8')
+
+          path = Path('electron/persistence/persistedRecordsAtomicBatch.test.ts')
+          text = path.read_text(encoding='utf-8').replace("engine: 'better-sqlite3',", "engine: 'better-sqlite3' as const,")
+          path.write_text(text, encoding='utf-8')
+
+          # Narrowing after expect() is not understood by TypeScript.
+          path = Path('electron/persistence/sqliteConnection.test.ts')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('db.pragma(', 'db!.pragma(').replace('db.close()', 'db!.close()')
+          text = text.replace('reopened.pragma(', 'reopened!.pragma(').replace('reopened.close()', 'reopened!.close()')
+          path.write_text(text, encoding='utf-8')
+
+          # Temporary workflow and trigger never belong in the final PR tree.
           Path('.github/workflows/temporary-ci-fix.yml').unlink()
           Path('.ci-kick').unlink(missing_ok=True)
 
