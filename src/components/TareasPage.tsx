@@ -220,7 +220,7 @@ function CompactTaskSummaryCard({
   );
 }
 
-const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active.v4';
+const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active.v5';
 
 const ATTENTION_PRIORITIES = new Set<Task['prioridad']>(['critica', 'alta']);
 
@@ -264,28 +264,24 @@ const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnI
   sort: null,
   columnWidths: {
     createdAt: 115,
-    titulo: 265,
-    tipo: 96,
+    titulo: 620,
     fase: 130,
     estado: 122,
     prioridad: 112,
     fechaLimite: 122,
     sindicato: 135,
-    actions: 88,
   },
   columnOrder: null,
 };
 
 const tareasTableColumnIds: ActiveTaskTableColumnId[] = [
-  'estado',
-  'titulo',
-  'createdAt',
-  'tipo',
-  'fase',
   'prioridad',
+  'estado',
+  'createdAt',
+  'titulo',
+  'fase',
   'fechaLimite',
   'sindicato',
-  'actions',
 ];
 
 const taskExportColumns: ExportColumn<Task>[] = [
@@ -319,7 +315,6 @@ export function TareasPage({
     isLoadingHistoricalTasks,
     load,
     loadHistoricalTasks,
-    removeWithConcurrencyCheck,
     selectTask,
     setFilter,
     tasks,
@@ -513,6 +508,40 @@ export function TareasPage({
   const activeTaskColumns = useMemo<Array<DataTableColumn<Task, ActiveTaskTableColumnId>>>(
     () => [
       {
+        id: 'prioridad',
+        header: 'Prioridad',
+        accessor: (task) => PRIORITY_ORDER.get(task.prioridad) ?? TASK_PRIORITIES.length,
+        render: (task) => (
+          <span className="inline-flex items-center gap-2 font-semibold text-metro-secondary">
+            <span className={`h-5 w-1 shrink-0 rounded-full ${TASK_PRIORITY_DOT[task.prioridad]}`} aria-hidden="true" />
+            {TASK_PRIORITY_LABELS[task.prioridad]}
+          </span>
+        ),
+        width: 112,
+        minWidth: 94,
+        maxWidth: 165,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'estado',
+        header: 'Estado',
+        accessor: (task) => task.estado,
+        render: (task) => (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${(TASK_STATE_PILL[task.estado] ?? 'border-metro-border bg-metro-panel text-metro-text')}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${(TASK_STATE_DOT[task.estado] ?? 'bg-slate-400')}`} />
+            {taskStates.find((state) => state.id === task.estado)?.nombre ?? TASK_STATE_LABELS[task.estado] ?? task.estado}
+          </span>
+        ),
+        width: 122,
+        minWidth: 98,
+        maxWidth: 180,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
         id: 'createdAt',
         header: 'Fecha creación',
         accessor: (task) => task.createdAt,
@@ -536,65 +565,20 @@ export function TareasPage({
             </div>
           );
         },
-        width: 265,
-        minWidth: 180,
-        maxWidth: 500,
+        width: 620,
+        minWidth: 260,
+        maxWidth: 1100,
         sortable: true,
         className: 'font-semibold text-metro-text',
-      },
-      {
-        id: 'tipo',
-        header: 'Tipo',
-        accessor: (task) => task.tipo,
-        render: (task) => task.tipo,
-        width: 96,
-        minWidth: 82,
-        maxWidth: 170,
-        sortable: true,
-        className: 'text-metro-muted',
       },
       {
         id: 'fase',
         header: 'Fase',
         accessor: (task) => task.fase,
         render: (task) => task.fase,
-        width: 130,
-        minWidth: 100,
+        width: 110,
+        minWidth: 90,
         maxWidth: 230,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'estado',
-        header: 'Estado',
-        accessor: (task) => task.estado,
-        render: (task) => (
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${(TASK_STATE_PILL[task.estado] ?? 'border-metro-border bg-metro-panel text-metro-text')}`}
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${(TASK_STATE_DOT[task.estado] ?? 'bg-slate-400')}`} />
-            {taskStates.find((state) => state.id === task.estado)?.nombre ?? TASK_STATE_LABELS[task.estado] ?? task.estado}
-          </span>
-        ),
-        width: 122,
-        minWidth: 98,
-        maxWidth: 180,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'prioridad',
-        header: 'Prioridad',
-        accessor: (task) => PRIORITY_ORDER.get(task.prioridad) ?? TASK_PRIORITIES.length,
-        render: (task) => (
-          <span className="inline-flex items-center gap-2 font-semibold text-metro-secondary">
-            <span className={`h-5 w-1 shrink-0 rounded-full ${TASK_PRIORITY_DOT[task.prioridad]}`} aria-hidden="true" />
-            {TASK_PRIORITY_LABELS[task.prioridad]}
-          </span>
-        ),
-        width: 112,
-        minWidth: 94,
-        maxWidth: 165,
         sortable: true,
         className: 'text-metro-muted',
       },
@@ -625,39 +609,14 @@ export function TareasPage({
         header: 'Origen',
         accessor: (task) => task.sindicato,
         render: (task) => task.sindicato || '—',
-        width: 135,
-        minWidth: 95,
+        width: 110,
+        minWidth: 90,
         maxWidth: 220,
         sortable: true,
         className: 'text-metro-muted',
       },
-      {
-        id: 'actions',
-        header: 'Acción',
-        render: (task) => (
-          <ActionButton
-            onClick={(event) => {
-              event.stopPropagation();
-              void (async () => {
-                const result = await removeWithConcurrencyCheck(task.id, task.updatedAt);
-                if (!result.ok) {
-                  await alert(result.message, { type: 'error' });
-                }
-              })();
-            }}
-            size="sm"
-            variant="delete" iconOnly
-          />
-        ),
-        width: 88,
-        minWidth: 82,
-        maxWidth: 120,
-        resizable: false,
-        isActionColumn: true,
-        className: 'whitespace-nowrap',
-      },
     ],
-    [alert, removeWithConcurrencyCheck, taskStates],
+    [taskStates],
   );
 
   const sortedTasks = useMemo(
