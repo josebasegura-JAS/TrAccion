@@ -73,12 +73,14 @@ export function SessionManagementPage({
   const {
     tasks,
     load: loadTasks,
+    reloadFromStorage: reloadTasksFromStorage,
     loadHistoricalTasks,
     historicalTasksLoaded,
     createManyFromImport,
   } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isRefreshingTasks, setIsRefreshingTasks] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
@@ -380,6 +382,18 @@ export function SessionManagementPage({
     }
 
     setEditingTaskId(task.id);
+  };
+
+  const refreshSessionTasks = async () => {
+    if (isRefreshingTasks) return;
+    setIsRefreshingTasks(true);
+    try {
+      await reloadTasksFromStorage();
+    } catch (error) {
+      await alert(error instanceof Error ? error.message : 'No se pudieron actualizar las tareas.', { type: 'error' });
+    } finally {
+      setIsRefreshingTasks(false);
+    }
   };
 
   const handleAddTaskToSession = async (session: ManagedSession, taskId: string) => {
@@ -935,6 +949,8 @@ export function SessionManagementPage({
             <SessionCard
               addTask={handleAddTaskToSession}
               availableTasks={availableTasks}
+              isRefreshingTasks={isRefreshingTasks}
+              onRefreshTasks={() => void refreshSessionTasks()}
               config={config}
               isExpanded={expandedSessionId === session.id}
               key={session.id}
@@ -943,9 +959,10 @@ export function SessionManagementPage({
               onClose={openCloseModal}
               onEdit={canEditSessions ? openEditModal : undefined}
               onRemove={handleRemoveSession}
-              onToggle={() =>
-                setExpandedSessionId((current) => (current === session.id ? null : session.id))
-              }
+              onToggle={() => {
+                if (expandedSessionId !== session.id) void refreshSessionTasks();
+                setExpandedSessionId((current) => (current === session.id ? null : session.id));
+              }}
               removeTask={handleRemoveTaskFromSession}
               session={session}
               tasksById={tasksById}
