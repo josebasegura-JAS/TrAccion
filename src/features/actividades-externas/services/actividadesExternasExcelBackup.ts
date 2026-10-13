@@ -10,7 +10,7 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'TrAcción';
     const sheet = workbook.addWorksheet('Actividades Externas', {
-      views: [{ state: 'frozen', ySplit: 1 }],
+      views: [{ state: 'frozen', ySplit: 4 }],
     });
     sheet.columns = [
       { header: 'Nº empleado', key: 'empleado', width: 17 },
@@ -25,6 +25,23 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
       { header: 'Fecha comunicación', key: 'fechaComunicacion', width: 24 },
       { header: 'Correo', key: 'email', width: 38 },
     ];
+    const lastColumn = 'K';
+    sheet.mergeCells('A1:K1');
+    const title = sheet.getCell('A1');
+    title.value = 'Actividades externas';
+    title.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+    title.alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getRow(1).height = 38;
+    sheet.mergeCells('A2:K2');
+    const info = sheet.getCell('A2');
+    const generated = new Date().toLocaleDateString('es-ES');
+    info.value = `Generado: ${generated} · Total solicitudes: ${records.length} · Pendientes: ${records.filter((record) => record.estado === 'pendiente').length} · Autorizadas: ${records.filter((record) => record.estado === 'autorizada').length} · Denegadas: ${records.filter((record) => record.estado === 'denegada').length}`;
+    info.font = { name: 'Calibri', size: 10, color: { argb: 'FF64748B' } };
+    info.alignment = { vertical: 'middle' };
+    sheet.getRow(2).height = 23;
+    sheet.getRow(3).height = 10;
+    sheet.getRow(4).values = sheet.columns.map((column) => column.header ?? '');
     const safe = (value: string) => /^\s*[=+@-]/.test(value) ? `'${value}` : value;
     [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).forEach((record) => {
       sheet.addRow({
@@ -41,17 +58,19 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
         email: safe(record.email),
       });
     });
-    const header = sheet.getRow(1);
-    header.height = 30;
+    const header = sheet.getRow(4);
+    header.height = 31;
     header.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF991B1B' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDC2626' } };
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
       cell.alignment = { vertical: 'middle', wrapText: true };
     });
-    sheet.autoFilter = { from: 'A1', to: 'K1' };
+    sheet.autoFilter = { from: 'A4', to: `${lastColumn}4` };
     sheet.eachRow((row, index) => {
-      if (index === 1) return;
+      if (index <= 4) return;
       row.alignment = { vertical: 'top', wrapText: true };
+      row.height = 22;
+      row.font = { name: 'Calibri', size: 11, color: { argb: 'FF111827' } };
       if (index % 2 === 0) row.eachCell((cell) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
       });
