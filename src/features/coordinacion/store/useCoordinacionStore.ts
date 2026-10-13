@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { isTaskClosed, type Task } from '../../tareas/domain/task';
+import { directionMeetingTasks } from '../domain/directionMeetingTasks';
 import { registerSyncableStore } from '../../../services/syncableStoreRegistry';
 import {
   createCoordinationId,
@@ -164,10 +165,8 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
 
     const current = stateSnapshot(get());
-    const marked = new Set(current.directionTaskIds);
     const now = new Date().toISOString();
-    const points: CoordinationPoint[] = tasks
-      .filter((task) => activeTask(task) && (marked.has(task.id) || [task.estado, task.fase].some((value) => value.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '') === 'tratar con rosa')))
+    const points: CoordinationPoint[] = directionMeetingTasks(tasks, current.directionTaskIds)
       .map((task) => ({
         id: createCoordinationId('dir-point'),
         origin: 'task',
