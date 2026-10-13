@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BriefcaseBusiness, FileSpreadsheet, Mail, Pencil, Plus, Search, Trash2 } from 'lucide-react';
-import { useAppDialog } from '../../../components/ui/AppDialog';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildActividadMail, type ActividadExterna, type ActividadExternaEstado } from '../domain/actividadExterna';
