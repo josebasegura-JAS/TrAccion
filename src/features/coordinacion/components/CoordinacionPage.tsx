@@ -232,7 +232,11 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
           const records = await readTasksForStore('all');
           // Un fallo de lectura no debe convertirse silenciosamente en una reunión sin puntos.
           if (records.length === 0 && tasks.length > 0) throw new Error('No se pudieron recuperar las tareas desde SQLite. Reintenta la operación.');
-          return records;
+          // La lista visible puede contener tareas aún no reflejadas en esta lectura.
+          // Unificar por id evita perder las que el usuario ya puede seleccionar.
+          const byId = new Map(tasks.map((task) => [task.id, task]));
+          records.forEach((task) => byId.set(task.id, task));
+          return [...byId.values()];
         })()
         : tasks;
       const result = area === 'direccion'
