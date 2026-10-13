@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BriefcaseBusiness, FileSpreadsheet, Mail, Plus, Search } from 'lucide-react';
+import { BriefcaseBusiness, FileSpreadsheet, Mail, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildActividadMail, type ActividadExterna, type ActividadExternaEstado } from '../domain/actividadExterna';
@@ -15,7 +16,7 @@ const label = (status: ActividadExternaEstado) => status === 'pendiente' ? 'Pend
 export function ActividadesExternasPage() {
   const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
-  const { records, load, create, resolve, setComunicacion } = useActividadesExternasStore();
+  const { records, load, create, update, remove, resolve, setComunicacion } = useActividadesExternasStore();
   const [employeeId, setEmployeeId] = useState('');
   const [employeeQuery, setEmployeeQuery] = useState('');
   const [showEmployeeSuggestions, setShowEmployeeSuggestions] = useState(false);
@@ -29,6 +30,20 @@ export function ActividadesExternasPage() {
   const [busy, setBusy] = useState(false);
   const [resolution, setResolution] = useState<{ record: ActividadExterna; estado: 'autorizada' | 'denegada' } | null>(null);
   const [reason, setReason] = useState('');
+  const [editing, setEditing] = useState<ActividadExterna | null>(null);
+  const [editActivity, setEditActivity] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editPaid, setEditPaid] = useState(false);
+  const { confirm, dialogNode } = useAppDialog();
+  const startEdit = (record: ActividadExterna) => {
+    setEditing(record); setEditActivity(record.actividad); setEditDate(record.fechaSolicitud); setEditPaid(record.remunerada);
+  };
+  const requestDelete = async (record: ActividadExterna) => {
+    const accepted = await confirm(`Se eliminará definitivamente la solicitud de ${record.nombre}. Esta acción no se puede deshacer.`, {
+      title: 'Eliminar actividad externa', confirmLabel: 'Eliminar', cancelLabel: 'Cancelar', danger: true,
+    });
+    if (accepted) await act(() => remove(record.id), () => setEditing(null));
+  };
 
   useEffect(() => { loadEmployees(); load(); }, [loadEmployees, load]);
   const employee = employees.find((item) => item.empleado === employeeId && !item.deletedAt);
@@ -122,6 +137,10 @@ export function ActividadesExternasPage() {
             <div><div className="font-semibold text-metro-text">{record.nombre} <span className="text-xs font-normal text-metro-muted">({record.empleado})</span></div><div className="mt-1 whitespace-pre-wrap text-sm text-metro-text">{record.actividad}</div><div className="mt-1 text-xs text-metro-muted">Solicitud: {record.fechaSolicitud} · {record.remunerada ? 'Remunerada' : 'No remunerada'}</div></div>
             <span className="rounded-md border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text">{label(record.estado)}</span>
           </div>
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
+            <button type="button" disabled={busy} onClick={() => startEdit(record)} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><Pencil size={13}/> Editar</button>
+            <button type="button" disabled={busy} onClick={() => void requestDelete(record)} className="inline-flex items-center gap-1 rounded-lg border border-red-700/60 px-2.5 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50"><Trash2 size={13}/> Eliminar</button>
+          </div>
           {record.estado === 'pendiente' ? <div className="mt-3 flex gap-2">
             <button disabled={busy} onClick={() => { setResolution({ record, estado: 'autorizada' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Autorizar</button>
             <button disabled={busy} onClick={() => { setResolution({ record, estado: 'denegada' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Denegar</button>
@@ -134,6 +153,31 @@ export function ActividadesExternasPage() {
         </article>)}
       </div>
     </div>
+    {editing && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
+      <form role="dialog" aria-modal="true" aria-label="Editar actividad externa" className="w-full max-w-lg space-y-3 rounded-xl border border-metro-border bg-metro-panel p-5 text-metro-text" onSubmit={(event) => {
+        event.preventDefault();
+        void act(() => update(editing.id, {
+          empleado: editing.empleado, nombre: editing.nombre, email: editing.email,
+          actividad: editActivity, fechaSolicitud: editDate, remunerada: editPaid,
+        }), () => setEditing(null));
+      }}>
+        <h3 className="font-bold">Editar actividad externa</h3>
+        <p className="text-xs text-metro-muted">{editing.nombre} · Nº {editing.empleado} · {label(editing.estado)}</p>
+        <label className="block text-xs font-semibold">Actividad externa
+          <textarea required value={editActivity} onChange={(event) => setEditActivity(event.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm text-metro-text"/>
+        </label>
+        <label className="block text-xs font-semibold">Fecha de solicitud
+          <input required type="date" value={editDate} onChange={(event) => setEditDate(event.target.value)} className="mt-1 block rounded-lg border border-metro-border bg-metro-surface p-2 text-sm text-metro-text"/>
+        </label>
+        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={editPaid} onChange={(event) => setEditPaid(event.target.checked)}/> Actividad remunerada</label>
+        <p className="text-xs text-metro-muted">Se conservan la resolución, sus observaciones y el estado de comunicación. Si ya se comunicó, revisa si procede enviar una actualización.</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" disabled={busy} onClick={() => setEditing(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
+          <button type="submit" disabled={busy || !editActivity.trim() || !editDate} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Guardar cambios</button>
+        </div>
+      </form>
+    </div>}
+    {dialogNode}
     {resolution && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
       <div role="dialog" aria-modal="true" aria-label="Resolver solicitud" className="w-full max-w-lg space-y-3 rounded-xl border border-metro-border bg-metro-panel p-5 text-metro-text">
         <h3 className="font-bold">{resolution.estado === 'autorizada' ? 'Autorizar' : 'Denegar'} solicitud de {resolution.record.nombre}</h3>
