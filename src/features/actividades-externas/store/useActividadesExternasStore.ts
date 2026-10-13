@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { syncActividadesExternasExcelBackup } from '../services/actividadesExternasExcelBackup';
 import { readStorageItem } from '../../../services/persistence';
-import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { deleteSharedArrayRecord, saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { parseActividadesExternas, type ActividadExterna, type ActividadExternaDraft, type ActividadExternaEstado, type ActividadExternaComunicacion } from '../domain/actividadExterna';
 
 const KEY = 'traccion.v1.actividadesExternas.records';
@@ -10,6 +10,8 @@ interface State {
   records: ActividadExterna[];
   load: () => void;
   create: (draft: ActividadExternaDraft) => Promise<Result>;
+  update: (id: string, draft: ActividadExternaDraft) => Promise<Result>;
+  remove: (id: string) => Promise<Result>;
   resolve: (id: string, estado: Exclude<ActividadExternaEstado, 'pendiente'>, motivo: string) => Promise<Result>;
   setComunicacion: (id: string, comunicacion: ActividadExternaComunicacion) => Promise<Result>;
 }
@@ -35,6 +37,43 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
       set({ records: result.records });
       const excelWarning = await syncActividadesExternasExcelBackup(result.records);
       return { ok: true, message: excelWarning ? `Solicitud registrada. ${excelWarning}` : 'Solicitud registrada.' };
+    } catch (error) { return { ok: false, message: message(error) }; }
+  },
+  update: async (id, draft) => {
+    const record = get().records.find((item) => item.id === id);
+    if (!record) return { ok: false, message: 'Solicitud no encontrada. Recarga los datos.' };
+    if (!draft.empleado.trim() || !draft.nombre.trim() || !draft.actividad.trim() || !draft.fechaSolicitud) {
+      return { ok: false, message: 'Completa la persona, la actividad y la fecha de solicitud.' };
+    }
+    try {
+      const result = await saveSharedArrayRecord<ActividadExterna>({
+        storageKey: KEY, recordId: id, expectedUpdatedAt: record.updatedAt,
+        parseRecords: parseActividadesExternas, getRecordId: (item) => item.id,
+        getRecordUpdatedAt: (item) => item.updatedAt,
+        updateRecord: (latest) => ({
+          ...latest, ...draft, actividad: draft.actividad.trim(), updatedAt: now(),
+        }),
+        missingMessage: 'La solicitud ya no existe.',
+        conflictMessage: 'Otro usuario ha modificado esta solicitud. Recarga antes de editar.',
+      });
+      set({ records: result.records });
+      const excelWarning = await syncActividadesExternasExcelBackup(result.records);
+      return { ok: true, message: `Solicitud actualizada.${excelWarning ? ` ${excelWarning}` : ''}` };
+    } catch (error) { return { ok: false, message: message(error) }; }
+  },
+  remove: async (id) => {
+    const record = get().records.find((item) => item.id === id);
+    if (!record) return { ok: false, message: 'Solicitud no encontrada. Recarga los datos.' };
+    try {
+      const result = await deleteSharedArrayRecord<ActividadExterna>({
+        storageKey: KEY, recordId: id, expectedUpdatedAt: record.updatedAt,
+        parseRecords: parseActividadesExternas, getRecordId: (item) => item.id,
+        getRecordUpdatedAt: (item) => item.updatedAt,
+        conflictMessage: 'Otro usuario ha modificado esta solicitud. Recarga antes de eliminar.',
+      });
+      set({ records: result.records });
+      const excelWarning = await syncActividadesExternasExcelBackup(result.records);
+      return { ok: true, message: `Solicitud eliminada.${excelWarning ? ` ${excelWarning}` : ''}` };
     } catch (error) { return { ok: false, message: message(error) }; }
   },
   resolve: async (id, estado, motivo) => {
