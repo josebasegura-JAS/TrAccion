@@ -22,10 +22,14 @@ function buildDeps(overrides: Partial<Parameters<typeof createPresupuestosReposi
   };
 }
 
+function asDeps(value: ReturnType<typeof buildDeps>): Parameters<typeof createPresupuestosRepository>[0] {
+  return value as unknown as Parameters<typeof createPresupuestosRepository>[0];
+}
+
 describe('createPresupuestosRepository', () => {
   it('crea las 4 tablas con su tabla, key legacy y label correctos', () => {
     const deps = buildDeps();
-    createPresupuestosRepository(deps);
+    createPresupuestosRepository(asDeps(deps));
 
     expect(deps.createJsonModuleRepository).toHaveBeenCalledTimes(4);
     const calls = deps.createJsonModuleRepository.mock.calls;
@@ -56,7 +60,7 @@ describe('createPresupuestosRepository', () => {
       return repo;
     });
 
-    const api = createPresupuestosRepository(buildDeps({ createJsonModuleRepository }));
+    const api = createPresupuestosRepository(asDeps(buildDeps({ createJsonModuleRepository })));
     const snapshot = await api.loadPresupuestosRecordsSnapshot();
 
     expect(snapshot.scenarios).toEqual([
@@ -80,7 +84,7 @@ describe('createPresupuestosRepository', () => {
     });
 
     const deps = buildDeps({ createJsonModuleRepository });
-    const api = createPresupuestosRepository(deps);
+    const api = createPresupuestosRepository(asDeps(deps));
 
     const result = await api.savePresupuestosSnapshotIfUnchanged({
       scenarios: [],
@@ -114,7 +118,7 @@ describe('createPresupuestosRepository', () => {
       createJsonModuleRepository,
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createPresupuestosRepository>[0]['requireDatabase']>),
     });
-    const api = createPresupuestosRepository(deps);
+    const api = createPresupuestosRepository(asDeps(deps));
 
     const result = await api.savePresupuestosSnapshotIfUnchanged({
       scenarios: [{ id: 's1', value: '{}' }],
@@ -143,7 +147,7 @@ describe('createPresupuestosRepository', () => {
       createJsonModuleRepository,
       getSqliteStatus: vi.fn(() => inactiveStatus),
     });
-    const api = createPresupuestosRepository(deps);
+    const api = createPresupuestosRepository(asDeps(deps));
 
     const result = await api.savePresupuestosSnapshotIfUnchanged({
       scenarios: [],
@@ -164,8 +168,8 @@ describe('createPresupuestosRepository', () => {
       return buildEmptyRepository();
     });
 
-    createPresupuestosRepository(buildDeps({ createJsonModuleRepository }));
-    createPresupuestosRepository(buildDeps({ createJsonModuleRepository }));
+    createPresupuestosRepository(asDeps(buildDeps({ createJsonModuleRepository })));
+    createPresupuestosRepository(asDeps(buildDeps({ createJsonModuleRepository })));
 
     expect(createJsonModuleRepository).toHaveBeenCalledTimes(8);
   });
