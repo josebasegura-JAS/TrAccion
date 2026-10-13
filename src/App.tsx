@@ -44,7 +44,7 @@ const TicketRestaurantePage = lazy(() => import('./features/ticket-restaurante/c
 const VinculogramaPage = lazy(() => import('./features/vinculograma/components/VinculogramaPage').then((m) => ({ default: m.VinculogramaPage })));
 const AyudaEscolarPage = lazy(() => import('./features/ayuda-escolar/components/AyudaEscolarPage').then((m) => ({ default: m.AyudaEscolarPage })));
 
-type NavigationTarget = { view: AppView; recordId?: string; responsibleFilter?: string; nonce: number };
+type NavigationTarget = { view: AppView; recordId?: string; pointId?: string; responsibleFilter?: string; nonce: number };
 interface ModuleErrorBoundaryProps { activeView: AppView; children: ReactNode; }
 interface ModuleErrorBoundaryState { error: Error | null; }
 
@@ -258,7 +258,7 @@ export function App() {
   }, [activeView]);
 
   const resetToDashboard = (): void => window.location.reload();
-  const handleDashboardOpenRecord = (target: { view: AppView; recordId?: string; responsibleFilter?: string }) => {
+  const handleDashboardOpenRecord = (target: { view: AppView; recordId?: string; pointId?: string; responsibleFilter?: string }) => {
     setNavigationTarget({ ...target, nonce: Date.now() });
     void changeActiveView(target.view);
   };
@@ -285,7 +285,7 @@ export function App() {
                     {activeView === 'plantilla' && <PlantillaPage />}
                     {activeView === 'ayuda-escolar' && <AyudaEscolarPage />}
                     {activeView === 'tareas' && <TareasPage initialTaskId={navigationTarget?.view === 'tareas' ? navigationTarget.recordId : null} initialResponsibleFilter={navigationTarget?.view === 'tareas' ? navigationTarget.responsibleFilter : undefined} navigationNonce={navigationTarget?.view === 'tareas' ? navigationTarget.nonce : undefined} />}
-                    {activeView === 'coordinacion' && <CoordinacionPage initialMeetingId={navigationTarget?.view === 'coordinacion' ? navigationTarget.recordId : null} navigationNonce={navigationTarget?.view === 'coordinacion' ? navigationTarget.nonce : undefined} />}
+                    {activeView === 'coordinacion' && <CoordinacionPage initialMeetingId={navigationTarget?.view === 'coordinacion' ? navigationTarget.recordId : null} initialPointId={navigationTarget?.view === 'coordinacion' ? navigationTarget.pointId : undefined} navigationNonce={navigationTarget?.view === 'coordinacion' ? navigationTarget.nonce : undefined} />}
                     {activeView === 'comite' && <ComitePage initialOrgan={navigationTarget ? resolveCommitteeOrganForNavigation(navigationTarget.view) : null} initialSessionId={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.recordId : null} navigationNonce={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.nonce : undefined} />}
                     {activeView === 'actas' && <ActasPage />}
                     {activeView === 'huelgas' && <HuelgasPage />}
