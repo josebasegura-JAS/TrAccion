@@ -14,6 +14,7 @@ function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSo
     id: 'teletrabajo-base',
     empleado: '100',
     nombreApellidos: 'Persona Base',
+    email: '',
     puestoNomina: 'Técnico/a',
     puestoOrganizativo: 'Administrativo/a',
     residencia: 'Oficinas Centrales',
