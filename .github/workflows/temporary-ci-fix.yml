@@ -84,10 +84,7 @@ jobs:
                   'createEmployeeRepository', 'createTaskRepository', 'createSorteosRepository',
                   'createSesionesRepository', 'createTeletrabajoRepository',
               ]:
-                  text = text.replace(
-                      f'{factory}(deps)',
-                      f'{factory}(deps as Parameters<typeof {factory}>[0])',
-                  )
+                  text = text.replace(f'{factory}(deps)', f'{factory}(deps as Parameters<typeof {factory}>[0])')
               text = text.replace(
                   'createRecordLockService(dependencies)',
                   'createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0])',
@@ -105,6 +102,14 @@ jobs:
                   'expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(true);',
               )
               text = text.replace(
+                  'setMigrationDoneRef?.(true);',
+                  '(setMigrationDoneRef as unknown as (value: boolean) => void)(true);',
+              )
+              text = text.replace(
+                  'expect(getMigrationDoneRef?.()).toBe(true);',
+                  'expect((getMigrationDoneRef as unknown as () => boolean)()).toBe(true);',
+              )
+              text = text.replace(
                   'releaseLockAttempt?.();',
                   '(releaseLockAttempt as unknown as () => void)();',
               )
@@ -112,14 +117,8 @@ jobs:
 
           path = Path('electron/persistence/simpleJsonModuleRepository.migration.test.ts')
           text = path.read_text(encoding='utf-8')
-          text = text.replace(
-              'safeDatabaseOperation: safeReads,',
-              "safeDatabaseOperation: safeReads as Parameters<typeof createSimpleJsonModuleRepository>[1]['safeDatabaseOperation'],",
-          )
-          text = text.replace(
-              'safeDatabaseMigrationOperation: safeMigrations,',
-              "safeDatabaseMigrationOperation: safeMigrations as Parameters<typeof createSimpleJsonModuleRepository>[1]['safeDatabaseMigrationOperation'],",
-          )
+          text = text.replace('safeDatabaseOperation: safeReads,', "safeDatabaseOperation: safeReads as Parameters<typeof createSimpleJsonModuleRepository>[1]['safeDatabaseOperation'],")
+          text = text.replace('safeDatabaseMigrationOperation: safeMigrations,', "safeDatabaseMigrationOperation: safeMigrations as Parameters<typeof createSimpleJsonModuleRepository>[1]['safeDatabaseMigrationOperation'],")
           path.write_text(text, encoding='utf-8')
 
           path = Path('electron/persistence/localBackupRestoreValidation.test.ts')
@@ -130,15 +129,10 @@ jobs:
           path.write_text(text, encoding='utf-8')
 
           path = Path('electron/persistence/maintenanceQueries.test.ts')
-          text = path.read_text(encoding='utf-8').replace(
-              '      const dbPath = db.name;',
-              "      const dbPath = (db as unknown as { name: string }).name;",
-          )
-          path.write_text(text, encoding='utf-8')
+          path.write_text(path.read_text(encoding='utf-8').replace('      const dbPath = db.name;', "      const dbPath = (db as unknown as { name: string }).name;"), encoding='utf-8')
 
           path = Path('electron/persistence/presupuestosRepository.test.ts')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace(
+          text = path.read_text(encoding='utf-8').replace(
               '    expect(deps.createJsonModuleRepository).toHaveBeenCalledTimes(4);\n    const calls = deps.createJsonModuleRepository.mock.calls;',
               "    const createRepositoryMock = deps.createJsonModuleRepository as ReturnType<typeof vi.fn>;\n    expect(createRepositoryMock).toHaveBeenCalledTimes(4);\n    const calls = createRepositoryMock.mock.calls;",
           )
@@ -149,16 +143,15 @@ jobs:
 
           path = Path('electron/persistence/sqliteConnection.test.ts')
           text = path.read_text(encoding='utf-8')
-          text = text.replace('db.pragma(', 'db!.pragma(').replace('db.close()', 'db!.close()')
-          text = text.replace('reopened.pragma(', 'reopened!.pragma(').replace('reopened.close()', 'reopened!.close()')
-          text = text.replace('configureSqliteConnection(db)', 'configureSqliteConnection(db!)')
-          text = text.replace('configureSqliteConnection(reopened)', 'configureSqliteConnection(reopened!)')
+          text = text.replace('readCurrentSchemaVersion(db)', 'readCurrentSchemaVersion(db!)')
+          text = text.replace('readCurrentSchemaVersion(reopened)', 'readCurrentSchemaVersion(reopened!)')
+          text = text.replace('db.close()', 'db!.close()').replace('reopened.close()', 'reopened!.close()')
           path.write_text(text, encoding='utf-8')
 
           path = Path('electron/persistence/taskRepository.test.ts')
           text = path.read_text(encoding='utf-8').replace(
               '  const prepare = vi.fn(() => ({ get, all, run }));',
-              '  const prepare = vi.fn((_sql: string) => ({ get, all, run }));',
+              '  const prepare = vi.fn((sql: string) => { void sql; return { get, all, run }; });',
           )
           path.write_text(text, encoding='utf-8')
 
