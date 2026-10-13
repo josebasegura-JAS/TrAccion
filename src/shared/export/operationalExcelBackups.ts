@@ -1,3 +1,4 @@
+import { saveExcelBackupWithRetry } from './saveExcelBackupWithRetry';
 import type ExcelJS from 'exceljs';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import type { LicenciaSinSueldoRecord } from '../../features/licencias-sin-sueldo/domain/licenciaSinSueldo';
@@ -190,13 +191,7 @@ async function saveWorkbook(
   buffer: ArrayBuffer,
 ): Promise<string | null> {
   if (!directory.trim() || !window.traccion?.saveOperationalExcelBackup) return null;
-  const result = await window.traccion.saveOperationalExcelBackup({
-    directory: directory.trim(),
-    fileName,
-    cleanupPrefix,
-    buffer,
-  });
-  return result.ok ? null : result.message;
+  return saveExcelBackupWithRetry({ directory: directory.trim(), fileName, cleanupPrefix, buffer });
 }
 
 export function appendBackupMessage(baseMessage: string, backupMessage: string | null): string {
