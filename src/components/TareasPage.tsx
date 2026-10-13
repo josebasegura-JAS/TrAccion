@@ -220,7 +220,24 @@ function CompactTaskSummaryCard({
   );
 }
 
-const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active.v3';
+const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active.v4';
+
+const ATTENTION_PRIORITIES = new Set<Task['prioridad']>(['critica', 'alta']);
+
+function needsTaskAttention(task: Task, today: string): boolean {
+  return task.estado === 'bloqueada' ||
+    (Boolean(task.fechaLimite) && task.fechaLimite <= today) ||
+    (ATTENTION_PRIORITIES.has(task.prioridad) && task.estado !== 'resuelta');
+}
+
+function compareTaskAttention(first: Task, second: Task, today: string): number {
+  const rank = (task: Task) => task.estado === 'bloqueada' ? 0
+    : task.fechaLimite && task.fechaLimite < today ? 1
+    : task.fechaLimite === today ? 2
+    : ATTENTION_PRIORITIES.has(task.prioridad) && task.estado !== 'resuelta' ? 3 : 4;
+  return rank(first) - rank(second);
+}
+
 
 const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnId> = {
   sort: null,
@@ -239,11 +256,11 @@ const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnI
 };
 
 const tareasTableColumnIds: ActiveTaskTableColumnId[] = [
-  'createdAt',
+  'estado',
   'titulo',
+  'createdAt',
   'tipo',
   'fase',
-  'estado',
   'prioridad',
   'fechaLimite',
   'sindicato',
@@ -305,6 +322,8 @@ export function TareasPage({
   const [isOriginsModalOpen, setIsOriginsModalOpen] = useState(false);
   const [isGeneratingOpenTasksExcel, setIsGeneratingOpenTasksExcel] = useState(false);
   const [responsibleFilter, setResponsibleFilter] = useState<string>(initialResponsibleFilter ?? '');
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [attentionOrder, setAttentionOrder] = useState(true);
   const [windowsUser, setWindowsUser] = useState('');
   const processedNavigationNonceRef = useRef<number | null>(null);
 
@@ -456,10 +475,18 @@ export function TareasPage({
       validColumnIds: tareasTableColumnIds,
     });
 
-  const activeTaskRows = useMemo(
-    () => (preferences.sort ? filteredTasks : sortTasksByDefault(filteredTasks)),
-    [filteredTasks, preferences.sort],
-  );
+  const todayForAttention = new Date().toLocaleDateString('en-CA');
+  const attentionCount = filteredTasks.filter((task) => needsTaskAttention(task, todayForAttention)).length;
+  const activeTaskRows = useMemo(() => {
+    const base = attentionOnly
+      ? filteredTasks.filter((task) => needsTaskAttention(task, todayForAttention))
+      : filteredTasks;
+    if (preferences.sort) return base;
+    const sorted = sortTasksByDefault(base);
+    return attentionOrder
+      ? [...sorted].sort((first, second) => compareTaskAttention(first, second, todayForAttention))
+      : sorted;
+  }, [filteredTasks, preferences.sort, attentionOnly, attentionOrder, todayForAttention]);
 
   const activeTaskColumns = useMemo<Array<DataTableColumn<Task, ActiveTaskTableColumnId>>>(
     () => [
@@ -531,7 +558,7 @@ export function TareasPage({
         accessor: (task) => PRIORITY_ORDER.get(task.prioridad) ?? TASK_PRIORITIES.length,
         render: (task) => (
           <span className="inline-flex items-center gap-2 font-semibold text-metro-secondary">
-            <span className={`h-2 w-2 rounded-full ${TASK_PRIORITY_DOT[task.prioridad]}`} />
+            <span className={`h-5 w-1 shrink-0 rounded-full ${TASK_PRIORITY_DOT[task.prioridad]}`} aria-hidden="true" />
             {TASK_PRIORITY_LABELS[task.prioridad]}
           </span>
         ),
@@ -734,7 +761,7 @@ export function TareasPage({
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
               <ListChecks size={16} className="shrink-0 text-sky-300" />
               <span className="whitespace-nowrap">Tareas activas</span>
-              <CountBadge>{filteredTasks.length} registros</CountBadge>
+              <CountBadge>{activeTaskRows.length} registros</CountBadge>
             </div>
 
             <SearchField
@@ -781,6 +808,15 @@ export function TareasPage({
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 px-3 pt-3 text-xs">
+          <button type="button" aria-pressed={attentionOnly} onClick={() => setAttentionOnly((value) => !value)} className={`rounded-lg border px-2.5 py-1.5 font-semibold ${attentionOnly ? 'border-rose-400/50 bg-rose-400/15 text-rose-200' : 'border-metro-border text-metro-muted hover:text-metro-text'}`}>
+            Requieren atención ({attentionCount})
+          </button>
+          <button type="button" aria-pressed={attentionOrder} onClick={() => { setAttentionOrder((value) => !value); if (preferences.sort) setSort(null); }} className={`rounded-lg border px-2.5 py-1.5 font-semibold ${attentionOrder && !preferences.sort ? 'border-sky-400/40 bg-sky-400/10 text-sky-200' : 'border-metro-border text-metro-muted hover:text-metro-text'}`}>
+            Priorizar atención {attentionOrder && !preferences.sort ? '✓' : ''}
+          </button>
+          <span className="text-metro-muted">Atención: bloqueadas, vencidas, vencen hoy o prioridad alta/crítica.</span>
+        </div>
         <div className="px-3 pt-3">
           <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
         </div>
