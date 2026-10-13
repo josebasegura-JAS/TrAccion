@@ -108,7 +108,7 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
   }, [initialMeetingId, initialPointId, meetings, navigationNonce]);
 
   const activeTasks = useMemo(() => tasks.filter(isActiveTask).sort((a, b) => a.titulo.localeCompare(b.titulo, 'es')), [tasks]);
-  const directionAutoTaskCount = useMemo(() => activeTasks.filter((task) => markedTaskIds.includes(task.id) || task.estado.trim().toLocaleLowerCase('es') === 'tratar con rosa').length, [activeTasks, markedTaskIds]);
+  const directionAutoTaskCount = useMemo(() => activeTasks.filter((task) => markedTaskIds.includes(task.id) || [task.estado, task.fase].some((value) => value.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '') === 'tratar con rosa')).length, [activeTasks, markedTaskIds]);
   const markedAreaCount = useMemo(() => {
     const normalized = areaName.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (!normalized) return 0;
