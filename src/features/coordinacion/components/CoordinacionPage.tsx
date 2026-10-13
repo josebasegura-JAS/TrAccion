@@ -269,7 +269,14 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   ) => {
     setTaskClosurePrompt(null);
     const result = await closeMeeting(meetingId);
-    if (!result.ok) { setStatus(result.message); return; }
+    if (!result.ok) { setStatus(`No se ha cerrado la reunión: ${result.message}`); return; }
+    const confirmedClosed = useCoordinacionStore.getState().meetings.some(
+      (meeting) => meeting.id === meetingId && meeting.status === 'closed',
+    );
+    if (!confirmedClosed) {
+      setStatus('El guardado ha respondido correctamente, pero el estado de la reunión no se ha actualizado. Recarga Coordinación antes de continuar.');
+      return;
+    }
 
     const taskFailures = taskIdsToClose.length > 0
       ? await closeCoordinationTasks(taskIdsToClose)
@@ -286,6 +293,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     } else {
       setStatus('Reunión cerrada. Las tareas vinculadas mantienen su estado y fase.');
     }
+    setSelectedId(null);
     await backup();
   };
 
@@ -429,7 +437,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           {selected.status === 'open' && <ActionButton icon={Pencil} iconOnly={false} onClick={() => setMeetingEditOpen(true)} size="sm" variant="secondary">Editar reunión</ActionButton>}
           <ActionButton icon={Trash2} iconOnly={false} onClick={() => void handleDeleteMeeting()} size="sm" variant="delete">Eliminar reunión</ActionButton>
           {selected.status === 'closed' && <ActionButton icon={RotateCcw} iconOnly={false} onClick={() => void handleReopen()} size="sm" variant="secondary">Reabrir reunión</ActionButton>}
-          {selected.status === 'open' && <ActionButton icon={CheckCircle2} iconOnly={false} onClick={() => void handleClose()} size="sm" variant="primary">Cerrar reunión</ActionButton>}
+          {selected.status === 'open' && <ActionButton icon={CheckCircle2} iconOnly={false} onClick={() => void handleClose()} size="sm" variant="primary">Guardar y cerrar reunión</ActionButton>}
         </div>
       </div>
       <div className="ui-section p-3">
