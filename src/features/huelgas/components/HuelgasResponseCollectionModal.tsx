@@ -18,11 +18,13 @@ function metricInput(
   label: string,
   onChange: (zoneId: string, field: keyof HuelgaZoneResponse, value: HuelgaZoneResponse[keyof HuelgaZoneResponse]) => void,
 ) {
+  const detailField = field === 'personasTrabajan' ? 'trabajan' : field === 'personasHuelga' ? 'huelga' : field;
+  const mismatch = Boolean(response.generalDetail?.length) && response[field] !== null && detailSum(response.generalDetail ?? [], detailField) !== response[field];
   return (
     <label className="space-y-1 text-xs font-medium text-metro-muted">
-      <span>{label}</span>
+      <span className="inline-flex items-center gap-1.5">{mismatch && <span aria-label="Total general incoherente" title="El total general no coincide con el desglose" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white">!</span>}{label}</span>
       <input
-        className="w-full rounded-lg border border-metro-border bg-metro-panel px-2.5 py-2 text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+        className={`w-full rounded-lg border px-2.5 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-amber-400/50 ${mismatch ? 'border-amber-400 bg-amber-300/20 text-amber-100' : 'border-metro-border bg-metro-panel text-metro-text focus:border-metro-red'}`}
         min={0}
         step={1}
         type="number"
