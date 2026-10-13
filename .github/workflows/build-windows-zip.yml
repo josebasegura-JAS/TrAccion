@@ -63,9 +63,6 @@ jobs:
           npm ci --include=dev --no-audit --no-fund
           npm rebuild better-sqlite3
 
-      - name: Typecheck
-        run: npm run typecheck
-
       - name: Lint
         run: npm run lint
 
@@ -75,6 +72,7 @@ jobs:
       - name: Bump build version
         run: npm run version:bump
 
+      # npm run build incluye ambas compilaciones TypeScript.
       - name: Build renderer and Electron main
         run: npm run build
 
