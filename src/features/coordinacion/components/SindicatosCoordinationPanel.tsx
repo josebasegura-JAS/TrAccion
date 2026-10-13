@@ -1,5 +1,5 @@
 import { isTaskClosed } from '../../tareas/domain/task';
-import { CalendarDays, CheckSquare2, Clock3, History, UsersRound } from 'lucide-react';
+import { CalendarDays, Clock3, History, UsersRound } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import type { Task } from '../../tareas/domain/task';
