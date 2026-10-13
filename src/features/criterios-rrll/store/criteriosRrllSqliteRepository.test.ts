@@ -135,7 +135,7 @@ describe('criteriosRrllSqliteRepository', () => {
   });
 
   it('deleteCriterioRrllInSqlite marca deletedAt y reutiliza saveCriterioRrllToSqlite', async () => {
-    const saver = vi.fn(async (_record: TraccionConditionalCriterioRrllRecord) => ({
+    const saver = vi.fn(async () => ({
       ok: true,
       status: { ready: true, phase: 'active', message: 'SQLite activo' },
       message: 'Criterio eliminado.',
