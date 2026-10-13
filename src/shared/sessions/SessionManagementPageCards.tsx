@@ -68,6 +68,8 @@ export function SessionPanel({
 export function SessionCard({
   addTask,
   availableTasks,
+  isRefreshingTasks,
+  onRefreshTasks,
   config,
   isExpanded,
   moveTask,
@@ -82,6 +84,8 @@ export function SessionCard({
 }: {
   addTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
   availableTasks: Task[];
+  isRefreshingTasks: boolean;
+  onRefreshTasks: () => void;
   config: SessionModuleConfig;
   isExpanded: boolean;
   moveTask: (
@@ -194,7 +198,7 @@ export function SessionCard({
           <div className="flex flex-col gap-2 lg:flex-row">
             <select
               className="min-w-0 flex-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              disabled={isReadOnly}
+              disabled={isReadOnly || isRefreshingTasks}
               onChange={(event) => {
                 if (!isReadOnly && event.target.value) {
                   void addTask(session, event.target.value);
@@ -203,7 +207,7 @@ export function SessionCard({
               }}
               value=""
             >
-              <option value="">{config.taskSelectPlaceholder}</option>
+              <option value="">{isRefreshingTasks ? 'Actualizando tareas…' : config.taskSelectPlaceholder}</option>
               {unassignedTasks.map((task) => (
                 <option key={task.id} value={task.id}>
                   {task.titulo}
@@ -213,6 +217,7 @@ export function SessionCard({
             <span className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-xs text-metro-muted">
               {unassignedTasks.length} tareas disponibles
             </span>
+            <button type="button" onClick={onRefreshTasks} disabled={isRefreshingTasks} className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text disabled:opacity-50">{isRefreshingTasks ? 'Actualizando…' : 'Actualizar tareas'}</button>
           </div>
 
           <div className="mt-3 space-y-2">
