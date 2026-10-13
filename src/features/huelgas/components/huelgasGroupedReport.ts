@@ -83,16 +83,17 @@ export async function downloadHuelgaGroupedReport(fecha: string): Promise<void> 
         // El archivo maestro debe encontrarse junto al informe agrupado.
         content = xml.replace(/Target="[^"]*"(?= TargetMode="External")/, `Target="${escapeXml(encodeURIComponent(masterName))}"`);
       } else if (path === 'xl/externalLinks/externalLink1.xml') {
-        // No arrastrar resultados cacheados de la huelga de ejemplo.
-        content = xml.replace(/<sheetName val="17-03-26"\s*\/>/, `<sheetName val="${escapeXml(shortDate)}"/>`)
-          .replace(/<sheetDataSet>[\s\S]*?<\/sheetDataSet>/, '<sheetDataSet/>');
+        // Conservar la estructura y los tipos de las celdas de la caché externa.
+        // Vaciar sheetDataSet provoca reparaciones de Excel en externalLink1.xml.
+        // La actualización de vínculos y el recálculo sustituyen los valores de ejemplo.
+        content = xml.replace(/<sheetName val="17-03-26"\s*\/>/, `<sheetName val="${escapeXml(shortDate)}"/>`);
       } else if (path === 'xl/workbook.xml') {
         content = xml.replace(/<x15ac:absPath[^>]*\/>/g, '')
           .replace(/<calcPr\b[^>]*\/>/, '<calcPr calcId="191029" fullCalcOnLoad="1" forceFullCalc="1"/>');
       } else if (/^xl\/worksheets\/sheet\d+\.xml$/.test(path)) {
         content = xml.replace(/17-03-26/g, shortDate).replace(/17\/03\/2026/g, longDate.replace(/-/g, '/'));
-        // Fórmulas recalculadas al abrir: no presentar resultados antiguos.
-        content = content.replace(/(<f(?:\s[^>]*)?>[\s\S]*?<\/f>)<v>[^<]*<\/v>/g, '$1<v/>');
+        // No eliminar los valores cacheados de las fórmulas: Excel necesita
+        // conservar sus tipos y estructura para abrir el libro sin reparaciones.
       } else {
         content = xml.replace(/17-03-26/g, shortDate).replace(/17-03-2026/g, longDate);
       }
