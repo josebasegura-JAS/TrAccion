@@ -92,5 +92,6 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      # El build valida TypeScript del renderer y Electron sin repetir typecheck.
       - name: Build renderer and Electron TypeScript without EXE
         run: npm run build
