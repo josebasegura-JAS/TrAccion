@@ -84,11 +84,11 @@ export function TaskTrackingSection({
                       {entry.source?.module === 'coordinacion' ? (
                         <button
                           className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-sky-400/20 px-2 py-1 text-[10px] font-bold text-sky-300 transition hover:bg-sky-500/10"
-                          onClick={() => navigateInApp({ view: 'coordinacion', recordId: entry.source?.recordId })}
+                          onClick={() => navigateInApp({ view: 'coordinacion', recordId: entry.source?.recordId, pointId: entry.source?.pointId })}
                           title={entry.source.label}
                           type="button"
                         >
-                          Origen: {entry.source.label}<ArrowUpRight size={11} aria-hidden="true" />
+                          Ver reunión de origen: {entry.source.label}<ArrowUpRight size={11} aria-hidden="true" />
                         </button>
                       ) : null}
                     </div>

@@ -45,7 +45,7 @@ function isActiveTask(task: Task): boolean {
   return !task.deletedAt && !isTaskClosed(task);
 }
 
-export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: { initialMeetingId?: string | null; navigationNonce?: number }) {
+export function CoordinacionPage({ initialMeetingId = null, initialPointId, navigationNonce }: { initialMeetingId?: string | null; initialPointId?: string; navigationNonce?: number }) {
   const tasks = useTaskStore((state) => state.tasks);
   const loadTasks = useTaskStore((state) => state.load);
   const meetings = useCoordinacionStore((state) => state.meetings);
@@ -102,7 +102,10 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     processedNavigationNonceRef.current = navigationNonce;
     setArea(target.area);
     setSelectedId(target.id);
-  }, [initialMeetingId, meetings, navigationNonce]);
+    const pointExists = initialPointId && target.points.some((point) => point.id === initialPointId);
+    setActivePointId(pointExists ? initialPointId : target.points[0]?.id ?? null);
+    if (initialPointId && !pointExists) setStatus('El punto de origen ya no existe. Se ha abierto la reunión correspondiente.');
+  }, [initialMeetingId, initialPointId, meetings, navigationNonce]);
 
   const activeTasks = useMemo(() => tasks.filter(isActiveTask).sort((a, b) => a.titulo.localeCompare(b.titulo, 'es')), [tasks]);
   const markedAreaCount = useMemo(() => {
