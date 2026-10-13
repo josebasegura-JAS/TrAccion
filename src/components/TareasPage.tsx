@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CalendarClock,
+  Bell,
   ChevronDown,
   ChevronRight,
   Clock3,
@@ -51,6 +52,8 @@ import {
   type HistoricSortKey,
   type HistoricSortState,
 } from '../features/tareas/components/tareasHistoricUtils';
+
+const pendingQuickActions = (task: Task) => task.seguimiento.reduce((total, entry) => total + (entry.quickActions?.filter((action) => !action.completedAt).length ?? 0), 0);
 
 type ActiveTaskTableColumnId = TaskSortKey | 'createdAt' | 'actions';
 
@@ -399,6 +402,7 @@ export function TareasPage({
     [taskResponsibles, windowsUser],
   );
 
+  const [quickActionsOnly, setQuickActionsOnly] = useState(false);
   const filteredTasks = useMemo(() => {
     const base = filterTasks(tasks, {
         ...filters,
@@ -408,14 +412,15 @@ export function TareasPage({
         prioridad: '',
         origen: '',
       });
-    if (!responsibleFilter) return base;
-    if (responsibleFilter === '__unassigned__') return base.filter((task) => !task.responsable.trim());
+    const quickFiltered = quickActionsOnly ? base.filter((task) => pendingQuickActions(task) > 0) : base;
+    if (!responsibleFilter) return quickFiltered;
+    if (responsibleFilter === '__unassigned__') return quickFiltered.filter((task) => !task.responsable.trim());
     if (responsibleFilter === '__mine__') {
       if (!currentResponsible) return [];
       return base.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === currentResponsible.nombre.trim().toLocaleLowerCase('es'));
     }
     return base.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === responsibleFilter.trim().toLocaleLowerCase('es'));
-  }, [currentResponsible, filters, responsibleFilter, tasks]);
+  }, [currentResponsible, filters, responsibleFilter, tasks, quickActionsOnly]);
 
   const historicTasks = useMemo(
     () => visibleTasks.filter((task) => isTaskClosed(task)),
@@ -564,7 +569,7 @@ export function TareasPage({
           const activity = taskFollowUpLabel(task, Date.now());
           return (
             <div className="min-w-0">
-              <div className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</div>
+              <div className="flex min-w-0 items-center gap-1.5">{pendingQuickActions(task) > 0 && <span title={`${pendingQuickActions(task)} acciones pendientes`} className="inline-flex shrink-0 items-center gap-0.5 text-red-400"><Bell size={14}/><span className="text-[10px] font-bold">{pendingQuickActions(task)}</span></span>}<span className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</span></div>
               {activity && <div className={`mt-0.5 truncate text-[11px] font-normal leading-4 ${activity.className}`} title={activity.label}>{activity.label}</div>}
             </div>
           );
@@ -769,6 +774,7 @@ export function TareasPage({
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
               <ListChecks size={16} className="shrink-0 text-sky-300" />
               <span className="whitespace-nowrap">Tareas activas</span>
+              <button type="button" onClick={() => setQuickActionsOnly((value) => !value)} className={`rounded-md border px-2 py-1 text-[11px] ${quickActionsOnly ? "border-red-400 text-red-300" : "border-metro-border text-metro-muted"}`}><Bell size={12} className="mr-1 inline"/>Con acciones pendientes</button>
               <CountBadge>{activeTaskRows.length} registros</CountBadge>
             </div>
 
