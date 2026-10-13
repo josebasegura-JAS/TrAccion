@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  BriefcaseBusiness,
   FileText,
   Megaphone,
   Landmark,
@@ -37,6 +38,7 @@ export type AppView =
   | 'sorteos'
   | 'loteria'
   | 'vinculograma'
+  | 'actividades-externas'
   | 'especiales'
   | 'ajustes';
 
@@ -100,6 +102,7 @@ export const navigationGroups: NavigationGroup[] = [
       { label: 'Teletrabajo', icon: Laptop, view: 'teletrabajo' },
       { label: 'Licencias sin sueldo y Excedencias', icon: CalendarDays, view: 'licencias-sin-sueldo' },
       { label: 'Vinculograma', icon: Link2, view: 'vinculograma' },
+      { label: 'Actividades Externas', icon: BriefcaseBusiness, view: 'actividades-externas' },
     ],
   },
   {
