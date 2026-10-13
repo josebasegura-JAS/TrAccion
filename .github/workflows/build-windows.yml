@@ -65,15 +65,13 @@ jobs:
           npm ci --include=dev --no-audit --no-fund
           npm rebuild better-sqlite3
 
-      - name: Typecheck
-        run: npm run typecheck
-
       - name: Lint
         run: npm run lint
 
       - name: Unit tests
         run: npm run test
 
+      # npm run build ejecuta tsc para renderer y Electron; evitar repetirlo.
       - name: Build renderer and Electron main
         run: npm run build
 
