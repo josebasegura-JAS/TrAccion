@@ -34,6 +34,7 @@ type RouteDraft = {
   rutaExportacionLicencias: string;
   rutaExportacionVinculograma: string;
   rutaExportacionCoordinacion: string;
+  rutaExportacionActividadesExternas: string;
   rutaResumenComites: string;
   rutaResumenParitaria: string;
   rutaAyudaEscolar: string;
@@ -150,6 +151,14 @@ const EXPORT_FIELDS: RouteField[] = [
     selector: 'operational',
   },
   {
+    key: 'rutaExportacionActividadesExternas',
+    label: 'Actividades Externas',
+    description: 'Carpeta compartida del Excel espejo de solicitudes y resoluciones de actividades externas.',
+    placeholder: 'G:\\Capital Humano\\...\\Actividades Externas',
+    kind: 'folder',
+    selector: 'operational',
+  },
+  {
     key: 'rutaResumenComites',
     label: 'Resumen histórico de Comité',
     description: 'Carpeta del Word “Resumen TEMÁTICA Comités de Empresa”. Se actualiza automáticamente al cerrar un Comité.',
@@ -189,6 +198,7 @@ function currentRoutes(): RouteDraft {
     rutaExportacionLicencias: state.rutaExportacionLicencias,
     rutaExportacionVinculograma: state.rutaExportacionVinculograma,
     rutaExportacionCoordinacion: state.rutaExportacionCoordinacion,
+    rutaExportacionActividadesExternas: state.rutaExportacionActividadesExternas,
     rutaResumenComites: state.rutaResumenComites,
     rutaResumenParitaria: state.rutaResumenParitaria,
     rutaAyudaEscolar: state.rutaAyudaEscolar,
@@ -209,6 +219,7 @@ export function AjustesPage() {
   const rutaExportacionLicencias = useConfiguracionStore((state) => state.rutaExportacionLicencias);
   const rutaExportacionVinculograma = useConfiguracionStore((state) => state.rutaExportacionVinculograma);
   const rutaExportacionCoordinacion = useConfiguracionStore((state) => state.rutaExportacionCoordinacion);
+  const rutaExportacionActividadesExternas = useConfiguracionStore((state) => state.rutaExportacionActividadesExternas);
   const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
   const rutaResumenParitaria = useConfiguracionStore((state) => state.rutaResumenParitaria);
   const rutaAyudaEscolar = useConfiguracionStore((state) => state.rutaAyudaEscolar);
@@ -225,6 +236,7 @@ export function AjustesPage() {
     rutaExportacionLicencias,
     rutaExportacionVinculograma,
     rutaExportacionCoordinacion,
+    rutaExportacionActividadesExternas,
     rutaResumenComites,
     rutaResumenParitaria,
     rutaAyudaEscolar,
@@ -240,6 +252,7 @@ export function AjustesPage() {
     rutaExportacionLicencias,
     rutaExportacionVinculograma,
     rutaExportacionCoordinacion,
+    rutaExportacionActividadesExternas,
     rutaResumenComites,
     rutaResumenParitaria,
     rutaAyudaEscolar,
