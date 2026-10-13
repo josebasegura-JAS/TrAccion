@@ -338,11 +338,15 @@ function extractGeneralDetail(
   },
 ): HuelgaGeneralDetail[] {
   const result: HuelgaGeneralDetail[] = [];
+  const seen = new Set<string>();
 
   for (const worksheet of workbook.worksheets) {
     const ssgg = extractSsggDetail(worksheet);
     if (ssgg.length > 0) {
-      result.push(...ssgg);
+      for (const item of ssgg) {
+        const key = `${item.turno}::${item.colectivo}`;
+        if (!seen.has(key)) { seen.add(key); result.push(item); }
+      }
       continue;
     }
 
@@ -364,6 +368,11 @@ function extractGeneralDetail(
         }
         if (!turno) continue;
 
+        // Una pareja de columnas puede reaparecer como subtotal o en una hoja auxiliar.
+        // Evitar que la misma combinación de turno y colectivo se cuente varias veces.
+        const key = `${turno}::${colectivo}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         result.push({
           turno,
           colectivo,
