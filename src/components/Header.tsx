@@ -29,6 +29,7 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
   sorteos: { title: 'Sorteos', subtitle: 'Creación de sorteos, exclusiones e histórico de resultados.' },
   loteria: { title: 'Lotería', subtitle: 'Campaña anual, solicitudes de décimos, cobros y control de caja.' },
   vinculograma: { title: 'Vinculograma', subtitle: 'Vinculaciones vigentes e histórico entre personas y áreas.' },
+  'actividades-externas': { title: 'Actividades Externas', subtitle: 'Solicitudes de compatibilidad, resoluciones y comunicaciones.' },
   especiales: { title: 'Especiales', subtitle: 'Comunicaciones, eventos y borradores de correo operativo.' },
   ajustes: { title: 'Ajustes', subtitle: 'Configuración de persistencia, datos y parámetros de la aplicación.' },
 };
