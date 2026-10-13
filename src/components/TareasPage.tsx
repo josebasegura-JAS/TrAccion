@@ -225,13 +225,15 @@ const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active.v4';
 const ATTENTION_PRIORITIES = new Set<Task['prioridad']>(['critica', 'alta']);
 
 function needsTaskAttention(task: Task, today: string): boolean {
+  if (isTaskClosed(task) || task.estado === 'resuelta') return false;
   return task.estado === 'bloqueada' ||
     (Boolean(task.fechaLimite) && task.fechaLimite <= today) ||
     (ATTENTION_PRIORITIES.has(task.prioridad) && task.estado !== 'resuelta');
 }
 
 function compareTaskAttention(first: Task, second: Task, today: string): number {
-  const rank = (task: Task) => task.estado === 'bloqueada' ? 0
+  const rank = (task: Task) => isTaskClosed(task) || task.estado === 'resuelta' ? 5
+    : task.estado === 'bloqueada' ? 0
     : task.fechaLimite && task.fechaLimite < today ? 1
     : task.fechaLimite === today ? 2
     : ATTENTION_PRIORITIES.has(task.prioridad) && task.estado !== 'resuelta' ? 3 : 4;
@@ -494,7 +496,8 @@ export function TareasPage({
       validColumnIds: tareasTableColumnIds,
     });
 
-  const todayForAttention = new Date().toLocaleDateString('en-CA');
+  const nowForAttention = new Date();
+  const todayForAttention = `${nowForAttention.getFullYear()}-${String(nowForAttention.getMonth() + 1).padStart(2, '0')}-${String(nowForAttention.getDate()).padStart(2, '0')}`;
   const attentionCount = filteredTasks.filter((task) => needsTaskAttention(task, todayForAttention)).length;
   const activeTaskRows = useMemo(() => {
     const base = attentionOnly
