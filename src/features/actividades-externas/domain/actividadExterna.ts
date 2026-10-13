@@ -11,6 +11,7 @@ export interface ActividadExterna {
   remunerada: boolean;
   estado: ActividadExternaEstado;
   motivoDenegacion: string;
+  observacionesResolucion?: string;
   fechaResolucion: string | null;
   comunicacion: ActividadExternaComunicacion;
   fechaComunicacion: string | null;
@@ -53,7 +54,8 @@ export function buildActividadMail(record: ActividadExterna) {
   const resolution = approved
     ? 'Te comunicamos que se ha autorizado la solicitud de compatibilidad para la actividad externa indicada.'
     : 'Te comunicamos que no se ha autorizado la solicitud de compatibilidad para la actividad externa indicada.';
-  const reason = !approved && record.motivoDenegacion
-    ? `<p><strong>Motivo:</strong> ${escapeMailHtml(record.motivoDenegacion).replace(/\n/g, '<br>')}</p>` : '';
+  const observations = record.observacionesResolucion ?? record.motivoDenegacion ?? '';
+  const reason = observations.trim()
+    ? `<p><strong>${approved ? 'Observaciones' : 'Motivo'}:</strong> ${escapeMailHtml(observations).replace(/\n/g, '<br>')}</p>` : '';
   return { subject, html: `<p>Hola, ${name}:</p><p>${resolution}</p><p><strong>Actividad:</strong> ${activity}</p>${reason}<p>Un saludo,<br>Relaciones Laborales<br>Metro Bilbao</p>` };
 }

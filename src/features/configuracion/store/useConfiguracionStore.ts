@@ -48,6 +48,7 @@ interface ConfiguracionState {
   rutaExportacionLicencias: string;
   rutaExportacionVinculograma: string;
   rutaExportacionCoordinacion: string;
+  rutaExportacionActividadesExternas: string;
   rutaResumenComites: string;
   rutaResumenParitaria: string;
   rutaAyudaEscolar: string;
@@ -70,6 +71,7 @@ type SharedRouteSettings = Pick<
   | 'rutaExportacionLicencias'
   | 'rutaExportacionVinculograma'
   | 'rutaExportacionCoordinacion'
+  | 'rutaExportacionActividadesExternas'
   | 'rutaResumenComites'
   | 'rutaResumenParitaria'
   | 'rutaAyudaEscolar'
@@ -89,6 +91,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaExportacionLicencias: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionCoordinacion: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaExportacionActividadesExternas: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaResumenComites: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaResumenParitaria: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaAyudaEscolar: (ruta: string) => Promise<{ ok: boolean; message: string }>;
@@ -122,6 +125,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaExportacionLicencias: state.rutaExportacionLicencias,
     rutaExportacionVinculograma: state.rutaExportacionVinculograma,
     rutaExportacionCoordinacion: state.rutaExportacionCoordinacion,
+    rutaExportacionActividadesExternas: state.rutaExportacionActividadesExternas,
     rutaResumenComites: state.rutaResumenComites,
     rutaResumenParitaria: state.rutaResumenParitaria,
     rutaAyudaEscolar: state.rutaAyudaEscolar,
@@ -252,6 +256,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaExportacionLicencias: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Licencias sin sueldo y Excedencias',
     rutaExportacionVinculograma: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
     rutaExportacionCoordinacion: '',
+    rutaExportacionActividadesExternas: '',
     rutaResumenComites: '',
     rutaResumenParitaria: '',
     rutaAyudaEscolar: getDefaultAyudaEscolarPath(),
@@ -279,6 +284,7 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
     rutaExportacionLicencias: typeof (parsed as { rutaExportacionLicencias?: unknown }).rutaExportacionLicencias === 'string' ? (parsed as { rutaExportacionLicencias: string }).rutaExportacionLicencias.trim() : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Licencias sin sueldo y Excedencias',
     rutaExportacionVinculograma: typeof (parsed as { rutaExportacionVinculograma?: unknown }).rutaExportacionVinculograma === 'string' ? (parsed as { rutaExportacionVinculograma: string }).rutaExportacionVinculograma.trim() : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
     rutaExportacionCoordinacion: typeof (parsed as { rutaExportacionCoordinacion?: unknown }).rutaExportacionCoordinacion === 'string' ? (parsed as { rutaExportacionCoordinacion: string }).rutaExportacionCoordinacion.trim() : '',
+    rutaExportacionActividadesExternas: typeof (parsed as { rutaExportacionActividadesExternas?: unknown }).rutaExportacionActividadesExternas === 'string' ? (parsed as { rutaExportacionActividadesExternas: string }).rutaExportacionActividadesExternas.trim() : '',
     rutaResumenComites: typeof (parsed as { rutaResumenComites?: unknown }).rutaResumenComites === 'string' ? (parsed as { rutaResumenComites: string }).rutaResumenComites.trim() : '',
     rutaResumenParitaria: typeof (parsed as { rutaResumenParitaria?: unknown }).rutaResumenParitaria === 'string' ? (parsed as { rutaResumenParitaria: string }).rutaResumenParitaria.trim() : '',
     rutaAyudaEscolar: normalizeAyudaEscolarPath((parsed as { rutaAyudaEscolar?: unknown }).rutaAyudaEscolar),
@@ -404,6 +410,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaExportacionLicencias: initialConfiguracion.rutaExportacionLicencias,
   rutaExportacionVinculograma: initialConfiguracion.rutaExportacionVinculograma,
   rutaExportacionCoordinacion: initialConfiguracion.rutaExportacionCoordinacion,
+  rutaExportacionActividadesExternas: initialConfiguracion.rutaExportacionActividadesExternas,
   rutaResumenComites: initialConfiguracion.rutaResumenComites,
   rutaResumenParitaria: initialConfiguracion.rutaResumenParitaria,
   rutaAyudaEscolar: initialConfiguracion.rutaAyudaEscolar,
@@ -417,8 +424,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   },
   reloadFromStorage: () => {
     const applyIfChanged = (configuracion: ConfiguracionState) => {
-      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
-      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
+      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaExportacionActividadesExternas, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
+      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaExportacionActividadesExternas, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
       if (!areConfiguracionesEquivalent(current, configuracion)) set(configuracion);
     };
     if (window.traccion?.loadConfiguracion) {
@@ -438,6 +445,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   setRutaExportacionLicencias: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionLicencias: ruta.trim() }),
   setRutaExportacionVinculograma: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionVinculograma: ruta.trim() }),
   setRutaExportacionCoordinacion: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionCoordinacion: ruta.trim() }),
+  setRutaExportacionActividadesExternas: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionActividadesExternas: ruta.trim() }),
   setRutaResumenComites: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaResumenComites: ruta.trim() }),
   setRutaResumenParitaria: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaResumenParitaria: ruta.trim() }),
   setRutaAyudaEscolar: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaAyudaEscolar: ruta.trim() }),
@@ -454,6 +462,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     rutaExportacionLicencias: rutas.rutaExportacionLicencias.trim(),
     rutaExportacionVinculograma: rutas.rutaExportacionVinculograma.trim(),
     rutaExportacionCoordinacion: rutas.rutaExportacionCoordinacion.trim(),
+    rutaExportacionActividadesExternas: rutas.rutaExportacionActividadesExternas.trim(),
     rutaResumenComites: rutas.rutaResumenComites.trim(),
     rutaResumenParitaria: rutas.rutaResumenParitaria.trim(),
     rutaAyudaEscolar: rutas.rutaAyudaEscolar.trim(),

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BriefcaseBusiness, Mail, Plus, Search } from 'lucide-react';
+import { BriefcaseBusiness, FileSpreadsheet, Mail, Plus, Search } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildActividadMail, type ActividadExterna, type ActividadExternaEstado } from '../domain/actividadExterna';
 import { useActividadesExternasStore } from '../store/useActividadesExternasStore';
+import { syncActividadesExternasExcelBackup } from '../services/actividadesExternasExcelBackup';
 
 const today = () => {
   const date = new Date();
@@ -16,6 +17,8 @@ export function ActividadesExternasPage() {
   const loadEmployees = useEmployeeStore((state) => state.load);
   const { records, load, create, resolve, setComunicacion } = useActividadesExternasStore();
   const [employeeId, setEmployeeId] = useState('');
+  const [employeeQuery, setEmployeeQuery] = useState('');
+  const [showEmployeeSuggestions, setShowEmployeeSuggestions] = useState(false);
   const [activity, setActivity] = useState('');
   const [date, setDate] = useState(today());
   const [paid, setPaid] = useState(false);
@@ -24,11 +27,16 @@ export function ActividadesExternasPage() {
   const [statusFilter, setStatusFilter] = useState('todos');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [denial, setDenial] = useState<ActividadExterna | null>(null);
+  const [resolution, setResolution] = useState<{ record: ActividadExterna; estado: 'autorizada' | 'denegada' } | null>(null);
   const [reason, setReason] = useState('');
 
   useEffect(() => { loadEmployees(); load(); }, [loadEmployees, load]);
   const employee = employees.find((item) => item.empleado === employeeId && !item.deletedAt);
+  const employeeSuggestions = useMemo(() => {
+    const query = employeeQuery.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (!query) return [];
+    return employees.filter((item) => !item.deletedAt && [item.empleado, item.nombreApellidos].some((value) => value.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(query))).slice(0, 10);
+  }, [employees, employeeQuery]);
   const visible = useMemo(() => records.filter((item) =>
     (statusFilter === 'todos' || item.estado === statusFilter)
     && [item.nombre, item.empleado, item.actividad].join(' ').toLocaleLowerCase('es').includes(filter.toLocaleLowerCase('es'))
@@ -67,21 +75,31 @@ export function ActividadesExternasPage() {
     <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 font-semibold text-metro-text"><BriefcaseBusiness size={17}/> Solicitudes de compatibilidad</h2>
-        <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/> Nueva solicitud</button>
+        <div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-text disabled:opacity-50"><FileSpreadsheet size={14}/> Actualizar Excel</button>
+        <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/> Nueva solicitud</button></div>
       </div>
       {creating && <form className="mb-3 space-y-3 rounded-xl border border-metro-border bg-metro-surface p-3" onSubmit={(event) => {
         event.preventDefault();
         if (!employee) { setMessage('Selecciona una persona activa de Plantilla.'); return; }
         void act(() => create({ empleado: employee.empleado, nombre: employee.nombreApellidos, email: employee.email, actividad: activity, fechaSolicitud: date, remunerada: paid }), () => {
-          setCreating(false); setEmployeeId(''); setActivity(''); setDate(today()); setPaid(false);
+          setCreating(false); setEmployeeId(''); setEmployeeQuery(''); setActivity(''); setDate(today()); setPaid(false);
         });
       }}>
-        <label className="block text-xs font-semibold text-metro-text">Persona de Plantilla
-          <select required value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel p-2 text-sm text-metro-text">
-            <option value="">Seleccionar empleado...</option>
-            {employees.filter((item) => !item.deletedAt).sort((a,b) => a.nombreApellidos.localeCompare(b.nombreApellidos)).map((item) => <option key={item.empleado} value={item.empleado}>{item.nombreApellidos} · {item.empleado}</option>)}
-          </select>
-        </label>
+        <div className="relative">
+          <label className="block text-xs font-semibold text-metro-text" htmlFor="actividad-employee-search">Buscar persona por número o nombre y apellidos</label>
+          <input id="actividad-employee-search" required value={employeeQuery} autoComplete="off"
+            onChange={(event) => { setEmployeeQuery(event.target.value); setEmployeeId(''); setShowEmployeeSuggestions(true); }}
+            onFocus={() => setShowEmployeeSuggestions(true)}
+            onBlur={() => window.setTimeout(() => setShowEmployeeSuggestions(false), 150)}
+            placeholder="Número de empleado o nombre..."
+            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel p-2 text-sm text-metro-text" />
+          {showEmployeeSuggestions && employeeSuggestions.length > 0 && <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-metro-border bg-metro-surface shadow-xl">
+            {employeeSuggestions.map((item) => <button key={item.empleado} type="button" onMouseDown={(event) => event.preventDefault()}
+              onClick={() => { setEmployeeId(item.empleado); setEmployeeQuery(`${item.empleado} · ${item.nombreApellidos}`); setShowEmployeeSuggestions(false); }}
+              className="block w-full px-3 py-2 text-left text-sm text-metro-text hover:bg-metro-red/10"><strong>{item.empleado}</strong> · {item.nombreApellidos}</button>)}
+          </div>}
+          {employee && <p className="mt-1 text-xs font-semibold text-metro-text">Seleccionado: {employee.nombreApellidos} ({employee.empleado})</p>}
+        </div>
         {employee && <p className="text-xs text-metro-muted">Correo de Plantilla: {employee.email || 'No disponible'}</p>}
         <label className="block text-xs font-semibold text-metro-text">Actividad externa
           <textarea required value={activity} onChange={(event) => setActivity(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel p-2 text-sm text-metro-text" placeholder="Descripción de la actividad solicitada"/>
@@ -105,10 +123,10 @@ export function ActividadesExternasPage() {
             <span className="rounded-md border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text">{label(record.estado)}</span>
           </div>
           {record.estado === 'pendiente' ? <div className="mt-3 flex gap-2">
-            <button disabled={busy} onClick={() => void act(() => resolve(record.id, 'autorizada', ''))} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Autorizar</button>
-            <button disabled={busy} onClick={() => { setDenial(record); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Denegar</button>
+            <button disabled={busy} onClick={() => { setResolution({ record, estado: 'autorizada' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Autorizar</button>
+            <button disabled={busy} onClick={() => { setResolution({ record, estado: 'denegada' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Denegar</button>
           </div> : <div className="mt-3 flex flex-wrap items-center gap-2">
-            {record.motivoDenegacion && <p className="w-full text-xs text-metro-muted">Motivo: {record.motivoDenegacion}</p>}
+            {(record.observacionesResolucion || record.motivoDenegacion) && <p className="w-full whitespace-pre-wrap text-xs text-metro-muted">{record.estado === 'denegada' ? 'Motivo' : 'Observaciones'}: {record.observacionesResolucion || record.motivoDenegacion}</p>}
             <span className="text-xs text-metro-muted">Comunicación: {record.comunicacion === 'confirmada' ? 'Envío confirmado' : record.comunicacion === 'borrador' ? 'Borrador preparado' : 'Pendiente'}</span>
             <button disabled={busy} onClick={() => void openDraft(record)} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><Mail size={14}/> Preparar correo en Outlook</button>
             {record.comunicacion !== 'confirmada' && <button disabled={busy} onClick={() => void act(() => setComunicacion(record.id, 'confirmada'))} className="rounded-lg border border-metro-border px-3 py-1.5 text-xs text-metro-text disabled:opacity-50">Confirmar envío manualmente</button>}
@@ -116,13 +134,14 @@ export function ActividadesExternasPage() {
         </article>)}
       </div>
     </div>
-    {denial && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
-      <div role="dialog" aria-modal="true" aria-label="Denegar solicitud" className="w-full max-w-lg space-y-3 rounded-xl border border-metro-border bg-metro-panel p-5 text-metro-text">
-        <h3 className="font-bold">Denegar solicitud de {denial.nombre}</h3>
-        <p className="text-xs text-metro-muted">El motivo se incluirá en el borrador del correo.</p>
-        <textarea autoFocus value={reason} onChange={(event) => setReason(event.target.value)} rows={4} className="w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm"/>
-        <div className="flex justify-end gap-2"><button type="button" onClick={() => setDenial(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
-          <button type="button" disabled={busy || !reason.trim()} onClick={() => void act(() => resolve(denial.id, 'denegada', reason), () => setDenial(null))} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Confirmar denegación</button>
+    {resolution && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label="Resolver solicitud" className="w-full max-w-lg space-y-3 rounded-xl border border-metro-border bg-metro-panel p-5 text-metro-text">
+        <h3 className="font-bold">{resolution.estado === 'autorizada' ? 'Autorizar' : 'Denegar'} solicitud de {resolution.record.nombre}</h3>
+        <p className="text-xs text-metro-muted">{resolution.estado === 'autorizada' ? 'Puedes indicar observaciones para la autorización.' : 'Indica el motivo de la denegación.'} Las observaciones se incorporarán al borrador de Outlook.</p>
+        <label htmlFor="actividad-resolution-notes" className="block text-xs font-semibold">Observaciones {resolution.estado === 'denegada' ? '(obligatorias)' : '(opcionales)'}</label>
+        <textarea id="actividad-resolution-notes" autoFocus value={reason} onChange={(event) => setReason(event.target.value)} rows={4} className="w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm"/>
+        <div className="flex justify-end gap-2"><button type="button" onClick={() => setResolution(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
+          <button type="button" disabled={busy || (resolution.estado === 'denegada' && !reason.trim())} onClick={() => void act(() => resolve(resolution.record.id, resolution.estado, reason), () => setResolution(null))} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{resolution.estado === 'autorizada' ? 'Confirmar autorización' : 'Confirmar denegación'}</button>
         </div>
       </div>
     </div>}

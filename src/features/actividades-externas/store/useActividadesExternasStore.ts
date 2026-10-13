@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { syncActividadesExternasExcelBackup } from '../services/actividadesExternasExcelBackup';
 import { readStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { parseActividadesExternas, type ActividadExterna, type ActividadExternaDraft, type ActividadExternaEstado, type ActividadExternaComunicacion } from '../domain/actividadExterna';
@@ -24,7 +25,7 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
     const createdAt = now();
     const record: ActividadExterna = {
       ...draft, actividad: draft.actividad.trim(), id: crypto.randomUUID(),
-      estado: 'pendiente', motivoDenegacion: '', fechaResolucion: null,
+      estado: 'pendiente', motivoDenegacion: '', observacionesResolucion: '', fechaResolucion: null,
       comunicacion: 'pendiente', fechaComunicacion: null, createdAt, updatedAt: createdAt,
     };
     try {
@@ -32,7 +33,8 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
         storageKey: KEY, newRecord: record, parseRecords: parseActividadesExternas, getRecordId: (item: ActividadExterna) => item.id,
       });
       set({ records: result.records });
-      return { ok: true, message: 'Solicitud registrada.' };
+      const excelWarning = await syncActividadesExternasExcelBackup(result.records);
+      return { ok: true, message: excelWarning ? `Solicitud registrada. ${excelWarning}` : 'Solicitud registrada.' };
     } catch (error) { return { ok: false, message: message(error) }; }
   },
   resolve: async (id, estado, motivo) => {
@@ -47,13 +49,14 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
         updateRecord: (latest) => {
           if (latest.estado !== 'pendiente') throw new Error('La solicitud ya ha sido resuelta por otro usuario.');
           const stamp = now();
-          return { ...latest, estado, motivoDenegacion: estado === 'denegada' ? motivo.trim() : '',
+          return { ...latest, estado, observacionesResolucion: motivo.trim(), motivoDenegacion: estado === 'denegada' ? motivo.trim() : '',
             fechaResolucion: stamp, comunicacion: 'pendiente', updatedAt: stamp };
         },
         missingMessage: 'Solicitud no encontrada.', conflictMessage: 'Otro usuario ha modificado la solicitud. Recarga antes de continuar.',
       });
       set({ records: result.records });
-      return { ok: true, message: estado === 'autorizada' ? 'Solicitud autorizada.' : 'Solicitud denegada.' };
+      const excelWarning = await syncActividadesExternasExcelBackup(result.records);
+      return { ok: true, message: `${estado === 'autorizada' ? 'Solicitud autorizada.' : 'Solicitud denegada.'}${excelWarning ? ` ${excelWarning}` : ''}` };
     } catch (error) { return { ok: false, message: message(error) }; }
   },
   setComunicacion: async (id, comunicacion) => {
@@ -72,7 +75,8 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
         missingMessage: 'Solicitud no encontrada.', conflictMessage: 'La solicitud ha cambiado. Recarga antes de continuar.',
       });
       set({ records: result.records });
-      return { ok: true, message: comunicacion === 'confirmada' ? 'Envío confirmado manualmente.' : 'Estado de comunicación actualizado.' };
+      const excelWarning = await syncActividadesExternasExcelBackup(result.records);
+      return { ok: true, message: `${comunicacion === 'confirmada' ? 'Envío confirmado manualmente.' : 'Estado de comunicación actualizado.'}${excelWarning ? ` ${excelWarning}` : ''}` };
     } catch (error) { return { ok: false, message: message(error) }; }
   },
 }));
