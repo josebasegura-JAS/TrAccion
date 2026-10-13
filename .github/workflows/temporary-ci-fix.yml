@@ -82,6 +82,23 @@ jobs:
           text = text.replace(old, ")) as unknown as Parameters<typeof")
           path.write_text(text, encoding='utf-8')
 
+          Path('electron/tsconfig.tests.json').write_text('''{
+            "extends": "./tsconfig.json",
+            "compilerOptions": {
+              "noEmit": true,
+              "module": "ESNext",
+              "moduleResolution": "Bundler"
+            },
+            "include": [
+              "**/*.ts",
+              "**/*.cts",
+              "**/*.d.ts"
+            ],
+            "exclude": [
+              "preload.ts"
+            ]
+          }\n''', encoding='utf-8')
+
           Path('.github/workflows/temporary-ci-fix.yml').unlink()
           Path('.ci-kick').unlink(missing_ok=True)
 
@@ -100,5 +117,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "test: align CI fixtures with current types"
+          git commit -m "test: restore full CI type safety"
           git push origin HEAD:fix/restore-ci-tests-20261013
