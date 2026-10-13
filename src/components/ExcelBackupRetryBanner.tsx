@@ -7,6 +7,26 @@ export function ExcelBackupRetryBanner() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const bridge = (window as unknown as { traccionTaskWord?: {
+      refresh: () => Promise<{ ok: boolean; message: string }>;
+      onBackupFailure?: (listener: (message: string) => void) => () => void;
+    } }).traccionTaskWord;
+    const unsubscribe = bridge?.onBackupFailure?.(() => {
+      if (!bridge) return;
+      setFailure({
+        message: 'No se ha podido actualizar el Excel de tareas abiertas. Comprueba que esté cerrado y que la red esté disponible.',
+        retry: async () => {
+          const result = await bridge.refresh();
+          if (!result.ok) throw new Error(result.message);
+          return true;
+        },
+      });
+      setError('');
+    });
+    return () => unsubscribe?.();
+  }, []);
+
+  useEffect(() => {
     const onFailure = (event: Event) => {
       setFailure((event as CustomEvent<ExcelBackupFailure>).detail);
       setError('');
