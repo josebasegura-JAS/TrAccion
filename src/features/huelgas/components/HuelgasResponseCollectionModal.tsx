@@ -94,11 +94,22 @@ function importedDetailPanel(
     onChange(response.zonaId, 'generalDetail', next);
   };
   const mismatches = metrics.filter(({ key, expected }) => expected !== null && detailSum(detail, key) !== expected);
+  const mismatchKeys = new Set(mismatches.map(({ key }) => key));
+  const rowIssues = detail.map((row) => {
+    const affected = new Set<'hombres' | 'mujeres'>();
+    for (const sex of ['hombres', 'mujeres'] as const) {
+      const total = row.personasTurno[sex];
+      const classified = row.serviciosMinimos[sex] + row.trabajan[sex] + row.huelga[sex];
+      if (total !== classified || ![total, row.serviciosMinimos[sex], row.trabajan[sex], row.huelga[sex]].every((value) => Number.isInteger(value) && value >= 0)) affected.add(sex);
+    }
+    return affected;
+  });
+  const hasVisualErrors = mismatches.length > 0 || rowIssues.some((affected) => affected.size > 0);
   return (
-    <details className="mt-3 rounded-lg border border-metro-border bg-metro-panel/35 p-3" open={mismatches.length > 0}>
+    <details className="mt-3 rounded-lg border border-metro-border bg-metro-panel/35 p-3" open={hasVisualErrors}>
       <summary className="cursor-pointer text-xs font-semibold text-metro-text">
         Desglose importado · {detail.length} filas por colectivo y turno
-        {mismatches.length > 0 ? ' · Totales por revisar' : ' · Ver detalle'}
+        {hasVisualErrors ? ' · Errores por revisar' : ' · Ver detalle'}
       </summary>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-[11px] text-metro-text">
@@ -109,7 +120,7 @@ function importedDetailPanel(
           <tbody>
             {detail.map((row, index) => (
               <tr className="border-b border-metro-border/50" key={`${row.turno}-${row.colectivo}-${index}`}>
-                <td className="px-2 py-1.5">{SHIFT_LABELS[row.turno]}</td>
+                <td className="px-2 py-1.5"><span className="inline-flex items-center gap-1.5">{rowIssues[index].size > 0 && <span aria-label="Fila con errores" title="Esta fila contiene valores incoherentes" className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white">!</span>}{SHIFT_LABELS[row.turno]}</span></td>
                 <td className="px-2 py-1.5">{row.colectivo}</td>
                 {metrics.map(({ key }) => (
                   <td className="px-2 py-1.5 text-right tabular-nums" colSpan={3} key={key}>
@@ -117,10 +128,10 @@ function importedDetailPanel(
                       {(['hombres', 'mujeres'] as const).map((sex) => (
                         <label className="flex items-center gap-1" key={sex} title={sex === 'hombres' ? 'Hombres' : 'Mujeres'}>
                           <span className="text-metro-muted">{sex === 'hombres' ? 'H' : 'M'}</span>
-                          <input aria-label={`${row.colectivo} ${SHIFT_LABELS[row.turno]} ${key} ${sex}`} className="w-12 rounded border border-metro-border bg-metro-panel px-1 py-1 text-right" min={0} type="number" value={row[key][sex]} onChange={(event) => updateDetail(index, key, sex, event.target.value)} />
+                          <input aria-label={`${row.colectivo} ${SHIFT_LABELS[row.turno]} ${key} ${sex}`} className={`w-12 rounded border px-1 py-1 text-right outline-none focus:ring-2 focus:ring-amber-400/50 ${rowIssues[index].has(sex) ? 'border-amber-400 bg-amber-300/20 text-amber-100' : 'border-metro-border bg-metro-panel'}`} min={0} type="number" value={row[key][sex]} onChange={(event) => updateDetail(index, key, sex, event.target.value)} />
                         </label>
                       ))}
-                      <strong className="w-7 text-right">{row[key].hombres + row[key].mujeres}</strong>
+                      <strong className={`w-7 rounded text-right ${rowIssues[index].size > 0 ? 'bg-amber-300/20 text-amber-200' : ''}`}>{row[key].hombres + row[key].mujeres}</strong>
                     </div>
                   </td>
                 ))}
@@ -129,7 +140,7 @@ function importedDetailPanel(
           </tbody>
           <tfoot><tr className="font-semibold">
             <td className="px-2 py-2" colSpan={2}>Totales del desglose</td>
-            {metrics.map(({ key }) => <td className="px-2 py-2 text-right tabular-nums" colSpan={3} key={key}>{detailSum(detail, key)}</td>)}
+            {metrics.map(({ key }) => <td className={`px-2 py-2 text-right tabular-nums ${mismatchKeys.has(key) ? 'bg-amber-300/15 text-amber-200' : ''}`} colSpan={3} key={key}>{mismatchKeys.has(key) && <span aria-label="Total incoherente" className="mr-2 inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] text-white">!</span>}{detailSum(detail, key)}</td>)}
           </tr></tfoot>
         </table>
       </div>
