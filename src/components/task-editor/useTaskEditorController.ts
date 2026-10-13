@@ -528,6 +528,7 @@ export function useTaskEditorController({
         expectedUpdatedAt: loadedUpdatedAt,
       });
     } catch (error) {
+      clearPersistenceBusy(feedbackKey);
       emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: feedbackKey, message: error instanceof Error ? error.message : 'No se ha podido actualizar el seguimiento.' });
       setSaveStatus(error instanceof Error ? error.message : 'No se ha podido actualizar el seguimiento.');
       setSaveStatusIsError(true);
@@ -535,6 +536,7 @@ export function useTaskEditorController({
     }
 
     if (!result.ok) {
+      clearPersistenceBusy(feedbackKey);
       emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: feedbackKey, message: result.message || 'No se ha podido actualizar el seguimiento.' });
       setSaveStatus(result.message || 'No se ha podido actualizar el seguimiento.');
       setSaveStatusIsError(true);
