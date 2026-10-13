@@ -792,6 +792,33 @@ export async function downloadHuelgaResponseReport(
   setTotalFormula(sheet, totalRows.serviciosMinimos);
   writePercentFormulas(sheet, totalRows);
 
+  const nominal = workbook.addWorksheet('Personal en huelga');
+  nominal.columns = [
+    { header: 'Nº empleado', key: 'empleado', width: 18 },
+    { header: 'Nombre y apellidos', key: 'nombre', width: 42 },
+    { header: 'Circuito', key: 'circuito', width: 32 },
+  ];
+  const people = responses.flatMap((response) =>
+    response.huelguistas.map((person) => ({
+      empleado: person.empleado.trim(),
+      nombre: person.nombre.trim(),
+      circuito: response.zonaNombre,
+    })),
+  ).sort((a, b) => a.circuito.localeCompare(b.circuito, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+  const seen = new Set<string>();
+  for (const person of people) {
+    const key = person.empleado.replace(/^0+/, '') || person.empleado;
+    if (seen.has(key)) throw new Error('Hay empleados repetidos en el listado nominal. Revisa los circuitos.');
+    seen.add(key);
+    const row = nominal.addRow([person.empleado, person.nombre, person.circuito]);
+    row.getCell(1).numFmt = '@';
+  }
+  nominal.addRow(['TOTAL', people.length, '']);
+  nominal.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  nominal.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB91C2C' } };
+  nominal.autoFilter = { from: 'A1', to: 'C1' };
+  nominal.views = [{ state: 'frozen', ySplit: 1 }];
+
   const generated = await workbook.xlsx.writeBuffer();
   const blob = new Blob([generated], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
