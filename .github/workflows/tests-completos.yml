@@ -32,7 +32,6 @@ jobs:
           npm config set registry https://registry.npmjs.org/
           npm config set fund false
           npm config set audit false
-          npm cache clean --force
 
       - name: Instalar dependencias
         shell: pwsh
@@ -57,14 +56,6 @@ jobs:
           npm exec -- vitest --version
           npm exec -- vite --version
 
-      - name: TypeScript renderer
-        shell: pwsh
-        run: node node_modules/typescript/bin/tsc --noEmit
-
-      - name: TypeScript Electron
-        shell: pwsh
-        run: node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit
-
       - name: TypeScript tests
         run: npm run typecheck:tests
 
@@ -77,6 +68,8 @@ jobs:
       - name: Build
         run: npm run build
 
+      # La compilación ya valida TypeScript de renderer y Electron.
+      # Los tests de tipos específicos se mantienen por separado.
       - name: Rebuild dependencias nativas Electron
         run: npm run electron:rebuild
 
