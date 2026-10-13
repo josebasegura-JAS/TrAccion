@@ -236,6 +236,12 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
           // en la incorporación automática, incluso si SQLite aún no las devuelve.
           const byId = new Map(tasks.map((task) => [task.id, task]));
           records.forEach((task) => byId.set(task.id, task));
+          // Evitar que un snapshot SQLite más antiguo sobrescriba el estado
+          // recién actualizado en memoria (incluido «Tratar con Rosa»).
+          tasks.forEach((task) => {
+            const stored = byId.get(task.id);
+            if (stored && task.updatedAt > stored.updatedAt) byId.set(task.id, task);
+          });
           return [...byId.values()];
         })()
         : tasks;
