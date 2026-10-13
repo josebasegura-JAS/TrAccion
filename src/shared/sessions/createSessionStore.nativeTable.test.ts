@@ -168,7 +168,7 @@ describe.each([
 
     expect(result.ok).toBe(true);
     expect(saver).toHaveBeenCalledTimes(1);
-    const savedCall = saver.mock.calls[0][0];
+    const savedCall = (saver as unknown as { mock: { calls: Array<[{ value: string }]> } }).mock.calls[0][0];
     const savedValue = JSON.parse(savedCall.value) as ManagedSession;
     expect(savedValue.items).toEqual(['task-1', 'task-2']);
   });
