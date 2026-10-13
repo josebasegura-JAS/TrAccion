@@ -90,11 +90,11 @@ export async function downloadHuelgaGroupedReport(fecha: string): Promise<void> 
         content = xml.replace(/<x15ac:absPath[^>]*\/>/g, '')
           .replace(/<calcPr\b[^>]*\/>/, '<calcPr calcId="191029" fullCalcOnLoad="1" forceFullCalc="1"/>');
       } else if (/^xl\/worksheets\/sheet\d+\.xml$/.test(path)) {
-        content = xml.replaceAll('17-03-26', shortDate).replaceAll('17/03/2026', longDate.replaceAll('-', '/'));
+        content = xml.replace(/17-03-26/g, shortDate).replace(/17\/03\/2026/g, longDate.replace(/-/g, '/'));
         // Fórmulas recalculadas al abrir: no presentar resultados antiguos.
         content = content.replace(/(<f(?:\s[^>]*)?>[\s\S]*?<\/f>)<v>[^<]*<\/v>/g, '$1<v/>');
       } else {
-        content = xml.replaceAll('17-03-26', shortDate).replaceAll('17-03-2026', longDate);
+        content = xml.replace(/17-03-26/g, shortDate).replace(/17-03-2026/g, longDate);
       }
     }
     zip.file(path, content);
