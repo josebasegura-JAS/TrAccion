@@ -23,6 +23,12 @@ describe('directionMeetingTasks', () => {
     expect(directionMeetingTasks([closed, deleted], ['cerrada', 'borrada'])).toEqual([]);
   });
 
+  it('genera puntos automáticamente sin marcarlos previamente para Dirección', () => {
+    const available = [task('rosa-fase', 'pendiente', 'Tratar con Rosa'), task('rosa-estado', 'Tratar con Rosa'), task('otra', 'pendiente')];
+    const pointTaskIds = directionMeetingTasks(available, []).map((item) => item.id);
+    expect(pointTaskIds).toEqual(['rosa-fase', 'rosa-estado']);
+  });
+
   it('normaliza mayúsculas y acentos', () => {
     expect(directionMeetingTasks([task('rosa', ' TRATAR CON ROSA ')], [])).toHaveLength(1);
   });
