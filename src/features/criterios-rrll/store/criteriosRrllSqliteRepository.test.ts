@@ -135,17 +135,20 @@ describe('criteriosRrllSqliteRepository', () => {
   });
 
   it('deleteCriterioRrllInSqlite marca deletedAt y reutiliza saveCriterioRrllToSqlite', async () => {
-    const saver = vi.fn(async () => ({
+    const saver = vi.fn(async (payload: { id: string; value: string; expectedUpdatedAt: string | null }) => ({
       ok: true,
       status: { ready: true, phase: 'active', message: 'SQLite activo' },
       message: 'Criterio eliminado.',
       currentUpdatedAt: '2026-06-19T00:00:00.000Z',
+      payload,
     }));
     Object.defineProperty(window, 'traccion', { configurable: true, value: { saveCriteriosRrllRecordIfUnchanged: saver } });
     const original = criterio({ id: 'criterio-4' });
     const result = await deleteCriterioRrllInSqlite(original, timestamp);
     expect(saver).toHaveBeenCalledTimes(1);
-    const callArg = saver.mock.calls[0][0];
+    const callArg = saver.mock.calls[0]?.[0];
+    expect(callArg).toBeDefined();
+    if (!callArg) throw new Error('Se esperaba una llamada a saveCriteriosRrllRecordIfUnchanged.');
     expect(callArg.id).toBe('criterio-4');
     expect(callArg.expectedUpdatedAt).toBe(timestamp);
     const sent = JSON.parse(callArg.value) as CriterioRrll;
