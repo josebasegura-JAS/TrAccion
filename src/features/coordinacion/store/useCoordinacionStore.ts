@@ -167,7 +167,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const marked = new Set(current.directionTaskIds);
     const now = new Date().toISOString();
     const points: CoordinationPoint[] = tasks
-      .filter((task) => marked.has(task.id) && activeTask(task))
+      .filter((task) => activeTask(task) && (marked.has(task.id) || task.estado.trim().toLocaleLowerCase('es') === 'tratar con rosa'))
       .map((task) => ({
         id: createCoordinationId('dir-point'),
         origin: 'task',
