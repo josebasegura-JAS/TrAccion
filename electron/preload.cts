@@ -346,6 +346,11 @@ contextBridge.exposeInMainWorld('traccionTaskWord', {
   selectDirectory: () => ipcRenderer.invoke('tasks:select-open-word-directory'),
   clearDirectory: () => ipcRenderer.invoke('tasks:clear-open-word-directory'),
   refresh: () => ipcRenderer.invoke('tasks:refresh-open-word'),
+  onBackupFailure: (listener: (message: string) => void) => {
+    const handler = (_event: IpcRendererEvent, message: string) => listener(message);
+    ipcRenderer.on('tasks:excel-backup-failed', handler);
+    return () => ipcRenderer.removeListener('tasks:excel-backup-failed', handler);
+  },
 });
 
 // Compatibilidad con el módulo Especiales de RRLL Dashboard y con builds intermedias.
