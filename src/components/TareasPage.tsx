@@ -239,6 +239,25 @@ function compareTaskAttention(first: Task, second: Task, today: string): number 
 }
 
 
+function taskLastFollowUp(task: Task): Date | null {
+  const timestamps = task.seguimiento
+    .map((entry) => new Date(entry.fechaHora).getTime())
+    .filter((timestamp) => Number.isFinite(timestamp));
+  if (timestamps.length === 0) return null;
+  return new Date(Math.max(...timestamps));
+}
+
+function taskFollowUpLabel(task: Task, now: number): { label: string; className: string } | null {
+  if (isTaskClosed(task) || task.estado === 'resuelta') return null;
+  const lastFollowUp = taskLastFollowUp(task);
+  if (!lastFollowUp) return { label: 'Sin seguimientos registrados', className: 'text-metro-muted' };
+  const elapsedDays = Math.max(0, Math.floor((now - lastFollowUp.getTime()) / 86_400_000));
+  if (elapsedDays >= 15) return { label: `Sin seguimiento desde hace ${elapsedDays} días`, className: 'text-red-600 dark:text-red-400' };
+  if (elapsedDays >= 7) return { label: `Último seguimiento hace ${elapsedDays} días`, className: 'text-amber-600 dark:text-amber-400' };
+  if (elapsedDays === 0) return { label: 'Seguimiento hoy', className: 'text-emerald-700 dark:text-emerald-400' };
+  return { label: `Seguimiento hace ${elapsedDays} día${elapsedDays === 1 ? '' : 's'}`, className: 'text-emerald-700 dark:text-emerald-400' };
+}
+
 const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnId> = {
   sort: null,
   columnWidths: {
@@ -505,7 +524,15 @@ export function TareasPage({
         id: 'titulo',
         header: 'Título',
         accessor: (task) => task.titulo,
-        render: (task) => task.titulo,
+        render: (task) => {
+          const activity = taskFollowUpLabel(task, Date.now());
+          return (
+            <div className="min-w-0">
+              <div className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</div>
+              {activity && <div className={`mt-0.5 truncate text-[11px] font-normal leading-4 ${activity.className}`} title={activity.label}>{activity.label}</div>}
+            </div>
+          );
+        },
         width: 265,
         minWidth: 180,
         maxWidth: 500,
