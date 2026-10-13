@@ -1,3 +1,4 @@
+import { saveExcelBackupWithRetry } from '../../../shared/export/saveExcelBackupWithRetry';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import type { ActividadExterna } from '../domain/actividadExterna';
 
@@ -79,11 +80,11 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
     const buffer = raw instanceof ArrayBuffer
       ? raw
       : new Uint8Array(raw).slice().buffer as ArrayBuffer;
-    const result = await window.traccion.saveOperationalExcelBackup({
+    const result = await saveExcelBackupWithRetry({
       directory, fileName: 'Actividades_Externas.xlsx',
       cleanupPrefix: 'Actividades_Externas', buffer,
     });
-    return result.ok ? null : `No se pudo actualizar el Excel espejo: ${result.message}`;
+    return result;
   } catch (error) {
     return `No se pudo actualizar el Excel espejo: ${error instanceof Error ? error.message : String(error)}`;
   }

@@ -1,3 +1,4 @@
+import { ExcelBackupRetryBanner } from './components/ExcelBackupRetryBanner';
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, LockKeyhole, RefreshCw, WifiOff } from 'lucide-react';
 import { AppUpdateChecker } from './components/AppUpdateChecker';
@@ -267,6 +268,7 @@ export function App() {
 
   return (
     <ToastProvider>
+    <ExcelBackupRetryBanner />
     <AppShellErrorBoundary>
       <TooltipLayer /><AppUpdateChecker />
       <div className="app-shell">

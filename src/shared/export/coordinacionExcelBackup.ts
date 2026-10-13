@@ -1,3 +1,4 @@
+import { saveExcelBackupWithRetry } from './saveExcelBackupWithRetry';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import type {
   CoordinationArea,
@@ -522,13 +523,13 @@ export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[
         .sort((a, b) => a.date.localeCompare(b.date));
       const workbook = createWorkbook(ExcelJS, definition, scopedMeetings, updatedAt);
       const raw = await workbook.xlsx.writeBuffer();
-      const result = await window.traccion.saveOperationalExcelBackup({
+      const result = await saveExcelBackupWithRetry({
         directory,
         fileName: definition.fileName,
         cleanupPrefix: definition.cleanupPrefix,
         buffer: toArrayBuffer(raw as ArrayBuffer | Uint8Array),
       });
-      if (!result.ok) failures.push(`${definition.fileName}: ${result.message}`);
+      if (result) failures.push(`${definition.fileName}: ${result}`);
     }
     return failures.length > 0
       ? `Datos guardados en TrAcción, pero no se han podido actualizar todos los Excel de Coordinación: ${failures.join(' | ')}`

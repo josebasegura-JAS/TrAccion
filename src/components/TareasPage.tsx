@@ -473,7 +473,16 @@ export function TareasPage({
         return;
       }
       if (!result.ok) {
-        await alert(result.message, { type: 'error' });
+        window.dispatchEvent(new CustomEvent('traccion:excel-backup-failure', {
+          detail: {
+            message: 'No se ha podido actualizar el Excel de tareas abiertas. Comprueba que esté cerrado y que la red esté disponible.',
+            retry: async () => {
+              const retried = await bridge.refresh();
+              if (!retried.ok) throw new Error(retried.message);
+              return true;
+            },
+          },
+        }));
         return;
       }
       await alert(result.message);
