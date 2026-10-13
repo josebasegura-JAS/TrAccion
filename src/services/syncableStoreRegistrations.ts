@@ -1,3 +1,4 @@
+import { useActividadesExternasStore } from '../features/actividades-externas/store/useActividadesExternasStore';
 import { useActasStore } from '../features/actas/store/useActasStore';
 import { useAyudaEscolarStore } from '../features/ayuda-escolar/store/useAyudaEscolarStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
@@ -82,6 +83,10 @@ registerSyncableStore({
 registerSyncableStore({
   id: 'criterios-rrll',
   reloadFromStorage: () => useCriteriosRrllStore.getState().reloadFromStorage(),
+});
+registerSyncableStore({
+  id: 'actividades-externas',
+  reloadFromStorage: () => useActividadesExternasStore.getState().load(),
 });
 registerSyncableStore({
   id: 'vinculograma',
