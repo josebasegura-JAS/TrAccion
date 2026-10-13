@@ -26,7 +26,7 @@ import {
  */
 describe('schemaMigrations', () => {
   let tempDir: string;
-  let db: Database.Database;
+  let db: InstanceType<typeof Database>;
 
   beforeEach(() => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'traccion-schema-test-'));

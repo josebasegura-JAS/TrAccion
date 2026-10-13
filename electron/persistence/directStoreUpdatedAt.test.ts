@@ -27,7 +27,7 @@ import {
  */
 describe('directStoreUpdatedAt', () => {
   let tempDir: string;
-  let db: Database.Database;
+  let db: InstanceType<typeof Database>;
 
   beforeEach(() => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'traccion-direct-store-test-'));

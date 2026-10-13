@@ -27,7 +27,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createSesionesRepository
   const db = buildDb();
 
   return {
-    safeDatabaseOperation: vi.fn(async (operation: () => unknown) => operation()),
+    safeDatabaseOperation: async <T>(operation: () => T) => operation(),
     getSqliteStatus: vi.fn(() => readyStatus),
     requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSesionesRepository>[0]['requireDatabase']>),
     isUpdatedAtRow: vi.fn((value: unknown): value is { updated_at: string } =>
@@ -64,7 +64,7 @@ describe('createSesionesRepository', () => {
   ])('$module', ({ load, save, backupReason }) => {
     it(`${load} devuelve lista vacía sin tocar la base si SQLite no está activo`, async () => {
       const deps = buildDeps({ getSqliteStatus: vi.fn(() => notReadyStatus) });
-      const repo = createSesionesRepository(deps);
+      const repo = createSesionesRepository(deps as Parameters<typeof createSesionesRepository>[0]);
 
       const result = await repo[load]();
 
@@ -74,7 +74,7 @@ describe('createSesionesRepository', () => {
 
     it(`${save} rechaza el guardado si el heartbeat bloquea la escritura`, async () => {
       const deps = buildDeps({ isDatabaseWriteBlockedByHeartbeat: vi.fn(() => true) });
-      const repo = createSesionesRepository(deps);
+      const repo = createSesionesRepository(deps as Parameters<typeof createSesionesRepository>[0]);
 
       const result = await repo[save]({ id: 'abc', value: '{}', expectedUpdatedAt: null });
 
@@ -87,7 +87,7 @@ describe('createSesionesRepository', () => {
       const deps = buildDeps({
         requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSesionesRepository>[0]['requireDatabase']>),
       });
-      const repo = createSesionesRepository(deps);
+      const repo = createSesionesRepository(deps as Parameters<typeof createSesionesRepository>[0]);
 
       const result = await repo[save]({
         id: 'abc',
@@ -105,7 +105,7 @@ describe('createSesionesRepository', () => {
       const deps = buildDeps({
         requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSesionesRepository>[0]['requireDatabase']>),
       });
-      const repo = createSesionesRepository(deps);
+      const repo = createSesionesRepository(deps as Parameters<typeof createSesionesRepository>[0]);
 
       const result = await repo[save]({ id: 'abc', value: '{}', expectedUpdatedAt: null });
 
@@ -117,7 +117,7 @@ describe('createSesionesRepository', () => {
 
   it('resetMigrationState existe, es invocable, y resetea los 3 flags a la vez', () => {
     const deps = buildDeps();
-    const { resetMigrationState } = createSesionesRepository(deps);
+    const { resetMigrationState } = createSesionesRepository(deps as Parameters<typeof createSesionesRepository>[0]);
 
     expect(() => resetMigrationState()).not.toThrow();
   });

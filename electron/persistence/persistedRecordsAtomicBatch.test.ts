@@ -28,7 +28,7 @@ async function createRepository() {
   `);
   const status = {
     ready: true,
-    engine: 'better-sqlite3',
+    engine: 'better-sqlite3' as const,
     phase: 'active' as const,
     path: databasePath,
     schemaVersion: 1,

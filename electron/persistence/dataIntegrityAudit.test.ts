@@ -16,7 +16,7 @@ import { CURRENT_SCHEMA_VERSION } from './schemaMigrations';
 describe('dataIntegrityAudit — auditoría de solo lectura', () => {
   let tempDir: string;
   let dbPath: string;
-  let db: Database.Database;
+  let db: InstanceType<typeof Database>;
 
   beforeEach(() => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'traccion-integrity-test-'));

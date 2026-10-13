@@ -26,7 +26,7 @@ import {
  */
 describe('recordLocks — funciones SQL puras sobre editing_locks', () => {
   let tempDir: string;
-  let db: Database.Database;
+  let db: InstanceType<typeof Database>;
 
   const ownerA: OwnerContext = { ownerId: 'owner-a', ownerName: 'Ana', hostname: 'PC-ANA' };
   const ownerB: OwnerContext = { ownerId: 'owner-b', ownerName: 'Bea', hostname: 'PC-BEA' };

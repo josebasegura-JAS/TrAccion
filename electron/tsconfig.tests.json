@@ -1,14 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
-  "include": [
-    "**/*.ts",
-    "**/*.cts",
-    "**/*.d.ts"
-  ],
-  "exclude": [
-    "preload.ts"
-  ]
+  "include": ["**/*.ts", "**/*.cts", "**/*.d.ts"],
+  "exclude": ["preload.ts"]
 }

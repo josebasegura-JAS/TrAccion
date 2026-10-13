@@ -31,8 +31,9 @@ describe('createPresupuestosRepository', () => {
     const deps = buildDeps();
     createPresupuestosRepository(asDeps(deps));
 
-    expect(deps.createJsonModuleRepository).toHaveBeenCalledTimes(4);
-    const calls = deps.createJsonModuleRepository.mock.calls;
+    const createRepositoryMock = deps.createJsonModuleRepository as ReturnType<typeof vi.fn>;
+    expect(createRepositoryMock).toHaveBeenCalledTimes(4);
+    const calls = createRepositoryMock.mock.calls;
     expect(calls.map((call) => call[0])).toEqual([
       'presupuesto_scenario_records',
       'presupuesto_manual_item_records',

@@ -27,7 +27,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createSorteosRepository>
   const db = buildDb();
 
   return {
-    safeDatabaseOperation: vi.fn(async (operation: () => unknown) => operation()),
+    safeDatabaseOperation: async <T>(operation: () => T) => operation(),
     getSqliteStatus: vi.fn(() => readyStatus),
     requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSorteosRepository>[0]['requireDatabase']>),
     readPersistedRecordByKey: vi.fn(() => null),
@@ -49,7 +49,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createSorteosRepository>
 describe('createSorteosRepository', () => {
   it('loadSorteosRecordsSnapshot devuelve listas vacías sin tocar la base si SQLite no está activo', async () => {
     const deps = buildDeps({ getSqliteStatus: vi.fn(() => notReadyStatus) });
-    const { loadSorteosRecordsSnapshot } = createSorteosRepository(deps);
+    const { loadSorteosRecordsSnapshot } = createSorteosRepository(deps as Parameters<typeof createSorteosRepository>[0]);
 
     const result = await loadSorteosRecordsSnapshot();
 
@@ -65,7 +65,7 @@ describe('createSorteosRepository', () => {
 
   it('saveSorteosSnapshotIfUnchanged rechaza el guardado si el heartbeat bloquea la escritura', async () => {
     const deps = buildDeps({ isDatabaseWriteBlockedByHeartbeat: vi.fn(() => true) });
-    const { saveSorteosSnapshotIfUnchanged } = createSorteosRepository(deps);
+    const { saveSorteosSnapshotIfUnchanged } = createSorteosRepository(deps as Parameters<typeof createSorteosRepository>[0]);
 
     const result = await saveSorteosSnapshotIfUnchanged({
       draws: [],
@@ -83,7 +83,7 @@ describe('createSorteosRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSorteosRepository>[0]['requireDatabase']>),
     });
-    const { saveSorteosSnapshotIfUnchanged } = createSorteosRepository(deps);
+    const { saveSorteosSnapshotIfUnchanged } = createSorteosRepository(deps as Parameters<typeof createSorteosRepository>[0]);
 
     const result = await saveSorteosSnapshotIfUnchanged({
       draws: [],
@@ -102,7 +102,7 @@ describe('createSorteosRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSorteosRepository>[0]['requireDatabase']>),
     });
-    const { saveSorteosSnapshotIfUnchanged } = createSorteosRepository(deps);
+    const { saveSorteosSnapshotIfUnchanged } = createSorteosRepository(deps as Parameters<typeof createSorteosRepository>[0]);
 
     const result = await saveSorteosSnapshotIfUnchanged({
       draws: [],
@@ -118,7 +118,7 @@ describe('createSorteosRepository', () => {
 
   it('resetMigrationState existe y es invocable (usado al cerrar/cambiar de base)', () => {
     const deps = buildDeps();
-    const { resetMigrationState } = createSorteosRepository(deps);
+    const { resetMigrationState } = createSorteosRepository(deps as Parameters<typeof createSorteosRepository>[0]);
 
     expect(() => resetMigrationState()).not.toThrow();
   });
@@ -129,14 +129,14 @@ describe('createSorteosRepository', () => {
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSorteosRepository>[0]['requireDatabase']>),
     });
 
-    const repoA = createSorteosRepository(deps);
+    const repoA = createSorteosRepository(deps as Parameters<typeof createSorteosRepository>[0]);
     await repoA.loadSorteosRecordsSnapshot();
     await repoA.loadSorteosRecordsSnapshot();
     // migrateSorteosArrayFromPersistedRecord se llama una vez por tabla (draws +
     // exclusions) solo la primera vez; la segunda carga no debería releer.
     expect(deps.readPersistedRecordByKey).toHaveBeenCalledTimes(2);
 
-    const repoB = createSorteosRepository(deps);
+    const repoB = createSorteosRepository(deps as Parameters<typeof createSorteosRepository>[0]);
     await repoB.loadSorteosRecordsSnapshot();
     // Un repositorio nuevo tiene su propio flag, así que sí vuelve a intentar migrar.
     expect(deps.readPersistedRecordByKey).toHaveBeenCalledTimes(4);

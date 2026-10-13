@@ -27,7 +27,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createTeletrabajoReposit
   const db = buildDb();
 
   return {
-    safeDatabaseOperation: vi.fn(async (operation: () => unknown) => operation()),
+    safeDatabaseOperation: async <T>(operation: () => T) => operation(),
     getSqliteStatus: vi.fn(() => readyStatus),
     requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTeletrabajoRepository>[0]['requireDatabase']>),
     isUpdatedAtRow: vi.fn((value: unknown): value is { updated_at: string } =>
@@ -44,7 +44,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createTeletrabajoReposit
 describe('createTeletrabajoRepository', () => {
   it('loadTeletrabajoRecordsSnapshot devuelve lista vacía sin tocar la base si SQLite no está activo', async () => {
     const deps = buildDeps({ getSqliteStatus: vi.fn(() => notReadyStatus) });
-    const { loadTeletrabajoRecordsSnapshot } = createTeletrabajoRepository(deps);
+    const { loadTeletrabajoRecordsSnapshot } = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     const result = await loadTeletrabajoRecordsSnapshot();
 
@@ -54,7 +54,7 @@ describe('createTeletrabajoRepository', () => {
 
   it('saveTeletrabajoRecordIfUnchanged rechaza el guardado si el heartbeat bloquea la escritura', async () => {
     const deps = buildDeps({ isDatabaseWriteBlockedByHeartbeat: vi.fn(() => true) });
-    const { saveTeletrabajoRecordIfUnchanged } = createTeletrabajoRepository(deps);
+    const { saveTeletrabajoRecordIfUnchanged } = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     const result = await saveTeletrabajoRecordIfUnchanged({ id: 'sol-1', value: '{}', expectedUpdatedAt: null });
 
@@ -67,7 +67,7 @@ describe('createTeletrabajoRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTeletrabajoRepository>[0]['requireDatabase']>),
     });
-    const { saveTeletrabajoRecordIfUnchanged } = createTeletrabajoRepository(deps);
+    const { saveTeletrabajoRecordIfUnchanged } = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     const result = await saveTeletrabajoRecordIfUnchanged({
       id: 'sol-1',
@@ -85,7 +85,7 @@ describe('createTeletrabajoRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTeletrabajoRepository>[0]['requireDatabase']>),
     });
-    const { saveTeletrabajoRecordIfUnchanged } = createTeletrabajoRepository(deps);
+    const { saveTeletrabajoRecordIfUnchanged } = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     const result = await saveTeletrabajoRecordIfUnchanged({ id: 'sol-1', value: '{}', expectedUpdatedAt: null });
 
@@ -96,7 +96,7 @@ describe('createTeletrabajoRepository', () => {
 
   it('saveTeletrabajoRecordsIfUnchanged no hace nada si la lista está vacía', async () => {
     const deps = buildDeps();
-    const { saveTeletrabajoRecordsIfUnchanged } = createTeletrabajoRepository(deps);
+    const { saveTeletrabajoRecordsIfUnchanged } = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     const result = await saveTeletrabajoRecordsIfUnchanged([]);
 
@@ -109,7 +109,7 @@ describe('createTeletrabajoRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTeletrabajoRepository>[0]['requireDatabase']>),
     });
-    const { saveTeletrabajoRecordsIfUnchanged } = createTeletrabajoRepository(deps);
+    const { saveTeletrabajoRecordsIfUnchanged } = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     const result = await saveTeletrabajoRecordsIfUnchanged([
       { id: 'sol-1', value: '{}', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' },
@@ -125,7 +125,7 @@ describe('createTeletrabajoRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTeletrabajoRepository>[0]['requireDatabase']>),
     });
-    const { saveTeletrabajoRecordsIfUnchanged } = createTeletrabajoRepository(deps);
+    const { saveTeletrabajoRecordsIfUnchanged } = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     const result = await saveTeletrabajoRecordsIfUnchanged([
       { id: 'sol-1', value: '{}', expectedUpdatedAt: null },
@@ -140,7 +140,7 @@ describe('createTeletrabajoRepository', () => {
 
   it('resetMigrationState existe y es invocable (usado al cerrar/cambiar de base)', () => {
     const deps = buildDeps();
-    const { resetMigrationState } = createTeletrabajoRepository(deps);
+    const { resetMigrationState } = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     expect(() => resetMigrationState()).not.toThrow();
   });
@@ -151,8 +151,8 @@ describe('createTeletrabajoRepository', () => {
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTeletrabajoRepository>[0]['requireDatabase']>),
     });
 
-    const repoA = createTeletrabajoRepository(deps);
-    const repoB = createTeletrabajoRepository(deps);
+    const repoA = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
+    const repoB = createTeletrabajoRepository(deps as Parameters<typeof createTeletrabajoRepository>[0]);
 
     await expect(repoA.loadTeletrabajoRecordsSnapshot()).resolves.toEqual({ status: readyStatus, records: [] });
     await expect(repoB.loadTeletrabajoRecordsSnapshot()).resolves.toEqual({ status: readyStatus, records: [] });
