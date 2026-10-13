@@ -49,6 +49,28 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     expect(useCoordinacionStore.getState().meetings[0].points.map((point) => point.taskId)).toEqual(['t-1', 't-2']);
   });
 
+  it('incorpora automáticamente dos tareas en estado Tratar con Rosa como puntos de Dirección y las persiste', async () => {
+    const tasks = [
+      { ...task('rosa-1', 'Plantilla'), estado: 'Tratar con Rosa' },
+      { ...task('rosa-2', 'Calendario'), estado: 'tratar con rosa' },
+      { ...task('control', 'No corresponde'), estado: 'pendiente' },
+    ];
+    const created = await useCoordinacionStore.getState().createDirectionMeeting(
+      '2026-10-13', 'Reunión de Dirección', tasks,
+    );
+
+    expect(created.ok).toBe(true);
+    const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
+    expect(meeting?.points.map((point) => ({ taskId: point.taskId, origin: point.origin, status: point.status }))).toEqual([
+      { taskId: 'rosa-1', origin: 'task', status: 'pendiente' },
+      { taskId: 'rosa-2', origin: 'task', status: 'pendiente' },
+    ]);
+    useCoordinacionStore.setState({ ...EMPTY_COORDINATION_STATE });
+    useCoordinacionStore.getState().load();
+    const restored = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
+    expect(restored?.points.map((point) => point.taskId)).toEqual(['rosa-1', 'rosa-2']);
+  });
+
   it('exige y conserva un título identificativo en las nuevas reuniones', async () => {
     const tasks = [task('t-title', 'Asunto', '')];
     const rejected = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-05', '   ', tasks);
