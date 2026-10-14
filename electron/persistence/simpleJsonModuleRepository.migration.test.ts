@@ -61,8 +61,8 @@ describe('simpleJsonModuleRepository migration/read separation', () => {
         setMigrationDone: (value) => { migrationDone = value; },
       },
       {
-        safeDatabaseOperation: safeReads,
-        safeDatabaseMigrationOperation: safeMigrations,
+        safeDatabaseOperation: safeReads as Parameters<typeof createSimpleJsonModuleRepository>[1]['safeDatabaseOperation'],
+        safeDatabaseMigrationOperation: safeMigrations as Parameters<typeof createSimpleJsonModuleRepository>[1]['safeDatabaseMigrationOperation'],
         getSqliteStatus: () => status,
         requireDatabase: () => db,
         isUpdatedAtRow: (row): row is { updated_at: string } =>
@@ -106,7 +106,7 @@ describe('simpleJsonModuleRepository migration/read separation', () => {
       },
       {
         safeDatabaseOperation: async <T>(operation: () => T) => operation(),
-        safeDatabaseMigrationOperation: safeMigrations,
+        safeDatabaseMigrationOperation: safeMigrations as Parameters<typeof createSimpleJsonModuleRepository>[1]['safeDatabaseMigrationOperation'],
         getSqliteStatus: () => currentStatus,
         requireDatabase: () => currentDb,
         isUpdatedAtRow: (row): row is { updated_at: string } =>

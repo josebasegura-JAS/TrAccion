@@ -17,7 +17,7 @@ function buildDb(overrides: { get?: unknown; all?: unknown[]; runChanges?: numbe
   const get = vi.fn(() => overrides.get ?? { count: 0 });
   const all = vi.fn(() => overrides.all ?? []);
   const run = vi.fn(() => ({ changes: overrides.runChanges ?? 1 }));
-  const prepare = vi.fn(() => ({ get, all, run }));
+  const prepare = vi.fn((sql: string) => { void sql; return { get, all, run }; });
   const transaction = vi.fn((fn: () => unknown) => () => fn());
 
   return { get, all, run, prepare, transaction };
@@ -27,7 +27,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createTaskRepository>[0]
   const db = buildDb();
 
   return {
-    safeDatabaseOperation: vi.fn(async (operation: () => unknown) => operation()),
+    safeDatabaseOperation: async <T>(operation: () => T) => operation(),
     getSqliteStatus: vi.fn(() => readyStatus),
     requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
     readPersistedRecordByKey: vi.fn(() => null),
@@ -52,7 +52,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createTaskRepository>[0]
 describe('createTaskRepository', () => {
   it('loadTaskRecordsSnapshot devuelve lista vacía sin tocar la base si SQLite no está activo', async () => {
     const deps = buildDeps({ getSqliteStatus: vi.fn(() => notReadyStatus) });
-    const { loadTaskRecordsSnapshot } = createTaskRepository(deps);
+    const { loadTaskRecordsSnapshot } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
 
     const result = await loadTaskRecordsSnapshot();
 
@@ -62,7 +62,7 @@ describe('createTaskRepository', () => {
 
   it('saveTaskRecordIfUnchanged rechaza el guardado si el heartbeat bloquea la escritura', async () => {
     const deps = buildDeps({ isDatabaseWriteBlockedByHeartbeat: vi.fn(() => true) });
-    const { saveTaskRecordIfUnchanged } = createTaskRepository(deps);
+    const { saveTaskRecordIfUnchanged } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
 
     const result = await saveTaskRecordIfUnchanged({ id: 'abc', value: '{}', expectedUpdatedAt: null });
 
@@ -75,7 +75,7 @@ describe('createTaskRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
     });
-    const { saveTaskRecordIfUnchanged } = createTaskRepository(deps);
+    const { saveTaskRecordIfUnchanged } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
 
     const result = await saveTaskRecordIfUnchanged({
       id: 'abc',
@@ -93,7 +93,7 @@ describe('createTaskRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
     });
-    const { saveTaskRecordIfUnchanged } = createTaskRepository(deps);
+    const { saveTaskRecordIfUnchanged } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
 
     const result = await saveTaskRecordIfUnchanged({ id: 'abc', value: '{}', expectedUpdatedAt: null });
 
@@ -107,7 +107,7 @@ describe('createTaskRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
     });
-    const { loadTaskRecordsSnapshot } = createTaskRepository(deps);
+    const { loadTaskRecordsSnapshot } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
 
     await loadTaskRecordsSnapshot({ mode: 'active' });
 
@@ -117,7 +117,7 @@ describe('createTaskRepository', () => {
 
   it('resetMigrationState existe y es invocable (usado al cerrar/cambiar de base)', () => {
     const deps = buildDeps();
-    const { resetMigrationState } = createTaskRepository(deps);
+    const { resetMigrationState } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
 
     expect(() => resetMigrationState()).not.toThrow();
   });
@@ -128,12 +128,12 @@ describe('createTaskRepository', () => {
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
     });
 
-    const repoA = createTaskRepository(deps);
+    const repoA = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
     await repoA.loadTaskRecordsSnapshot();
     await repoA.loadTaskRecordsSnapshot();
     expect(deps.readPersistedRecordByKey).toHaveBeenCalledTimes(1);
 
-    const repoB = createTaskRepository(deps);
+    const repoB = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
     await repoB.loadTaskRecordsSnapshot();
     expect(deps.readPersistedRecordByKey).toHaveBeenCalledTimes(2);
   });

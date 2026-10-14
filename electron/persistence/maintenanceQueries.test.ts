@@ -32,7 +32,7 @@ import {
  */
 describe('maintenanceQueries — funciones SQL puras', () => {
   let tempDir: string;
-  let db: Database.Database;
+  let db: InstanceType<typeof Database>;
 
   beforeEach(() => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'traccion-sqlite-test-'));
@@ -107,7 +107,7 @@ describe('maintenanceQueries — funciones SQL puras', () => {
       }
       db.exec('COMMIT');
 
-      const dbPath = db.name;
+      const dbPath = (db as unknown as { name: string }).name;
       const sizeBeforePrune = statSync(dbPath).size;
 
       pruneLocalStorageBackups(db);

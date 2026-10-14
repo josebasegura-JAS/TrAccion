@@ -4,7 +4,7 @@ import { createLicenciaSinSueldoRepository } from './licenciaSinSueldoRepository
 describe('createLicenciaSinSueldoRepository', () => {
   it('llama a createJsonModuleRepository con la tabla, key legacy y label correctos', () => {
     const repository = { loadSnapshot: vi.fn(), saveIfUnchanged: vi.fn(), saveManyIfUnchanged: vi.fn() };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     createLicenciaSinSueldoRepository(createJsonModuleRepository);
 
@@ -16,13 +16,13 @@ describe('createLicenciaSinSueldoRepository', () => {
   });
 
   it('loadLicenciaSinSueldoRecordsSnapshot delega en repository.loadSnapshot', async () => {
-    const snapshot = { status: { ready: true, engine: 'sqlite', phase: 'active' }, records: [] };
+    const snapshot = { status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' }, records: [] };
     const repository = {
       loadSnapshot: vi.fn(async () => snapshot),
       saveIfUnchanged: vi.fn(),
       saveManyIfUnchanged: vi.fn(),
     };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     const { loadLicenciaSinSueldoRecordsSnapshot } = createLicenciaSinSueldoRepository(
       createJsonModuleRepository,
@@ -36,7 +36,7 @@ describe('createLicenciaSinSueldoRepository', () => {
   it('saveLicenciaSinSueldoRecordIfUnchanged delega en repository.saveIfUnchanged con el mismo registro', async () => {
     const saveResult = {
       ok: true,
-      status: { ready: true, engine: 'sqlite', phase: 'active' },
+      status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' },
       currentUpdatedAt: '2026-01-01',
       message: 'ok',
     };
@@ -45,7 +45,7 @@ describe('createLicenciaSinSueldoRepository', () => {
       saveIfUnchanged: vi.fn(async () => saveResult),
       saveManyIfUnchanged: vi.fn(),
     };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     const { saveLicenciaSinSueldoRecordIfUnchanged } = createLicenciaSinSueldoRepository(
       createJsonModuleRepository,
@@ -73,6 +73,6 @@ describe('createLicenciaSinSueldoRepository', () => {
 
     createLicenciaSinSueldoRepository(createJsonModuleRepository);
 
-    expect(capturedGetMigrationDone?.()).toBe(false);
+    expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(false);
   });
 });

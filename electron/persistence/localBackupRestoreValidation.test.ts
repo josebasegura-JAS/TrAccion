@@ -102,7 +102,7 @@ describe('localBackupService - validación previa de restauración SQLite', () =
       isLockContentionError: () => false,
       readAllPersistedRecords: () => [],
       migrateLocalStorageSnapshot: async () => activeStatus(targetDatabasePath),
-      withDatabaseOperationLock,
+      withDatabaseOperationLock: withDatabaseOperationLock as LocalBackupServiceDependencies['withDatabaseOperationLock'],
       backupExistingDatabase,
       closeDatabaseAndReleaseLock,
       activateDatabase,

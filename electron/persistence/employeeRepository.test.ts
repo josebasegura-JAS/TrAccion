@@ -27,7 +27,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createEmployeeRepository
   const db = buildDb();
 
   return {
-    safeDatabaseOperation: vi.fn(async (operation: () => unknown) => operation()),
+    safeDatabaseOperation: async <T>(operation: () => T) => operation(),
     getSqliteStatus: vi.fn(() => readyStatus),
     requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createEmployeeRepository>[0]['requireDatabase']>),
     readPersistedRecordByKey: vi.fn(() => null),
@@ -45,7 +45,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createEmployeeRepository
 describe('createEmployeeRepository', () => {
   it('loadEmployeeRecordsSnapshot devuelve lista vacía sin tocar la base si SQLite no está activo', async () => {
     const deps = buildDeps({ getSqliteStatus: vi.fn(() => notReadyStatus) });
-    const { loadEmployeeRecordsSnapshot } = createEmployeeRepository(deps);
+    const { loadEmployeeRecordsSnapshot } = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
 
     const result = await loadEmployeeRecordsSnapshot();
 
@@ -55,7 +55,7 @@ describe('createEmployeeRepository', () => {
 
   it('saveEmployeeRecordIfUnchanged rechaza el guardado si el heartbeat bloquea la escritura', async () => {
     const deps = buildDeps({ isDatabaseWriteBlockedByHeartbeat: vi.fn(() => true) });
-    const { saveEmployeeRecordIfUnchanged } = createEmployeeRepository(deps);
+    const { saveEmployeeRecordIfUnchanged } = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
 
     const result = await saveEmployeeRecordIfUnchanged({ id: '100', value: '{}', expectedValue: null });
 
@@ -68,7 +68,7 @@ describe('createEmployeeRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createEmployeeRepository>[0]['requireDatabase']>),
     });
-    const { saveEmployeeRecordIfUnchanged } = createEmployeeRepository(deps);
+    const { saveEmployeeRecordIfUnchanged } = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
 
     const result = await saveEmployeeRecordIfUnchanged({
       id: '100',
@@ -86,7 +86,7 @@ describe('createEmployeeRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createEmployeeRepository>[0]['requireDatabase']>),
     });
-    const { saveEmployeeRecordIfUnchanged } = createEmployeeRepository(deps);
+    const { saveEmployeeRecordIfUnchanged } = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
 
     const result = await saveEmployeeRecordIfUnchanged({ id: '100', value: '{"nombre":"nuevo"}', expectedValue: null });
 
@@ -100,7 +100,7 @@ describe('createEmployeeRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createEmployeeRepository>[0]['requireDatabase']>),
     });
-    const { saveEmployeeRecordsIfUnchanged } = createEmployeeRepository(deps);
+    const { saveEmployeeRecordsIfUnchanged } = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
 
     const result = await saveEmployeeRecordsIfUnchanged([
       { id: '100', value: '{"nombre":"nuevo"}', expectedValue: '{"nombre":"viejo"}' },
@@ -159,7 +159,7 @@ describe('createEmployeeRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createEmployeeRepository>[0]['requireDatabase']>),
     });
-    const { saveEmployeeRecordsIfUnchanged } = createEmployeeRepository(deps);
+    const { saveEmployeeRecordsIfUnchanged } = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
 
     const result = await saveEmployeeRecordsIfUnchanged([
       { id: '100', value: hydratedSnapshot, expectedValue: hydratedSnapshot },
@@ -175,7 +175,7 @@ describe('createEmployeeRepository', () => {
     const deps = buildDeps({
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createEmployeeRepository>[0]['requireDatabase']>),
     });
-    const { saveEmployeeRecordsIfUnchanged } = createEmployeeRepository(deps);
+    const { saveEmployeeRecordsIfUnchanged } = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
 
     const result = await saveEmployeeRecordsIfUnchanged([
       { id: '100', value: '{"nombre":"nuevo"}', expectedValue: null },
@@ -188,7 +188,7 @@ describe('createEmployeeRepository', () => {
 
   it('resetMigrationState existe y es invocable (usado al cerrar/cambiar de base)', () => {
     const deps = buildDeps();
-    const { resetMigrationState } = createEmployeeRepository(deps);
+    const { resetMigrationState } = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
 
     expect(() => resetMigrationState()).not.toThrow();
   });
@@ -199,12 +199,12 @@ describe('createEmployeeRepository', () => {
       requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createEmployeeRepository>[0]['requireDatabase']>),
     });
 
-    const repoA = createEmployeeRepository(deps);
+    const repoA = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
     await repoA.loadEmployeeRecordsSnapshot();
     await repoA.loadEmployeeRecordsSnapshot();
     expect(deps.readPersistedRecordByKey).toHaveBeenCalledTimes(1);
 
-    const repoB = createEmployeeRepository(deps);
+    const repoB = createEmployeeRepository(deps as Parameters<typeof createEmployeeRepository>[0]);
     await repoB.loadEmployeeRecordsSnapshot();
     expect(deps.readPersistedRecordByKey).toHaveBeenCalledTimes(2);
   });

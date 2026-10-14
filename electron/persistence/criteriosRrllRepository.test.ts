@@ -3,14 +3,14 @@ import { createCriteriosRrllRepository } from './criteriosRrllRepository';
 
 describe('createCriteriosRrllRepository', () => {
   it('configura la tabla, key legacy y label correctos, y expone las 3 funciones con el nombre esperado', async () => {
-    const snapshot = { status: { ready: true, engine: 'sqlite', phase: 'active' }, records: [] };
-    const batchResult = { ok: true, status: { ready: true, engine: 'sqlite', phase: 'active' }, results: [], message: 'ok' };
+    const snapshot = { status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' }, records: [] };
+    const batchResult = { ok: true, status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' }, results: [], message: 'ok' };
     const repository = {
       loadSnapshot: vi.fn(async () => snapshot),
       saveIfUnchanged: vi.fn(),
       saveManyIfUnchanged: vi.fn(async () => batchResult),
     };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     const api = createCriteriosRrllRepository(createJsonModuleRepository);
 

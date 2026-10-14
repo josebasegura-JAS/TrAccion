@@ -36,8 +36,8 @@ describe('sqliteConnection — openSqliteDatabase', () => {
       db = openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 });
     }).not.toThrow();
 
-    expect(readCurrentSchemaVersion(db)).toBe(CURRENT_SCHEMA_VERSION);
-    db.close();
+    expect(readCurrentSchemaVersion(db!)).toBe(CURRENT_SCHEMA_VERSION);
+    db!.close();
   });
 
   it('reabre sin errores una base de datos ya existente y migrada', () => {
@@ -49,7 +49,7 @@ describe('sqliteConnection — openSqliteDatabase', () => {
       reopened = openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 });
     }).not.toThrow();
 
-    expect(readCurrentSchemaVersion(reopened)).toBe(CURRENT_SCHEMA_VERSION);
-    reopened.close();
+    expect(readCurrentSchemaVersion(reopened!)).toBe(CURRENT_SCHEMA_VERSION);
+    reopened!.close();
   });
 });

@@ -11,7 +11,7 @@ import { createVinculogramaRepository } from './vinculogramaRepository';
 describe('createVinculogramaRepository', () => {
   it('llama a createJsonModuleRepository con la tabla, key legacy y label correctos', () => {
     const repository = { loadSnapshot: vi.fn(), saveIfUnchanged: vi.fn(), saveManyIfUnchanged: vi.fn() };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     createVinculogramaRepository(createJsonModuleRepository);
 
@@ -41,19 +41,19 @@ describe('createVinculogramaRepository', () => {
 
     createVinculogramaRepository(createJsonModuleRepository);
 
-    expect(capturedGetMigrationDone?.()).toBe(false);
-    capturedSetMigrationDone?.(true);
-    expect(capturedGetMigrationDone?.()).toBe(true);
+    expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(false);
+    (capturedSetMigrationDone as unknown as (value: boolean) => void)(true);
+    expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(true);
   });
 
   it('loadVinculogramaRecordsSnapshot delega en repository.loadSnapshot', async () => {
-    const snapshot = { status: { ready: true, engine: 'sqlite', phase: 'active' }, records: [] };
+    const snapshot = { status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' }, records: [] };
     const repository = {
       loadSnapshot: vi.fn(async () => snapshot),
       saveIfUnchanged: vi.fn(),
       saveManyIfUnchanged: vi.fn(),
     };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     const { loadVinculogramaRecordsSnapshot } = createVinculogramaRepository(createJsonModuleRepository);
     const result = await loadVinculogramaRecordsSnapshot();
@@ -63,13 +63,13 @@ describe('createVinculogramaRepository', () => {
   });
 
   it('saveVinculogramaRecordIfUnchanged delega en repository.saveIfUnchanged con el mismo registro', async () => {
-    const saveResult = { ok: true, status: { ready: true, engine: 'sqlite', phase: 'active' }, currentUpdatedAt: '2026-01-01', message: 'ok' };
+    const saveResult = { ok: true, status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' }, currentUpdatedAt: '2026-01-01', message: 'ok' };
     const repository = {
       loadSnapshot: vi.fn(),
       saveIfUnchanged: vi.fn(async () => saveResult),
       saveManyIfUnchanged: vi.fn(),
     };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     const { saveVinculogramaRecordIfUnchanged } = createVinculogramaRepository(createJsonModuleRepository);
     const record = { id: 'abc', value: '{}', expectedUpdatedAt: null };

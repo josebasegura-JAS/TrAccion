@@ -29,7 +29,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
 
   it('rechaza un payload inválido sin llegar a tocar la base', async () => {
     const dependencies = buildDependencies();
-    const service = createRecordLockService(dependencies);
+    const service = createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0]);
 
     const result = await service.acquireRecordLock({ module: '', recordId: '' });
 
@@ -40,7 +40,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
 
   it('devuelve error cuando la base no está lista (ready:false)', async () => {
     const dependencies = buildDependencies({ ready: false });
-    const service = createRecordLockService(dependencies);
+    const service = createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0]);
 
     const result = await service.acquireRecordLock({ module: 'teletrabajo', recordId: 'sol-1' });
 
@@ -50,7 +50,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
 
   it('devuelve error cuando la fase es "locked"', async () => {
     const dependencies = buildDependencies({ phase: 'locked' });
-    const service = createRecordLockService(dependencies);
+    const service = createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0]);
 
     const result = await service.heartbeatRecordLock({ module: 'actas', recordId: 'acta-1' });
 
@@ -60,7 +60,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
 
   it('delega en acquireRecordLockInTransaction con el contexto del propietario actual', async () => {
     const dependencies = buildDependencies();
-    const service = createRecordLockService(dependencies);
+    const service = createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0]);
     const spy = vi
       .spyOn(recordLocksModule, 'acquireRecordLockInTransaction')
       .mockReturnValue({ ok: true, status: 'acquired', lock: null, message: 'ok' });
@@ -79,7 +79,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
 
   it('convierte una excepción inesperada en un RecordLockResult con mensaje', async () => {
     const dependencies = buildDependencies();
-    const service = createRecordLockService(dependencies);
+    const service = createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0]);
     const spy = vi
       .spyOn(recordLocksModule, 'releaseRecordLockInTransaction')
       .mockImplementation(() => {
@@ -96,7 +96,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
 
   it('usa la ruta de base de datos actual como clave del lock de operación', async () => {
     const dependencies = buildDependencies();
-    const service = createRecordLockService(dependencies);
+    const service = createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0]);
     vi.spyOn(recordLocksModule, 'getRecordLockInTransaction').mockReturnValue({
       ok: true,
       status: 'idle',

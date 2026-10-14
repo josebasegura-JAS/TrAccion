@@ -35,9 +35,9 @@ describe('nombre local estable del ejecutable', () => {
   });
 
   it('instala la nueva versión en la misma carpeta que el ejecutable arrancado', () => {
-    const current = path.win32.join('C:\\', 'Users', 'usuario', 'Desktop', 'Traccion 1.1.exe');
-    expect(path.win32.normalize(buildInstalledExecutablePath(current, '1.1.82') ?? '')).toBe(
-      path.win32.join('C:\\', 'Users', 'usuario', 'Desktop', 'Traccion 1.1.exe'),
+    const current = path.join('Users', 'usuario', 'Desktop', 'Traccion 1.1.exe');
+    expect(buildInstalledExecutablePath(current, '1.1.82')).toBe(
+      path.join('Users', 'usuario', 'Desktop', 'Traccion 1.1.exe'),
     );
   });
 

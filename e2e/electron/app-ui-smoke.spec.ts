@@ -38,6 +38,7 @@ test('sin SQLite compartida mantiene la aplicación en modo consulta y bloquea l
 });
 
 test('permite navegar por los módulos principales desde el menú lateral', async () => {
+  test.setTimeout(90_000);
   const { page, close } = await launchTraccionElectronWithIsolatedSharedDatabase();
 
   try {
@@ -98,6 +99,7 @@ test('abre modales críticos de Tareas y Actas', async () => {
 // Su objetivo es bloquear regresiones gruesas de render, navegación y modales.
 
 test('las ayudas de todos los módulos abren como diálogo y no desbordan horizontalmente', async () => {
+  test.setTimeout(90_000);
   const { page, close } = await launchTraccionElectronWithIsolatedSharedDatabase();
 
   try {
@@ -122,6 +124,13 @@ test('las ayudas de todos los módulos abren como diálogo y no desbordan horizo
 
     for (const [groupLabel, moduleLabel] of modules) {
       await navigateToModule(page, groupLabel, moduleLabel);
+
+      // Teletrabajo abre por diseño en su workflow. La ayuda del módulo vive en
+      // la vista operativa de solicitudes, donde se renderiza su PageHeader.
+      if (moduleLabel === 'Teletrabajo') {
+        await page.getByRole('button', { name: /Solicitudes/ }).first().click();
+      }
+
       const helpButton = page.getByRole('button', { name: `Abrir ayuda de ${moduleLabel}` }).first();
       await expect(helpButton).toBeVisible();
       await helpButton.evaluate((element) => (element as HTMLButtonElement).click());

@@ -175,7 +175,7 @@ describe('localBackupService - cierre sin backup redundante', () => {
     await acquireStarted;
     expect(acquireLock).toHaveBeenCalledTimes(1);
 
-    releaseLockAttempt?.();
+    (releaseLockAttempt as unknown as () => void)();
     const metrics = await shutdownPromise;
 
     expect(metrics.totalMs).toBe(0);

@@ -4,7 +4,7 @@ import { createBatchDomainRepository, createSimpleDomainRepository } from './sim
 describe('createSimpleDomainRepository', () => {
   it('llama a createJsonModuleRepository con la tabla, key legacy y label dados', () => {
     const repository = { loadSnapshot: vi.fn(), saveIfUnchanged: vi.fn(), saveManyIfUnchanged: vi.fn() };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     createSimpleDomainRepository(createJsonModuleRepository, 'mi_tabla', 'mi.legacy.key', 'Mi módulo');
 
@@ -34,17 +34,17 @@ describe('createSimpleDomainRepository', () => {
 
     const api = createSimpleDomainRepository(createJsonModuleRepository, 't', 'k', 'L');
 
-    expect(capturedGetMigrationDone?.()).toBe(false);
-    capturedSetMigrationDone?.(true);
-    expect(capturedGetMigrationDone?.()).toBe(true);
+    expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(false);
+    (capturedSetMigrationDone as unknown as (value: boolean) => void)(true);
+    expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(true);
     expect(Object.keys(api)).toEqual(['loadSnapshot', 'saveIfUnchanged']);
   });
 
   it('loadSnapshot y saveIfUnchanged delegan en el repositorio devuelto por createJsonModuleRepository', async () => {
-    const snapshot = { status: { ready: true, engine: 'sqlite', phase: 'active' }, records: [] };
+    const snapshot = { status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' }, records: [] };
     const saveResult = {
       ok: true,
-      status: { ready: true, engine: 'sqlite', phase: 'active' },
+      status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' },
       currentUpdatedAt: '2026-01-01',
       message: 'ok',
     };
@@ -53,7 +53,7 @@ describe('createSimpleDomainRepository', () => {
       saveIfUnchanged: vi.fn(async () => saveResult),
       saveManyIfUnchanged: vi.fn(),
     };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     const api = createSimpleDomainRepository(createJsonModuleRepository, 't', 'k', 'L');
     const record = { id: '1', value: '{}', expectedUpdatedAt: null };
@@ -139,16 +139,16 @@ describe('createSimpleDomainRepository', () => {
 
 describe('createBatchDomainRepository', () => {
   it('expone loadSnapshot, saveIfUnchanged y saveManyIfUnchanged, todos delegando en el repositorio', async () => {
-    const snapshot = { status: { ready: true, engine: 'sqlite', phase: 'active' }, records: [] };
+    const snapshot = { status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' }, records: [] };
     const saveResult = {
       ok: true,
-      status: { ready: true, engine: 'sqlite', phase: 'active' },
+      status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' },
       currentUpdatedAt: '2026-01-01',
       message: 'ok',
     };
     const batchResult = {
       ok: true,
-      status: { ready: true, engine: 'sqlite', phase: 'active' },
+      status: { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' },
       results: [],
       message: '2 registros guardados.',
     };
@@ -157,7 +157,7 @@ describe('createBatchDomainRepository', () => {
       saveIfUnchanged: vi.fn(async () => saveResult),
       saveManyIfUnchanged: vi.fn(async () => batchResult),
     };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     const api = createBatchDomainRepository(createJsonModuleRepository, 't', 'k', 'L');
     const record = { id: '1', value: '{}', expectedUpdatedAt: null };
@@ -171,7 +171,7 @@ describe('createBatchDomainRepository', () => {
 
   it('llama a createJsonModuleRepository con la tabla, key legacy y label dados', () => {
     const repository = { loadSnapshot: vi.fn(), saveIfUnchanged: vi.fn(), saveManyIfUnchanged: vi.fn() };
-    const createJsonModuleRepository = vi.fn(() => repository);
+    const createJsonModuleRepository = vi.fn<(tableName: string, legacyKey: string, moduleLabel: string, getMigrationDone: () => boolean, setMigrationDone: (value: boolean) => void) => typeof repository>(() => repository);
 
     createBatchDomainRepository(createJsonModuleRepository, 'mi_tabla_batch', 'mi.legacy.batch', 'Mi módulo batch');
 
@@ -197,7 +197,7 @@ describe('createBatchDomainRepository', () => {
 
     createBatchDomainRepository(createJsonModuleRepository, 't', 'k', 'L');
 
-    expect(capturedGetMigrationDone?.()).toBe(false);
+    expect((capturedGetMigrationDone as unknown as () => boolean)()).toBe(false);
   });
 
   it('invalida también la caché antes del guardado batch al cambiar de base', async () => {
@@ -228,8 +228,8 @@ describe('createBatchDomainRepository', () => {
     );
 
     const api = createBatchDomainRepository(createJsonModuleRepository, 't', 'k', 'L');
-    setMigrationDoneRef?.(true);
-    expect(getMigrationDoneRef?.()).toBe(true);
+    (setMigrationDoneRef as unknown as (value: boolean) => void)(true);
+    expect((getMigrationDoneRef as unknown as () => boolean)()).toBe(true);
 
     await api.saveManyIfUnchanged([{ id: '1', value: '{}', expectedUpdatedAt: null }]);
 

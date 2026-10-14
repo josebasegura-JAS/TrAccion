@@ -79,7 +79,7 @@ describe('useTicketRestauranteStore reloadFromStorage (estabilidad multiusuario)
 });
 
 describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () => {
-  function buildSqliteRecord(value: unknown, updatedAt: string) {
+  function buildSqliteRecord(value: unknown, updatedAt: string): { id: string; value: string; createdAt: string; updatedAt: string; deletedAt: string | null } {
     return {
       id:
         (value as { id?: string; empleado?: string }).id ??
@@ -314,7 +314,7 @@ describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () =
 });
 
 describe('useTicketRestauranteStore — absences y config con repositorio SQLite simulado (OCC)', () => {
-  function buildSqliteRecord(value: unknown, updatedAt: string) {
+  function buildSqliteRecord(value: unknown, updatedAt: string): { id: string; value: string; createdAt: string; updatedAt: string; deletedAt: string | null } {
     return {
       id: (value as { id: string }).id,
       value: JSON.stringify(value),
@@ -600,7 +600,7 @@ describe('useTicketRestauranteStore — absences y config con repositorio SQLite
 });
 
 describe('useTicketRestauranteStore — manutenciones con repositorio SQLite simulado (OCC)', () => {
-  function buildSqliteRecord(value: unknown, updatedAt: string) {
+  function buildSqliteRecord(value: unknown, updatedAt: string): { id: string; value: string; createdAt: string; updatedAt: string; deletedAt: string | null } {
     return {
       id: (value as { id: string }).id,
       value: JSON.stringify(value),
