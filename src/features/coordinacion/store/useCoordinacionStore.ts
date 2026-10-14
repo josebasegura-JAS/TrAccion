@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { isTaskClosed, type Task } from '../../tareas/domain/task';
 import { directionMeetingTasks } from '../domain/directionMeetingTasks';
+import { readFreshCoordinationTasks } from '../services/coordinationTaskSnapshot';
 import { registerSyncableStore } from '../../../services/syncableStoreRegistry';
 import {
   createCoordinationId,
@@ -27,6 +28,11 @@ import {
 export const COORDINATION_STORAGE_KEY = LEGACY_COORDINATION_STORAGE_KEY;
 
 type Result = { ok: boolean; message: string; recordId?: string };
+
+async function resolveTasksForCoordination(injectedTasks: Task[]): Promise<Task[]> {
+  if (import.meta.env.MODE === 'test') return injectedTasks;
+  return readFreshCoordinationTasks();
+}
 
 interface CoordinationStore extends CoordinationState {
   load: () => void;
@@ -164,10 +170,11 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const cleanTitle = title.trim();
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
     if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
+    const freshTasks = await resolveTasksForCoordination(tasks);
 
     const current = stateSnapshot(get());
     const now = new Date().toISOString();
-    const points: CoordinationPoint[] = directionMeetingTasks(tasks, current.directionTaskIds)
+    const points: CoordinationPoint[] = directionMeetingTasks(freshTasks, current.directionTaskIds)
       .map((task) => ({
         id: createCoordinationId('dir-point'),
         origin: 'task',
@@ -203,9 +210,10 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
     if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
     if (!cleanAreaName) return { ok: false, message: 'Indica el área con la que se celebra la reunión.' };
+    const freshTasks = await resolveTasksForCoordination(tasks);
 
     const task = referenceTaskId
-      ? tasks.find((candidate) => candidate.id === referenceTaskId && activeTask(candidate))
+      ? freshTasks.find((candidate) => candidate.id === referenceTaskId && activeTask(candidate))
       : undefined;
     if (referenceTaskId && !task) {
       return { ok: false, message: 'La tarea inicial seleccionada no existe o ya está cerrada.' };
@@ -218,7 +226,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const selectedIds = new Set(queuedArea?.[1] ?? []);
     if (task) selectedIds.add(task.id);
     const now = new Date().toISOString();
-    const points: CoordinationPoint[] = tasks
+    const points: CoordinationPoint[] = freshTasks
       .filter((candidate) => selectedIds.has(candidate.id) && activeTask(candidate))
       .map((candidate) => ({
         id: createCoordinationId('area-point'),
@@ -259,6 +267,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
     if (!cleanTitle) return { ok: false, message: 'Indica un título para la reunión.' };
     if (!cleanUnion) return { ok: false, message: 'Selecciona el sindicato.' };
+    const freshTasks = await resolveTasksForCoordination(tasks);
 
     const current = stateSnapshot(get());
     const selectedIds = new Set([...(current.unionTaskIds[cleanUnion] ?? []), ...taskIds]);
@@ -273,7 +282,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     });
 
     const now = new Date().toISOString();
-    const points: CoordinationPoint[] = tasks
+    const points: CoordinationPoint[] = freshTasks
       .filter((task) => selectedIds.has(task.id) && activeTask(task))
       .map((task) => ({
         id: createCoordinationId('union-point'),
@@ -310,6 +319,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   },
 
   addTaskPoint: async (meetingId, taskId, tasks) => {
+    const freshTasks = await resolveTasksForCoordination(tasks);
     const current = stateSnapshot(get());
     const editable = findEditableMeeting(current, meetingId);
     if (editable.error) return editable.error;
@@ -317,7 +327,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (meeting.points.some((point) => point.taskId === taskId)) {
       return { ok: false, message: 'La tarea ya está incluida en el guion.' };
     }
-    const task = tasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
+    const task = freshTasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
     if (!task) return { ok: false, message: 'La tarea seleccionada no está activa.' };
 
     const now = new Date().toISOString();
@@ -345,6 +355,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   },
 
   linkManualPointToTask: async (meetingId, pointId, taskId, tasks) => {
+    const freshTasks = await resolveTasksForCoordination(tasks);
     const current = stateSnapshot(get());
     const editable = findEditableMeeting(current, meetingId);
     if (editable.error) return editable.error;
@@ -356,7 +367,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (meeting.points.some((item) => item.id !== pointId && item.taskId === taskId)) {
       return { ok: false, message: 'La tarea ya está incluida en el guion.' };
     }
-    const task = tasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
+    const task = freshTasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
     if (!task) return { ok: false, message: 'La tarea creada no está activa.' };
 
     const now = new Date().toISOString();
