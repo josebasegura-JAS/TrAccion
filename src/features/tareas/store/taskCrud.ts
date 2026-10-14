@@ -165,6 +165,26 @@ export async function createTaskWithConcurrencyCheck(
   }
 }
 
+export function buildImportedTaskRecord(
+  entry: { externalKey: string; draft: TaskDraft; closedAt?: string | null },
+  now = new Date().toISOString(),
+): Task {
+  const { externalKey, draft, closedAt } = entry;
+  return normalizeTask({
+    id: createTaskId(),
+    ...draft,
+    sessionDocumentCode: '',
+    sessionModule: '',
+    sessionDate: '',
+    observaciones: `${draft.observaciones ? `${draft.observaciones} ` : ''}ImportKey:${externalKey}`,
+    seguimiento: buildSeguimiento('Tarea importada desde resumen histórico de Comité/Paritaria.', now),
+    createdAt: closedAt ?? now,
+    updatedAt: now,
+    deletedAt: null,
+    closedAt: isTaskClosed(draft) ? (closedAt ?? now) : null,
+  });
+}
+
 export async function createManyTasksFromImport(
   drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>,
   state: TaskCrudState,
@@ -191,19 +211,7 @@ export async function createManyTasksFromImport(
       return;
     }
 
-    const task: Task = normalizeTask({
-      id: createTaskId(),
-      ...draft,
-      sessionDocumentCode: '',
-      sessionModule: '',
-      sessionDate: '',
-      observaciones: `${draft.observaciones ? `${draft.observaciones} ` : ''}ImportKey:${externalKey}`,
-      seguimiento: buildSeguimiento('Tarea importada desde resumen histórico de Comité/Paritaria.', now),
-      createdAt: closedAt ?? now,
-      updatedAt: now,
-      deletedAt: null,
-      closedAt: isTaskClosed(draft) ? (closedAt ?? now) : null,
-    });
+    const task = buildImportedTaskRecord({ externalKey, draft, closedAt }, now);
     createdIds[externalKey] = task.id;
     importedTasks.push(task);
   });

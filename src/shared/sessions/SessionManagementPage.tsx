@@ -5,6 +5,7 @@ import { CLOSED_TASK_PHASE, DEFAULT_TASK_PHASE, isTaskClosed } from '../../featu
 import { buildActaObservacionesFromSession } from '../../features/actas/domain/acta';
 import { useActasStore } from '../../features/actas/store/useActasStore';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
+import { buildImportedTaskRecord } from '../../features/tareas/store/taskCrud';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import { withSharedModuleLocks } from '../../services/sharedModuleLock';
 import { useAppDialog } from '../../hooks/useAppDialog';
@@ -18,7 +19,7 @@ import { InlineSaveFeedback } from '../../components/InlineSaveFeedback';
 import { TaskEditor } from '../../components/TaskEditor';
 import { type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
-import type { ManagedSessionStateStore } from './createSessionStore';
+import { buildImportedManagedSession, type ManagedSessionStateStore } from './createSessionStore';
 import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
 import { HistoricSessionCard, SessionCard, SessionPanel } from './SessionManagementPageCards';
 import { SessionImportPreviewModal } from './SessionImportPreviewModal';
@@ -62,7 +63,6 @@ export function SessionManagementPage({
     load,
     loadHistoricalSessions,
     createWithConcurrencyCheck,
-    importSessionsWithConcurrencyCheck,
     removeWithConcurrencyCheck,
     updateWithConcurrencyCheck,
     addTaskWithConcurrencyCheck,
@@ -76,7 +76,6 @@ export function SessionManagementPage({
     reloadFromStorage: reloadTasksFromStorage,
     loadHistoricalTasks,
     historicalTasksLoaded,
-    createManyFromImport,
   } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -744,28 +743,44 @@ export function SessionManagementPage({
               ...task,
               closedAt: closedAtByTaskExternalKey.get(task.externalKey) ?? null,
             }));
-          const taskIdsByExternalKey = await createManyFromImport(importableTasks);
-          const importedSessionsResult = await importSessionsWithConcurrencyCheck(
-            importableSessions.map((session) => ({
-              externalKey: session.externalKey,
-              draft: session.draft,
-              taskIds: session.taskExternalKeys.flatMap((externalKey) => {
-                const taskId = taskIdsByExternalKey[externalKey];
-                return taskId ? [taskId] : [];
-              }),
-            })),
-          );
-          if (!importedSessionsResult.ok) {
-            throw new Error(importedSessionsResult.message);
+          const atomicImport = window.traccion?.importSessionHistoryAtomically;
+          if (!atomicImport) {
+            throw new Error('La importación histórica transaccional no está disponible. Reinicia TrAcción antes de continuar.');
           }
+          const now = new Date().toISOString();
+          const taskPayload = importableTasks.map((task) => {
+            const record = buildImportedTaskRecord(task, now);
+            return { externalKey: task.externalKey, id: record.id, value: JSON.stringify(record) };
+          });
+          const sessionPayload = importableSessions.map((session) => {
+            const record = buildImportedManagedSession(
+              config,
+              { externalKey: session.externalKey, draft: session.draft, taskIds: [] },
+              now,
+            );
+            return {
+              externalKey: session.externalKey,
+              id: record.id,
+              value: JSON.stringify(record),
+              taskExternalKeys: session.taskExternalKeys,
+            };
+          });
+          const importedSessionsResult = await atomicImport({
+            module: moduleImportKind,
+            tasks: taskPayload,
+            sessions: sessionPayload,
+          });
+          if (!importedSessionsResult.ok) throw new Error(importedSessionsResult.message);
 
-          loadTasks();
+          await reloadTasksFromStorage();
+          await loadHistoricalTasks();
+          loadHistoricalSessions();
           setOpenPanel('history');
           setImportPreview(null);
           await alert(
-            importedSessionsResult.importedCount > 0
-              ? `Importación completada: ${importedSessionsResult.importedCount} sesiones históricas y ${importableTasks.length} puntos históricos procesados.`
-              : 'No se han creado sesiones nuevas. Ya existían sesiones con el mismo código y fecha.',
+            importedSessionsResult.importedSessionCount > 0
+              ? `Importación completada: ${importedSessionsResult.importedSessionCount} sesiones históricas y ${importedSessionsResult.createdTaskCount} puntos históricos nuevos.`
+              : 'No se han creado sesiones nuevas. El histórico ya estaba importado.',
             { type: 'info' },
           );
         },

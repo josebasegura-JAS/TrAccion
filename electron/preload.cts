@@ -134,6 +134,11 @@ contextBridge.exposeInMainWorld('traccion', {
     index: { key: string; value: string; expectedUpdatedAt: string };
     tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
   }) => ipcRenderer.invoke('coordinacion:close-workflow-atomically', payload),
+  importSessionHistoryAtomically: (payload: {
+    module: 'comite' | 'paritaria';
+    tasks: Array<{ externalKey: string; id: string; value: string }>;
+    sessions: Array<{ externalKey: string; id: string; value: string; taskExternalKeys: string[] }>;
+  }) => ipcRenderer.invoke('sessions:import-history-atomically', payload),
   closeSessionWorkflowAtomically: (payload: {
     module: 'comite' | 'paritaria';
     session: { id: string; value: string; expectedUpdatedAt: string | null };

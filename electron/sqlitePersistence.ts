@@ -171,6 +171,33 @@ export interface AtomicSessionWorkflowResult {
   message: string;
 }
 
+export interface AtomicSessionHistoryImportTask {
+  externalKey: string;
+  id: string;
+  value: string;
+}
+
+export interface AtomicSessionHistoryImportSession {
+  externalKey: string;
+  id: string;
+  value: string;
+  taskExternalKeys: string[];
+}
+
+export interface AtomicSessionHistoryImportPayload {
+  module: 'comite' | 'paritaria';
+  tasks: AtomicSessionHistoryImportTask[];
+  sessions: AtomicSessionHistoryImportSession[];
+}
+
+export interface AtomicSessionHistoryImportResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  message: string;
+  importedSessionCount: number;
+  createdTaskCount: number;
+}
+
 export interface AtomicCoordinationWorkflowRecord {
   key: string;
   value: string;
@@ -991,6 +1018,173 @@ export async function closeSessionWorkflowAtomically(
       ok: false,
       status: nextStatus,
       message,
+    }),
+  );
+}
+
+
+export async function importSessionHistoryAtomically(
+  payload: AtomicSessionHistoryImportPayload,
+): Promise<AtomicSessionHistoryImportResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (
+        !currentStatus.ready ||
+        currentStatus.phase !== 'active' ||
+        isDatabaseWriteBlockedByHeartbeat()
+      ) {
+        return {
+          ok: false,
+          status: currentStatus,
+          message:
+            currentStatus.message ??
+            'SQLite no está activo. No se puede importar el histórico de forma segura.',
+          importedSessionCount: 0,
+          createdTaskCount: 0,
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+      const db = requireDatabase();
+      const sessionTable =
+        payload.module === 'comite' ? 'comite_session_records' : 'paritaria_session_records';
+
+      try {
+        const result = db.transaction((): AtomicSessionHistoryImportResult => {
+        const parseObject = (value: string): Record<string, unknown> => {
+          try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
+          } catch {
+            return {};
+          }
+        };
+        const importKeyFrom = (value: unknown): string | null => {
+          if (typeof value !== 'string') return null;
+          return value.match(/ImportKey:([^\s]+)/)?.[1] ?? null;
+        };
+        const recordMeta = (value: string) => {
+          const parsed = parseObject(value);
+          const now = new Date().toISOString();
+          return {
+            createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : now,
+            updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : now,
+            deletedAt: typeof parsed.deletedAt === 'string' ? parsed.deletedAt : null,
+          };
+        };
+
+        const taskIdsByExternalKey = new Map<string, string>();
+        const existingTaskRows = db.prepare(
+          'SELECT id, value_json FROM task_records WHERE deleted_at IS NULL',
+        ).all() as Array<{ id?: unknown; value_json?: unknown }>;
+        for (const row of existingTaskRows) {
+          if (typeof row.id !== 'string' || typeof row.value_json !== 'string') continue;
+          const parsed = parseObject(row.value_json);
+          const key = importKeyFrom(parsed.observaciones);
+          if (key) taskIdsByExternalKey.set(key, row.id);
+        }
+
+        let createdTaskCount = 0;
+        for (const task of payload.tasks) {
+          const knownId = taskIdsByExternalKey.get(task.externalKey);
+          if (knownId) continue;
+          const duplicateId = db.prepare('SELECT id FROM task_records WHERE id = ?').get(task.id) as { id?: unknown } | undefined;
+          if (duplicateId) {
+            throw new Error('Una tarea histórica generada ya existe con el mismo identificador. Reintenta la importación.');
+          }
+          const meta = recordMeta(task.value);
+          const inserted = db.prepare(
+            `INSERT INTO task_records (id, value_json, created_at, updated_at, deleted_at)
+             VALUES (?, ?, ?, ?, ?)`,
+          ).run(task.id, task.value, meta.createdAt, meta.updatedAt, meta.deletedAt);
+          if (inserted.changes !== 1) throw new Error('No se ha podido crear un punto histórico.');
+          taskIdsByExternalKey.set(task.externalKey, task.id);
+          createdTaskCount += 1;
+        }
+
+        const existingSessionImportKeys = new Set<string>();
+        const existingSessionCodeDates = new Set<string>();
+        const sessionRows = db.prepare(
+          `SELECT value_json FROM ${sessionTable} WHERE deleted_at IS NULL`,
+        ).all() as Array<{ value_json?: unknown }>;
+        for (const row of sessionRows) {
+          if (typeof row.value_json !== 'string') continue;
+          const parsed = parseObject(row.value_json);
+          const importKey = importKeyFrom(parsed.notes);
+          if (importKey) existingSessionImportKeys.add(importKey);
+          const code = typeof parsed.code === 'string' ? parsed.code.trim().toLowerCase() : '';
+          const date = typeof parsed.date === 'string' ? parsed.date : '';
+          if (code && date) existingSessionCodeDates.add(`${code}\u0000${date}`);
+        }
+
+        let importedSessionCount = 0;
+        for (const session of payload.sessions) {
+          const parsed = parseObject(session.value);
+          const code = typeof parsed.code === 'string' ? parsed.code.trim().toLowerCase() : '';
+          const date = typeof parsed.date === 'string' ? parsed.date : '';
+          const codeDate = `${code}\u0000${date}`;
+          if (
+            existingSessionImportKeys.has(session.externalKey) ||
+            (code && date && existingSessionCodeDates.has(codeDate))
+          ) {
+            continue;
+          }
+
+          const taskIds = session.taskExternalKeys.flatMap((externalKey) => {
+            const id = taskIdsByExternalKey.get(externalKey);
+            return id ? [id] : [];
+          });
+          if (taskIds.length !== session.taskExternalKeys.length) {
+            throw new Error('No se han podido resolver todos los puntos de una sesión histórica. No se ha importado ningún cambio.');
+          }
+          const finalValue = JSON.stringify({
+            ...parsed,
+            items: taskIds,
+            treatedTaskIds: taskIds,
+            untreatedTaskIds: [],
+          });
+          const meta = recordMeta(finalValue);
+          const duplicateId = db.prepare(`SELECT id FROM ${sessionTable} WHERE id = ?`).get(session.id) as { id?: unknown } | undefined;
+          if (duplicateId) throw new Error('Una sesión histórica generada ya existe con el mismo identificador. Reintenta la importación.');
+          const inserted = db.prepare(
+            `INSERT INTO ${sessionTable} (id, value_json, created_at, updated_at, deleted_at)
+             VALUES (?, ?, ?, ?, ?)`,
+          ).run(session.id, finalValue, meta.createdAt, meta.updatedAt, meta.deletedAt);
+          if (inserted.changes !== 1) throw new Error('No se ha podido crear una sesión histórica.');
+          existingSessionImportKeys.add(session.externalKey);
+          if (code && date) existingSessionCodeDates.add(codeDate);
+          importedSessionCount += 1;
+        }
+
+        updateRefreshMetadata(db, new Date().toISOString());
+        return {
+          ok: true,
+          status: currentStatus,
+          message: 'Histórico de sesiones y puntos importado de forma atómica.',
+          importedSessionCount,
+          createdTaskCount,
+        };
+      })();
+
+        if (result.ok) enqueueLocalBackup(`import:${payload.module}_session_history`);
+        return result;
+      } catch (error) {
+        return {
+          ok: false,
+          status: getSqliteStatus(),
+          message: error instanceof Error ? error.message : 'No se ha podido importar el histórico de sesiones.',
+          importedSessionCount: 0,
+          createdTaskCount: 0,
+        };
+      }
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      message,
+      importedSessionCount: 0,
+      createdTaskCount: 0,
     }),
   );
 }
