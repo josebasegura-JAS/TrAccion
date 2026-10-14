@@ -212,6 +212,7 @@ interface TraccionApi {
   saveEmployeeRecordsIfUnchanged?: (records: TraccionConditionalEmployeeRecord[]) => Promise<TraccionConditionalEmployeeBatchSaveResult>;
   loadTaskRecords?: (filter?: TraccionTaskRecordsFilter) => Promise<TraccionTaskRecordsSnapshot>;
   saveTaskRecordIfUnchanged?: (record: TraccionConditionalTaskRecord) => Promise<TraccionConditionalTaskSaveResult>;
+  closeCoordinationWorkflowAtomically?: (payload: { meeting: { key: string; value: string; expectedUpdatedAt: string }; index: { key: string; value: string; expectedUpdatedAt: string }; tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> }) => Promise<{ ok: boolean; message: string; meetingUpdatedAt?: string; indexUpdatedAt?: string }>;
   closeSessionWorkflowAtomically?: (payload: { module: 'comite' | 'paritaria'; session: { id: string; value: string; expectedUpdatedAt: string | null }; tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>; acta?: { id: string; value: string; sourceSessionId: string } | null; }) => Promise<{ ok: boolean; message: string }>;
   loadComiteSessionRecords?: () => Promise<TraccionComiteSessionRecordsSnapshot>;
   saveComiteSessionRecordIfUnchanged?: (record: TraccionConditionalComiteSessionRecord) => Promise<TraccionConditionalTaskSaveResult>;

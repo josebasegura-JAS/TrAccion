@@ -124,6 +124,11 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('tasks:save-record-if-unchanged', record),
+  closeCoordinationWorkflowAtomically: (payload: {
+    meeting: { key: string; value: string; expectedUpdatedAt: string };
+    index: { key: string; value: string; expectedUpdatedAt: string };
+    tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
+  }) => ipcRenderer.invoke('coordinacion:close-workflow-atomically', payload),
   closeSessionWorkflowAtomically: (payload: {
     module: 'comite' | 'paritaria';
     session: { id: string; value: string; expectedUpdatedAt: string | null };

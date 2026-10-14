@@ -27,7 +27,9 @@ import { CoordinationPointEditor } from './CoordinationPointEditor';
 import { CoordinationTaskClosureDialog } from './CoordinationTaskClosureDialog';
 import { pointToDraft, type CoordinationPointDraft } from './coordinationPointDraft';
 import { updateCoordinationMeetingDetails } from '../services/coordinationMeetingDetails';
-import { closeCoordinationTasks, meetingContext, syncMeetingTracking } from '../services/coordinationMeetingTracking';
+import { meetingContext, syncMeetingTracking } from '../services/coordinationMeetingTracking';
+import { closeCoordinationWorkflowAtomically } from '../services/coordinationClosure';
+import { registerTaskUpdateAudit } from '../../tareas/store/taskMutations';
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
   { title: 'Para qué sirve', items: ['Prepara y conserva las reuniones de RRLL con Dirección, otras áreas y sindicatos.', 'Permite convertir tareas abiertas en puntos de reunión, añadir puntos libres y crear tareas nuevas sin perder la relación entre reunión y seguimiento.'] },
@@ -61,7 +63,6 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
   const saveMeetingPoints = useCoordinacionStore((state) => state.saveMeetingPoints);
   const deleteManualPoint = useCoordinacionStore((state) => state.deleteManualPoint);
   const deleteMeeting = useCoordinacionStore((state) => state.deleteMeeting);
-  const closeMeeting = useCoordinacionStore((state) => state.closeMeeting);
   const reopenMeeting = useCoordinacionStore((state) => state.reopenMeeting);
   const markedTaskIds = useCoordinacionStore((state) => state.directionTaskIds);
   const areaTaskIds = useCoordinacionStore((state) => state.areaTaskIds);
@@ -309,23 +310,30 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
     trackingFailures: string[],
   ) => {
     setTaskClosurePrompt(null);
-    const result = await closeMeeting(meetingId);
-    if (!result.ok) { setStatus(`No se ha cerrado la reunión: ${result.message}`); return; }
-    const confirmedClosed = useCoordinacionStore.getState().meetings.some(
-      (meeting) => meeting.id === meetingId && meeting.status === 'closed',
+    const currentCoordination = useCoordinacionStore.getState();
+    const result = await closeCoordinationWorkflowAtomically(
+      {
+        meetings: currentCoordination.meetings,
+        directionTaskIds: currentCoordination.directionTaskIds,
+        unionTaskIds: currentCoordination.unionTaskIds,
+        areaTaskIds: currentCoordination.areaTaskIds,
+      },
+      meetingId,
+      taskIdsToClose,
+      useTaskStore.getState().tasks,
     );
-    if (!confirmedClosed) {
-      setStatus('El guardado ha respondido correctamente, pero el estado de la reunión no se ha actualizado. Recarga Coordinación antes de continuar.');
-      return;
+    if (!result.ok) { setStatus(`No se ha cerrado la reunión: ${result.message}`); return; }
+
+    useCoordinacionStore.setState(result.nextState);
+    if (result.taskChanges.length > 0) {
+      const nextById = new Map(result.taskChanges.map((change) => [change.next.id, change.next]));
+      useTaskStore.setState((state) => ({
+        tasks: state.tasks.map((task) => nextById.get(task.id) ?? task),
+      }));
+      result.taskChanges.forEach((change) => registerTaskUpdateAudit(change.previous, change.draft));
     }
 
-    const taskFailures = taskIdsToClose.length > 0
-      ? await closeCoordinationTasks(taskIdsToClose)
-      : [];
-    const warnings = [
-      ...trackingFailures,
-      ...taskFailures.map((failure) => failure.message),
-    ];
+    const warnings = [...trackingFailures];
 
     if (warnings.length > 0) {
       setStatus(`Reunión cerrada. Hay ${warnings.length} incidencia(s) de sincronización de tareas: ${warnings.join(' | ')}`);

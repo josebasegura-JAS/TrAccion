@@ -10,6 +10,7 @@ import {
   type CoordinationState,
   type UnionMeetingType,
 } from '../domain/coordinacion';
+import { buildClosedCoordinationState } from '../services/coordinationClosure';
 import {
   coordinationTargetsEqual,
   updateAreaTarget,
@@ -488,48 +489,8 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       return { ok: true, message: 'La reunión ya estaba cerrada.', recordId: meeting.id };
     }
 
-    const now = new Date().toISOString();
-    const directionTaskIds = new Set(current.directionTaskIds);
-    const unionTaskIds = { ...current.unionTaskIds };
-    const areaTaskIds = { ...current.areaTaskIds };
-
-    if (meeting.area === 'direccion') {
-      meeting.points.forEach((point) => {
-        if (!point.taskId) return;
-        if (point.status === 'tratado' || point.status === 'seguimiento') directionTaskIds.delete(point.taskId);
-        if (['volver', 'pendiente', 'no-tratado'].includes(point.status)) directionTaskIds.add(point.taskId);
-      });
-    }
-    if (meeting.area === 'sindicatos' && meeting.unionName) {
-      const ids = new Set(unionTaskIds[meeting.unionName] ?? []);
-      meeting.points.forEach((point) => {
-        if (!point.taskId) return;
-        if (point.status === 'tratado' || point.status === 'seguimiento') ids.delete(point.taskId);
-        else ids.add(point.taskId);
-      });
-      unionTaskIds[meeting.unionName] = [...ids];
-    }
-    if (meeting.area === 'otras-areas' && meeting.areaName) {
-      const ids = new Set(areaTaskIds[meeting.areaName] ?? []);
-      meeting.points.forEach((point) => {
-        if (!point.taskId) return;
-        if (point.status === 'tratado' || point.status === 'seguimiento') ids.delete(point.taskId);
-        else ids.add(point.taskId);
-      });
-      areaTaskIds[meeting.areaName] = [...ids];
-    }
-
-    const next: CoordinationState = {
-      directionTaskIds: [...directionTaskIds],
-      unionTaskIds,
-      areaTaskIds,
-      meetings: current.meetings.map((item) => item.id === meetingId ? {
-        ...item,
-        status: 'closed',
-        closedAt: now,
-        updatedAt: now,
-      } : item),
-    };
+    const next = buildClosedCoordinationState(current, meetingId, new Date().toISOString());
+    if (!next) return { ok: false, message: 'No se ha podido preparar el cierre de la reunión.' };
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };

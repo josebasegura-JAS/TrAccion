@@ -156,4 +156,61 @@ describe('Coordinación granular — OCC real sobre persisted_records', () => {
     expect(snapshot.record?.value).toBe(JSON.stringify({ id: 'meeting-a', editor: 'one' }));
     await persistence.closeSqlitePersistence();
   });
+
+  it('cierra reunión, índice y tareas en una única transacción', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await import('./sqlitePersistence.js');
+    await persistence.initializeSqlitePersistence();
+
+    const meetingKey = 'traccion.v1.coordinacion.meeting.meeting-atomic';
+    const indexKey = 'traccion.v1.coordinacion.index';
+    const meeting = await persistence.savePersistedRecordIfUnchanged({ key: meetingKey, value: JSON.stringify({ id: 'meeting-atomic', status: 'open' }), expectedUpdatedAt: null });
+    const index = await persistence.savePersistedRecordIfUnchanged({ key: indexKey, value: JSON.stringify({ meetingIds: ['meeting-atomic'] }), expectedUpdatedAt: null });
+    const taskValue = JSON.stringify({ id: 'task-atomic', updatedAt: '2026-10-14T04:00:00.000Z', deletedAt: null, estado: 'pendiente' });
+    const task = await persistence.saveTaskRecordIfUnchanged({ id: 'task-atomic', value: taskValue, expectedUpdatedAt: null });
+    expect(meeting.ok && index.ok && task.ok).toBe(true);
+
+    const closedTaskValue = JSON.stringify({ id: 'task-atomic', updatedAt: '2026-10-14T05:00:00.000Z', deletedAt: null, estado: 'cerrada' });
+    const result = await persistence.closeCoordinationWorkflowAtomically({
+      meeting: { key: meetingKey, value: JSON.stringify({ id: 'meeting-atomic', status: 'closed' }), expectedUpdatedAt: meeting.currentUpdatedAt! },
+      index: { key: indexKey, value: JSON.stringify({ meetingIds: ['meeting-atomic'], directionTaskIds: [] }), expectedUpdatedAt: index.currentUpdatedAt! },
+      tasks: [{ id: 'task-atomic', value: closedTaskValue, expectedUpdatedAt: task.currentUpdatedAt }],
+    });
+    expect(result.ok).toBe(true);
+    expect((await persistence.getPersistedRecordSnapshot(meetingKey)).record?.value).toContain('closed');
+    expect((await persistence.getPersistedRecordSnapshot(indexKey)).record?.value).toContain('directionTaskIds');
+    const taskSnapshot = await persistence.loadTaskRecordsSnapshot({ mode: 'all' });
+    expect(taskSnapshot.records.find((record) => record.id === 'task-atomic')?.value).toBe(closedTaskValue);
+    await persistence.closeSqlitePersistence();
+  });
+
+  it('si una tarea tiene un token obsoleto no cierra ni la reunión ni el índice', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await import('./sqlitePersistence.js');
+    await persistence.initializeSqlitePersistence();
+
+    const meetingKey = 'traccion.v1.coordinacion.meeting.meeting-conflict';
+    const indexKey = 'traccion.v1.coordinacion.index';
+    const openMeeting = JSON.stringify({ id: 'meeting-conflict', status: 'open' });
+    const openIndex = JSON.stringify({ meetingIds: ['meeting-conflict'], directionTaskIds: ['task-conflict'] });
+    const meeting = await persistence.savePersistedRecordIfUnchanged({ key: meetingKey, value: openMeeting, expectedUpdatedAt: null });
+    const index = await persistence.savePersistedRecordIfUnchanged({ key: indexKey, value: openIndex, expectedUpdatedAt: null });
+    const firstTask = await persistence.saveTaskRecordIfUnchanged({ id: 'task-conflict', value: JSON.stringify({ id: 'task-conflict', updatedAt: '2026-10-14T04:00:00.000Z', deletedAt: null }), expectedUpdatedAt: null });
+    const secondTask = await persistence.saveTaskRecordIfUnchanged({ id: 'task-conflict', value: JSON.stringify({ id: 'task-conflict', updatedAt: '2026-10-14T04:30:00.000Z', deletedAt: null }), expectedUpdatedAt: firstTask.currentUpdatedAt });
+    expect(secondTask.ok).toBe(true);
+
+    const result = await persistence.closeCoordinationWorkflowAtomically({
+      meeting: { key: meetingKey, value: JSON.stringify({ id: 'meeting-conflict', status: 'closed' }), expectedUpdatedAt: meeting.currentUpdatedAt! },
+      index: { key: indexKey, value: JSON.stringify({ meetingIds: ['meeting-conflict'], directionTaskIds: [] }), expectedUpdatedAt: index.currentUpdatedAt! },
+      tasks: [{ id: 'task-conflict', value: JSON.stringify({ id: 'task-conflict', updatedAt: '2026-10-14T05:00:00.000Z', deletedAt: null, estado: 'cerrada' }), expectedUpdatedAt: firstTask.currentUpdatedAt }],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('tareas seleccionadas');
+    expect((await persistence.getPersistedRecordSnapshot(meetingKey)).record?.value).toBe(openMeeting);
+    expect((await persistence.getPersistedRecordSnapshot(indexKey)).record?.value).toBe(openIndex);
+    await persistence.closeSqlitePersistence();
+  });
+
 });

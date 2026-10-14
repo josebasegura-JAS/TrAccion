@@ -17,6 +17,7 @@ import {
   saveParitariaSessionRecordIfUnchanged,
   saveActaRecordIfUnchanged,
   closeSessionWorkflowAtomically,
+  closeCoordinationWorkflowAtomically,
 } from '../sqlitePersistence.js';
 
 export function registerSesionesIpc(): void {
@@ -63,6 +64,15 @@ export function registerSesionesIpc(): void {
       date: candidate.date,
       points: candidate.points,
     });
+  });
+
+  ipcMain.handle('coordinacion:close-workflow-atomically', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return { ok: false, status: getSqliteStatus(), message: 'Payload de cierre de Coordinación inválido.' };
+    }
+    return enqueueSqliteIpc('coordinacion:close-workflow-atomically', () =>
+      closeCoordinationWorkflowAtomically(payload as Parameters<typeof closeCoordinationWorkflowAtomically>[0]),
+    );
   });
 
   ipcMain.handle('sessions:close-workflow-atomically', (_event, payload: unknown) => {

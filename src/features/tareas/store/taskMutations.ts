@@ -18,7 +18,7 @@ function pickTaskAuditSnapshot(task: Task | TaskDraft): Record<string, unknown> 
   }, {});
 }
 
-function registerTaskUpdateAudit(previousTask: Task, draft: TaskDraft): void {
+export function registerTaskUpdateAudit(previousTask: Task, draft: TaskDraft): void {
   const changes = buildAuditChanges(
     pickTaskAuditSnapshot(previousTask), pickTaskAuditSnapshot(draft), TASK_AUDIT_LABELS, TASK_AUDIT_FIELDS,
   );
@@ -74,9 +74,15 @@ function resolvePhaseBeforeClose(task: Task, draft: TaskDraft): string | undefin
   return previousPhase || undefined;
 }
 
-export function buildUpdatedTask(task: Task, draft: TaskDraft, seguimientoText: string | undefined, quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo'>): Task {
-  const now = new Date().toISOString();
-  registerTaskUpdateAudit(task, draft);
+export function buildUpdatedTask(
+  task: Task,
+  draft: TaskDraft,
+  seguimientoText: string | undefined,
+  quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo'>,
+  options?: { now?: string; skipAudit?: boolean },
+): Task {
+  const now = options?.now ?? new Date().toISOString();
+  if (!options?.skipAudit) registerTaskUpdateAudit(task, draft);
   return {
     ...task,
     ...draft,
