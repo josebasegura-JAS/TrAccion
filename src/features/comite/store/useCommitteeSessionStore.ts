@@ -1,4 +1,4 @@
-import { createManagedSessionStore } from '../../../shared/sessions/createSessionStore';
+import { createValidatedManagedSessionStore } from '../../../shared/sessions/createValidatedSessionStore';
 import { COMITE_SESSION_CONFIG } from '../domain/comite';
 
-export const useCommitteeSessionStore = createManagedSessionStore(COMITE_SESSION_CONFIG);
+export const useCommitteeSessionStore = createValidatedManagedSessionStore(COMITE_SESSION_CONFIG);
