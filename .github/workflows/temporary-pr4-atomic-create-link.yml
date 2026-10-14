@@ -11,6 +11,9 @@ permissions:
 jobs:
   apply-and-validate:
     runs-on: windows-latest
+    env:
+      CI: "true"
+      NODE_ENV: development
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,7 +30,15 @@ jobs:
           python -c "from pathlib import Path; p=Path('src/features/tareas/store/taskCrud.ts'); t=p.read_text(encoding='utf-8'); p.write_text(t.replace('  buildNewTask,\n  buildUpdatedTask,', '  buildNewTask,\n  buildSeguimiento,\n  buildUpdatedTask,'), encoding='utf-8')"
           python -c "from pathlib import Path; p=Path('src/features/coordinacion/components/CoordinacionPage.tsx'); t=p.read_text(encoding='utf-8'); p.write_text(t.replace('  const linkManualPointToTask = useCoordinacionStore((state) => state.linkManualPointToTask);\n', ''), encoding='utf-8')"
       - name: Install dependencies
-        run: npm ci
+        shell: pwsh
+        run: |
+          npm config delete production
+          npm config delete omit
+          npm config set registry https://registry.npmjs.org/
+          npm config set fund false
+          npm config set audit false
+          npm ci --include=dev --no-audit --no-fund
+          npm rebuild better-sqlite3
       - name: TypeScript tests
         run: npm run typecheck:tests
       - name: TypeScript
@@ -35,13 +46,13 @@ jobs:
       - name: ESLint
         run: npm run lint
       - name: Tests
-        run: npm test -- --run
+        run: npm run test
       - name: Build
         run: npm run build
       - name: Rebuild native Electron dependencies
-        run: npm run rebuild:electron
+        run: npm run electron:rebuild
       - name: Smoke Electron critical
-        run: npm run test:electron-smoke
+        run: npx playwright test -c playwright.electron.config.ts e2e/electron/app-ui-smoke.spec.ts e2e/electron/critical-flows.spec.ts
       - name: Commit PR4 code
         shell: pwsh
         run: |
