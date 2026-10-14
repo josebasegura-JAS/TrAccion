@@ -9,6 +9,11 @@ export interface SharedModuleLockTarget {
   label: string;
 }
 
+export interface SharedModuleLockGuard {
+  assertActive: () => void;
+  readonly lost: boolean;
+}
+
 function formatLockOwner(lock: TraccionRecordLockOwnerInfo | null): string {
   return lock ? `${lock.ownerName}@${lock.machineName}` : 'otro usuario';
 }
@@ -65,16 +70,32 @@ async function releaseModuleLock(payload: TraccionRecordLockPayload): Promise<vo
 
 export async function withSharedModuleLocks<TResult>(
   targets: SharedModuleLockTarget[],
-  operation: () => TResult | Promise<TResult>,
+  operation: (guard: SharedModuleLockGuard) => TResult | Promise<TResult>,
 ): Promise<TResult> {
   const acquiredPayloads: TraccionRecordLockPayload[] = [];
+  let lostLockError: Error | null = null;
+  const rememberLockLoss = (error: unknown) => {
+    if (!lostLockError) {
+      lostLockError = error instanceof Error
+        ? error
+        : new Error('Se ha perdido el bloqueo compartido durante la operación.');
+    }
+    console.warn('No se ha podido renovar el bloqueo global de módulo.', error);
+  };
+  const guard: SharedModuleLockGuard = {
+    assertActive: () => {
+      if (lostLockError) throw lostLockError;
+    },
+    get lost() {
+      return lostLockError !== null;
+    },
+  };
   const heartbeatId = window.setInterval(() => {
+    if (lostLockError) return;
     acquiredPayloads.forEach((payload) => {
       window.traccion?.heartbeatRecordLock?.(payload)
         .then((result) => ensureHeartbeatResult(payload, result))
-        .catch((error: unknown) => {
-          console.warn('No se ha podido renovar el bloqueo global de módulo.', error);
-        });
+        .catch(rememberLockLoss);
     });
   }, MODULE_LOCK_HEARTBEAT_MS);
 
@@ -85,7 +106,10 @@ export async function withSharedModuleLocks<TResult>(
       markSharedEditingActive(payload.module, payload.recordId);
     }
 
-    return await operation();
+    guard.assertActive();
+    const result = await operation(guard);
+    guard.assertActive();
+    return result;
   } finally {
     window.clearInterval(heartbeatId);
     acquiredPayloads.forEach((payload) => markSharedEditingInactive(payload.module, payload.recordId));
