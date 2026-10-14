@@ -6,6 +6,12 @@ export interface TaskPhaseConfig {
   updatedAt: string;
 }
 
+export const PROTECTED_TASK_PHASE_IDS = ['comite', 'paritaria'] as const;
+
+export function isProtectedTaskPhaseId(id: string): boolean {
+  return PROTECTED_TASK_PHASE_IDS.some((protectedId) => protectedId === id);
+}
+
 const DEFAULT_PHASE_NAMES = [
   'tarea',
   'peticion',
