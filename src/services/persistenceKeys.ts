@@ -6,6 +6,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.tareas.tasks',
   'traccion.v1.coordinacion.state',
   'traccion.v1.coordinacion.index',
+  'traccion.v1.coordinacion.pendingTrackingQueue',
   'traccion.v1.peticiones.peticiones',
   'traccion.v1.tareas.peticionesMigrated',
   'traccion.v1.auditTrail.events',
