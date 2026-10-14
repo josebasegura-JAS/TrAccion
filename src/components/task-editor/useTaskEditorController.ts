@@ -740,7 +740,14 @@ export function useTaskEditorController({
     if (!task || isCreate) return;
 
     const hasUnsavedTaskChanges =
-      JSON.stringify({ draft, trackingText, trackingDate }) !== JSON.stringify(recoveryBaseline);
+      JSON.stringify({
+        draft,
+        trackingText,
+        trackingDate,
+        sendToDirection,
+        sendToUnion,
+        selectedAreaTarget,
+      }) !== JSON.stringify(recoveryBaseline);
 
     if (hasUnsavedTaskChanges) {
       setSaveStatus(
