@@ -23,7 +23,7 @@ import { TaskCircuitsSection } from './task-editor/TaskCircuitsSection';
 import { TaskEditorSection } from './task-editor/TaskEditorSection';
 import { TaskGeneralFields } from './task-editor/TaskGeneralFields';
 import { TaskTrackingSection } from './task-editor/TaskTrackingSection';
-import { useTaskEditorController } from './task-editor/useTaskEditorController';
+import { useTaskEditorController, type TaskCreateOverride } from './task-editor/useTaskEditorController';
 import { useAppDialog } from '../hooks/useAppDialog';
 
 export function TaskEditor({
@@ -33,6 +33,7 @@ export function TaskEditor({
   initialDraft,
   initialTrackingText = '',
   onCreated,
+  createTaskOverride,
 }: {
   task: Task | null;
   mode: 'create' | 'edit';
@@ -40,6 +41,7 @@ export function TaskEditor({
   initialDraft?: Partial<TaskDraft>;
   initialTrackingText?: string;
   onCreated?: (taskId: string) => void | Promise<void>;
+  createTaskOverride?: TaskCreateOverride;
 }) {
   const [taskPrintPreviewHtml, setTaskPrintPreviewHtml] = useState<string | null>(null);
   const { confirm: confirmCloseTask, dialogNode: closeTaskDialogNode } = useAppDialog();
@@ -115,7 +117,7 @@ export function TaskEditor({
     trackingUser,
     quickActionEnabled, setQuickActionEnabled, quickActionTitle, setQuickActionTitle, quickActionDate, setQuickActionDate,
     unionCircuitOptions,
-  } = useTaskEditorController({ task, mode, onDone, initialDraft, initialTrackingText, onCreated });
+  } = useTaskEditorController({ task, mode, onDone, initialDraft, initialTrackingText, onCreated, createTaskOverride });
 
   return (
     <>

@@ -40,6 +40,18 @@ import {
   type TaskRecoveryValue,
 } from './taskEditorModel';
 
+export type TaskCreateOverrideInput = {
+  draft: TaskDraft;
+  seguimientoText?: string;
+  targets: { direction: boolean; unionName: string | null; areaName: string | null };
+};
+
+export type TaskCreateOverride = (input: TaskCreateOverrideInput) => Promise<{
+  ok: boolean;
+  message: string;
+  recordId?: string;
+}>;
+
 export type TaskEditorControllerArgs = {
   task: Task | null;
   mode: 'create' | 'edit';
@@ -47,6 +59,7 @@ export type TaskEditorControllerArgs = {
   initialDraft?: Partial<TaskDraft>;
   initialTrackingText?: string;
   onCreated?: (taskId: string) => void | Promise<void>;
+  createTaskOverride?: TaskCreateOverride;
 };
 
 export function useTaskEditorController({
@@ -56,6 +69,7 @@ export function useTaskEditorController({
   initialDraft,
   initialTrackingText = '',
   onCreated,
+  createTaskOverride,
 }: TaskEditorControllerArgs) {
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
@@ -336,7 +350,14 @@ export function useTaskEditorController({
     setSaveStatusIsError(false);
 
     if (isCreate) {
-      const result = await createTask(draft, seguimientoForSave);
+      const targets = {
+        direction: sendToDirection,
+        unionName: sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : null,
+        areaName: selectedAreaTarget || null,
+      };
+      const result = createTaskOverride
+        ? await createTaskOverride({ draft, seguimientoText: seguimientoForSave, targets })
+        : await createTask(draft, seguimientoForSave);
       if (!result.ok) {
         setSaveStatus(result.message);
         setSaveStatusIsError(true);
@@ -346,11 +367,13 @@ export function useTaskEditorController({
         // La tarea recién creada no debe aparecer como "nueva" al propio creador.
         // El visto es local por usuario, por lo que el resto del equipo sí recibirá el aviso azul.
         markTaskCreationIdsSeen(trackingUser, [result.recordId]);
-        const coordinationResult = await updateCoordinationTargets(result.recordId);
-        if (!coordinationResult.ok) {
-          setSaveStatus(`Tarea guardada, pero no se ha podido actualizar Coordinación: ${coordinationResult.message}`);
-          setSaveStatusIsError(true);
-          return;
+        if (!createTaskOverride) {
+          const coordinationResult = await updateCoordinationTargets(result.recordId);
+          if (!coordinationResult.ok) {
+            setSaveStatus(`Tarea guardada, pero no se ha podido actualizar Coordinación: ${coordinationResult.message}`);
+            setSaveStatusIsError(true);
+            return;
+          }
         }
         await onCreated?.(result.recordId);
       }

@@ -191,6 +191,14 @@ export interface AtomicCoordinationWorkflowResult {
   indexUpdatedAt?: string;
 }
 
+export interface AtomicCoordinationTaskCreationPayload {
+  meeting: AtomicCoordinationWorkflowRecord;
+  index: AtomicCoordinationWorkflowRecord;
+  task: { id: string; value: string };
+}
+
+export type AtomicCoordinationTaskCreationResult = AtomicCoordinationWorkflowResult;
+
 export type {
   SqliteComiteSessionRecord,
   SqliteComiteSessionRecordsSnapshot,
@@ -1067,6 +1075,85 @@ export async function closeCoordinationWorkflowAtomically(
       })();
 
       if (result.ok) enqueueLocalBackup('close:coordinacion_workflow');
+      return result;
+    },
+    (nextStatus, message) => ({ ok: false, status: nextStatus, message }),
+  );
+}
+
+
+export async function createCoordinationTaskAtomically(
+  payload: AtomicCoordinationTaskCreationPayload,
+): Promise<AtomicCoordinationTaskCreationResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || isDatabaseWriteBlockedByHeartbeat()) {
+        return {
+          ok: false,
+          status: currentStatus,
+          message: currentStatus.message ?? 'SQLite no está activo. No se puede crear la tarea desde Coordinación de forma segura.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+      const db = requireDatabase();
+      const result = db.transaction((): AtomicCoordinationTaskCreationResult => {
+        const readPersistedUpdatedAt = (key: string): string | null => {
+          const row = db.prepare('SELECT updated_at FROM persisted_records WHERE key = ?').get(key) as { updated_at?: unknown } | undefined;
+          return typeof row?.updated_at === 'string' ? row.updated_at : null;
+        };
+        if (readPersistedUpdatedAt(payload.meeting.key) !== payload.meeting.expectedUpdatedAt) {
+          return { ok: false, status: currentStatus, message: 'La reunión ha sido modificada por otro usuario. Recarga antes de crear la tarea.' };
+        }
+        if (readPersistedUpdatedAt(payload.index.key) !== payload.index.expectedUpdatedAt) {
+          return { ok: false, status: currentStatus, message: 'Coordinación ha sido modificada por otro usuario. Recarga antes de crear la tarea.' };
+        }
+        const existingTask = db.prepare('SELECT id FROM task_records WHERE id = ?').get(payload.task.id);
+        if (existingTask) {
+          return { ok: false, status: currentStatus, message: 'La tarea ya existe. Recarga antes de volver a intentarlo.' };
+        }
+
+        const now = new Date().toISOString();
+        const updatePersisted = (record: AtomicCoordinationWorkflowRecord): void => {
+          const update = db.prepare(
+            `UPDATE persisted_records
+             SET value_json = ?, source = 'sqlite-primary', updated_at = ?
+             WHERE key = ? AND updated_at = ?`,
+          ).run(record.value, now, record.key, record.expectedUpdatedAt);
+          if (update.changes !== 1) throw new Error('Conflicto de concurrencia al vincular la nueva tarea con Coordinación.');
+        };
+
+        let parsed: Record<string, unknown> = {};
+        try {
+          const candidate = JSON.parse(payload.task.value);
+          if (candidate && typeof candidate === 'object') parsed = candidate as Record<string, unknown>;
+        } catch {
+          // El renderer ya ha validado la estructura funcional de la tarea.
+        }
+        const createdAt = typeof parsed.createdAt === 'string' ? parsed.createdAt : now;
+        const updatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : now;
+        const deletedAt = typeof parsed.deletedAt === 'string' ? parsed.deletedAt : null;
+
+        updatePersisted(payload.meeting);
+        updatePersisted(payload.index);
+        const insert = db.prepare(
+          `INSERT INTO task_records (id, value_json, created_at, updated_at, deleted_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        ).run(payload.task.id, payload.task.value, createdAt, updatedAt, deletedAt);
+        if (insert.changes !== 1) throw new Error('No se ha podido crear la tarea vinculada a Coordinación.');
+
+        updateRefreshMetadata(db, now);
+        return {
+          ok: true,
+          status: currentStatus,
+          message: 'Tarea creada y vinculada a Coordinación de forma atómica.',
+          meetingUpdatedAt: now,
+          indexUpdatedAt: now,
+        };
+      })();
+
+      if (result.ok) enqueueLocalBackup('create:coordinacion_task_workflow');
       return result;
     },
     (nextStatus, message) => ({ ok: false, status: nextStatus, message }),
