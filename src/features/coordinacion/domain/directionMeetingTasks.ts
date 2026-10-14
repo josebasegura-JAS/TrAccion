@@ -1,7 +1,13 @@
 import { isTaskClosed, type Task } from '../../tareas/domain/task';
 
 function normalized(value: string): string {
-  return value.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return value
+    .trim()
+    .toLocaleLowerCase('es')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 export function isRosaTask(task: Task): boolean {
