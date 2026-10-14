@@ -1,13 +1,27 @@
 from pathlib import Path
 
-# Strengthen integrity: a session must resolve every imported point.
+# Keep business failures inside the atomic import contract: transaction rolls back,
+# renderer receives ok=false instead of an uncaught exception.
 p = Path('electron/sqlitePersistence.ts')
 t = p.read_text(encoding='utf-8')
+old = """      const result = db.transaction((): AtomicSessionHistoryImportResult => {"""
+new = """      try {\n        const result = db.transaction((): AtomicSessionHistoryImportResult => {"""
+if old not in t:
+    raise SystemExit('atomic transaction start anchor missing')
+t = t.replace(old, new, 1)
+old = """      if (result.ok) enqueueLocalBackup(`import:${payload.module}_session_history`);\n      return result;\n    },"""
+new = """        if (result.ok) enqueueLocalBackup(`import:${payload.module}_session_history`);\n        return result;\n      } catch (error) {\n        return {\n          ok: false,\n          status: getSqliteStatus(),\n          message: error instanceof Error ? error.message : 'No se ha podido importar el histórico de sesiones.',\n          importedSessionCount: 0,\n          createdTaskCount: 0,\n        };\n      }\n    },"""
+if old not in t:
+    raise SystemExit('atomic transaction result anchor missing')
+t = t.replace(old, new, 1)
+
+# Strengthen integrity: a session must resolve every imported point.
 old = """          const taskIds = session.taskExternalKeys.flatMap((externalKey) => {\n            const id = taskIdsByExternalKey.get(externalKey);\n            return id ? [id] : [];\n          });\n          const finalValue = JSON.stringify({"""
 new = """          const taskIds = session.taskExternalKeys.flatMap((externalKey) => {\n            const id = taskIdsByExternalKey.get(externalKey);\n            return id ? [id] : [];\n          });\n          if (taskIds.length !== session.taskExternalKeys.length) {\n            throw new Error('No se han podido resolver todos los puntos de una sesión histórica. No se ha importado ningún cambio.');\n          }\n          const finalValue = JSON.stringify({"""
 if old not in t:
     raise SystemExit('task resolution anchor missing')
-p.write_text(t.replace(old, new, 1), encoding='utf-8')
+t = t.replace(old, new, 1)
+p.write_text(t, encoding='utf-8')
 
 # Force a fresh task snapshot after commit before loading historical tasks.
 p = Path('src/shared/sessions/SessionManagementPage.tsx')
@@ -52,6 +66,7 @@ tests = r'''  it('importa puntos y sesiones históricas en una única transacci�
     const sessionRecord = sessions.records.find((record) => record.id === 'hist-session-1');
     expect(sessionRecord).toBeDefined();
     expect((JSON.parse(sessionRecord!.value) as { items: string[] }).items).toEqual(['hist-task-1']);
+    await persistence.closeSqlitePersistence();
   });
 
   it('revierte también los puntos si falla la inserción de una sesión histórica', async () => {
@@ -74,9 +89,11 @@ tests = r'''  it('importa puntos y sesiones históricas en una única transacci�
       sessions: [{ externalKey: 'ROLL-S', id: 'collision', value: JSON.stringify({ id: 'collision', code: 'NEW', date: '2025-02-01', notes: 'ImportKey:ROLL-S', createdAt: now, updatedAt: now, closedAt: now }), taskExternalKeys: ['ROLL-T'] }],
     });
     expect(result.ok).toBe(false);
+    expect(result.message).toContain('mismo identificador');
 
     const tasks = await persistence.loadTaskRecordsSnapshot({ mode: 'all' });
     expect(tasks.records.some((record) => record.id === 'rollback-task')).toBe(false);
+    await persistence.closeSqlitePersistence();
   });
 '''
 p.write_text(t[:start] + tests + t[end:], encoding='utf-8')
