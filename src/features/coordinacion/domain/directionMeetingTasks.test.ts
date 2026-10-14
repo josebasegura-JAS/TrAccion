@@ -29,6 +29,10 @@ describe('directionMeetingTasks', () => {
     expect(pointTaskIds).toEqual(['rosa-fase', 'rosa-estado']);
   });
 
+  it('incorpora el id interno configurable generado para «Tratar con Rosa»', () => {
+    expect(directionMeetingTasks([task('rosa-id', 'tratar-con-rosa')], [])).toHaveLength(1);
+  });
+
   it('normaliza mayúsculas y acentos', () => {
     expect(directionMeetingTasks([task('rosa', ' TRATAR CON ROSA ')], [])).toHaveLength(1);
   });
