@@ -60,9 +60,20 @@ function meeting(result = 'Acuerdo alcanzado'): CoordinationMeeting {
   };
 }
 
+const activeStatus = {
+  ready: true,
+  engine: 'better-sqlite3' as const,
+  phase: 'active' as const,
+  path: 'Z:/TrAccion/traccion.sqlite',
+  schemaVersion: 1,
+  isDefaultPath: false,
+  lockPath: 'Z:/TrAccion/traccion.sqlite.lock',
+};
+
 describe('coordinationMeetingTracking hardening', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    Object.defineProperty(window, 'traccion', { configurable: true, writable: true, value: undefined });
     useTaskStore.setState({ tasks: [task()] });
   });
 
@@ -123,7 +134,7 @@ describe('coordinationMeetingTracking hardening', () => {
   });
 
   it('reintenta una operación pendiente para un punto que ya salió de la reunión', async () => {
-    queueCoordinationTrackingRemoval({
+    await queueCoordinationTrackingRemoval({
       meetingId: 'meeting-1',
       pointId: 'point-1',
       taskId: 'task-1',
@@ -160,5 +171,65 @@ describe('coordinationMeetingTracking hardening', () => {
     expect(failures).toEqual([]);
     expect(upsert).not.toHaveBeenCalled();
     expect(pendingCoordinationTrackingCount()).toBe(0);
+  });
+
+  it('permite que otro equipo recupere desde SQLite un pendiente creado en el primero', async () => {
+    let sharedValue: string | null = null;
+    let sharedUpdatedAt: string | null = null;
+    let revision = 0;
+
+    const getPersistedRecord = vi.fn(async () => ({
+      status: activeStatus,
+      record: sharedValue === null ? null : {
+        key: 'traccion.v1.coordinacion.pendingTrackingQueue',
+        value: sharedValue,
+        createdAt: '2026-10-14T05:00:00.000Z',
+        updatedAt: sharedUpdatedAt,
+      },
+    }));
+    const saveLocalStorageRecordIfUnchanged = vi.fn(async (record: {
+      value: string;
+      expectedUpdatedAt: string | null;
+    }) => {
+      if (record.expectedUpdatedAt !== sharedUpdatedAt) {
+        return {
+          ok: false,
+          status: activeStatus,
+          currentUpdatedAt: sharedUpdatedAt,
+          message: 'Los datos han cambiado mientras guardabas.',
+        };
+      }
+      revision += 1;
+      sharedValue = record.value;
+      sharedUpdatedAt = `revision-${revision}`;
+      return {
+        ok: true,
+        status: activeStatus,
+        currentUpdatedAt: sharedUpdatedAt,
+        message: 'Guardado.',
+      };
+    });
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      writable: true,
+      value: { getPersistedRecord, saveLocalStorageRecordIfUnchanged },
+    });
+
+    useTaskStore.setState({
+      upsertCoordinationTracking: vi.fn().mockResolvedValue({ ok: false, message: 'Fallo temporal' }),
+    });
+    const firstFailures = await syncMeetingTracking(meeting(), ['point-1'], { allowStatusOnly: false });
+    expect(firstFailures).toHaveLength(1);
+    expect(JSON.parse(sharedValue ?? '[]')).toHaveLength(1);
+
+    window.localStorage.clear();
+    const upsertFromSecondPc = vi.fn().mockResolvedValue({ ok: true, message: 'Guardado' });
+    useTaskStore.setState({ tasks: [task()], upsertCoordinationTracking: upsertFromSecondPc });
+
+    const secondFailures = await retryPendingCoordinationTracking([meeting()]);
+
+    expect(secondFailures).toEqual([]);
+    expect(upsertFromSecondPc).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(sharedValue ?? '[]')).toEqual([]);
   });
 });
