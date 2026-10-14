@@ -64,13 +64,15 @@ export async function removeCoordinationMeetingPoint(pointId: string): Promise<R
       && !trackingResult.message.toLowerCase().includes('ya no existe')
       && !trackingResult.message.toLowerCase().includes('eliminada')
     ) {
-      queueCoordinationTrackingRemoval({
+      const queueResult = await queueCoordinationTrackingRemoval({
         meetingId: meeting.id,
         pointId: point.id,
         taskId: point.taskId,
         label: trackingLabel,
       });
-      trackingWarning = ` Aviso: el punto se ha quitado, pero no se ha podido limpiar su seguimiento en la tarea: ${trackingResult.message}. Se reintentará automáticamente.`;
+      trackingWarning = queueResult.ok
+        ? ` Aviso: el punto se ha quitado, pero no se ha podido limpiar su seguimiento en la tarea: ${trackingResult.message}. Se reintentará automáticamente desde cualquier equipo.`
+        : ` Aviso: el punto se ha quitado, pero no se ha podido limpiar su seguimiento en la tarea: ${trackingResult.message}. Tampoco se ha podido registrar el reintento compartido: ${queueResult.message}`;
     }
   }
 
