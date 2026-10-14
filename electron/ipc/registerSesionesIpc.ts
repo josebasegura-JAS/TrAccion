@@ -17,6 +17,7 @@ import {
   saveParitariaSessionRecordIfUnchanged,
   saveActaRecordIfUnchanged,
   closeSessionWorkflowAtomically,
+  importSessionHistoryAtomically,
   closeCoordinationWorkflowAtomically,
   createCoordinationTaskAtomically,
 } from '../sqlitePersistence.js';
@@ -82,6 +83,21 @@ export function registerSesionesIpc(): void {
     }
     return enqueueSqliteIpc('coordinacion:close-workflow-atomically', () =>
       closeCoordinationWorkflowAtomically(payload as Parameters<typeof closeCoordinationWorkflowAtomically>[0]),
+    );
+  });
+
+  ipcMain.handle('sessions:import-history-atomically', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        message: 'Payload de importación histórica inválido.',
+        importedSessionCount: 0,
+        createdTaskCount: 0,
+      };
+    }
+    return enqueueSqliteIpc('sessions:import-history-atomically', () =>
+      importSessionHistoryAtomically(payload as Parameters<typeof importSessionHistoryAtomically>[0]),
     );
   });
 

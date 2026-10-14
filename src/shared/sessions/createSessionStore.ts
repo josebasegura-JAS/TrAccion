@@ -453,6 +453,30 @@ function buildUpdatedSessionFromDraft(
   };
 }
 
+export function buildImportedManagedSession(
+  config: SessionModuleConfig,
+  entry: { externalKey: string; draft: ManagedSessionDraft; taskIds: string[] },
+  now = new Date().toISOString(),
+): ManagedSession {
+  const { externalKey, draft, taskIds } = entry;
+  const closedAt = draft.date ? `${draft.date}T00:00:00.000Z` : now;
+  return {
+    id: createSessionId(config.moduleId),
+    date: draft.date,
+    code: draft.code.trim(),
+    title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
+    notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
+    observations: draft.observations.trim(),
+    status: 'closed',
+    items: taskIds,
+    treatedTaskIds: taskIds,
+    untreatedTaskIds: [],
+    createdAt: closedAt,
+    updatedAt: now,
+    closedAt,
+  };
+}
+
 function addTaskToSession(session: ManagedSession, taskId: string): ManagedSession {
   if (session.status === 'closed' || session.items.includes(taskId)) {
     return session;
@@ -619,25 +643,9 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             return;
           }
 
-          const closedAt = draft.date ? `${draft.date}T00:00:00.000Z` : now;
-
-          const importedSessionId = createSessionId(config.moduleId);
-          importedSessionIds.add(importedSessionId);
-          importedSessions.push({
-            id: importedSessionId,
-            date: draft.date,
-            code: draft.code.trim(),
-            title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
-            notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
-            observations: draft.observations.trim(),
-            status: 'closed',
-            items: taskIds,
-            treatedTaskIds: taskIds,
-            untreatedTaskIds: [],
-            createdAt: closedAt,
-            updatedAt: now,
-            closedAt,
-          });
+          const importedSession = buildImportedManagedSession(config, { externalKey, draft, taskIds }, now);
+          importedSessionIds.add(importedSession.id);
+          importedSessions.push(importedSession);
         });
 
         estimatedImportedCount = importedSessions.length;
@@ -683,26 +691,9 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
               return;
             }
 
-            const closedAt = draft.date ? `${draft.date}T00:00:00.000Z` : now;
-
-            const importedSessionId = createSessionId(config.moduleId);
-            importedSessionIds.add(importedSessionId);
-            importedSessions.push({
-              id: importedSessionId,
-              date: draft.date,
-              code: draft.code.trim(),
-              title:
-                draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
-              notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
-              observations: draft.observations.trim(),
-              status: 'closed',
-              items: taskIds,
-              treatedTaskIds: taskIds,
-              untreatedTaskIds: [],
-              createdAt: closedAt,
-              updatedAt: now,
-              closedAt,
-            });
+            const importedSession = buildImportedManagedSession(config, { externalKey, draft, taskIds }, now);
+            importedSessionIds.add(importedSession.id);
+            importedSessions.push(importedSession);
           });
 
           importedCount = importedSessions.length;
