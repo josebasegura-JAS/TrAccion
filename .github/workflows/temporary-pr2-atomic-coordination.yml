@@ -19,6 +19,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Fix PR2 apply anchor
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('scripts/pr2_apply.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace("Promise<{ ok: boolean; message: string }>;;\"", "Promise<{ ok: boolean; message: string }>;\"")
+          path.write_text(text, encoding='utf-8')
       - name: Apply PR2 implementation
         run: python scripts/pr2_apply.py
       - name: Install dependencies
