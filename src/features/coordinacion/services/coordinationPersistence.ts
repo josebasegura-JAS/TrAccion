@@ -93,7 +93,7 @@ export function readCoordinationState(): CoordinationState {
   return parseLegacyState(readStorageItem(LEGACY_COORDINATION_STORAGE_KEY)) ?? EMPTY_COORDINATION_STATE;
 }
 
-function indexFromState(state: CoordinationState): CoordinationIndex {
+export function coordinationIndexFromState(state: CoordinationState): CoordinationIndex {
   return {
     meetingIds: state.meetings.map((meeting) => meeting.id),
     directionTaskIds: state.directionTaskIds,
@@ -116,7 +116,7 @@ async function migrateLegacyState(state: CoordinationState): Promise<PersistResu
     const result = await writeJsonStorageAsync(coordinationMeetingStorageKey(meeting.id), meeting);
     if (!result.ok) return { ok: false, message: result.message };
   }
-  const indexResult = await writeJsonStorageAsync(COORDINATION_INDEX_STORAGE_KEY, indexFromState(state));
+  const indexResult = await writeJsonStorageAsync(COORDINATION_INDEX_STORAGE_KEY, coordinationIndexFromState(state));
   return { ok: indexResult.ok, message: indexResult.message };
 }
 
@@ -153,8 +153,8 @@ export async function persistCoordinationState(next: CoordinationState): Promise
   // El índice es la autoridad sobre qué reuniones están activas. Al borrar una
   // reunión no eliminamos físicamente su registro: queda huérfano e inaccesible,
   // evitando que un conflicto posterior deje una eliminación a medias.
-  const currentIndex = indexFromState(current);
-  const nextIndex = indexFromState(next);
+  const currentIndex = coordinationIndexFromState(current);
+  const nextIndex = coordinationIndexFromState(next);
   if (!equalJson(currentIndex, nextIndex)) {
     const result = await writeJsonStorageAsync(COORDINATION_INDEX_STORAGE_KEY, nextIndex);
     if (!result.ok) {

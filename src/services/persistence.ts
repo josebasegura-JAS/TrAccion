@@ -98,6 +98,12 @@ function updateSqliteRecordMetadata(key: string, updatedAt: string | null): void
   writeSqliteRecordMetadata(metadata);
 }
 
+export function applyConfirmedPersistedRecord(key: string, value: string, updatedAt: string): void {
+  if (!isPersistedStorageKey(key)) return;
+  window.localStorage.setItem(key, value);
+  updateSqliteRecordMetadata(key, updatedAt);
+}
+
 function replaceSqliteRecordMetadata(records: TraccionStorageRecordSnapshot[]): void {
   const metadata: SqliteRecordMetadata = {};
   for (const record of records) {

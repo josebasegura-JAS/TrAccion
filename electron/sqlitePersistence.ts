@@ -171,6 +171,26 @@ export interface AtomicSessionWorkflowResult {
   message: string;
 }
 
+export interface AtomicCoordinationWorkflowRecord {
+  key: string;
+  value: string;
+  expectedUpdatedAt: string;
+}
+
+export interface AtomicCoordinationWorkflowPayload {
+  meeting: AtomicCoordinationWorkflowRecord;
+  index: AtomicCoordinationWorkflowRecord;
+  tasks: AtomicSessionWorkflowRecord[];
+}
+
+export interface AtomicCoordinationWorkflowResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  message: string;
+  meetingUpdatedAt?: string;
+  indexUpdatedAt?: string;
+}
+
 export type {
   SqliteComiteSessionRecord,
   SqliteComiteSessionRecordsSnapshot,
@@ -964,6 +984,92 @@ export async function closeSessionWorkflowAtomically(
       status: nextStatus,
       message,
     }),
+  );
+}
+
+
+export async function closeCoordinationWorkflowAtomically(
+  payload: AtomicCoordinationWorkflowPayload,
+): Promise<AtomicCoordinationWorkflowResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || isDatabaseWriteBlockedByHeartbeat()) {
+        return {
+          ok: false,
+          status: currentStatus,
+          message: currentStatus.message ?? 'SQLite no está activo. No se puede cerrar Coordinación de forma segura.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+      const db = requireDatabase();
+      const result = db.transaction((): AtomicCoordinationWorkflowResult => {
+        const readPersistedUpdatedAt = (key: string): string | null => {
+          const row = db.prepare('SELECT updated_at FROM persisted_records WHERE key = ?').get(key) as { updated_at?: unknown } | undefined;
+          return typeof row?.updated_at === 'string' ? row.updated_at : null;
+        };
+        const readTaskUpdatedAt = (id: string): string | null => {
+          const row = db.prepare('SELECT updated_at FROM task_records WHERE id = ? AND deleted_at IS NULL').get(id) as { updated_at?: unknown } | undefined;
+          return typeof row?.updated_at === 'string' ? row.updated_at : null;
+        };
+
+        if (readPersistedUpdatedAt(payload.meeting.key) !== payload.meeting.expectedUpdatedAt) {
+          return { ok: false, status: currentStatus, message: 'La reunión ha sido modificada por otro usuario. Recarga antes de cerrarla.' };
+        }
+        if (readPersistedUpdatedAt(payload.index.key) !== payload.index.expectedUpdatedAt) {
+          return { ok: false, status: currentStatus, message: 'Coordinación ha sido modificada por otro usuario. Recarga antes de cerrar la reunión.' };
+        }
+        for (const task of payload.tasks) {
+          if (readTaskUpdatedAt(task.id) !== task.expectedUpdatedAt) {
+            return { ok: false, status: currentStatus, message: 'Una de las tareas seleccionadas ha sido modificada por otro usuario. Recarga antes de cerrar la reunión.' };
+          }
+        }
+
+        const now = new Date().toISOString();
+        const updatePersisted = (record: AtomicCoordinationWorkflowRecord): void => {
+          const update = db.prepare(
+            `UPDATE persisted_records
+             SET value_json = ?, source = 'sqlite-primary', updated_at = ?
+             WHERE key = ? AND updated_at = ?`,
+          ).run(record.value, now, record.key, record.expectedUpdatedAt);
+          if (update.changes !== 1) throw new Error('Conflicto de concurrencia durante el cierre de Coordinación.');
+        };
+        const updateTask = (record: AtomicSessionWorkflowRecord): void => {
+          let parsed: Record<string, unknown> = {};
+          try {
+            const candidate = JSON.parse(record.value);
+            if (candidate && typeof candidate === 'object') parsed = candidate as Record<string, unknown>;
+          } catch {
+            // The renderer/store has already validated the task record shape.
+          }
+          const updatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : now;
+          const deletedAt = typeof parsed.deletedAt === 'string' ? parsed.deletedAt : null;
+          const update = db.prepare(
+            `UPDATE task_records
+             SET value_json = ?, updated_at = ?, deleted_at = ?
+             WHERE id = ? AND updated_at = ?`,
+          ).run(record.value, updatedAt, deletedAt, record.id, record.expectedUpdatedAt);
+          if (update.changes !== 1) throw new Error('Conflicto de concurrencia durante el cierre de tareas de Coordinación.');
+        };
+
+        updatePersisted(payload.meeting);
+        updatePersisted(payload.index);
+        for (const task of payload.tasks) updateTask(task);
+        updateRefreshMetadata(db, now);
+        return {
+          ok: true,
+          status: currentStatus,
+          message: 'Reunión y tareas cerradas de forma atómica.',
+          meetingUpdatedAt: now,
+          indexUpdatedAt: now,
+        };
+      })();
+
+      if (result.ok) enqueueLocalBackup('close:coordinacion_workflow');
+      return result;
+    },
+    (nextStatus, message) => ({ ok: false, status: nextStatus, message }),
   );
 }
 
