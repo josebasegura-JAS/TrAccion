@@ -1,4 +1,4 @@
-import { createManagedSessionStore } from '../../../shared/sessions/createSessionStore';
+import { createValidatedManagedSessionStore } from '../../../shared/sessions/createValidatedSessionStore';
 import { PARITARIA_SESSION_CONFIG } from '../domain/paritaria';
 
-export const useParitariaSessionStore = createManagedSessionStore(PARITARIA_SESSION_CONFIG);
+export const useParitariaSessionStore = createValidatedManagedSessionStore(PARITARIA_SESSION_CONFIG);
