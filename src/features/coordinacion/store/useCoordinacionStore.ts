@@ -53,4 +53,5 @@ baseCoordinacionStore.setState({
 });
 
 export const useCoordinacionStore = baseCoordinacionStore;
+export { COORDINATION_STORAGE_KEY } from './useCoordinacionStoreBase';
 export { coordinationPointStatusLabel };
