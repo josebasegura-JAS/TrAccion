@@ -4,19 +4,31 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  GripVertical,
   Pencil,
   RefreshCw,
   RotateCcw,
+  Save,
   Trash2,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type DragEvent, type ReactNode } from 'react';
 import type { Task } from '../../features/tareas/domain/task';
+import { useCommitteeSessionStore } from '../../features/comite/store/useCommitteeSessionStore';
+import { useParitariaSessionStore } from '../../features/paritaria/store/useParitariaSessionStore';
+import { withSharedModuleLocks } from '../../services/sharedModuleLock';
 import { useSharedRecordLock } from '../../services/useSharedRecordLock';
 import { ActionButton } from '../../components/ui/ActionButton';
 import { CountBadge } from '../../components/ui/CountBadge';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import { buildPrintableCommitteeSessionHtml } from './buildPrintableCommitteeSessionHtml';
-import { getManagedSessionTaskResult, managedSessionLabel, managedSessionTaskResultLabel, type ManagedSession, type SessionModuleConfig } from './session';
+import {
+  getManagedSessionTaskResult,
+  managedSessionLabel,
+  managedSessionTaskResultLabel,
+  type ManagedSession,
+  type SessionModuleConfig,
+} from './session';
+import { saveSessionTaskOrder } from './sessionTaskOrder';
 import {
   buildSessionExportPayload,
   describeTask,
@@ -65,6 +77,24 @@ export function SessionPanel({
   );
 }
 
+interface SessionOrderDraft {
+  items: string[];
+  baseItems: string[];
+  baseUpdatedAt: string | null;
+}
+
+function sameOrder(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((taskId, index) => taskId === right[index]);
+}
+
+function buildOrderDraft(session: ManagedSession): SessionOrderDraft {
+  return {
+    items: [...session.items],
+    baseItems: [...session.items],
+    baseUpdatedAt: session.updatedAt ?? null,
+  };
+}
+
 export function SessionCard({
   addTask,
   availableTasks,
@@ -72,7 +102,6 @@ export function SessionCard({
   onRefreshTasks,
   config,
   isExpanded,
-  moveTask,
   onClose,
   onEdit,
   onEditTask,
@@ -113,6 +142,18 @@ export function SessionCard({
     enabled: isExpanded && session.status === 'open',
   });
   const isReadOnly = recordLock.isReadOnly;
+  const [orderDraft, setOrderDraft] = useState<SessionOrderDraft>(() => buildOrderDraft(session));
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [orderError, setOrderError] = useState('');
+  const orderDirty = !sameOrder(orderDraft.items, orderDraft.baseItems);
+
+  useEffect(() => {
+    if (!orderDirty) {
+      setOrderDraft(buildOrderDraft(session));
+    }
+  }, [orderDirty, session]);
+
   const sessionExportPayload = buildSessionExportPayload(session, tasksById, config);
   const sessionPrintBuilder =
     config.moduleId === 'comite'
@@ -125,169 +166,311 @@ export function SessionCard({
           })
       : undefined;
 
+  const reorderDraft = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    setOrderDraft((current) => {
+      const fromIndex = current.items.indexOf(draggedId);
+      const toIndex = current.items.indexOf(targetId);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return current;
+
+      const items = [...current.items];
+      const [moved] = items.splice(fromIndex, 1);
+      if (!moved) return current;
+      items.splice(toIndex, 0, moved);
+      return { ...current, items };
+    });
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLButtonElement>, taskId: string) => {
+    if (isReadOnly || isSavingOrder) {
+      event.preventDefault();
+      return;
+    }
+    setDraggedTaskId(taskId);
+    setOrderError('');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', taskId);
+  };
+
+  const discardOrder = () => {
+    setOrderDraft(buildOrderDraft(session));
+    setDraggedTaskId(null);
+    setOrderError('');
+  };
+
+  const saveOrder = async () => {
+    if (!orderDirty || isReadOnly || isSavingOrder) return;
+
+    setIsSavingOrder(true);
+    setOrderError('');
+    try {
+      await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
+        const result = await saveSessionTaskOrder(
+          config,
+          session.id,
+          orderDraft.items,
+          orderDraft.baseUpdatedAt,
+        );
+        if (!result.ok || !result.session) {
+          throw new Error(result.message);
+        }
+
+        setOrderDraft(buildOrderDraft(result.session));
+        if (config.moduleId === 'comite') {
+          useCommitteeSessionStore.getState().reloadFromStorage();
+        } else if (config.moduleId === 'paritaria') {
+          useParitariaSessionStore.getState().reloadFromStorage();
+        }
+      });
+    } catch (error) {
+      setOrderError(
+        error instanceof Error ? error.message : 'No se ha podido guardar el nuevo orden.',
+      );
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
   return (
-    <article className="rounded-2xl border border-metro-border/80 bg-metro-panel/65 p-4 shadow-[0_12px_26px_rgba(2,8,23,0.16)]">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-        <button className="min-w-0 flex-1 text-left" onClick={onToggle} type="button">
-          <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
-            {isExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-            <CalendarDays size={17} className="text-metro-red" /> {session.title}
-          </h3>
-          <p className="mt-1 text-xs text-metro-muted">
-            {managedSessionLabel(session)} · {session.items.length} puntos
-          </p>
-          {session.observations && (
-            <p className="mt-2 rounded-lg border border-metro-border/70 bg-metro-surface/55 px-3 py-2 text-sm text-metro-secondary">
-              <span className="mr-1 font-bold text-metro-text">Observaciones:</span>{session.observations}
+    <>
+      <article className="rounded-2xl border border-metro-border/80 bg-metro-panel/65 p-4 shadow-[0_12px_26px_rgba(2,8,23,0.16)]">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+          <button className="min-w-0 flex-1 text-left" onClick={onToggle} type="button">
+            <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
+              {isExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+              <CalendarDays size={17} className="text-metro-red" /> {session.title}
+            </h3>
+            <p className="mt-1 text-xs text-metro-muted">
+              {managedSessionLabel(session)} · {session.items.length} puntos
             </p>
-          )}
-          {session.notes && <p className="mt-2 text-xs text-metro-muted">{session.notes}</p>}
-        </button>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} size="sm" />
-          {onEdit && (
-            <ActionButton
-              disabled={!isExpanded || isReadOnly}
-              iconOnly={false}
-              onClick={() => onEdit(session)}
-              size="sm"
-              title={
-                !isExpanded ? 'Abre la sesión para bloquearla antes de editarla' : 'Editar sesión'
-              }
-              variant="edit"
-            >
-              Editar
-            </ActionButton>
-          )}
-          <ActionButton
-            disabled={!isExpanded || isReadOnly}
-            iconOnly={false}
-            onClick={() => onClose(session)}
-            size="sm"
-            title={!isExpanded ? 'Abre la sesión para bloquearla antes de cerrarla' : undefined}
-            variant="secondary"
-          >
-            Cerrar sesión
-          </ActionButton>
-          <ActionButton
-            disabled={!isExpanded || isReadOnly}
-            iconOnly={false}
-            onClick={() => void onRemove(session)}
-            size="sm"
-            title={!isExpanded ? 'Abre la sesión para bloquearla antes de eliminarla' : undefined}
-            variant="delete"
-          >
-            Eliminar
-          </ActionButton>
-        </div>
-      </div>
-
-      {isExpanded && (
-        <div className="mt-4 rounded-xl border border-metro-border/70 bg-metro-app/45 p-3.5">
-          {recordLock.message && (
-            <p
-              className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
-                isReadOnly
-                  ? 'border-red-400/40 bg-red-950/20 text-red-100'
-                  : 'border-metro-border bg-metro-surface text-metro-muted'
-              }`}
-            >
-              {recordLock.message}
-            </p>
-          )}
-          <div className="flex flex-col gap-2 lg:flex-row">
-            <select
-              className="min-w-0 flex-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              disabled={isReadOnly || isRefreshingTasks}
-              onChange={(event) => {
-                if (!isReadOnly && event.target.value) {
-                  void addTask(session, event.target.value);
-                  event.target.value = '';
-                }
-              }}
-              value=""
-            >
-              <option value="">{isRefreshingTasks ? 'Actualizando tareas…' : config.taskSelectPlaceholder}</option>
-              {unassignedTasks.map((task) => (
-                <option key={task.id} value={task.id}>
-                  {task.titulo}
-                </option>
-              ))}
-            </select>
-            <span className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-xs text-metro-muted">
-              {unassignedTasks.length} tareas disponibles
-            </span>
-            <button type="button" onClick={onRefreshTasks} disabled={isRefreshingTasks} className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text disabled:opacity-50">{isRefreshingTasks ? 'Actualizando…' : 'Actualizar tareas'}</button>
-          </div>
-
-          <div className="mt-3 space-y-2">
-            {session.items.length === 0 && (
-              <p className="rounded-lg border border-dashed border-metro-border p-3 text-sm text-metro-muted">
-                Sin tareas en el orden del día.
+            {session.observations && (
+              <p className="mt-2 rounded-lg border border-metro-border/70 bg-metro-surface/55 px-3 py-2 text-sm text-metro-secondary">
+                <span className="mr-1 font-bold text-metro-text">Observaciones:</span>{session.observations}
               </p>
             )}
-            {session.items.map((taskId, index) => {
-              const task = tasksById.get(taskId);
-
-              return (
-                <div
-                  className="flex items-center gap-2 rounded-xl border border-metro-border/60 bg-metro-surface px-3 py-2.5 transition hover:bg-metro-raised/60"
-                  key={taskId}
-                >
-                  <span className="w-7 shrink-0 text-sm font-bold text-metro-red">{index + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="truncate text-sm font-semibold text-metro-text"
-                      title={getTaskTitle(tasksById, taskId)}
-                    >
-                      {getTaskTitle(tasksById, taskId)}
-                    </p>
-                    <p className="truncate text-xs text-metro-muted" title={describeTask(task)}>
-                      {describeTask(task)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <button
-                      className="rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
-                      disabled={isReadOnly || index === 0}
-                      onClick={() => void moveTask(session, taskId, 'up')}
-                      type="button"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      className="rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
-                      disabled={isReadOnly || index === session.items.length - 1}
-                      onClick={() => void moveTask(session, taskId, 'down')}
-                      type="button"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={isReadOnly || !task}
-                      onClick={() => void onEditTask(session, taskId, isReadOnly)}
-                      title={task ? 'Editar punto' : 'No se ha encontrado el punto'}
-                      type="button"
-                    >
-                      <Pencil size={12} /> Editar
-                    </button>
-                    <button
-                      className="rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={isReadOnly}
-                      onClick={() => void removeTask(session, taskId)}
-                      type="button"
-                    >
-                      Quitar
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {session.notes && <p className="mt-2 text-xs text-metro-muted">{session.notes}</p>}
+          </button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} size="sm" />
+            {onEdit && (
+              <ActionButton
+                disabled={!isExpanded || isReadOnly || orderDirty}
+                iconOnly={false}
+                onClick={() => onEdit(session)}
+                size="sm"
+                title={
+                  orderDirty
+                    ? 'Guarda o descarta primero el nuevo orden'
+                    : !isExpanded
+                      ? 'Abre la sesión para bloquearla antes de editarla'
+                      : 'Editar sesión'
+                }
+                variant="edit"
+              >
+                Editar
+              </ActionButton>
+            )}
+            <ActionButton
+              disabled={!isExpanded || isReadOnly || orderDirty}
+              iconOnly={false}
+              onClick={() => onClose(session)}
+              size="sm"
+              title={
+                orderDirty
+                  ? 'Guarda o descarta primero el nuevo orden'
+                  : !isExpanded
+                    ? 'Abre la sesión para bloquearla antes de cerrarla'
+                    : undefined
+              }
+              variant="secondary"
+            >
+              Cerrar sesión
+            </ActionButton>
+            <ActionButton
+              disabled={!isExpanded || isReadOnly || orderDirty}
+              iconOnly={false}
+              onClick={() => void onRemove(session)}
+              size="sm"
+              title={
+                orderDirty
+                  ? 'Guarda o descarta primero el nuevo orden'
+                  : !isExpanded
+                    ? 'Abre la sesión para bloquearla antes de eliminarla'
+                    : undefined
+              }
+              variant="delete"
+            >
+              Eliminar
+            </ActionButton>
           </div>
         </div>
+
+        {isExpanded && (
+          <div className="mt-4 rounded-xl border border-metro-border/70 bg-metro-app/45 p-3.5">
+            {recordLock.message && (
+              <p
+                className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                  isReadOnly
+                    ? 'border-red-400/40 bg-red-950/20 text-red-100'
+                    : 'border-metro-border bg-metro-surface text-metro-muted'
+                }`}
+              >
+                {recordLock.message}
+              </p>
+            )}
+            {orderError && (
+              <p className="mb-3 rounded-lg border border-red-400/40 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-100">
+                {orderError}
+              </p>
+            )}
+            <div className="flex flex-col gap-2 lg:flex-row">
+              <select
+                className="min-w-0 flex-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                disabled={isReadOnly || isRefreshingTasks || orderDirty}
+                onChange={(event) => {
+                  if (!isReadOnly && !orderDirty && event.target.value) {
+                    void addTask(session, event.target.value);
+                    event.target.value = '';
+                  }
+                }}
+                value=""
+              >
+                <option value="">
+                  {orderDirty
+                    ? 'Guarda o descarta el nuevo orden antes de añadir puntos'
+                    : isRefreshingTasks
+                      ? 'Actualizando tareas…'
+                      : config.taskSelectPlaceholder}
+                </option>
+                {unassignedTasks.map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.titulo}
+                  </option>
+                ))}
+              </select>
+              <span className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-xs text-metro-muted">
+                {unassignedTasks.length} tareas disponibles
+              </span>
+              <button
+                type="button"
+                onClick={onRefreshTasks}
+                disabled={isRefreshingTasks}
+                className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text disabled:opacity-50"
+              >
+                {isRefreshingTasks ? 'Actualizando…' : 'Actualizar tareas'}
+              </button>
+            </div>
+
+            <p className="mt-3 text-xs text-metro-muted">
+              Arrastra los puntos desde el asa para ordenarlos. El nuevo orden no se guarda hasta pulsar Guardar orden.
+            </p>
+
+            <div className="mt-2 space-y-2">
+              {orderDraft.items.length === 0 && (
+                <p className="rounded-lg border border-dashed border-metro-border p-3 text-sm text-metro-muted">
+                  Sin tareas en el orden del día.
+                </p>
+              )}
+              {orderDraft.items.map((taskId, index) => {
+                const task = tasksById.get(taskId);
+
+                return (
+                  <div
+                    className={`flex items-center gap-2 rounded-xl border bg-metro-surface px-3 py-2.5 transition hover:bg-metro-raised/60 ${
+                      draggedTaskId === taskId
+                        ? 'border-metro-red/70 opacity-60'
+                        : 'border-metro-border/60'
+                    }`}
+                    key={taskId}
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      if (draggedTaskId) reorderDraft(draggedTaskId, taskId);
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                    }}
+                  >
+                    <button
+                      aria-label={`Mover punto ${index + 1}`}
+                      className="cursor-grab rounded-md p-1 text-metro-muted hover:bg-metro-raised hover:text-metro-text active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"
+                      disabled={isReadOnly || isSavingOrder}
+                      draggable={!isReadOnly && !isSavingOrder}
+                      onDragEnd={() => setDraggedTaskId(null)}
+                      onDragStart={(event) => handleDragStart(event, taskId)}
+                      title="Arrastrar para cambiar el orden"
+                      type="button"
+                    >
+                      <GripVertical size={16} />
+                    </button>
+                    <span className="w-7 shrink-0 text-sm font-bold text-metro-red">{index + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="truncate text-sm font-semibold text-metro-text"
+                        title={getTaskTitle(tasksById, taskId)}
+                      >
+                        {getTaskTitle(tasksById, taskId)}
+                      </p>
+                      <p className="truncate text-xs text-metro-muted" title={describeTask(task)}>
+                        {describeTask(task)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={isReadOnly || !task}
+                        onClick={() => void onEditTask(session, taskId, isReadOnly)}
+                        title={task ? 'Editar punto' : 'No se ha encontrado el punto'}
+                        type="button"
+                      >
+                        <Pencil size={12} /> Editar
+                      </button>
+                      <button
+                        className="rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={isReadOnly || orderDirty}
+                        onClick={() => void removeTask(session, taskId)}
+                        title={orderDirty ? 'Guarda o descarta primero el nuevo orden' : undefined}
+                        type="button"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </article>
+
+      {isExpanded && orderDirty && (
+        <div className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-xl border border-metro-border bg-[#0b1725]/95 p-2 shadow-[0_14px_38px_rgba(2,6,23,0.42)] backdrop-blur">
+          <span className="hidden px-2 text-xs font-semibold text-metro-muted sm:inline">
+            Orden del día modificado
+          </span>
+          <ActionButton
+            disabled={isSavingOrder}
+            iconOnly={false}
+            onClick={discardOrder}
+            size="sm"
+            variant="secondary"
+          >
+            Descartar
+          </ActionButton>
+          <ActionButton
+            disabled={isReadOnly || isSavingOrder}
+            icon={Save}
+            iconOnly={false}
+            loading={isSavingOrder}
+            onClick={() => void saveOrder()}
+            size="sm"
+            variant="save"
+          >
+            {isSavingOrder ? 'Guardando…' : 'Guardar orden'}
+          </ActionButton>
+        </div>
       )}
-    </article>
+    </>
   );
 }
 

@@ -13,6 +13,8 @@ import {
 } from './recordLocks.js';
 
 const SQLITE_RECORD_LOCK_WAIT_MS = 750;
+const TEMPORARY_RECORD_LOCK_MESSAGE =
+  'Base ocupada temporalmente. Reintentando el bloqueo compartido de forma segura.';
 
 export interface DatabaseStatus {
   ready: boolean;
@@ -39,6 +41,17 @@ export interface RecordLockService {
   heartbeatRecordLock: (payload: RecordLockPayload) => Promise<RecordLockResult>;
   releaseRecordLock: (payload: RecordLockPayload) => Promise<RecordLockResult>;
   getRecordLock: (payload: RecordLockPayload) => Promise<RecordLockResult>;
+}
+
+function isTemporaryDatabaseOperationLockError(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error ?? '')).toLowerCase();
+  return (
+    message.includes('base ocupada temporalmente') ||
+    message.includes('eisdir') ||
+    message.includes('no se ha podido comprobar de forma fiable el bloqueo sqlite') ||
+    message.includes('directorio de bloqueo sqlite existe') ||
+    message.includes('posible problema temporal de red/smb')
+  );
 }
 
 /**
@@ -107,7 +120,13 @@ export function createRecordLockService(
         }
       },
       SQLITE_RECORD_LOCK_WAIT_MS,
-    );
+    ).catch((error: unknown) => {
+      if (isTemporaryDatabaseOperationLockError(error)) {
+        return recordLockError(TEMPORARY_RECORD_LOCK_MESSAGE);
+      }
+
+      return recordLockError(error instanceof Error ? error.message : unexpectedErrorMessage);
+    });
   }
 
   return {
