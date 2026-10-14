@@ -22,7 +22,7 @@ function task(id: string): Task {
     id,
     titulo: `Tarea ${id}`,
     descripcion: '',
-    tipo: 'tarea',
+    tipo: 'interna',
     fase: 'tarea',
     estado: 'pendiente',
     prioridad: 'media',
