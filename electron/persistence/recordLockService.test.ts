@@ -94,6 +94,23 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
     spy.mockRestore();
   });
 
+  it('normaliza EISDIR del lock SMB como incidencia temporal recuperable', async () => {
+    const dependencies = buildDependencies();
+    dependencies.withDatabaseOperationLock.mockRejectedValueOnce(
+      new Error(
+        'No se ha podido comprobar de forma fiable el bloqueo SQLite. EISDIR: illegal operation on a directory, read',
+      ),
+    );
+    const service = createRecordLockService(
+      dependencies as Parameters<typeof createRecordLockService>[0],
+    );
+
+    const result = await service.heartbeatRecordLock({ module: 'comite', recordId: 'sesion-1' });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('Base ocupada temporalmente');
+  });
+
   it('usa la ruta de base de datos actual como clave del lock de operación', async () => {
     const dependencies = buildDependencies();
     const service = createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0]);
