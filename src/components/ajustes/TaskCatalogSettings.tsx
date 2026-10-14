@@ -1,6 +1,7 @@
 import { ChevronDown, ListTodo, Plus, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { TaskOriginConfig } from '../../features/configuracion/domain/taskOrigins';
+import { isProtectedTaskPhaseId } from '../../features/configuracion/domain/taskPhases';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 
 type TaskSettingsTab = 'states' | 'responsibles' | 'phases' | 'origins';
@@ -11,12 +12,14 @@ function CatalogTextInput({
   className,
   placeholder,
   allowEmpty = false,
+  disabled = false,
 }: {
   value: string;
   onCommit: (value: string) => void;
   className: string;
   placeholder?: string;
   allowEmpty?: boolean;
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
 
@@ -36,6 +39,7 @@ function CatalogTextInput({
   return (
     <input
       className={className}
+      disabled={disabled}
       onBlur={commit}
       onChange={(event) => setDraft(event.target.value)}
       onKeyDown={(event) => {
@@ -130,9 +134,9 @@ export function TaskCatalogSettings() {
           )}
           {activeTab === 'phases' && (
             <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-          <div className="mb-3"><h4 className="text-sm font-bold text-metro-text">Fases</h4><p className="mt-1 text-xs leading-5 text-metro-muted">Desactivar una fase evita nuevas selecciones, pero conserva el histórico.</p></div>
+          <div className="mb-3"><h4 className="text-sm font-bold text-metro-text">Fases</h4><p className="mt-1 text-xs leading-5 text-metro-muted">Desactivar una fase evita nuevas selecciones, pero conserva el histórico. Comité y Paritaria están protegidas porque identifican circuitos funcionales internos.</p></div>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row"><input className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red" onChange={(e) => setNewTaskPhase(e.target.value)} placeholder="Nueva fase" value={newTaskPhase} /><button className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:opacity-50" disabled={!newTaskPhase.trim()} onClick={handleAddTaskPhase} type="button"><Plus size={16} /> Añadir</button></div>
-          <div className="space-y-2">{taskPhases.map((phase) => <div className="grid gap-2 rounded-lg border border-metro-border bg-metro-panel p-2 sm:grid-cols-[minmax(0,1fr)_auto]" key={phase.id}><CatalogTextInput className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red" onCommit={(value) => updateTaskPhase(phase.id, value)} value={phase.nombre} /><button className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red" onClick={() => toggleTaskPhase(phase.id)} type="button">{phase.active ? 'Desactivar' : 'Activar'}</button></div>)}</div>
+          <div className="space-y-2">{taskPhases.map((phase) => { const protectedPhase = isProtectedTaskPhaseId(phase.id); return <div className="grid gap-2 rounded-lg border border-metro-border bg-metro-panel p-2 sm:grid-cols-[minmax(0,1fr)_auto]" key={phase.id}><div><CatalogTextInput className="w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60" disabled={protectedPhase} onCommit={(value) => updateTaskPhase(phase.id, value)} value={phase.nombre} />{protectedPhase && <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-metro-muted">Fase de circuito protegida</span>}</div><button className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50" disabled={protectedPhase} onClick={() => toggleTaskPhase(phase.id)} type="button">{phase.active ? 'Desactivar' : 'Activar'}</button></div>; })}</div>
         </div>
           )}
           {activeTab === 'origins' && (
