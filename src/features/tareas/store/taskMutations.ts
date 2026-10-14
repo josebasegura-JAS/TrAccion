@@ -62,6 +62,28 @@ export function buildSeguimiento(text: string | undefined, fechaHora: string): T
   return trimmedText ? [{ fechaHora, texto: trimmedText }] : [];
 }
 
+export function buildNewTask(
+  draft: TaskDraft,
+  seguimientoText: string | undefined,
+  options?: { now?: string; taskId?: string },
+): Task {
+  const now = options?.now ?? new Date().toISOString();
+  const taskId = options?.taskId ?? createTaskId();
+  return {
+    id: taskId,
+    ...draft,
+    ...buildAssignmentNoticeFields(taskId, '', draft.responsable, now),
+    sessionDocumentCode: '',
+    sessionModule: '',
+    sessionDate: '',
+    seguimiento: buildSeguimiento(seguimientoText, now),
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+    closedAt: isTaskClosed(draft) ? now : null,
+  };
+}
+
 function resolveClosedAt(task: Task, draft: TaskDraft, fechaHora: string): string | null {
   if (!isTaskClosed(draft)) return null;
   return isTaskClosed(task) ? (task.closedAt ?? fechaHora) : fechaHora;

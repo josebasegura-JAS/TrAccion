@@ -213,4 +213,61 @@ describe('Coordinación granular — OCC real sobre persisted_records', () => {
     await persistence.closeSqlitePersistence();
   });
 
+
+  it('crea la tarea y la vincula con reunión e índice en una única transacción', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await import('./sqlitePersistence.js');
+    await persistence.initializeSqlitePersistence();
+
+    const meetingKey = 'traccion.v1.coordinacion.meeting.meeting-create-task';
+    const indexKey = 'traccion.v1.coordinacion.index';
+    const meeting = await persistence.savePersistedRecordIfUnchanged({ key: meetingKey, value: JSON.stringify({ id: 'meeting-create-task', points: [] }), expectedUpdatedAt: null });
+    const index = await persistence.savePersistedRecordIfUnchanged({ key: indexKey, value: JSON.stringify({ meetingIds: ['meeting-create-task'], directionTaskIds: [] }), expectedUpdatedAt: null });
+    expect(meeting.ok && index.ok).toBe(true);
+
+    const taskValue = JSON.stringify({ id: 'task-created-atomic', titulo: 'Nueva', updatedAt: '2026-10-14T06:00:00.000Z', createdAt: '2026-10-14T06:00:00.000Z', deletedAt: null });
+    const result = await persistence.createCoordinationTaskAtomically({
+      meeting: { key: meetingKey, value: JSON.stringify({ id: 'meeting-create-task', points: [{ taskId: 'task-created-atomic' }] }), expectedUpdatedAt: meeting.currentUpdatedAt! },
+      index: { key: indexKey, value: JSON.stringify({ meetingIds: ['meeting-create-task'], directionTaskIds: ['task-created-atomic'] }), expectedUpdatedAt: index.currentUpdatedAt! },
+      task: { id: 'task-created-atomic', value: taskValue },
+    });
+
+    expect(result.ok).toBe(true);
+    expect((await persistence.getPersistedRecordSnapshot(meetingKey)).record?.value).toContain('task-created-atomic');
+    expect((await persistence.getPersistedRecordSnapshot(indexKey)).record?.value).toContain('task-created-atomic');
+    const tasks = await persistence.loadTaskRecordsSnapshot({ mode: 'all' });
+    expect(tasks.records.find((record) => record.id === 'task-created-atomic')?.value).toBe(taskValue);
+    await persistence.closeSqlitePersistence();
+  });
+
+  it('si la reunión cambió no crea la tarea ni modifica el índice', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await import('./sqlitePersistence.js');
+    await persistence.initializeSqlitePersistence();
+
+    const meetingKey = 'traccion.v1.coordinacion.meeting.meeting-create-conflict';
+    const indexKey = 'traccion.v1.coordinacion.index';
+    const initialMeeting = JSON.stringify({ id: 'meeting-create-conflict', points: [] });
+    const initialIndex = JSON.stringify({ meetingIds: ['meeting-create-conflict'], directionTaskIds: [] });
+    const meeting = await persistence.savePersistedRecordIfUnchanged({ key: meetingKey, value: initialMeeting, expectedUpdatedAt: null });
+    const index = await persistence.savePersistedRecordIfUnchanged({ key: indexKey, value: initialIndex, expectedUpdatedAt: null });
+    const newerMeeting = await persistence.savePersistedRecordIfUnchanged({ key: meetingKey, value: JSON.stringify({ id: 'meeting-create-conflict', points: [{ id: 'remote' }] }), expectedUpdatedAt: meeting.currentUpdatedAt });
+    expect(newerMeeting.ok).toBe(true);
+
+    const result = await persistence.createCoordinationTaskAtomically({
+      meeting: { key: meetingKey, value: JSON.stringify({ id: 'meeting-create-conflict', points: [{ taskId: 'task-should-not-exist' }] }), expectedUpdatedAt: meeting.currentUpdatedAt! },
+      index: { key: indexKey, value: JSON.stringify({ meetingIds: ['meeting-create-conflict'], directionTaskIds: ['task-should-not-exist'] }), expectedUpdatedAt: index.currentUpdatedAt! },
+      task: { id: 'task-should-not-exist', value: JSON.stringify({ id: 'task-should-not-exist', createdAt: '2026-10-14T06:00:00.000Z', updatedAt: '2026-10-14T06:00:00.000Z', deletedAt: null }) },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('reunión');
+    expect((await persistence.getPersistedRecordSnapshot(indexKey)).record?.value).toBe(initialIndex);
+    const tasks = await persistence.loadTaskRecordsSnapshot({ mode: 'all' });
+    expect(tasks.records.some((record) => record.id === 'task-should-not-exist')).toBe(false);
+    await persistence.closeSqlitePersistence();
+  });
+
 });

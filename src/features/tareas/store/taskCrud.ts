@@ -9,7 +9,7 @@ import {
   tasksDiffer,
 } from './taskNormalization';
 import {
-  buildAssignmentNoticeFields,
+  buildNewTask,
   buildSeguimiento,
   buildUpdatedTask,
   createTaskId,
@@ -125,21 +125,7 @@ export async function createTaskWithConcurrencyCheck(
   seguimientoText: string | undefined,
   setState: SetTaskCrudState,
 ): Promise<TaskUpdateResult> {
-  const now = new Date().toISOString();
-  const taskId = createTaskId();
-  const task: Task = {
-    id: taskId,
-    ...draft,
-    ...buildAssignmentNoticeFields(taskId, '', draft.responsable, now),
-    sessionDocumentCode: '',
-    sessionModule: '',
-    sessionDate: '',
-    seguimiento: buildSeguimiento(seguimientoText, now),
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
-    closedAt: isTaskClosed(draft) ? now : null,
-  };
+  const task = buildNewTask(draft, seguimientoText);
 
   try {
     if (hasTaskSqliteRepository()) {

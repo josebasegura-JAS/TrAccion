@@ -18,6 +18,7 @@ import {
   saveActaRecordIfUnchanged,
   closeSessionWorkflowAtomically,
   closeCoordinationWorkflowAtomically,
+  createCoordinationTaskAtomically,
 } from '../sqlitePersistence.js';
 
 export function registerSesionesIpc(): void {
@@ -64,6 +65,15 @@ export function registerSesionesIpc(): void {
       date: candidate.date,
       points: candidate.points,
     });
+  });
+
+  ipcMain.handle('coordinacion:create-task-atomically', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return { ok: false, status: getSqliteStatus(), message: 'Payload de creación de tarea desde Coordinación inválido.' };
+    }
+    return enqueueSqliteIpc('coordinacion:create-task-atomically', () =>
+      createCoordinationTaskAtomically(payload as Parameters<typeof createCoordinationTaskAtomically>[0]),
+    );
   });
 
   ipcMain.handle('coordinacion:close-workflow-atomically', (_event, payload: unknown) => {

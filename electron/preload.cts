@@ -124,6 +124,11 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('tasks:save-record-if-unchanged', record),
+  createCoordinationTaskAtomically: (payload: {
+    meeting: { key: string; value: string; expectedUpdatedAt: string };
+    index: { key: string; value: string; expectedUpdatedAt: string };
+    task: { id: string; value: string };
+  }) => ipcRenderer.invoke('coordinacion:create-task-atomically', payload),
   closeCoordinationWorkflowAtomically: (payload: {
     meeting: { key: string; value: string; expectedUpdatedAt: string };
     index: { key: string; value: string; expectedUpdatedAt: string };

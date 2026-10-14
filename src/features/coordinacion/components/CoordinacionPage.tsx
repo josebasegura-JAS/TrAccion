@@ -30,6 +30,7 @@ import { updateCoordinationMeetingDetails } from '../services/coordinationMeetin
 import { meetingContext, syncMeetingTracking } from '../services/coordinationMeetingTracking';
 import { closeCoordinationWorkflowAtomically } from '../services/coordinationClosure';
 import { registerTaskUpdateAudit } from '../../tareas/store/taskMutations';
+import { createAndLinkCoordinationTaskAtomically } from '../services/coordinationTaskCreation';
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
   { title: 'Para qué sirve', items: ['Prepara y conserva las reuniones de RRLL con Dirección, otras áreas y sindicatos.', 'Permite convertir tareas abiertas en puntos de reunión, añadir puntos libres y crear tareas nuevas sin perder la relación entre reunión y seguimiento.'] },
@@ -59,7 +60,6 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
   const createOtherAreaMeeting = useCoordinacionStore((state) => state.createOtherAreaMeeting);
   const addManualPoint = useCoordinacionStore((state) => state.addManualPoint);
   const addTaskPoint = useCoordinacionStore((state) => state.addTaskPoint);
-  const linkManualPointToTask = useCoordinacionStore((state) => state.linkManualPointToTask);
   const saveMeetingPoints = useCoordinacionStore((state) => state.saveMeetingPoints);
   const deleteManualPoint = useCoordinacionStore((state) => state.deleteManualPoint);
   const deleteMeeting = useCoordinacionStore((state) => state.deleteMeeting);
@@ -279,16 +279,24 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
     }
   };
 
-  const handleCreatedTask = async (taskId: string) => {
-    if (!selected) return;
-    const currentTasks = useTaskStore.getState().tasks;
-    const result = taskCreation?.pointId
-      ? await linkManualPointToTask(selected.id, taskCreation.pointId, taskId, currentTasks)
-      : await addTaskPoint(selected.id, taskId, currentTasks);
-    setStatus(result.ok
-      ? taskCreation?.pointId ? 'Punto convertido en tarea y vinculado a la reunión.' : 'Tarea creada y añadida a la reunión.'
-      : `La tarea se ha creado, pero no ha podido vincularse a la reunión: ${result.message}`);
-    if (result.ok) await backup();
+  const handleCreateTaskFromCoordination = (input: {
+    draft: TaskDraft;
+    seguimientoText?: string;
+    targets: { direction: boolean; unionName: string | null; areaName: string | null };
+  }) => {
+    if (!selected) return Promise.resolve({ ok: false, message: 'No hay una reunión activa para vincular la tarea.' });
+    return createAndLinkCoordinationTaskAtomically({
+      meetingId: selected.id,
+      pointId: taskCreation?.pointId ?? null,
+      ...input,
+    });
+  };
+
+  const handleCreatedTask = async () => {
+    setStatus(taskCreation?.pointId
+      ? 'Punto convertido en tarea y vinculado a la reunión.'
+      : 'Tarea creada y añadida a la reunión.');
+    await backup();
   };
 
   const handleEditMeeting = async (
@@ -560,7 +568,7 @@ export function CoordinacionPage({ initialMeetingId = null, initialPointId, navi
         visible={selected.status === 'open' && hasUnsavedMeetingChanges}
       />
       {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}
-      {taskCreation && <TaskEditor initialDraft={taskInitialDraft} initialTrackingText={taskInitialTrackingText} key={`meeting-task-${taskCreation.pointId ?? 'new'}`} mode="create" onCreated={handleCreatedTask} onDone={() => setTaskCreation(null)} task={null} />}
+      {taskCreation && <TaskEditor createTaskOverride={handleCreateTaskFromCoordination} initialDraft={taskInitialDraft} initialTrackingText={taskInitialTrackingText} key={`meeting-task-${taskCreation.pointId ?? 'new'}`} mode="create" onCreated={handleCreatedTask} onDone={() => setTaskCreation(null)} task={null} />}
       {meetingEditOpen && selected.status === 'open' && (
         <CoordinationMeetingEditDialog
           key={`edit-${selected.id}-${selected.updatedAt}`}
