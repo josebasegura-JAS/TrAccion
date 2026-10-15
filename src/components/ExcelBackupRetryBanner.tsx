@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
-import { EXCEL_BACKUP_FAILURE_EVENT, type ExcelBackupFailure } from '../shared/export/saveExcelBackupWithRetry';
+import {
+  EXCEL_BACKUP_FAILURE_EVENT,
+  upsertExcelBackupFailure,
+  type ExcelBackupFailure,
+} from '../shared/export/saveExcelBackupWithRetry';
+
+const TASKS_EXCEL_FAILURE_ID = 'tareas-abiertas';
 
 export function ExcelBackupRetryBanner() {
-  const [failure, setFailure] = useState<ExcelBackupFailure | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [failures, setFailures] = useState<ExcelBackupFailure[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const bridge = (window as unknown as { traccionTaskWord?: {
@@ -13,55 +19,92 @@ export function ExcelBackupRetryBanner() {
     } }).traccionTaskWord;
     const unsubscribe = bridge?.onBackupFailure?.(() => {
       if (!bridge) return;
-      setFailure({
+      setFailures((current) => upsertExcelBackupFailure(current, {
+        id: TASKS_EXCEL_FAILURE_ID,
         message: 'No se ha podido actualizar el Excel de tareas abiertas. Comprueba que esté cerrado y que la red esté disponible.',
         retry: async () => {
           const result = await bridge.refresh();
           if (!result.ok) throw new Error(result.message);
           return true;
         },
+      }));
+      setErrors((current) => {
+        const next = { ...current };
+        delete next[TASKS_EXCEL_FAILURE_ID];
+        return next;
       });
-      setError('');
     });
     return () => unsubscribe?.();
   }, []);
 
   useEffect(() => {
     const onFailure = (event: Event) => {
-      setFailure((event as CustomEvent<ExcelBackupFailure>).detail);
-      setError('');
+      const failure = (event as CustomEvent<ExcelBackupFailure>).detail;
+      setFailures((current) => upsertExcelBackupFailure(current, failure));
+      setErrors((current) => {
+        const next = { ...current };
+        delete next[failure.id];
+        return next;
+      });
     };
     window.addEventListener(EXCEL_BACKUP_FAILURE_EVENT, onFailure);
     return () => window.removeEventListener(EXCEL_BACKUP_FAILURE_EVENT, onFailure);
   }, []);
 
-  if (!failure) return null;
+  if (failures.length === 0) return null;
 
-  const retry = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError('');
+  const retry = async (failure: ExcelBackupFailure) => {
+    if (busyId) return;
+    setBusyId(failure.id);
+    setErrors((current) => {
+      const next = { ...current };
+      delete next[failure.id];
+      return next;
+    });
     try {
       await failure.retry();
-      setFailure(null);
+      setFailures((current) => current.filter((item) => item.id !== failure.id));
     } catch {
-      setError('El respaldo sigue sin poder guardarse. Comprueba el Excel y la conexión antes de reintentar.');
+      setErrors((current) => ({
+        ...current,
+        [failure.id]: 'El respaldo sigue sin poder guardarse. Comprueba el Excel y la conexión antes de reintentar.',
+      }));
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   };
 
   return (
-    <div role="alert" className="fixed bottom-5 right-5 z-[120] w-[min(30rem,calc(100vw-2rem))] rounded-xl border border-red-400/50 bg-red-950 p-4 text-sm text-red-50 shadow-2xl">
-      <p className="font-bold">Respaldo Excel pendiente</p>
-      <p className="mt-1">{failure.message}</p>
-      <p className="mt-1 text-xs text-red-100/80">Los datos de TrAcción se han guardado; solo ha fallado el Excel de respaldo.</p>
-      {error && <p className="mt-2 text-xs font-semibold">{error}</p>}
-      <div className="mt-3 flex justify-end gap-2">
-        <button className="rounded-lg border border-red-200/40 px-3 py-1.5" onClick={() => setFailure(null)} type="button">Cerrar</button>
-        <button className="rounded-lg bg-red-100 px-3 py-1.5 font-bold text-red-950 disabled:opacity-50" disabled={busy} onClick={() => void retry()} type="button">
-          {busy ? 'Reintentando…' : 'Reintentar'}
-        </button>
+    <div
+      role="alert"
+      className="fixed bottom-5 right-5 z-[120] max-h-[min(32rem,calc(100vh-2rem))] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-red-400/50 bg-red-950 p-4 text-sm text-red-50 shadow-2xl"
+    >
+      <p className="font-bold">
+        {failures.length === 1 ? 'Respaldo Excel pendiente' : `${failures.length} respaldos Excel pendientes`}
+      </p>
+      <p className="mt-1 text-xs text-red-100/80">
+        Los datos de TrAcción están guardados. Estos avisos permanecerán hasta que cada Excel de respaldo se actualice correctamente.
+      </p>
+
+      <div className="mt-3 space-y-3">
+        {failures.map((failure) => (
+          <div className="rounded-lg border border-red-200/20 bg-black/10 p-3" key={failure.id}>
+            <p>{failure.message}</p>
+            {errors[failure.id] && (
+              <p className="mt-2 text-xs font-semibold">{errors[failure.id]}</p>
+            )}
+            <div className="mt-2 flex justify-end">
+              <button
+                className="rounded-lg bg-red-100 px-3 py-1.5 font-bold text-red-950 disabled:opacity-50"
+                disabled={busyId !== null}
+                onClick={() => void retry(failure)}
+                type="button"
+              >
+                {busyId === failure.id ? 'Reintentando…' : 'Reintentar'}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
