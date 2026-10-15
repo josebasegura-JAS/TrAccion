@@ -5,6 +5,7 @@ describe('clasificación de persistencia', () => {
   it('mantiene como compartidos los datos operativos', () => {
     expect(isPersistedStorageKey('traccion.v1.tareas.tasks')).toBe(true);
     expect(isPersistedStorageKey('traccion.v1.paritaria.sessions')).toBe(true);
+    expect(isPersistedStorageKey('traccion.v1.actividadesExternas.records')).toBe(true);
   });
 
   it('no sincroniza preferencias visuales locales entre usuarios', () => {
