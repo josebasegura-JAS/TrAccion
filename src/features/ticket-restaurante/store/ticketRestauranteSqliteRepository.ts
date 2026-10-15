@@ -7,6 +7,7 @@ import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
   saveSharedRecord,
 } from '../../../services/strictSqliteWrites';
+import { assertTicketRestauranteModuleLockActive } from './ticketRestauranteLockCheckpoint';
 
 const TICKET_RESTAURANTE_CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
@@ -394,15 +395,16 @@ export async function saveTicketRestauranteAbsencesToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver(
+    const result = await withTemporarySqliteRetry(async () => {
+      await assertTicketRestauranteModuleLockActive();
+      return saver(
         records.map(({ id, serializedValue, expectedUpdatedAt }) => ({
           id,
           value: serializedValue,
           expectedUpdatedAt,
         })),
-      ),
-    );
+      );
+    });
 
     publishDatabaseStatus(result.status);
     clearPersistenceBusy(TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY, result.message);
@@ -575,15 +577,16 @@ export async function saveTicketRestauranteManutencionesToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver(
+    const result = await withTemporarySqliteRetry(async () => {
+      await assertTicketRestauranteModuleLockActive();
+      return saver(
         records.map(({ id, serializedValue, expectedUpdatedAt }) => ({
           id,
           value: serializedValue,
           expectedUpdatedAt,
         })),
-      ),
-    );
+      );
+    });
 
     publishDatabaseStatus(result.status);
     clearPersistenceBusy(TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY, result.message);
