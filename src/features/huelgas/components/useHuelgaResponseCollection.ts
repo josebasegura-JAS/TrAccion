@@ -145,7 +145,10 @@ function base64ToArrayBuffer(value: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-function totalsFromGeneralDetail(detail: HuelgaGeneralDetail[]) {
+function totalsFromGeneralDetail(detail: HuelgaGeneralDetail[]): Pick<
+  HuelgaZoneResponse,
+  'personasTurno' | 'serviciosMinimos' | 'personasTrabajan' | 'personasHuelga'
+> {
   const sumMetric = (metric: 'personasTurno' | 'serviciosMinimos' | 'trabajan' | 'huelga') =>
     detail.reduce((total, row) => total + row[metric].mujeres + row[metric].hombres, 0);
   return {
@@ -272,12 +275,12 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     const mismatchWarning = fileCircuitMismatchWarning(fileName, currentZone, allZones);
     const detailTotals = parsed.generalDetail?.length
       ? totalsFromGeneralDetail(parsed.generalDetail)
-      : {};
+      : null;
     const normalizedParsed = {
       ...parsed,
-      ...detailTotals,
-      serviciosMinimos: detailTotals.serviciosMinimos ?? parsed.serviciosMinimos ?? 0,
-      personasHuelga: detailTotals.personasHuelga ?? parsed.personasHuelga ?? 0,
+      ...(detailTotals ?? {}),
+      serviciosMinimos: detailTotals?.serviciosMinimos ?? parsed.serviciosMinimos ?? 0,
+      personasHuelga: detailTotals?.personasHuelga ?? parsed.personasHuelga ?? 0,
     };
     const optionalMissingPattern = /total de (servicios mínimos|personas en huelga)/i;
     const warnings = [...new Set([
@@ -568,8 +571,7 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     const errors = validateHuelgaCollection(responses).filter((item) => item.severity === 'error');
     if (errors.length > 0) {
       await alert(`No se puede generar el informe agrupado mientras existan errores.\n${issueMessage(errors)}`, {
-        title: 'Informe agrupado bloqueado',
-        type: 'error',
+        title: 'Informe agrupado bloqueado', type: 'error',
       });
       return;
     }
@@ -578,13 +580,11 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     try {
       await downloadHuelgaGroupedReport(target.fecha);
       await alert('Guarda este informe junto a la Excel maestra de la misma fecha, sin renombrarla. Abre ambos archivos en Excel y permite actualizar vínculos para recalcular las cifras.', {
-        title: 'Informe agrupado generado',
-        type: 'info',
+        title: 'Informe agrupado generado', type: 'info',
       });
     } catch (error) {
       await alert(error instanceof Error ? error.message : 'No se ha podido generar el informe agrupado.', {
-        title: 'Error al exportar',
-        type: 'error',
+        title: 'Error al exportar', type: 'error',
       });
     } finally {
       setExporting(false);
