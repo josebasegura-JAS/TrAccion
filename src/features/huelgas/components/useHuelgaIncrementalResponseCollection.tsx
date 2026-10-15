@@ -25,8 +25,6 @@ import {
 } from './huelgasIncrementalImports';
 import { useHuelgaResponseCollection } from './useHuelgaResponseCollection';
 
-const INTERNAL_SSGG_ZONE_ID = 'zona-ssgg-interno';
-
 export type HuelgaImportDisplayBatch = HuelgaImportBatch & {
   zoneId: string;
   zoneName: string;
@@ -182,7 +180,6 @@ export function useHuelgaIncrementalResponseCollection(huelgas: Huelga[], zonas:
       return false;
     }
 
-    // Ficheros antiguos sin desglose: conservar el importador existente para no perder compatibilidad.
     if (incoming.length === 0 && !(parsed.generalDetail?.length)) {
       const synthetic = new File([buffer], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       await base.importResponse(zoneId, synthetic);
