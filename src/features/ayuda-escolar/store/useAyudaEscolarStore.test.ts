@@ -89,7 +89,7 @@ describe('Ayuda Escolar - persistencia compartida', () => {
     );
   });
 
-  it('si SQLite compartida no está disponible no usa datos locales como fallback', async () => {
+  it('si SQLite compartida falla conserva el último histórico válido', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const getPersistedRecord = vi.fn().mockResolvedValue({
       status: {
@@ -101,11 +101,12 @@ describe('Ayuda Escolar - persistencia compartida', () => {
       record: null,
     });
     setTraccion({ getPersistedRecord });
-    useAyudaEscolarStore.setState({ records: [record('local', '2026-09-01T10:00:00.000Z')] });
+    const existing = [record('existing', '2026-09-01T10:00:00.000Z')];
+    useAyudaEscolarStore.setState({ records: existing });
 
     await useAyudaEscolarStore.getState().load();
 
-    expect(useAyudaEscolarStore.getState().records).toEqual([]);
+    expect(useAyudaEscolarStore.getState().records).toEqual(existing);
     expect(mocks.writeRendererStorageCache).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
