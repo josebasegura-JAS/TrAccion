@@ -29,10 +29,35 @@ describe('withSharedModuleLocks', () => {
     await expect(
       withSharedModuleLocks([{ module: 'tareas', label: 'Tareas' }], async () => 'ok'),
     ).resolves.toBe('ok');
+    expect(heartbeatRecordLock).toHaveBeenCalledTimes(1);
+    expect(releaseRecordLock).toHaveBeenCalledTimes(1);
+  });
+
+  it('no inicia la operación si la verificación inmediata detecta que el lock ya es ajeno', async () => {
+    heartbeatRecordLock.mockResolvedValueOnce({
+      ok: false,
+      status: 'locked',
+      lock: {
+        ownerId: 'otro',
+        ownerName: 'Rosa',
+        machineName: 'PC-RRLL',
+        acquiredAt: '2026-10-14T08:00:00.000Z',
+        expiresAt: '2026-10-14T08:01:00.000Z',
+      },
+      message: '',
+    });
+    const operation = vi.fn(async () => 'ok');
+
+    await expect(
+      withSharedModuleLocks([{ module: 'sorteos', label: 'Sorteos' }], operation),
+    ).rejects.toThrow('ahora lo tiene Rosa@PC-RRLL');
+
+    expect(operation).not.toHaveBeenCalled();
     expect(releaseRecordLock).toHaveBeenCalledTimes(1);
   });
 
   it('marca el guard como perdido cuando falla el heartbeat y bloquea la escritura posterior', async () => {
+    heartbeatRecordLock.mockResolvedValueOnce(acquired);
     heartbeatRecordLock.mockRejectedValueOnce(new Error('network down'));
     let continueOperation!: () => void;
     const waitForHeartbeat = new Promise<void>((resolve) => { continueOperation = resolve; });
@@ -56,6 +81,7 @@ describe('withSharedModuleLocks', () => {
   });
 
   it('convierte un heartbeat que informa lock ajeno en un error legible', async () => {
+    heartbeatRecordLock.mockResolvedValueOnce(acquired);
     heartbeatRecordLock.mockResolvedValueOnce({
       ok: false,
       status: 'locked',
