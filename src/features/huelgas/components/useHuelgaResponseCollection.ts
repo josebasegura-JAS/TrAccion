@@ -12,6 +12,7 @@ import {
   isHuelgaResponseCollections,
   parseHuelgaResponseWorkbook,
   responseHasData,
+  type HuelgaGeneralDetail,
   type HuelgaResponseCollections,
   type HuelgaZoneResponse,
 } from './huelgasResponseCollection';
@@ -144,6 +145,20 @@ function base64ToArrayBuffer(value: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+function totalsFromGeneralDetail(detail: HuelgaGeneralDetail[]): Pick<
+  HuelgaZoneResponse,
+  'personasTurno' | 'serviciosMinimos' | 'personasTrabajan' | 'personasHuelga'
+> {
+  const sumMetric = (metric: 'personasTurno' | 'serviciosMinimos' | 'trabajan' | 'huelga') =>
+    detail.reduce((total, row) => total + row[metric].mujeres + row[metric].hombres, 0);
+  return {
+    personasTurno: sumMetric('personasTurno'),
+    serviciosMinimos: sumMetric('serviciosMinimos'),
+    personasTrabajan: sumMetric('trabajan'),
+    personasHuelga: sumMetric('huelga'),
+  };
+}
+
 type HuelgaMailAttachment = { name: string; size: number; contentBase64?: string };
 type HuelgaMailInspection = {
   senderName: string;
@@ -214,12 +229,16 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
             personasHuelga: previous.personasHuelga ?? 0,
           }
         : {};
+      const detailTotals = field === 'generalDetail' && Array.isArray(value) && value.length > 0
+        ? totalsFromGeneralDetail(value as HuelgaGeneralDetail[])
+        : {};
       return {
         ...current,
         [zoneId]: {
           ...previous,
           ...internalDefaults,
           [field]: value,
+          ...detailTotals,
           reviewed: field === 'reviewed' ? Boolean(value) : false,
         },
       };
@@ -254,10 +273,14 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
       analyzeHuelgaResponseWorkbook(buffer),
     ]);
     const mismatchWarning = fileCircuitMismatchWarning(fileName, currentZone, allZones);
+    const detailTotals = parsed.generalDetail?.length
+      ? totalsFromGeneralDetail(parsed.generalDetail)
+      : null;
     const normalizedParsed = {
       ...parsed,
-      serviciosMinimos: parsed.serviciosMinimos ?? 0,
-      personasHuelga: parsed.personasHuelga ?? 0,
+      ...(detailTotals ?? {}),
+      serviciosMinimos: detailTotals?.serviciosMinimos ?? parsed.serviciosMinimos ?? 0,
+      personasHuelga: detailTotals?.personasHuelga ?? parsed.personasHuelga ?? 0,
     };
     const optionalMissingPattern = /total de (servicios mínimos|personas en huelga)/i;
     const warnings = [...new Set([
