@@ -94,24 +94,23 @@ async function loadSharedRecords(): Promise<SchoolHelpRecord[] | null> {
 }
 
 async function loadAndMigrateLegacyRecords(): Promise<SchoolHelpRecord[]> {
-  try {
-    const sharedRecords = await loadSharedRecords();
-    if (sharedRecords !== null) {
-      mirrorRecords(sharedRecords);
-      return sharedRecords;
-    }
-  } catch (error) {
-    console.error('No se ha podido cargar Ayuda Escolar desde SQLite; no se usa fallback local.', error);
+  const sharedRecords = await loadSharedRecords();
+  if (sharedRecords !== null) {
+    mirrorRecords(sharedRecords);
+    return sharedRecords;
   }
-
   return [];
 }
 
 export const useAyudaEscolarStore = create<SchoolHelpState>((set, get) => ({
   records: [],
   load: async () => {
-    const records = await loadAndMigrateLegacyRecords();
-    set({ records });
+    try {
+      const records = await loadAndMigrateLegacyRecords();
+      set({ records });
+    } catch (error) {
+      console.error('No se ha podido cargar Ayuda Escolar desde SQLite; se conserva el último histórico válido.', error);
+    }
   },
   reloadFromStorage: async () => {
     try {
@@ -122,6 +121,7 @@ export const useAyudaEscolarStore = create<SchoolHelpState>((set, get) => ({
       set({ records: sharedRecords });
     } catch {
       // El polling global ya informa de los problemas de conectividad SQLite.
+      // Se conserva el último snapshot válido en pantalla.
     }
   },
   add: async (record) => {
