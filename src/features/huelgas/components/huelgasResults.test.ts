@@ -42,7 +42,7 @@ function response(
 }
 
 describe('buildHuelgaResults', () => {
-  it('excludes minimum services from the computable population', () => {
+  it('includes minimum services in the seguimiento denominator through personas con turno', () => {
     const collection: HuelgaResponseCollection = {
       huelgaId: 'h-1',
       updatedAt: '2026-10-15T10:00:00.000Z',
@@ -53,25 +53,46 @@ describe('buildHuelgaResults', () => {
 
     const results = buildHuelgaResults(collection);
     expect(results.noche.totals.personasTurno).toBe(100);
-    expect(results.noche.totals.personasComputables).toBe(80);
-    expect(results.noche.totals.seguimiento).toBe(25);
+    expect(results.noche.totals.personasComputables).toBe(100);
+    expect(results.noche.totals.seguimiento).toBe(20);
   });
 
-  it('calculates the global percentage from people instead of averaging area percentages', () => {
+  it('reproduces the real Conducción example: 6 huelga / 57 con turno = 10.53%', () => {
     const collection: HuelgaResponseCollection = {
-      huelgaId: 'h-2',
+      huelgaId: 'h-real',
       updatedAt: '2026-10-15T10:00:00.000Z',
       responses: {
-        a: response('a', 'Área grande', { trabajan: 80, huelga: 20, minimos: 0 }, { trabajan: 0, huelga: 0, minimos: 0 }, { trabajan: 0, huelga: 0, minimos: 0 }),
-        b: response('b', 'Área pequeña', { trabajan: 0, huelga: 10, minimos: 0 }, { trabajan: 0, huelga: 0, minimos: 0 }, { trabajan: 0, huelga: 0, minimos: 0 }),
+        conduccion: response(
+          'conduccion',
+          'Conducción',
+          { trabajan: 35, huelga: 6, minimos: 16 },
+          { trabajan: 0, huelga: 0, minimos: 0 },
+          { trabajan: 0, huelga: 0, minimos: 0 },
+        ),
       },
     };
 
     const results = buildHuelgaResults(collection);
-    expect(results.global.totals.personasComputables).toBe(110);
+    expect(results.noche.totals.personasTurno).toBe(57);
+    expect(results.noche.totals.personasHuelga).toBe(6);
+    expect(results.noche.totals.seguimiento).toBeCloseTo(10.5263, 3);
+  });
+
+  it('calculates the global percentage from total people with shift instead of averaging area percentages', () => {
+    const collection: HuelgaResponseCollection = {
+      huelgaId: 'h-2',
+      updatedAt: '2026-10-15T10:00:00.000Z',
+      responses: {
+        a: response('a', 'Área grande', { trabajan: 70, huelga: 20, minimos: 10 }, { trabajan: 0, huelga: 0, minimos: 0 }, { trabajan: 0, huelga: 0, minimos: 0 }),
+        b: response('b', 'Área pequeña', { trabajan: 0, huelga: 10, minimos: 10 }, { trabajan: 0, huelga: 0, minimos: 0 }, { trabajan: 0, huelga: 0, minimos: 0 }),
+      },
+    };
+
+    const results = buildHuelgaResults(collection);
+    expect(results.global.totals.personasTurno).toBe(120);
     expect(results.global.totals.personasHuelga).toBe(30);
-    expect(results.global.totals.seguimiento).toBeCloseTo(27.2727, 3);
-    expect(results.global.totals.seguimiento).not.toBe(60);
+    expect(results.global.totals.seguimiento).toBe(25);
+    expect(results.global.totals.seguimiento).not.toBe(35);
   });
 
   it('keeps night, morning and afternoon separated while global consolidates all shifts', () => {
@@ -88,7 +109,7 @@ describe('buildHuelgaResults', () => {
     expect(results.manana.totals.personasHuelga).toBe(4);
     expect(results.tarde.totals.personasHuelga).toBe(3);
     expect(results.global.totals.personasHuelga).toBe(8);
-    expect(results.global.totals.personasComputables).toBe(40);
-    expect(results.global.totals.seguimiento).toBe(20);
+    expect(results.global.totals.personasTurno).toBe(48);
+    expect(results.global.totals.seguimiento).toBeCloseTo(16.6667, 3);
   });
 });
