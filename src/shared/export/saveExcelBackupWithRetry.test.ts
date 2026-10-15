@@ -36,9 +36,9 @@ describe('saveExcelBackupWithRetry', () => {
       value: { saveOperationalExcelBackup },
     });
 
-    let emittedFailure: ExcelBackupFailure | null = null;
+    const emittedFailures: ExcelBackupFailure[] = [];
     const listener = (event: Event) => {
-      emittedFailure = (event as CustomEvent<ExcelBackupFailure>).detail;
+      emittedFailures.push((event as CustomEvent<ExcelBackupFailure>).detail);
     };
     window.addEventListener(EXCEL_BACKUP_FAILURE_EVENT, listener);
 
@@ -51,11 +51,11 @@ describe('saveExcelBackupWithRetry', () => {
       });
 
       expect(message).toMatch(/archivo esté cerrado/i);
-      expect(emittedFailure).not.toBeNull();
-      expect((emittedFailure as ExcelBackupFailure | null)?.id).toBe(
-        'G:\\RRLL\\Respaldos::Coordinacion_Direccion.xlsx',
-      );
-      await expect((emittedFailure as ExcelBackupFailure).retry()).resolves.toBe(true);
+      expect(emittedFailures).toHaveLength(1);
+      const emittedFailure = emittedFailures[0];
+      expect(emittedFailure?.id).toBe('G:\\RRLL\\Respaldos::Coordinacion_Direccion.xlsx');
+      if (!emittedFailure) throw new Error('No se ha emitido el fallo de respaldo esperado.');
+      await expect(emittedFailure.retry()).resolves.toBe(true);
       expect(saveOperationalExcelBackup).toHaveBeenCalledTimes(2);
     } finally {
       window.removeEventListener(EXCEL_BACKUP_FAILURE_EVENT, listener);
