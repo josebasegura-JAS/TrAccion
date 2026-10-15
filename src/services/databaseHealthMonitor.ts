@@ -1,15 +1,24 @@
 import { publishDatabaseStatus, refreshDatabaseStatus } from './databaseStatus';
 import { publishDatabaseConnectivityBlock } from './editingAvailability';
-import { forceExternalDataRefreshAfterRecovery, startExternalDataSyncPolling } from './externalDataSync';
+import {
+  forceExternalDataRefreshAfterRecovery,
+  startExternalDataSyncPolling,
+  stopExternalDataSyncPolling,
+} from './externalDataSync';
 import { publishDatabaseConnectivityState } from './databaseConnectivityState';
 
-const HEALTHY_CHECK_INTERVAL_MS = 8_000;
+const HEALTHY_CHECK_INTERVAL_MS = 5_000;
 const RECONNECT_FAST_INTERVAL_MS = 2_000;
 const RECONNECT_SLOW_INTERVAL_MS = 5_000;
 const RECONNECT_FAST_ATTEMPTS = 5;
 const HEALTH_CHECK_TIMEOUT_MS = 6_000;
 const CONNECTIVITY_MESSAGE =
   'Se ha perdido la conexión con la base SQLite compartida. La edición permanece bloqueada mientras TrAcción intenta reconectar.';
+
+type NetworkInformationLike = {
+  addEventListener?: (type: 'change', listener: () => void) => void;
+  removeEventListener?: (type: 'change', listener: () => void) => void;
+};
 
 let timerId: number | null = null;
 let checkInProgress = false;
@@ -18,6 +27,8 @@ let blockedByHealthMonitor = false;
 let monitorStarted = false;
 let browserOnlineHandler: (() => void) | null = null;
 let browserOfflineHandler: (() => void) | null = null;
+let networkConnection: NetworkInformationLike | null = null;
+let networkConnectionChangeHandler: (() => void) | null = null;
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -59,6 +70,7 @@ function scheduleNextCheck(delayMs?: number): void {
 }
 
 function blockEditing(message = CONNECTIVITY_MESSAGE): void {
+  stopExternalDataSyncPolling();
   blockedByHealthMonitor = true;
   const attempt = Math.max(1, consecutiveFailures);
   publishDatabaseConnectivityBlock(true, message, 'health-monitor');
@@ -69,6 +81,17 @@ function blockEditing(message = CONNECTIVITY_MESSAGE): void {
       : `Reconectando con la base compartida… intento ${attempt}`,
     attempt,
   );
+}
+
+function markPotentialNetworkTransition(message: string): void {
+  consecutiveFailures = Math.max(1, consecutiveFailures);
+  blockEditing(message);
+  requestDatabaseReconnectCheck();
+}
+
+function getNetworkInformation(): NetworkInformationLike | null {
+  if (typeof navigator === 'undefined') return null;
+  return (navigator as Navigator & { connection?: NetworkInformationLike }).connection ?? null;
 }
 
 async function completeRecovery(): Promise<void> {
@@ -144,14 +167,27 @@ export function startDatabaseHealthMonitor(): void {
   }
 
   monitorStarted = true;
-  browserOnlineHandler = () => requestDatabaseReconnectCheck();
+  browserOnlineHandler = () => {
+    markPotentialNetworkTransition(
+      'La red ha cambiado o acaba de recuperarse. Verificando de nuevo la base compartida…',
+    );
+  };
   browserOfflineHandler = () => {
-    consecutiveFailures = Math.max(1, consecutiveFailures);
-    blockEditing('Windows ha informado de una pérdida de red. Reconectando con la base compartida…');
-    requestDatabaseReconnectCheck();
+    markPotentialNetworkTransition(
+      'Windows ha informado de una pérdida de red. Reconectando con la base compartida…',
+    );
   };
   window.addEventListener('online', browserOnlineHandler);
   window.addEventListener('offline', browserOfflineHandler);
+
+  networkConnection = getNetworkInformation();
+  networkConnectionChangeHandler = () => {
+    markPotentialNetworkTransition(
+      'Se ha detectado un cambio de conexión de red. Verificando la base compartida antes de continuar…',
+    );
+  };
+  networkConnection?.addEventListener?.('change', networkConnectionChangeHandler);
+
   requestDatabaseReconnectCheck();
 }
 
@@ -163,8 +199,13 @@ export function stopDatabaseHealthMonitor(): void {
   clearScheduledCheck();
   if (browserOnlineHandler) window.removeEventListener('online', browserOnlineHandler);
   if (browserOfflineHandler) window.removeEventListener('offline', browserOfflineHandler);
+  if (networkConnectionChangeHandler) {
+    networkConnection?.removeEventListener?.('change', networkConnectionChangeHandler);
+  }
   browserOnlineHandler = null;
   browserOfflineHandler = null;
+  networkConnection = null;
+  networkConnectionChangeHandler = null;
   checkInProgress = false;
   consecutiveFailures = 0;
   blockedByHealthMonitor = false;
