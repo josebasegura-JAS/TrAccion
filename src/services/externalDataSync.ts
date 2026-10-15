@@ -62,6 +62,11 @@ type ExternalDataSyncState = {
 
 type ExternalDataSyncListener = () => void;
 
+type ExternalDataSyncPollingStartOptions = {
+  preserveSeenTokens?: boolean;
+  runImmediately?: boolean;
+};
+
 const listeners = new Set<ExternalDataSyncListener>();
 let state: ExternalDataSyncState = {
   status: 'idle',
@@ -347,7 +352,9 @@ function handleSharedEditingActivityChanged(): void {
   }
 }
 
-export function startExternalDataSyncPolling(): void {
+export function startExternalDataSyncPolling(
+  options: ExternalDataSyncPollingStartOptions = {},
+): void {
   if (typeof window === 'undefined' || timerId !== null) {
     return;
   }
@@ -356,19 +363,24 @@ export function startExternalDataSyncPolling(): void {
     console.error('No se han podido registrar los stores sincronizables.', error);
   });
 
-  const metadata = readHydrationMetadata();
-  lastSeenRefreshToken = metadata?.refreshToken ?? null;
-  // Los stores con tabla directa no forman parte del snapshot genérico de hidratación.
-  // Sus tokens arrancan a null deliberadamente: el primer poll los compara contra
-  // SQLite y recarga solo los stores que ya tienen datos, cerrando la ventana entre
-  // hidratación y primer polling sin añadir un segundo temporizador por módulo.
-  const hasValidCache = Boolean(metadata?.refreshToken && metadata.strategy === 'sqlite');
-  lastSeenPersistedRecordsUpdatedAt = hasValidCache ? (metadata?.lastUpdatedAt ?? null) : null;
-  lastSeenTaskRecordsUpdatedAt = null;
-  lastSeenSorteosDrawsUpdatedAt = null;
-  lastSeenSorteosExclusionsUpdatedAt = null;
-  lastSeenDirectStoreUpdatedAt = {};
-  void pollOnce();
+  if (!options.preserveSeenTokens) {
+    const metadata = readHydrationMetadata();
+    lastSeenRefreshToken = metadata?.refreshToken ?? null;
+    // Los stores con tabla directa no forman parte del snapshot genérico de hidratación.
+    // Sus tokens arrancan a null deliberadamente: el primer poll los compara contra
+    // SQLite y recarga solo los stores que ya tienen datos, cerrando la ventana entre
+    // hidratación y primer polling sin añadir un segundo temporizador por módulo.
+    const hasValidCache = Boolean(metadata?.refreshToken && metadata.strategy === 'sqlite');
+    lastSeenPersistedRecordsUpdatedAt = hasValidCache ? (metadata?.lastUpdatedAt ?? null) : null;
+    lastSeenTaskRecordsUpdatedAt = null;
+    lastSeenSorteosDrawsUpdatedAt = null;
+    lastSeenSorteosExclusionsUpdatedAt = null;
+    lastSeenDirectStoreUpdatedAt = {};
+  }
+
+  if (options.runImmediately !== false) {
+    void pollOnce();
+  }
   timerId = window.setInterval(() => {
     void pollOnce();
   }, POLLING_INTERVAL_MS);
