@@ -22,11 +22,11 @@ const SHIFT_PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde'];
 
 function escapeHtml(value: string): string {
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+    .split('&').join('&amp;')
+    .split('<').join('&lt;')
+    .split('>').join('&gt;')
+    .split('"').join('&quot;')
+    .split("'").join('&#039;');
 }
 
 function deltaText(value: number | null): string {
@@ -64,7 +64,7 @@ function printResult(huelga: Huelga, collection: HuelgaResponseCollection, resul
       .top{border-top:6px solid #b91c2c;padding-top:12px;display:flex;justify-content:space-between;gap:20px}.eyebrow{font-size:10px;font-weight:700;letter-spacing:.08em;color:#777;text-transform:uppercase}.title{font-size:23px;font-weight:800;margin:3px 0}.meta{color:#666}.stamp{text-align:right;color:#666;font-size:10px}
       .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:18px 0}.kpi{border:1px solid #ddd;border-radius:8px;padding:10px}.kpi small{display:block;color:#777;text-transform:uppercase;font-weight:700;font-size:9px}.kpi strong{display:block;font-size:20px;margin-top:4px}.kpi.red strong{color:#b91c2c}
       .summary{border-left:4px solid #b91c2c;background:#f7f7f7;padding:10px 12px;margin:12px 0 16px;line-height:1.45}.section-title{font-size:13px;font-weight:800;margin:18px 0 9px}.bar-row{display:grid;grid-template-columns:185px 1fr 58px;gap:8px;align-items:center;margin:5px 0}.bar-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar-track{height:10px;background:#ececec;border-radius:99px;overflow:hidden}.bar-track span{display:block;height:100%;background:#b91c2c;border-radius:99px}.bar-value{text-align:right;font-weight:700}
-      table{width:100%;border-collapse:collapse;margin-top:8px;font-size:9.5px}th{background:#333;color:white;text-align:right;padding:6px}th:first-child,td:first-child{text-align:left}td{text-align:right;padding:5px 6px;border-bottom:1px solid #ddd}tfoot td{font-weight:800;border-top:2px solid #333}.footer{margin-top:14px;border-top:1px solid #ddd;padding-top:7px;color:#777;font-size:9px} @media print{button{display:none}}
+      table{width:100%;border-collapse:collapse;margin-top:8px;font-size:9.5px}th{background:#333;color:white;text-align:right;padding:6px}th:first-child,td:first-child{text-align:left}td{text-align:right;padding:5px 6px;border-bottom:1px solid #ddd}tfoot td{font-weight:800;border-top:2px solid #333}.footer{margin-top:14px;border-top:1px solid #ddd;padding-top:7px;color:#777;font-size:9px}
     </style></head><body>
     <div class="top"><div><div class="eyebrow">Metro Bilbao · Relaciones Laborales · TrAcción</div><div class="title">Resultados de huelga · ${escapeHtml(HUELGA_PERIOD_LABELS[result.period])}</div><div class="meta">${escapeHtml(formatDate(huelga.fecha))} · ${escapeHtml(huelga.sindicatos.join(' · '))}</div></div><div class="stamp"><strong>DATOS VALIDADOS</strong><br>${escapeHtml(new Date(collection.updatedAt).toLocaleString('es-ES'))}</div></div>
     <div class="kpis"><div class="kpi"><small>Computables</small><strong>${result.totals.personasComputables}</strong></div><div class="kpi red"><small>En huelga</small><strong>${result.totals.personasHuelga}</strong></div><div class="kpi red"><small>Seguimiento</small><strong>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</strong></div><div class="kpi"><small>Trabajan</small><strong>${result.totals.personasTrabajan}</strong></div></div>
@@ -72,8 +72,10 @@ function printResult(huelga: Huelga, collection: HuelgaResponseCollection, resul
     <div class="section-title">Seguimiento por área / circuito</div>${bars || '<p>Sin datos para este corte.</p>'}
     <div class="section-title">Detalle</div><table><thead><tr><th>Área / circuito</th><th>Con turno</th><th>SS.MM.</th><th>Computables</th><th>Trabajan</th><th>Huelga</th><th>Seguimiento</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td>${result.totals.personasTurno}</td><td>${result.totals.serviciosMinimos}</td><td>${result.totals.personasComputables}</td><td>${result.totals.personasTrabajan}</td><td>${result.totals.personasHuelga}</td><td>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</td></tr></tfoot></table>
     <div class="footer">Seguimiento = personas en huelga / (personas que trabajan + personas en huelga). Los servicios mínimos quedan fuera de la base computable.</div>
-    <script>window.addEventListener('load',()=>{window.print();});<\/script></body></html>`);
+    </body></html>`);
   printWindow.document.close();
+  printWindow.focus();
+  window.setTimeout(() => printWindow.print(), 150);
 }
 
 type Props = {
