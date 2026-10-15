@@ -236,7 +236,9 @@ function addReportSection(
 export async function downloadHuelgaResultsWorkbook(
   huelga: Huelga,
   collection: HuelgaResponseCollection,
+  _results: unknown,
 ): Promise<void> {
+  void _results;
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'TrAcción';
