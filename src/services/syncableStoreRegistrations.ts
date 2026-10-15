@@ -7,6 +7,7 @@ import { useCoordinacionStore } from '../features/coordinacion/store/useCoordina
 import { pendingCoordinationTrackingCount, retryPendingCoordinationTracking } from '../features/coordinacion/services/coordinationMeetingTracking';
 import { useCriteriosRrllStore } from '../features/criterios-rrll/store/useCriteriosRrllStore';
 import { useEspecialesStore } from '../features/especiales/store/useEspecialesStore';
+import { notifyHuelgasExternalReload } from '../features/huelgas/components/huelgasSyncBridge';
 import { useLicenciasSinSueldoStore } from '../features/licencias-sin-sueldo/store/useLicenciasSinSueldoStore';
 import { useLoteriaStore } from '../features/loteria/store/useLoteriaStore';
 import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
@@ -87,6 +88,10 @@ registerSyncableStore({
 registerSyncableStore({
   id: 'actividades-externas',
   reloadFromStorage: () => useActividadesExternasStore.getState().load(),
+});
+registerSyncableStore({
+  id: 'huelgas',
+  reloadFromStorage: () => notifyHuelgasExternalReload(),
 });
 registerSyncableStore({
   id: 'vinculograma',
