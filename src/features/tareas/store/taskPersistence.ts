@@ -71,42 +71,42 @@ export function persistTasks(tasks: Task[]): void {
 export async function readTasksForStore(mode: TaskSqliteLoadMode = 'active'): Promise<Task[]> {
   if (!hasTaskSqliteRepository()) {
     if (import.meta.env.MODE === 'test') return readTasks();
-    console.error('Repositorio SQLite de tareas no disponible; no se usa fallback local.');
-    return [];
+    throw new Error('Repositorio SQLite de tareas no disponible.');
   }
 
   try {
     const sqliteTasks = await loadTasksFromSqlite(parseTasksSnapshot, mode);
-    if (sqliteTasks) {
-      const normalizedSqliteTasks = sqliteTasks.map(normalizeTask);
-      const reconciledSqliteTasks = reconcileTasksWithClosedSessions(normalizedSqliteTasks);
-      const previousTasksById = new Map(normalizedSqliteTasks.map((task) => [task.id, task]));
-      const migratedPeticiones = mode === 'active'
-        ? readMigratedPeticiones().filter(
-            (migratedTask) =>
-              !isTaskClosed(migratedTask) &&
-              !reconciledSqliteTasks.some((task) => task.id === migratedTask.id),
-          )
-        : [];
-      const tasks = [...reconciledSqliteTasks, ...migratedPeticiones].map(normalizeTask);
-
-      const normalizationPersisted = await persistTaskChangesBestEffort(
-        tasks,
-        previousTasksById,
-        'normalización o migración de tareas',
-      );
-
-      if (migratedPeticiones.length > 0 && normalizationPersisted) {
-        writeStorageItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
-      }
-
-      return tasks;
+    if (sqliteTasks === null) {
+      throw new Error('SQLite de tareas no está disponible en este momento.');
     }
+
+    const normalizedSqliteTasks = sqliteTasks.map(normalizeTask);
+    const reconciledSqliteTasks = reconcileTasksWithClosedSessions(normalizedSqliteTasks);
+    const previousTasksById = new Map(normalizedSqliteTasks.map((task) => [task.id, task]));
+    const migratedPeticiones = mode === 'active'
+      ? readMigratedPeticiones().filter(
+          (migratedTask) =>
+            !isTaskClosed(migratedTask) &&
+            !reconciledSqliteTasks.some((task) => task.id === migratedTask.id),
+        )
+      : [];
+    const tasks = [...reconciledSqliteTasks, ...migratedPeticiones].map(normalizeTask);
+
+    const normalizationPersisted = await persistTaskChangesBestEffort(
+      tasks,
+      previousTasksById,
+      'normalización o migración de tareas',
+    );
+
+    if (migratedPeticiones.length > 0 && normalizationPersisted) {
+      writeStorageItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
+    }
+
+    return tasks;
   } catch (error) {
     console.error('No se han podido cargar tareas desde SQLite. No se usa fallback local.', error);
+    throw error;
   }
-
-  return [];
 }
 
 export async function persistTaskDirectly(
