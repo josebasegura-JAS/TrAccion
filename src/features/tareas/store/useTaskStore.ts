@@ -60,6 +60,10 @@ function selectedTaskIdAfterRefresh(tasks: Task[], selectedTaskId: string): stri
     : firstActiveTaskId(tasks);
 }
 
+function warnTaskReadFailure(context: string, error: unknown): void {
+  console.warn(`[tareas] ${context}. Se conserva el último snapshot válido.`, error);
+}
+
 export const useTaskStore = create<TaskStateStore>((set, get) => ({
   tasks: [],
   selectedTaskId: '',
@@ -68,30 +72,41 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
   filters: EMPTY_TASK_FILTERS,
   load: () => {
     if (!hasTaskSqliteRepository()) {
-      const tasks = import.meta.env.MODE === 'test' ? readTasks() : [];
-      set((state) => ({
-        tasks,
-        selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
-      }));
+      if (import.meta.env.MODE === 'test') {
+        const tasks = readTasks();
+        set((state) => ({
+          tasks,
+          selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
+        }));
+      } else {
+        warnTaskReadFailure('Repositorio SQLite no disponible durante la carga', new Error('Repositorio SQLite no disponible.'));
+      }
       return;
     }
 
-    void readTasksForStore('active').then((tasks) => {
-      set((state) => ({
-        tasks,
-        selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
-        historicalTasksLoaded: false,
-      }));
-    });
+    void readTasksForStore('active')
+      .then((tasks) => {
+        set((state) => ({
+          tasks,
+          selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
+          historicalTasksLoaded: false,
+        }));
+      })
+      .catch((error: unknown) => {
+        warnTaskReadFailure('No se han podido recargar las tareas activas', error);
+      });
   },
   reloadFromStorage: async () => {
     if (!hasTaskSqliteRepository()) {
-      const tasks = import.meta.env.MODE === 'test' ? readTasks() : [];
-      set((state) => ({
-        tasks,
-        selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
-      }));
-      return;
+      if (import.meta.env.MODE === 'test') {
+        const tasks = readTasks();
+        set((state) => ({
+          tasks,
+          selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
+        }));
+        return;
+      }
+      throw new Error('Repositorio SQLite de tareas no disponible.');
     }
 
     const tasks = await readTasksForStore('active');
@@ -114,7 +129,9 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
         ? await readTasksForStore('historical')
         : import.meta.env.MODE === 'test'
           ? readTasks().filter(isTaskClosed)
-          : [];
+          : (() => {
+              throw new Error('Repositorio SQLite de tareas no disponible.');
+            })();
 
       set((current) => {
         const tasksById = new Map(current.tasks.map((task) => [task.id, task]));
@@ -123,7 +140,7 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
         return { tasks, historicalTasksLoaded: true, isLoadingHistoricalTasks: false };
       });
     } catch (error) {
-      console.warn('No se han podido cargar las tareas históricas.', error);
+      warnTaskReadFailure('No se han podido cargar las tareas históricas', error);
       set({ isLoadingHistoricalTasks: false });
     }
   },
