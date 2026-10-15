@@ -1,9 +1,6 @@
 import type { Cell, Row, Worksheet } from 'exceljs';
 import type { Huelga } from './huelgasPageModel';
-import type {
-  HuelgaGeneralShift,
-  HuelgaResponseCollection,
-} from './huelgasResponseCollection';
+import type { HuelgaResponseCollection } from './huelgasResponseCollection';
 import { HUELGA_PERIOD_LABELS, type HuelgaResultPeriod } from './huelgasResults';
 
 const PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde', 'global'];
