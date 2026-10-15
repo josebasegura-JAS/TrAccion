@@ -8,9 +8,8 @@ import {
 import type { TaskOriginConfig } from '../../features/configuracion/domain/taskOrigins';
 import { isProtectedTaskPhaseId } from '../../features/configuracion/domain/taskPhases';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
-import { loadTasksFromSqlite, hasTaskSqliteRepository } from '../../features/tareas/store/taskSqliteRepository';
-import { parseTasksSnapshot } from '../../features/tareas/store/taskNormalization';
 import { AppDialog } from '../ui/AppDialog';
+import { loadTasksForCatalogIntegrityCheck } from './taskCatalogIntegrityCheck';
 
 type TaskSettingsTab = 'states' | 'responsibles' | 'phases' | 'origins';
 
@@ -65,15 +64,6 @@ function CatalogTextInput({
       value={draft}
     />
   );
-}
-
-export async function loadTasksForCatalogIntegrityCheck() {
-  if (!hasTaskSqliteRepository()) {
-    throw new Error('Repositorio SQLite de tareas no disponible.');
-  }
-  const tasks = await loadTasksFromSqlite(parseTasksSnapshot, 'all');
-  if (!tasks) throw new Error('SQLite de tareas no está disponible.');
-  return tasks;
 }
 
 export function TaskCatalogSettings() {

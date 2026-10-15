@@ -14,7 +14,7 @@ vi.mock('../../features/tareas/store/taskNormalization', () => ({
   parseTasksSnapshot: vi.fn(),
 }));
 
-import { loadTasksForCatalogIntegrityCheck } from './TaskCatalogSettings';
+import { loadTasksForCatalogIntegrityCheck } from './taskCatalogIntegrityCheck';
 
 describe('TaskCatalogSettings - integridad de renombrados', () => {
   beforeEach(() => {
