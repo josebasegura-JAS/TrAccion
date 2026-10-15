@@ -41,6 +41,43 @@ function previousPeriod(period: HuelgaResultPeriod): HuelgaResultPeriod | undefi
   return undefined;
 }
 
+function printHtml(html: string) {
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '1px';
+  iframe.style.height = '1px';
+  iframe.style.border = '0';
+  iframe.style.opacity = '0';
+
+  const cleanup = () => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  };
+
+  iframe.onload = () => {
+    const printWindow = iframe.contentWindow;
+    if (!printWindow) {
+      cleanup();
+      return;
+    }
+    const afterPrint = () => {
+      printWindow.removeEventListener('afterprint', afterPrint);
+      cleanup();
+    };
+    printWindow.addEventListener('afterprint', afterPrint);
+    window.setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      window.setTimeout(cleanup, 3000);
+    }, 80);
+  };
+
+  document.body.appendChild(iframe);
+  iframe.srcdoc = html;
+}
+
 function printResult(huelga: Huelga, collection: HuelgaResponseCollection, result: HuelgaPeriodResult) {
   const max = Math.max(1, ...result.areas.map((area) => area.seguimiento));
   const bars = result.areas.map((area) => `
@@ -56,15 +93,13 @@ function printResult(huelga: Huelga, collection: HuelgaResponseCollection, resul
       <td>${area.personasTrabajan}</td><td>${area.personasHuelga}</td><td><strong>${escapeHtml(formatSeguimiento(area.seguimiento))}</strong></td>
     </tr>`).join('');
 
-  const printWindow = window.open('', '_blank', 'width=1100,height=800');
-  if (!printWindow) return;
-  printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Resultados huelga</title>
+  printHtml(`<!doctype html><html><head><meta charset="utf-8"><title>Resultados huelga</title>
     <style>
-      @page{size:A4;margin:13mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#222;margin:0;font-size:11px}
-      .top{border-top:6px solid #b91c2c;padding-top:12px;display:flex;justify-content:space-between;gap:20px}.eyebrow{font-size:10px;font-weight:700;letter-spacing:.08em;color:#777;text-transform:uppercase}.title{font-size:23px;font-weight:800;margin:3px 0}.meta{color:#666}.stamp{text-align:right;color:#666;font-size:10px}
-      .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:18px 0}.kpi{border:1px solid #ddd;border-radius:8px;padding:10px}.kpi small{display:block;color:#777;text-transform:uppercase;font-weight:700;font-size:9px}.kpi strong{display:block;font-size:20px;margin-top:4px}.kpi.red strong{color:#b91c2c}
-      .summary{border-left:4px solid #b91c2c;background:#f7f7f7;padding:10px 12px;margin:12px 0 16px;line-height:1.45}.section-title{font-size:13px;font-weight:800;margin:18px 0 9px}.bar-row{display:grid;grid-template-columns:185px 1fr 58px;gap:8px;align-items:center;margin:5px 0}.bar-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar-track{height:10px;background:#ececec;border-radius:99px;overflow:hidden}.bar-track span{display:block;height:100%;background:#b91c2c;border-radius:99px}.bar-value{text-align:right;font-weight:700}
-      table{width:100%;border-collapse:collapse;margin-top:8px;font-size:9.5px}th{background:#333;color:white;text-align:right;padding:6px}th:first-child,td:first-child{text-align:left}td{text-align:right;padding:5px 6px;border-bottom:1px solid #ddd}tfoot td{font-weight:800;border-top:2px solid #333}.footer{margin-top:14px;border-top:1px solid #ddd;padding-top:7px;color:#777;font-size:9px}
+      @page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}html,body{background:#fff}body{font-family:Arial,Helvetica,sans-serif;color:#222;margin:0;font-size:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .top{border-top:6px solid #b91c2c;padding-top:10px;display:flex;justify-content:space-between;gap:20px}.eyebrow{font-size:9px;font-weight:700;letter-spacing:.08em;color:#777;text-transform:uppercase}.title{font-size:21px;font-weight:800;margin:3px 0}.meta{color:#666}.stamp{text-align:right;color:#666;font-size:9px}
+      .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.kpi{border:1px solid #ddd;border-radius:7px;padding:8px}.kpi small{display:block;color:#777;text-transform:uppercase;font-weight:700;font-size:8px}.kpi strong{display:block;font-size:18px;margin-top:3px}.kpi.red strong{color:#b91c2c}
+      .summary{border-left:4px solid #b91c2c;background:#f7f7f7;padding:8px 10px;margin:10px 0 12px;line-height:1.4}.section-title{font-size:12px;font-weight:800;margin:13px 0 7px}.bar-row{display:grid;grid-template-columns:180px 1fr 58px;gap:8px;align-items:center;margin:4px 0}.bar-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar-track{height:9px;background:#ececec;border-radius:99px;overflow:hidden}.bar-track span{display:block;height:100%;background:#b91c2c;border-radius:99px}.bar-value{text-align:right;font-weight:700}
+      table{width:100%;border-collapse:collapse;margin-top:6px;font-size:9px;break-inside:avoid}th{background:#333;color:white;text-align:right;padding:5px;border:1px solid #666}th:first-child,td:first-child{text-align:left}td{text-align:right;padding:4px 5px;border:1px solid #ddd}tfoot td{font-weight:800;background:#f3d1d1;border-top:2px solid #333}.footer{margin-top:10px;border-top:1px solid #ddd;padding-top:6px;color:#777;font-size:8px}
     </style></head><body>
     <div class="top"><div><div class="eyebrow">Metro Bilbao · Relaciones Laborales · TrAcción</div><div class="title">Resultados de huelga · ${escapeHtml(HUELGA_PERIOD_LABELS[result.period])}</div><div class="meta">${escapeHtml(formatDate(huelga.fecha))} · ${escapeHtml(huelga.sindicatos.join(' · '))}</div></div><div class="stamp"><strong>DATOS VALIDADOS</strong><br>${escapeHtml(new Date(collection.updatedAt).toLocaleString('es-ES'))}</div></div>
     <div class="kpis"><div class="kpi"><small>Personas con turno</small><strong>${result.totals.personasTurno}</strong></div><div class="kpi red"><small>En huelga</small><strong>${result.totals.personasHuelga}</strong></div><div class="kpi red"><small>Seguimiento</small><strong>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</strong></div><div class="kpi"><small>Trabajan</small><strong>${result.totals.personasTrabajan}</strong></div></div>
@@ -73,9 +108,6 @@ function printResult(huelga: Huelga, collection: HuelgaResponseCollection, resul
     <div class="section-title">Detalle</div><table><thead><tr><th>Área / circuito</th><th>Con turno</th><th>SS.MM.</th><th>Trabajan</th><th>Huelga</th><th>Seguimiento</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td>${result.totals.personasTurno}</td><td>${result.totals.serviciosMinimos}</td><td>${result.totals.personasTrabajan}</td><td>${result.totals.personasHuelga}</td><td>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</td></tr></tfoot></table>
     <div class="footer">Seguimiento = personas en huelga / personas con turno. Los servicios mínimos están incluidos en personas con turno, aunque no en personas que trabajan.</div>
     </body></html>`);
-  printWindow.document.close();
-  printWindow.focus();
-  window.setTimeout(() => printWindow.print(), 150);
 }
 
 type Props = {
