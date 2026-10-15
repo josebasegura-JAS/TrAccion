@@ -27,14 +27,11 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
         rutaPlantillaTeletrabajo: '\\\\servidor\\plantillas\\teletrabajo.docx',
         rutaPlantillaLicenciaSinSueldo: '',
         taskPhases: [],
-      taskStates: [],
+        taskStates: [],
         taskOrigins: [],
       }),
       updatedAt: timestamp,
     }));
-    // El saver simula que otro usuario ha guardado configuración justo
-    // antes: el expectedUpdatedAt que envía este cliente ya no coincide con
-    // el valor vigente, así que el guardado debe rechazarse.
     const saver = vi.fn(async () => ({
       ok: false,
       status: activeStatus(),
@@ -57,11 +54,90 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
     useConfiguracionStore.getState().setRutaPlantillaTeletrabajo('\\\\servidor\\plantillas\\nueva.docx');
     await vi.waitFor(() => expect(saver).toHaveBeenCalledTimes(1));
 
-    // Como el saver ha rechazado el guardado, el estado local no debe haber
-    // cambiado: seguimos viendo la ruta que ya teníamos, no la nueva.
     expect(useConfiguracionStore.getState().rutaPlantillaTeletrabajo).toBe(
       '\\\\servidor\\plantillas\\teletrabajo.docx',
     );
+  });
+
+  it('descarta cambios optimistas ya encolados si una escritura anterior entra en conflicto', async () => {
+    let resolveFirstSave: ((value: {
+      ok: boolean;
+      status: ReturnType<typeof activeStatus>;
+      currentUpdatedAt: string;
+      message: string;
+    }) => void) | null = null;
+
+    const firstSave = new Promise<{
+      ok: boolean;
+      status: ReturnType<typeof activeStatus>;
+      currentUpdatedAt: string;
+      message: string;
+    }>((resolve) => {
+      resolveFirstSave = resolve;
+    });
+
+    const remoteOrigin = {
+      id: 'remoto',
+      nombre: 'Cambio remoto',
+      tipo: 'otro' as const,
+      active: true,
+      createdAt: timestamp,
+      updatedAt: '2026-06-17T08:05:00.000Z',
+    };
+
+    const loader = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: activeStatus(),
+        value: JSON.stringify({
+          rutaPlantillaTeletrabajo: '',
+          taskPhases: [],
+          taskStates: [],
+          taskOrigins: [],
+        }),
+        updatedAt: timestamp,
+      })
+      .mockResolvedValueOnce({
+        status: activeStatus(),
+        value: JSON.stringify({
+          rutaPlantillaTeletrabajo: '',
+          taskPhases: [],
+          taskStates: [],
+          taskOrigins: [remoteOrigin],
+        }),
+        updatedAt: '2026-06-17T08:05:00.000Z',
+      });
+    const saver = vi.fn(() => firstSave);
+
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: { loadConfiguracion: loader, saveConfiguracionIfUnchanged: saver },
+    });
+
+    useConfiguracionStore.getState().load();
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
+
+    useConfiguracionStore.getState().addTaskOrigin('Primero local', 'otro');
+    useConfiguracionStore.getState().addTaskOrigin('Segundo local', 'otro');
+    await vi.waitFor(() => expect(saver).toHaveBeenCalledTimes(1));
+
+    resolveFirstSave?.({
+      ok: false,
+      status: activeStatus(),
+      currentUpdatedAt: '2026-06-17T08:05:00.000Z',
+      message: 'Conflicto de concurrencia.',
+    });
+
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(useConfiguracionStore.getState().taskOrigins.some((origin) => origin.id === 'remoto')).toBe(true),
+    );
+
+    expect(saver).toHaveBeenCalledTimes(1);
+    expect(
+      useConfiguracionStore.getState().taskOrigins.some((origin) =>
+        origin.nombre === 'Primero local' || origin.nombre === 'Segundo local'),
+    ).toBe(false);
   });
 
   it('aplica el cambio local cuando expectedUpdatedAt coincide con el valor vigente', async () => {
@@ -115,14 +191,9 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
 
     const taskPhasesBeforeReload = useConfiguracionStore.getState().taskPhases;
 
-    // El polling detecta un cambio de updatedAt (por ejemplo, generado por
-    // nuestra propia escritura en otra pestaña), pero el contenido
-    // normalizado que devuelve SQLite es idéntico al que ya tenemos.
     useConfiguracionStore.getState().reloadFromStorage();
     await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
 
-    // La referencia del array de fases debe mantenerse intacta: no debe
-    // haberse llamado a set() si el contenido no cambió realmente.
     expect(useConfiguracionStore.getState().taskPhases).toBe(taskPhasesBeforeReload);
   });
 
@@ -135,7 +206,7 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
           rutaPlantillaTeletrabajo: '\\\\servidor\\plantillas\\teletrabajo.docx',
           rutaPlantillaLicenciaSinSueldo: '',
           taskPhases: [],
-      taskStates: [],
+          taskStates: [],
           taskOrigins: [],
         }),
         updatedAt: timestamp,
@@ -146,7 +217,7 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
           rutaPlantillaTeletrabajo: '\\\\servidor\\plantillas\\modificada-por-otro.docx',
           rutaPlantillaLicenciaSinSueldo: '',
           taskPhases: [],
-      taskStates: [],
+          taskStates: [],
           taskOrigins: [],
         }),
         updatedAt: '2026-06-17T09:00:00.000Z',

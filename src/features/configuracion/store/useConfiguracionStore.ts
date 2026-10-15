@@ -33,6 +33,7 @@ const STORAGE_KEY = 'traccion.v1.configuracion';
 let latestConfiguracionUpdatedAt: string | null = null;
 let configuracionWriteQueue: Promise<void> = Promise.resolve();
 let configuracionPendingWrites = 0;
+let configuracionQueueGeneration = 0;
 
 const CONFIGURACION_FEEDBACK_KEY = 'configuracion';
 
@@ -305,10 +306,6 @@ async function readConfiguracionFromSqlite(): Promise<ConfiguracionState | null>
   const snapshot = await loader();
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') return null;
 
-  // El token de concurrencia pertenece a la SQLite activa. Debe actualizarse
-  // incluso cuando una base recién seleccionada todavía no tiene registro de
-  // configuración; de lo contrario se reutilizaría el updatedAt de la base
-  // anterior y el primer guardado compartido fallaría por falso conflicto.
   latestConfiguracionUpdatedAt = snapshot.updatedAt;
   if (!snapshot.value) return null;
 
@@ -338,12 +335,21 @@ async function commitConfiguracion(
 ): Promise<{ ok: boolean; message: string }> {
   const applyOnSuccess = options.applyOnSuccess ?? true;
   const revertOnError = options.revertOnError ?? false;
+  const writeGeneration = configuracionQueueGeneration;
   configuracionPendingWrites += 1;
   publishPersistenceBusy(CONFIGURACION_FEEDBACK_KEY, 'Guardando cambios…');
 
   let result: { ok: boolean; message: string } = { ok: false, message: 'No se ha podido guardar la configuración.' };
   const queuedWrite = configuracionWriteQueue.then(async () => {
     try {
+      if (writeGeneration !== configuracionQueueGeneration) {
+        result = {
+          ok: false,
+          message: 'Cambio descartado porque la configuración compartida cambió mientras esperaba para guardarse.',
+        };
+        return;
+      }
+
       await persistConfiguracionConfirmed(configuracion);
       if (applyOnSuccess) set(configuracion);
       result = { ok: true, message: 'Configuración guardada.' };
@@ -359,6 +365,7 @@ async function commitConfiguracion(
       });
 
       if (revertOnError) {
+        configuracionQueueGeneration += 1;
         try {
           const persisted = await readConfiguracionFromSqlite();
           if (persisted) set(persisted);
@@ -374,8 +381,6 @@ async function commitConfiguracion(
     }
   });
 
-  // La cola sigue viva aunque una escritura falle: el siguiente cambio debe poder
-  // persistirse con el updatedAt confirmado más reciente.
   configuracionWriteQueue = queuedWrite.catch(() => undefined);
   await queuedWrite;
   return result;
@@ -385,10 +390,6 @@ function commitTaskCatalogConfiguracion(
   set: (partial: ConfiguracionState) => void,
   configuracion: ConfiguracionState,
 ): void {
-  // El callback de Zustand devuelve esta configuración de forma optimista para
-  // que los inputs controlados respondan al instante. La persistencia queda
-  // serializada para no provocar conflictos OCC contra escrituras anteriores
-  // realizadas por este mismo equipo.
   void commitConfiguracion(set, configuracion, { applyOnSuccess: false, revertOnError: true });
 }
 
