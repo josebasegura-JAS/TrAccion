@@ -235,6 +235,27 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const appWindow = window as Window & {
+      __traccionConfirmAppClose?: () => Promise<boolean>;
+    };
+    appWindow.__traccionConfirmAppClose = async () => {
+      if (!hasDirtyEditors()) return true;
+      return confirm(
+        'Hay cambios sin guardar en uno o varios formularios. Si sale ahora, esos cambios se perderán. ¿Desea cerrar TrAcción?',
+        {
+          title: 'Cambios sin guardar',
+          confirmLabel: 'Salir de TrAcción',
+          cancelLabel: 'Seguir editando',
+          danger: true,
+        },
+      );
+    };
+    return () => {
+      delete appWindow.__traccionConfirmAppClose;
+    };
+  }, [confirm]);
+
   const changeActiveView = async (view: AppView): Promise<void> => {
     const nextView = resolveActiveViewForNavigation(view);
     if (nextView === activeView) return;

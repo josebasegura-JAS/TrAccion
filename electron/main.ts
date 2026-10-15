@@ -49,11 +49,44 @@ async function readShutdownPerformance(): Promise<PersistedShutdownPerformance |
 type SqlitePersistenceModule = typeof import('./sqlitePersistence.js');
 type ConnectivityIssueNotifier = Parameters<SqlitePersistenceModule['setDatabaseConnectivityIssueNotifier']>[0];
 let sqlitePersistenceModulePromise: Promise<SqlitePersistenceModule> | null = null;
+let isQuitAfterSqlitePersistenceClosed = false;
+let isShutdownInProgress = false;
+let isRendererCloseApproved = false;
+let isCloseConfirmationInProgress = false;
+let shutdownWindow: BrowserWindow | null = null;
 
 function loadSqlitePersistenceModule(): Promise<SqlitePersistenceModule> {
   sqlitePersistenceModulePromise ??= import('./sqlitePersistence.js');
   return sqlitePersistenceModulePromise;
 }
+
+async function rendererAllowsAppClose(mainWindow: BrowserWindow): Promise<boolean> {
+  if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return true;
+  try {
+    const approved: unknown = await mainWindow.webContents.executeJavaScript(
+      'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : true',
+      true,
+    );
+    return approved !== false;
+  } catch (error) {
+    console.warn('No se ha podido consultar el estado de cambios sin guardar antes del cierre.', error);
+    return true;
+  }
+}
+
+async function requestRendererAppClose(mainWindow: BrowserWindow): Promise<void> {
+  if (isCloseConfirmationInProgress || isShutdownInProgress || isQuitAfterSqlitePersistenceClosed) return;
+  isCloseConfirmationInProgress = true;
+  try {
+    const approved = await rendererAllowsAppClose(mainWindow);
+    if (!approved) return;
+    isRendererCloseApproved = true;
+    app.quit();
+  } finally {
+    isCloseConfirmationInProgress = false;
+  }
+}
+
 function logStartupPhase(startedAt: number, phase: string): void { console.info(`[startup] ${phase}: ${Date.now() - startedAt} ms`); }
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -163,6 +196,11 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     const isAllowedPackagedNavigation = !isDev && parsedUrl.protocol === 'file:';
     if (!isAllowedDevNavigation && !isAllowedPackagedNavigation) event.preventDefault();
   });
+  mainWindow.on('close', (event) => {
+    if (isRendererCloseApproved || isShutdownInProgress || isQuitAfterSqlitePersistenceClosed) return;
+    event.preventDefault();
+    void requestRendererAppClose(mainWindow);
+  });
   createContextMenu(mainWindow);
   setConnectivityIssueNotifier?.((payload) => { if (!mainWindow.isDestroyed()) mainWindow.webContents.send('database:connectivity-issue', payload); });
   let hasRequestedMainWindowShow = false;
@@ -255,11 +293,16 @@ if (!app.requestSingleInstanceLock()) {
       console.error('[startup] Error durante el arranque de TrAcción.', error);
     }
   });
-  let isQuitAfterSqlitePersistenceClosed = false;
-  let isShutdownInProgress = false;
-  let shutdownWindow: BrowserWindow | null = null;
   app.on('before-quit', (event) => {
     if (isQuitAfterSqlitePersistenceClosed) return;
+    if (!isRendererCloseApproved && !isShutdownInProgress) {
+      const mainWindow = BrowserWindow.getAllWindows().find((candidate) => candidate !== shutdownWindow && !candidate.isDestroyed());
+      if (mainWindow) {
+        event.preventDefault();
+        void requestRendererAppClose(mainWindow);
+        return;
+      }
+    }
     event.preventDefault();
     if (isShutdownInProgress) return;
     isShutdownInProgress = true;
