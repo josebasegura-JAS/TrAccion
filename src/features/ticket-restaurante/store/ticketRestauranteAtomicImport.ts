@@ -4,6 +4,7 @@ import {
   waitForNextPaint,
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import { assertTicketRestauranteModuleLockActive } from './ticketRestauranteLockCheckpoint';
 
 const ATOMIC_IMPORT_KEY = 'traccion.v1.ticketRestaurante.atomic-people-import';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
@@ -70,8 +71,9 @@ export async function importTicketPeopleAtomically(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      importer({
+    const result = await withTemporarySqliteRetry(async () => {
+      await assertTicketRestauranteModuleLockActive();
+      return importer({
         calendars: calendars.map((record) => ({
           id: record.id,
           value: record.serializedValue,
@@ -82,8 +84,8 @@ export async function importTicketPeopleAtomically(
           value: record.serializedValue,
           expectedUpdatedAt: record.expectedUpdatedAt,
         })),
-      }),
-    );
+      });
+    });
     publishDatabaseStatus(result.status);
     clearPersistenceBusy(ATOMIC_IMPORT_KEY, result.message);
     return {
