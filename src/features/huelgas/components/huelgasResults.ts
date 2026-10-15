@@ -37,8 +37,8 @@ export const HUELGA_PERIOD_LABELS: Record<HuelgaResultPeriod, string> = {
   global: 'Global',
 };
 
-function percentage(huelga: number, computables: number): number {
-  return computables > 0 ? (huelga / computables) * 100 : 0;
+function percentage(huelga: number, personasTurno: number): number {
+  return personasTurno > 0 ? (huelga / personasTurno) * 100 : 0;
 }
 
 function metrics(
@@ -47,16 +47,16 @@ function metrics(
   personasTrabajan: number,
   personasHuelga: number,
 ): HuelgaResultMetrics {
-  // Servicios mínimos es una situación excluyente de “trabajan” y “huelga”.
-  // Para medir seguimiento se utiliza la población que podía optar entre trabajar o secundar la huelga.
-  const personasComputables = personasTrabajan + personasHuelga;
+  // Criterio RRLL: el seguimiento se calcula sobre todas las personas con turno.
+  // Los servicios mínimos están incluidos en personas con turno, aunque no en personas que trabajan.
+  const personasComputables = personasTurno;
   return {
     personasTurno,
     serviciosMinimos,
     personasTrabajan,
     personasHuelga,
     personasComputables,
-    seguimiento: percentage(personasHuelga, personasComputables),
+    seguimiento: percentage(personasHuelga, personasTurno),
   };
 }
 
@@ -145,17 +145,17 @@ export function formatSeguimiento(value: number): string {
 }
 
 export function huelgaExecutiveSummary(result: HuelgaPeriodResult): string {
-  if (!result.hasData || result.totals.personasComputables === 0) {
-    return `No hay datos computables para el corte ${HUELGA_PERIOD_LABELS[result.period].toLowerCase()}.`;
+  if (!result.hasData || result.totals.personasTurno === 0) {
+    return `No hay personas con turno para el corte ${HUELGA_PERIOD_LABELS[result.period].toLowerCase()}.`;
   }
 
-  const ranked = result.areas.filter((area) => area.personasComputables > 0);
+  const ranked = result.areas.filter((area) => area.personasTurno > 0);
   const top = ranked[0];
   const topText = top
     ? ` El mayor seguimiento se registra en ${top.nombre} (${formatSeguimiento(top.seguimiento)}).`
     : '';
 
-  return `El corte ${HUELGA_PERIOD_LABELS[result.period].toLowerCase()} registra un seguimiento del ${formatSeguimiento(result.totals.seguimiento)}, con ${result.totals.personasHuelga.toLocaleString('es-ES')} personas en huelga sobre ${result.totals.personasComputables.toLocaleString('es-ES')} personas computables.${topText}`;
+  return `El corte ${HUELGA_PERIOD_LABELS[result.period].toLowerCase()} registra un seguimiento del ${formatSeguimiento(result.totals.seguimiento)}, con ${result.totals.personasHuelga.toLocaleString('es-ES')} personas en huelga sobre ${result.totals.personasTurno.toLocaleString('es-ES')} personas con turno.${topText}`;
 }
 
 export function seguimientoDelta(
