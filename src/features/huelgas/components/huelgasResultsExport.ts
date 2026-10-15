@@ -4,7 +4,7 @@ import type {
   HuelgaGeneralShift,
   HuelgaResponseCollection,
 } from './huelgasResponseCollection';
-import { HUELGA_PERIOD_LABELS, type HuelgaResultPeriod, type HuelgaResults } from './huelgasResults';
+import { HUELGA_PERIOD_LABELS, type HuelgaResultPeriod } from './huelgasResults';
 
 const PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde', 'global'];
 const BLUE = 'FFD9EAF7';
@@ -236,7 +236,6 @@ function addReportSection(
 export async function downloadHuelgaResultsWorkbook(
   huelga: Huelga,
   collection: HuelgaResponseCollection,
-  _results: HuelgaResults,
 ): Promise<void> {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
@@ -332,23 +331,6 @@ export async function downloadHuelgaResultsWorkbook(
     }
   }
 
-  for (const worksheet of workbook.worksheets) {
-    worksheet.eachRow((row) => {
-      row.alignment = { ...row.alignment, vertical: 'middle' };
-    });
-  }
-
   const generated = await workbook.xlsx.writeBuffer();
   download(generated as ArrayBuffer, `Resultados huelga ${fileDate(huelga.fecha)}.xlsx`);
-}
-
-export function resultLabelForExport(results: HuelgaResults, period: HuelgaResultPeriod): string {
-  const result = results[period];
-  return result.hasData
-    ? `${result.totals.seguimiento.toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
-    : 'Sin datos';
-}
-
-export function shiftLabelForExport(shift: HuelgaGeneralShift): string {
-  return HUELGA_PERIOD_LABELS[shift];
 }
