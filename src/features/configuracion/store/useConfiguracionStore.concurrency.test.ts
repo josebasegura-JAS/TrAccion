@@ -60,19 +60,15 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
   });
 
   it('descarta cambios optimistas ya encolados si una escritura anterior entra en conflicto', async () => {
-    let resolveFirstSave: ((value: {
+    type SaveResult = {
       ok: boolean;
       status: ReturnType<typeof activeStatus>;
       currentUpdatedAt: string;
       message: string;
-    }) => void) | null = null;
+    };
+    let resolveFirstSave!: (value: SaveResult) => void;
 
-    const firstSave = new Promise<{
-      ok: boolean;
-      status: ReturnType<typeof activeStatus>;
-      currentUpdatedAt: string;
-      message: string;
-    }>((resolve) => {
+    const firstSave = new Promise<SaveResult>((resolve) => {
       resolveFirstSave = resolve;
     });
 
@@ -121,7 +117,7 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
     useConfiguracionStore.getState().addTaskOrigin('Segundo local', 'otro');
     await vi.waitFor(() => expect(saver).toHaveBeenCalledTimes(1));
 
-    resolveFirstSave?.({
+    resolveFirstSave({
       ok: false,
       status: activeStatus(),
       currentUpdatedAt: '2026-06-17T08:05:00.000Z',
