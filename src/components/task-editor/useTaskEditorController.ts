@@ -87,6 +87,7 @@ export function useTaskEditorController({
   const [linkedCriterionId, setLinkedCriterionId] = useState<string | null>(null);
   const [criterionLinkReady, setCriterionLinkReady] = useState(false);
   const { confirm: confirmTrackingDelete, dialogNode: trackingDeleteDialogNode } = useAppDialog();
+  const { confirm: confirmCriterionSave, dialogNode: criterionSaveDialogNode } = useAppDialog();
   const [draft, setDraft] = useState<TaskDraft>(() => createInitialDraft(task, initialDraft));
   const [sendToDirection, setSendToDirection] = useState(() => task ? directionTaskIds.includes(task.id) : false);
   const [sendToUnion, setSendToUnion] = useState(() => task
@@ -339,12 +340,12 @@ export function useTaskEditorController({
     return true;
   };
 
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
+  const handleSubmit = async (): Promise<boolean> => {
+    if (!canSubmit) return false;
     if (quickActionEnabled && (!trackingText.trim() || !quickActionTitle.trim())) {
       setSaveStatus('Para crear una acción pendiente debes escribir el seguimiento y la actuación.');
       setSaveStatusIsError(true);
-      return;
+      return false;
     }
     setSaveStatus('');
     setSaveStatusIsError(false);
@@ -361,40 +362,38 @@ export function useTaskEditorController({
       if (!result.ok) {
         setSaveStatus(result.message);
         setSaveStatusIsError(true);
-        return;
+        return false;
       }
       if (result.recordId) {
-        // La tarea recién creada no debe aparecer como "nueva" al propio creador.
-        // El visto es local por usuario, por lo que el resto del equipo sí recibirá el aviso azul.
         markTaskCreationIdsSeen(trackingUser, [result.recordId]);
         if (!createTaskOverride) {
           const coordinationResult = await updateCoordinationTargets(result.recordId);
           if (!coordinationResult.ok) {
             setSaveStatus(`Tarea guardada, pero no se ha podido actualizar Coordinación: ${coordinationResult.message}`);
             setSaveStatusIsError(true);
-            return;
+            return false;
           }
         }
         await onCreated?.(result.recordId);
       }
       clearRecoveryDraft();
       onDone();
-      return;
+      return true;
     }
-    if (!task) return;
+    if (!task) return false;
 
     const liveLock = await window.traccion?.getRecordLock?.({ module: 'tareas', recordId: task.id });
     if (!liveLock?.ok || liveLock.status !== 'acquired') {
       setSaveStatus(liveLock?.message || 'No se ha confirmado el bloqueo compartido de edición.');
       setSaveStatusIsError(true);
-      return;
+      return false;
     }
 
     const result = await updateTask(task.id, draft, seguimientoForSave, loadedUpdatedAt, quickActionEnabled ? { titulo: quickActionTitle.trim(), fechaObjetivo: quickActionDate || undefined } : undefined);
     if (!result.ok) {
       setSaveStatus(result.message);
       setSaveStatusIsError(true);
-      return;
+      return false;
     }
 
     const coordinationResult = await updateCoordinationTargets(task.id);
@@ -434,6 +433,7 @@ export function useTaskEditorController({
       ? 'Guardado correctamente. Puedes seguir editando la tarea.'
       : `Tarea guardada, pero no se ha podido actualizar Coordinación: ${coordinationResult.message}`);
     setSaveStatusIsError(!coordinationResult.ok);
+    return coordinationResult.ok;
   };
 
   useEditorShortcuts({
@@ -750,11 +750,18 @@ export function useTaskEditorController({
       }) !== JSON.stringify(recoveryBaseline);
 
     if (hasUnsavedTaskChanges) {
-      setSaveStatus(
-        'Guarda o descarta primero los cambios de la tarea antes de crear o abrir su criterio RRLL.',
+      const confirmed = await confirmCriterionSave(
+        'Hay cambios sin guardar en la tarea. Para crear o abrir su criterio RRLL, TrAcción debe guardar primero esos cambios.',
+        {
+          title: 'Guardar tarea antes de abrir Criterio RRLL',
+          confirmLabel: 'Guardar y abrir',
+          cancelLabel: 'Cancelar',
+        },
       );
-      setSaveStatusIsError(true);
-      return;
+      if (!confirmed) return;
+
+      const saved = await handleSubmit();
+      if (!saved) return;
     }
 
     setSaveStatus('');
@@ -816,7 +823,6 @@ export function useTaskEditorController({
     }
   };
 
-
   return {
     areaCircuitOptions,
     canSubmit,
@@ -824,6 +830,7 @@ export function useTaskEditorController({
     clearRecoveryDraft,
     creationDate,
     criterionLinkReady,
+    criterionSaveDialogNode,
     customAreaTarget,
     dialogNode,
     documentStatus,
