@@ -68,6 +68,18 @@ async function releaseModuleLock(payload: TraccionRecordLockPayload): Promise<vo
   });
 }
 
+async function verifyAcquiredModuleLocks(payloads: TraccionRecordLockPayload[]): Promise<void> {
+  const heartbeatRecordLock = window.traccion?.heartbeatRecordLock;
+  if (!heartbeatRecordLock) return;
+
+  await Promise.all(
+    payloads.map(async (payload) => {
+      const result = await heartbeatRecordLock(payload);
+      ensureHeartbeatResult(payload, result);
+    }),
+  );
+}
+
 export async function withSharedModuleLocks<TResult>(
   targets: SharedModuleLockTarget[],
   operation: (guard: SharedModuleLockGuard) => TResult | Promise<TResult>,
@@ -106,6 +118,11 @@ export async function withSharedModuleLocks<TResult>(
       markSharedEditingActive(payload.module, payload.recordId);
     }
 
+    try {
+      await verifyAcquiredModuleLocks(acquiredPayloads);
+    } catch (error) {
+      rememberLockLoss(error);
+    }
     guard.assertActive();
     const result = await operation(guard);
     guard.assertActive();
