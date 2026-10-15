@@ -518,7 +518,7 @@ export function SessionManagementPage({
           { module: 'tareas', label: 'Tareas' },
           { module: 'actas', label: 'Actas' },
         ],
-        async () => {
+        async (guard) => {
           const atomicClose = window.traccion?.closeSessionWorkflowAtomically;
           if (!atomicClose) {
             throw new Error(
@@ -584,6 +584,7 @@ export function SessionManagementPage({
               }
             : null;
 
+          guard.assertActive();
           const result = await atomicClose({
             module: config.moduleId === 'comite' ? 'comite' : 'paritaria',
             session: {
@@ -713,7 +714,7 @@ export function SessionManagementPage({
           { module: config.moduleId, label: config.title },
           { module: 'tareas', label: 'Tareas' },
         ],
-        async () => {
+        async (guard) => {
           const latestSessions = useSessionStore.getState().sessions;
           const importableSessions = relevantImportSessions.filter((session) => {
             const normalizedCode = session.draft.code.trim().toLowerCase();
@@ -765,6 +766,7 @@ export function SessionManagementPage({
               taskExternalKeys: session.taskExternalKeys,
             };
           });
+          guard.assertActive();
           const importedSessionsResult = await atomicImport({
             module: moduleImportKind,
             tasks: taskPayload,
