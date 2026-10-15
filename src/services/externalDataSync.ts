@@ -37,6 +37,11 @@ const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
   'traccion.v1.criterios-rrll.criterios': 'criterios-rrll',
   'traccion.v1.vinculograma.records': 'vinculograma',
   'traccion.v1.actividadesExternas.records': 'actividades-externas',
+  'traccion.v1.huelgas.records': 'huelgas',
+  'traccion.v1.huelgas.puestoResponsables': 'huelgas',
+  'traccion.v1.huelgas.zonas': 'huelgas',
+  'traccion.v1.huelgas.areas': 'huelgas',
+  'traccion.v1.huelgas.recogidas': 'huelgas',
   'traccion.v1.configuracion': 'configuracion',
   'traccion.v1.loteria.campaign': 'loteria',
   'rrll_especiales_destinatarios': 'especiales',
@@ -284,10 +289,10 @@ async function pollOnce(): Promise<void> {
       lastError: null,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Error sincronizando cambios externos.';
+    const message = error instanceof Error ? error.message : 'Error desconocido al sincronizar datos.';
     setState({
       status: 'error',
-      message,
+      message: 'No se han podido comprobar los cambios compartidos.',
       lastCheckedAt: checkedAt,
       lastError: message,
     });
@@ -296,117 +301,48 @@ async function pollOnce(): Promise<void> {
   }
 }
 
-export async function forceExternalDataRefreshAfterRecovery(): Promise<void> {
-  if (!window.traccion?.loadPersistedRecords || !window.traccion?.getPersistedRecordsToken) {
-    throw new Error('IPC de persistencia no disponible para refrescar datos tras la reconexión.');
-  }
-
-  await ensureSyncableStoresRegistered();
-
-  const snapshot = await window.traccion.loadPersistedRecords();
-  if (!canPollStatus(snapshot.status)) {
-    throw new Error(snapshot.status.message ?? 'SQLite no está operativa tras recuperar la conexión.');
-  }
-
-  applyPersistedRecordsSnapshotToLocalStorage(snapshot);
-  updateSeenTokens(snapshot);
-
-  // Todos los stores se fuerzan a releer su fuente SQLite. Algunos módulos
-  // mantienen una copia efímera de representación en sessionStorage, pero nunca se usa
-  // como fuente autoritativa para recuperar una caída.
-  await reloadIntegratedStores();
-
-  const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
-  if (!canPollStatus(tokenSnapshot.status)) {
-    throw new Error(tokenSnapshot.status.message ?? 'SQLite dejó de estar disponible durante el refresco.');
-  }
-  updateSeenTokens(tokenSnapshot);
-
-  const now = new Date().toISOString();
-  setState({
-    status: 'applied',
-    message: 'Conexión recuperada; datos compartidos refrescados.',
-    lastCheckedAt: now,
-    lastAppliedAt: now,
-    lastError: null,
-  });
-}
-
-function handleDatabaseConnectivityRecovered(): void {
-  void pollOnce();
-}
-
-function handleSharedEditingActivityChanged(): void {
-  if (!hasActiveSharedEditing()) {
-    void pollOnce();
-  }
-}
-
 export function startExternalDataSyncPolling(): void {
-  if (typeof window === 'undefined' || timerId !== null) {
-    return;
-  }
-
-  void ensureSyncableStoresRegistered().catch((error) => {
-    console.error('No se han podido registrar los stores sincronizables.', error);
-  });
-
-  const metadata = readHydrationMetadata();
-  lastSeenRefreshToken = metadata?.refreshToken ?? null;
-  // Los stores con tabla directa no forman parte del snapshot genérico de hidratación.
-  // Sus tokens arrancan a null deliberadamente: el primer poll los compara contra
-  // SQLite y recarga solo los stores que ya tienen datos, cerrando la ventana entre
-  // hidratación y primer polling sin añadir un segundo temporizador por módulo.
-  const hasValidCache = Boolean(metadata?.refreshToken && metadata.strategy === 'sqlite');
-  lastSeenPersistedRecordsUpdatedAt = hasValidCache ? (metadata?.lastUpdatedAt ?? null) : null;
-  lastSeenTaskRecordsUpdatedAt = null;
-  lastSeenSorteosDrawsUpdatedAt = null;
-  lastSeenSorteosExclusionsUpdatedAt = null;
-  lastSeenDirectStoreUpdatedAt = {};
-  void pollOnce();
+  if (timerId !== null) return;
+  void ensureSyncableStoresRegistered().then(() => pollOnce());
   timerId = window.setInterval(() => {
     void pollOnce();
   }, POLLING_INTERVAL_MS);
-  window.addEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
-  unsubscribeSharedEditingActivity = subscribeSharedEditingActivity(handleSharedEditingActivityChanged);
-  unsubscribePersistenceFeedback = subscribeToPersistenceFeedback((feedback) => {
-    if (isPersistenceFeedbackSilent(feedback)) {
-      return;
-    }
 
+  unsubscribeSharedEditingActivity ??= subscribeSharedEditingActivity(() => {
+    postponePolling();
+  });
+  unsubscribePersistenceFeedback ??= subscribeToPersistenceFeedback((feedback) => {
+    if (isPersistenceFeedbackSilent()) return;
     if (feedback.kind === 'saving') {
       persistenceWriteInProgress = true;
-      postponePolling(2_000);
+      postponePolling();
       return;
     }
-
     persistenceWriteInProgress = false;
-    postponePolling(1_000);
+    postponePolling();
   });
+
+  window.addEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleConnectivityRecovered);
+}
+
+function handleConnectivityRecovered(): void {
+  postponePolling(500);
+  void pollOnce();
 }
 
 export function stopExternalDataSyncPolling(): void {
-  if (typeof window === 'undefined' || timerId === null) {
-    return;
+  if (timerId !== null) {
+    window.clearInterval(timerId);
+    timerId = null;
   }
-
-  window.clearInterval(timerId);
-  timerId = null;
-  window.removeEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
   unsubscribeSharedEditingActivity?.();
   unsubscribeSharedEditingActivity = null;
   unsubscribePersistenceFeedback?.();
   unsubscribePersistenceFeedback = null;
   persistenceWriteInProgress = false;
-  postponePollingUntil = 0;
-  lastSeenRefreshToken = null;
-  lastSeenPersistedRecordsUpdatedAt = null;
-  lastSeenTaskRecordsUpdatedAt = null;
-  lastSeenSorteosDrawsUpdatedAt = null;
-  lastSeenSorteosExclusionsUpdatedAt = null;
-  lastSeenDirectStoreUpdatedAt = {};
+  window.removeEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleConnectivityRecovered);
 }
 
-export function useExternalDataSyncStatus(): ExternalDataSyncState {
+export function useExternalDataSyncState(): ExternalDataSyncState {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
