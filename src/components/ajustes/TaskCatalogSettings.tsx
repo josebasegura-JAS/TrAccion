@@ -10,7 +10,6 @@ import { isProtectedTaskPhaseId } from '../../features/configuracion/domain/task
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import { loadTasksFromSqlite, hasTaskSqliteRepository } from '../../features/tareas/store/taskSqliteRepository';
 import { parseTasksSnapshot } from '../../features/tareas/store/taskNormalization';
-import { useTaskStore } from '../../features/tareas/store/useTaskStore';
 import { AppDialog } from '../ui/AppDialog';
 
 type TaskSettingsTab = 'states' | 'responsibles' | 'phases' | 'origins';
@@ -68,8 +67,10 @@ function CatalogTextInput({
   );
 }
 
-async function loadTasksForCatalogIntegrityCheck() {
-  if (!hasTaskSqliteRepository()) return useTaskStore.getState().tasks;
+export async function loadTasksForCatalogIntegrityCheck() {
+  if (!hasTaskSqliteRepository()) {
+    throw new Error('Repositorio SQLite de tareas no disponible.');
+  }
   const tasks = await loadTasksFromSqlite(parseTasksSnapshot, 'all');
   if (!tasks) throw new Error('SQLite de tareas no está disponible.');
   return tasks;
