@@ -1,6 +1,11 @@
+import { useState } from 'react';
 import { Database, RotateCcw } from 'lucide-react';
 import { formatLockAge } from '../../services/databaseLockView';
 import type { DatabaseStatusBadgeViewModel } from '../../services/databaseStatusView';
+import {
+  databaseContextSwitchBlockReason,
+  didDatabaseContextChange,
+} from '../../services/databaseContextSwitchSafety';
 import { ActionButton } from '../ui/ActionButton';
 import { FieldLabel, Select } from '../ui/Field';
 import { Notice } from '../ui/Notice';
@@ -109,6 +114,25 @@ export function DatabaseSettingsSection({
   vacuumActionStatus,
   handleVacuumNow,
 }: DatabaseSettingsSectionProps) {
+  const [databaseSwitchSafetyMessage, setDatabaseSwitchSafetyMessage] = useState('');
+
+  const runDatabaseContextChange = async (action: () => void | Promise<void>): Promise<void> => {
+    const blockedReason = databaseContextSwitchBlockReason();
+    if (blockedReason) {
+      setDatabaseSwitchSafetyMessage(blockedReason);
+      return;
+    }
+
+    setDatabaseSwitchSafetyMessage('');
+    const previousStatus = (await window.traccion?.databaseStatus?.()) ?? databaseStatus;
+    await action();
+    const nextStatus = (await window.traccion?.databaseStatus?.()) ?? databaseStatus;
+
+    if (didDatabaseContextChange(previousStatus, nextStatus)) {
+      window.location.reload();
+    }
+  };
+
   return (
     <div
       id="base-de-datos"
@@ -221,10 +245,16 @@ export function DatabaseSettingsSection({
         </Notice>
       )}
 
+      {databaseSwitchSafetyMessage && (
+        <Notice className="mt-3" tone="warning">
+          {databaseSwitchSafetyMessage}
+        </Notice>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-          onClick={() => void handleSelectDatabaseDirectory()}
+          onClick={() => void runDatabaseContextChange(handleSelectDatabaseDirectory)}
           type="button"
         >
           <Database size={16} />
@@ -232,7 +262,7 @@ export function DatabaseSettingsSection({
         </button>
         <button
           className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-          onClick={() => void handleResetDatabaseDirectory()}
+          onClick={() => void runDatabaseContextChange(handleResetDatabaseDirectory)}
           type="button"
         >
           <RotateCcw size={16} />
