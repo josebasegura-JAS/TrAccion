@@ -5,9 +5,10 @@ import { HuelgasZonesModals } from './HuelgasZonesModals';
 import { HuelgasCollectionMailsModal } from './HuelgasCollectionMailsModal';
 import { HuelgasResponseCollectionModal } from './HuelgasResponseCollectionModal';
 import { HuelgasResultsModal } from './HuelgasResultsModal';
+import { HuelgaImportHistoryPanel } from './HuelgaImportHistoryPanel';
 import { isHuelgaResultsReady, loadHuelgaResultsCollection } from './huelgasResultsAccess';
 import type { Huelga } from './huelgasPageModel';
-import { useHuelgaResponseCollection } from './useHuelgaResponseCollection';
+import { useHuelgaIncrementalResponseCollection } from './useHuelgaIncrementalResponseCollection';
 import { useHuelgasPageController } from './useHuelgasPageController';
 
 export function HuelgasPage() {
@@ -59,7 +60,7 @@ export function HuelgasPage() {
     dialogNode,
   } = useHuelgasPageController();
 
-  const responseCollection = useHuelgaResponseCollection(huelgas, zonas);
+  const responseCollection = useHuelgaIncrementalResponseCollection(huelgas, zonas);
   const [resultsTarget, setResultsTarget] = useState<Huelga | null>(null);
   const resultsCollection = resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null;
   const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id));
@@ -136,6 +137,11 @@ export function HuelgasPage() {
         onSave={() => void responseCollection.save()}
         onExport={() => void responseCollection.exportReport()}
         onExportGrouped={() => void responseCollection.exportGroupedReport()}
+      />
+
+      <HuelgaImportHistoryPanel
+        open={Boolean(responseCollection.target)}
+        batches={responseCollection.importHistory}
       />
 
       <HuelgasResultsModal
