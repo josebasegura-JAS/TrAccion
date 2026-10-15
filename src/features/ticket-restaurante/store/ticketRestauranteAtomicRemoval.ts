@@ -4,6 +4,7 @@ import {
   waitForNextPaint,
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import { assertTicketRestauranteModuleLockActive } from './ticketRestauranteLockCheckpoint';
 
 const TICKET_RESTAURANTE_ATOMIC_REMOVE_KEY =
   'traccion.v1.ticketRestaurante.atomic-calendar-removal';
@@ -80,8 +81,9 @@ export async function removeTicketCalendarWithPeopleAtomically(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      remover({
+    const result = await withTemporarySqliteRetry(async () => {
+      await assertTicketRestauranteModuleLockActive();
+      return remover({
         calendar: {
           id: calendar.id,
           value: calendar.serializedValue,
@@ -92,8 +94,8 @@ export async function removeTicketCalendarWithPeopleAtomically(
           value: person.serializedValue,
           expectedUpdatedAt: person.expectedUpdatedAt,
         })),
-      }),
-    );
+      });
+    });
 
     publishDatabaseStatus(result.status);
     clearPersistenceBusy(TICKET_RESTAURANTE_ATOMIC_REMOVE_KEY, result.message);

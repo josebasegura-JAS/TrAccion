@@ -111,4 +111,41 @@ describe('useTicketRestauranteStore importPeople atómico', () => {
     expect(useTicketRestauranteStore.getState().calendars).toStrictEqual(calendarsBefore);
     expect(useTicketRestauranteStore.getState().people).toStrictEqual(peopleBefore);
   });
+
+  it('no inicia el commit atómico si el lock de módulo se ha perdido', async () => {
+    const atomicImport = vi.fn();
+    const heartbeatRecordLock = vi.fn(async () => ({
+      ok: false,
+      status: 'locked' as const,
+      lock: {
+        ownerId: 'otro-owner',
+        ownerName: 'otro.usuario',
+        machineName: 'PC-OTRO',
+        acquiredAt: '2026-10-15T07:00:00.000Z',
+        expiresAt: '2026-10-15T07:01:00.000Z',
+      },
+      message: 'Bloqueo adquirido por otro usuario.',
+    }));
+
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: {
+        loadTicketRestauranteCalendarRecords: vi.fn(async () => ({ status: sqliteStatus, records: [] })),
+        loadTicketRestaurantePersonRecords: vi.fn(async () => ({ status: sqliteStatus, records: [] })),
+        saveTicketRestauranteCalendarRecordIfUnchanged: vi.fn(),
+        saveTicketRestaurantePersonRecordIfUnchanged: vi.fn(),
+        importTicketRestaurantePeopleAtomically: atomicImport,
+        heartbeatRecordLock,
+      },
+    });
+
+    await expect(useTicketRestauranteStore.getState().importPeople([draft()])).rejects.toThrow(
+      'Se ha perdido el bloqueo de Ticket Restaurante',
+    );
+    expect(heartbeatRecordLock).toHaveBeenCalledWith({
+      module: 'ticket-restaurante',
+      recordId: '__module__',
+    });
+    expect(atomicImport).not.toHaveBeenCalled();
+  });
 });
