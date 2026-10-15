@@ -52,6 +52,7 @@ export function TaskEditor({
     clearRecoveryDraft,
     creationDate,
     criterionLinkReady,
+    criterionSaveDialogNode,
     customAreaTarget,
     dialogNode,
     documentStatus,
@@ -321,6 +322,7 @@ export function TaskEditor({
       {dialogNode}
       {closeTaskDialogNode}
       {recoveryDialogNode}
+      {criterionSaveDialogNode}
       {trackingDeleteDialogNode}
       {taskPrintPreviewHtml && (
         <PrintPreviewModal
