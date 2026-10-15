@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   publishDatabaseConnectivityBlock: vi.fn(),
   forceExternalDataRefreshAfterRecovery: vi.fn(),
   startExternalDataSyncPolling: vi.fn(),
+  stopExternalDataSyncPolling: vi.fn(),
   publishDatabaseConnectivityState: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock('./editingAvailability', () => ({
 vi.mock('./externalDataSync', () => ({
   forceExternalDataRefreshAfterRecovery: mocks.forceExternalDataRefreshAfterRecovery,
   startExternalDataSyncPolling: mocks.startExternalDataSyncPolling,
+  stopExternalDataSyncPolling: mocks.stopExternalDataSyncPolling,
 }));
 
 vi.mock('./databaseConnectivityState', () => ({
@@ -95,6 +97,7 @@ describe('databaseHealthMonitor', () => {
       'connected',
       'SQLite compartida accesible.',
     );
+    expect(mocks.stopExternalDataSyncPolling).not.toHaveBeenCalled();
     expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
       true,
       expect.any(String),
@@ -104,7 +107,7 @@ describe('databaseHealthMonitor', () => {
     monitor.stopDatabaseHealthMonitor();
   });
 
-  it('bloquea edición y entra en reconexión cuando falla el health check', async () => {
+  it('pausa el polling, bloquea edición y entra en reconexión cuando falla el health check', async () => {
     const databaseHealthCheck = vi.fn().mockResolvedValue({
       ok: false,
       status: errorStatus,
@@ -117,6 +120,7 @@ describe('databaseHealthMonitor', () => {
     monitor.startDatabaseHealthMonitor();
     await vi.advanceTimersByTimeAsync(0);
 
+    expect(mocks.stopExternalDataSyncPolling).toHaveBeenCalledTimes(1);
     expect(mocks.publishDatabaseConnectivityBlock).toHaveBeenCalledWith(
       true,
       expect.stringContaining('No se puede acceder al recurso SMB.'),
@@ -153,12 +157,15 @@ describe('databaseHealthMonitor', () => {
     await vi.advanceTimersByTimeAsync(2_000);
 
     expect(databaseHealthCheck).toHaveBeenCalledTimes(2);
+    expect(mocks.stopExternalDataSyncPolling).toHaveBeenCalled();
     expect(mocks.refreshDatabaseStatus).toHaveBeenCalledTimes(1);
     expect(mocks.forceExternalDataRefreshAfterRecovery).toHaveBeenCalledTimes(1);
     expect(mocks.startExternalDataSyncPolling).toHaveBeenCalledTimes(1);
 
+    const stopOrder = mocks.stopExternalDataSyncPolling.mock.invocationCallOrder[0];
     const refreshOrder = mocks.forceExternalDataRefreshAfterRecovery.mock.invocationCallOrder[0];
     const pollingOrder = mocks.startExternalDataSyncPolling.mock.invocationCallOrder[0];
+    expect(refreshOrder).toBeGreaterThan(stopOrder);
     expect(pollingOrder).toBeGreaterThan(refreshOrder);
 
     const blockCalls = mocks.publishDatabaseConnectivityBlock.mock.calls;
@@ -181,7 +188,7 @@ describe('databaseHealthMonitor', () => {
     monitor.stopDatabaseHealthMonitor();
   });
 
-  it('el evento offline de Windows bloquea de inmediato y fuerza una comprobación de reconexión', async () => {
+  it('el evento offline de Windows pausa el polling, bloquea de inmediato y fuerza una comprobación', async () => {
     const databaseHealthCheck = vi.fn().mockResolvedValue({
       ok: false,
       status: errorStatus,
@@ -194,6 +201,7 @@ describe('databaseHealthMonitor', () => {
     monitor.startDatabaseHealthMonitor();
     fakeWindow.dispatch('offline');
 
+    expect(mocks.stopExternalDataSyncPolling).toHaveBeenCalledTimes(1);
     expect(mocks.publishDatabaseConnectivityBlock).toHaveBeenCalledWith(
       true,
       'Windows ha informado de una pérdida de red. Reconectando con la base compartida…',
@@ -207,6 +215,34 @@ describe('databaseHealthMonitor', () => {
 
     await vi.advanceTimersByTimeAsync(0);
     expect(databaseHealthCheck).toHaveBeenCalledTimes(1);
+
+    monitor.stopDatabaseHealthMonitor();
+  });
+
+  it('el evento online se trata como transición y verifica SQLite antes de reactivar edición', async () => {
+    const databaseHealthCheck = vi.fn().mockResolvedValue({
+      ok: true,
+      status: activeStatus,
+      checkedAt: '2026-10-05T12:00:00.000Z',
+      message: 'SQLite accesible.',
+    });
+    const fakeWindow = installFakeWindow(databaseHealthCheck);
+    const monitor = await import('./databaseHealthMonitor');
+
+    monitor.startDatabaseHealthMonitor();
+    fakeWindow.dispatch('online');
+
+    expect(mocks.stopExternalDataSyncPolling).toHaveBeenCalledTimes(1);
+    expect(mocks.publishDatabaseConnectivityBlock).toHaveBeenCalledWith(
+      true,
+      'La red ha cambiado o acaba de recuperarse. Verificando de nuevo la base compartida…',
+      'health-monitor',
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(databaseHealthCheck).toHaveBeenCalledTimes(1);
+    expect(mocks.forceExternalDataRefreshAfterRecovery).toHaveBeenCalledTimes(1);
+    expect(mocks.startExternalDataSyncPolling).toHaveBeenCalledTimes(1);
 
     monitor.stopDatabaseHealthMonitor();
   });
