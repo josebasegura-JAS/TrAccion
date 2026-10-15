@@ -111,7 +111,7 @@ async function completeRecovery(): Promise<void> {
   }
 
   await forceExternalDataRefreshAfterRecovery();
-  startExternalDataSyncPolling();
+  startExternalDataSyncPolling({ preserveSeenTokens: true, runImmediately: false });
   blockedByHealthMonitor = false;
   consecutiveFailures = 0;
   publishDatabaseConnectivityBlock(false, 'Conexión SQLite recuperada y datos compartidos actualizados.', 'health-monitor');
