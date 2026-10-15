@@ -6,11 +6,29 @@ type BackupPayload = {
 };
 
 export type ExcelBackupFailure = {
+  id: string;
   message: string;
   retry: () => Promise<boolean>;
 };
 
 export const EXCEL_BACKUP_FAILURE_EVENT = 'traccion:excel-backup-failure';
+
+export function excelBackupFailureId(payload: Pick<BackupPayload, 'directory' | 'fileName'>): string {
+  const directory = payload.directory.trim().replace(/[\\/]+$/, '');
+  return `${directory}::${payload.fileName.trim()}`;
+}
+
+export function upsertExcelBackupFailure(
+  failures: ExcelBackupFailure[],
+  nextFailure: ExcelBackupFailure,
+): ExcelBackupFailure[] {
+  const existingIndex = failures.findIndex((failure) => failure.id === nextFailure.id);
+  if (existingIndex < 0) return [...failures, nextFailure];
+
+  const next = [...failures];
+  next[existingIndex] = nextFailure;
+  return next;
+}
 
 export async function saveExcelBackupWithRetry(payload: BackupPayload): Promise<string | null> {
   const save = window.traccion?.saveOperationalExcelBackup;
@@ -32,6 +50,7 @@ export async function saveExcelBackupWithRetry(payload: BackupPayload): Promise<
 
   window.dispatchEvent(new CustomEvent<ExcelBackupFailure>(EXCEL_BACKUP_FAILURE_EVENT, {
     detail: {
+      id: excelBackupFailureId(payload),
       message,
       retry: async () => {
         const error = await attempt();
