@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { HuelgasOverview } from './HuelgasOverview';
 import { HuelgaEditorModal } from './HuelgaEditorModal';
 import { HuelgasZonesModals } from './HuelgasZonesModals';
 import { HuelgasCollectionMailsModal } from './HuelgasCollectionMailsModal';
 import { HuelgasResponseCollectionModal } from './HuelgasResponseCollectionModal';
+import { HuelgasResultsModal } from './HuelgasResultsModal';
+import { isHuelgaResultsReady, loadHuelgaResultsCollection } from './huelgasResultsAccess';
+import type { Huelga } from './huelgasPageModel';
 import { useHuelgaResponseCollection } from './useHuelgaResponseCollection';
 import { useHuelgasPageController } from './useHuelgasPageController';
 
@@ -56,6 +60,9 @@ export function HuelgasPage() {
   } = useHuelgasPageController();
 
   const responseCollection = useHuelgaResponseCollection(huelgas, zonas);
+  const [resultsTarget, setResultsTarget] = useState<Huelga | null>(null);
+  const resultsCollection = resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null;
+  const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id));
 
   return (
     <div className="ui3-huelgas space-y-3">
@@ -66,11 +73,13 @@ export function HuelgasPage() {
         zonas={zonas}
         generatingCollectionForId={generatingCollectionForId}
         collectionStatusFor={responseCollection.collectionStatusFor}
+        resultsReadyFor={resultsReadyFor}
         onOpenZones={openZones}
         onOpenNew={openNew}
         onOpenEdit={openEdit}
         onOpenCollectionMails={(huelga) => void openCollectionMails(huelga)}
         onOpenResponseCollection={responseCollection.open}
+        onOpenResults={setResultsTarget}
         onRemove={(huelga) => void remove(huelga)}
       />
 
@@ -127,6 +136,12 @@ export function HuelgasPage() {
         onSave={() => void responseCollection.save()}
         onExport={() => void responseCollection.exportReport()}
         onExportGrouped={() => void responseCollection.exportGroupedReport()}
+      />
+
+      <HuelgasResultsModal
+        target={resultsTarget}
+        collection={resultsCollection}
+        onClose={() => setResultsTarget(null)}
       />
 
       <HuelgaEditorModal
