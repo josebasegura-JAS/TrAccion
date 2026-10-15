@@ -3,6 +3,7 @@ import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
+import { markSharedEditingActive, markSharedEditingInactive } from '../../../services/sharedEditingActivity';
 import { isHuelgaPuestoAsignaciones, type HuelgaPuestoAsignacion } from './huelgasAssignments';
 import { ensureDefaultZonas, isHuelgaZonas, type HuelgaZona } from './huelgasZones';
 import { isHuelgaAreas, mergeLegacyAreas, type HuelgaArea } from './huelgasAreas';
@@ -16,6 +17,7 @@ import {
   todayIso,
   type Huelga,
 } from './huelgasPageModel';
+import { subscribeHuelgasExternalReload } from './huelgasSyncBridge';
 import { useHuelgaAssignments } from './useHuelgaAssignments';
 import { useHuelgaCollectionMails } from './useHuelgaCollectionMails';
 import { useHuelgaEditor } from './useHuelgaEditor';
@@ -195,6 +197,37 @@ export function useHuelgasPageController() {
       void writeJsonStorageAsync(AREAS_STORAGE_KEY, nextAreas);
     }
   }, [loadConfiguracion, loadEmployees]);
+
+  useEffect(() => subscribeHuelgasExternalReload(() => {
+    const nextHuelgas = readJsonStorage(STORAGE_KEY, [], isHuelgas);
+    const nextAssignments = readJsonStorage(
+      PUESTO_RESPONSABLES_STORAGE_KEY,
+      [],
+      isHuelgaPuestoAsignaciones,
+    );
+    const nextZonas = ensureDefaultZonas(readJsonStorage(ZONAS_STORAGE_KEY, [], isHuelgaZonas));
+    const storedAreas = readJsonStorage(AREAS_STORAGE_KEY, [], isHuelgaAreas);
+    const historicalAssignments = nextHuelgas.flatMap((huelga) => huelga.asignacionesPuesto ?? []);
+
+    setHuelgas(nextHuelgas);
+    setPuestoResponsables(nextAssignments);
+    setZonas(nextZonas);
+    setAreas(mergeLegacyAreas(storedAreas, [...nextAssignments, ...historicalAssignments]));
+  }), []);
+
+  const hasInteractiveHuelgasEdit =
+    editorOpen ||
+    Boolean(importTarget) ||
+    Boolean(assignmentTarget) ||
+    zonesOpen ||
+    Boolean(mailTarget) ||
+    Boolean(personDetailAssignment);
+
+  useEffect(() => {
+    if (!hasInteractiveHuelgasEdit) return undefined;
+    markSharedEditingActive('huelgas', '__page__');
+    return () => markSharedEditingInactive('huelgas', '__page__');
+  }, [hasInteractiveHuelgasEdit]);
 
   const sindicatos = useMemo(
     () =>
