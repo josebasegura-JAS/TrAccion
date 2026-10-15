@@ -12,6 +12,7 @@ import {
   isHuelgaResponseCollections,
   parseHuelgaResponseWorkbook,
   responseHasData,
+  type HuelgaGeneralDetail,
   type HuelgaResponseCollections,
   type HuelgaZoneResponse,
 } from './huelgasResponseCollection';
@@ -144,6 +145,17 @@ function base64ToArrayBuffer(value: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+function totalsFromGeneralDetail(detail: HuelgaGeneralDetail[]) {
+  const sumMetric = (metric: 'personasTurno' | 'serviciosMinimos' | 'trabajan' | 'huelga') =>
+    detail.reduce((total, row) => total + row[metric].mujeres + row[metric].hombres, 0);
+  return {
+    personasTurno: sumMetric('personasTurno'),
+    serviciosMinimos: sumMetric('serviciosMinimos'),
+    personasTrabajan: sumMetric('trabajan'),
+    personasHuelga: sumMetric('huelga'),
+  };
+}
+
 type HuelgaMailAttachment = { name: string; size: number; contentBase64?: string };
 type HuelgaMailInspection = {
   senderName: string;
@@ -214,12 +226,16 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
             personasHuelga: previous.personasHuelga ?? 0,
           }
         : {};
+      const detailTotals = field === 'generalDetail' && Array.isArray(value) && value.length > 0
+        ? totalsFromGeneralDetail(value as HuelgaGeneralDetail[])
+        : {};
       return {
         ...current,
         [zoneId]: {
           ...previous,
           ...internalDefaults,
           [field]: value,
+          ...detailTotals,
           reviewed: field === 'reviewed' ? Boolean(value) : false,
         },
       };
@@ -254,10 +270,14 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
       analyzeHuelgaResponseWorkbook(buffer),
     ]);
     const mismatchWarning = fileCircuitMismatchWarning(fileName, currentZone, allZones);
+    const detailTotals = parsed.generalDetail?.length
+      ? totalsFromGeneralDetail(parsed.generalDetail)
+      : {};
     const normalizedParsed = {
       ...parsed,
-      serviciosMinimos: parsed.serviciosMinimos ?? 0,
-      personasHuelga: parsed.personasHuelga ?? 0,
+      ...detailTotals,
+      serviciosMinimos: detailTotals.serviciosMinimos ?? parsed.serviciosMinimos ?? 0,
+      personasHuelga: detailTotals.personasHuelga ?? parsed.personasHuelga ?? 0,
     };
     const optionalMissingPattern = /total de (servicios mínimos|personas en huelga)/i;
     const warnings = [...new Set([
@@ -548,7 +568,8 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     const errors = validateHuelgaCollection(responses).filter((item) => item.severity === 'error');
     if (errors.length > 0) {
       await alert(`No se puede generar el informe agrupado mientras existan errores.\n${issueMessage(errors)}`, {
-        title: 'Informe agrupado bloqueado', type: 'error',
+        title: 'Informe agrupado bloqueado',
+        type: 'error',
       });
       return;
     }
@@ -557,11 +578,13 @@ export function useHuelgaResponseCollection(huelgas: Huelga[], zonas: HuelgaZona
     try {
       await downloadHuelgaGroupedReport(target.fecha);
       await alert('Guarda este informe junto a la Excel maestra de la misma fecha, sin renombrarla. Abre ambos archivos en Excel y permite actualizar vínculos para recalcular las cifras.', {
-        title: 'Informe agrupado generado', type: 'info',
+        title: 'Informe agrupado generado',
+        type: 'info',
       });
     } catch (error) {
       await alert(error instanceof Error ? error.message : 'No se ha podido generar el informe agrupado.', {
-        title: 'Error al exportar', type: 'error',
+        title: 'Error al exportar',
+        type: 'error',
       });
     } finally {
       setExporting(false);
