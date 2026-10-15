@@ -1,6 +1,6 @@
 import { publishDatabaseStatus, refreshDatabaseStatus } from './databaseStatus';
 import { publishDatabaseConnectivityBlock } from './editingAvailability';
-import { forceExternalDataRefreshAfterRecovery } from './externalDataSync';
+import { forceExternalDataRefreshAfterRecovery, startExternalDataSyncPolling } from './externalDataSync';
 import { publishDatabaseConnectivityState } from './databaseConnectivityState';
 
 const HEALTHY_CHECK_INTERVAL_MS = 8_000;
@@ -88,6 +88,7 @@ async function completeRecovery(): Promise<void> {
   }
 
   await forceExternalDataRefreshAfterRecovery();
+  startExternalDataSyncPolling();
   blockedByHealthMonitor = false;
   consecutiveFailures = 0;
   publishDatabaseConnectivityBlock(false, 'Conexión SQLite recuperada y datos compartidos actualizados.', 'health-monitor');

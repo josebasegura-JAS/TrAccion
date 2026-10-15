@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   refreshDatabaseStatus: vi.fn(),
   publishDatabaseConnectivityBlock: vi.fn(),
   forceExternalDataRefreshAfterRecovery: vi.fn(),
+  startExternalDataSyncPolling: vi.fn(),
   publishDatabaseConnectivityState: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock('./editingAvailability', () => ({
 
 vi.mock('./externalDataSync', () => ({
   forceExternalDataRefreshAfterRecovery: mocks.forceExternalDataRefreshAfterRecovery,
+  startExternalDataSyncPolling: mocks.startExternalDataSyncPolling,
 }));
 
 vi.mock('./databaseConnectivityState', () => ({
@@ -129,7 +131,7 @@ describe('databaseHealthMonitor', () => {
     monitor.stopDatabaseHealthMonitor();
   });
 
-  it('al recuperar red sincroniza datos antes de desbloquear la edición', async () => {
+  it('al recuperar red sincroniza datos y reactiva el polling antes de desbloquear la edición', async () => {
     const databaseHealthCheck = vi.fn()
       .mockResolvedValueOnce({
         ok: false,
@@ -153,6 +155,11 @@ describe('databaseHealthMonitor', () => {
     expect(databaseHealthCheck).toHaveBeenCalledTimes(2);
     expect(mocks.refreshDatabaseStatus).toHaveBeenCalledTimes(1);
     expect(mocks.forceExternalDataRefreshAfterRecovery).toHaveBeenCalledTimes(1);
+    expect(mocks.startExternalDataSyncPolling).toHaveBeenCalledTimes(1);
+
+    const refreshOrder = mocks.forceExternalDataRefreshAfterRecovery.mock.invocationCallOrder[0];
+    const pollingOrder = mocks.startExternalDataSyncPolling.mock.invocationCallOrder[0];
+    expect(pollingOrder).toBeGreaterThan(refreshOrder);
 
     const blockCalls = mocks.publishDatabaseConnectivityBlock.mock.calls;
     const syncingBlockIndex = blockCalls.findIndex((call) =>
