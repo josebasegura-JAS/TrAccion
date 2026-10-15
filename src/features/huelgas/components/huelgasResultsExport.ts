@@ -70,7 +70,7 @@ export async function downloadHuelgaResultsWorkbook(
   summary.getCell('A3').font = { italic: true, color: { argb: 'FF6B7280' } };
 
   const headerRow = summary.getRow(5);
-  headerRow.values = ['Corte', 'Computables', 'Huelga', 'Trabajan', 'SS.MM.', 'Seguimiento'];
+  headerRow.values = ['Corte', 'Con turno', 'Huelga', 'Trabajan', 'SS.MM.', 'Seguimiento'];
   headerRow.font = { bold: true, color: { argb: WHITE } };
   headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DARK } };
   headerRow.alignment = { horizontal: 'center' };
@@ -81,7 +81,7 @@ export async function downloadHuelgaResultsWorkbook(
     const row = summary.getRow(rowIndex);
     row.values = [
       HUELGA_PERIOD_LABELS[period],
-      result.totals.personasComputables,
+      result.totals.personasTurno,
       result.totals.personasHuelga,
       result.totals.personasTrabajan,
       result.totals.serviciosMinimos,
@@ -118,14 +118,13 @@ export async function downloadHuelgaResultsWorkbook(
     { header: 'Área / circuito', key: 'area', width: 34 },
     { header: 'Con turno', key: 'turno', width: 14 },
     { header: 'SS.MM.', key: 'minimos', width: 12 },
-    { header: 'Computables', key: 'computables', width: 14 },
     { header: 'Trabajan', key: 'trabajan', width: 12 },
     { header: 'Huelga', key: 'huelga', width: 12 },
     { header: 'Seguimiento', key: 'seguimiento', width: 16 },
   ];
   byArea.getRow(1).font = { bold: true, color: { argb: WHITE } };
   byArea.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: RED } };
-  byArea.autoFilter = { from: 'A1', to: 'H1' };
+  byArea.autoFilter = { from: 'A1', to: 'G1' };
 
   for (const period of PERIODS) {
     for (const area of results[period].areas) {
@@ -134,15 +133,14 @@ export async function downloadHuelgaResultsWorkbook(
         area: area.nombre,
         turno: area.personasTurno,
         minimos: area.serviciosMinimos,
-        computables: area.personasComputables,
         trabajan: area.personasTrabajan,
         huelga: area.personasHuelga,
         seguimiento: area.seguimiento / 100,
       });
-      row.getCell(8).numFmt = '0.0%';
+      row.getCell(7).numFmt = '0.0%';
     }
   }
-  byArea.getColumn(8).font = { color: { argb: GREEN } };
+  byArea.getColumn(7).font = { color: { argb: GREEN } };
 
   const detail = workbook.addWorksheet('Detalle validado', {
     views: [{ state: 'frozen', ySplit: 1 }],
@@ -155,13 +153,12 @@ export async function downloadHuelgaResultsWorkbook(
     { header: 'SS.MM.', key: 'serviciosMinimos', width: 12 },
     { header: 'Trabajan', key: 'trabajan', width: 12 },
     { header: 'Huelga', key: 'huelga', width: 12 },
-    { header: 'Computables', key: 'computables', width: 13 },
     { header: 'Seguimiento', key: 'seguimiento', width: 16 },
     { header: 'Validado', key: 'reviewed', width: 12 },
   ];
   detail.getRow(1).font = { bold: true, color: { argb: WHITE } };
   detail.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: RED } };
-  detail.autoFilter = { from: 'A1', to: 'J1' };
+  detail.autoFilter = { from: 'A1', to: 'I1' };
 
   for (const response of Object.values(collection.responses)) {
     for (const item of response.generalDetail ?? []) {
@@ -169,8 +166,7 @@ export async function downloadHuelgaResultsWorkbook(
       const minimos = item.serviciosMinimos.hombres + item.serviciosMinimos.mujeres;
       const trabajan = item.trabajan.hombres + item.trabajan.mujeres;
       const huelgaCount = item.huelga.hombres + item.huelga.mujeres;
-      const computables = trabajan + huelgaCount;
-      const seguimiento = computables > 0 ? huelgaCount / computables : 0;
+      const seguimiento = turno > 0 ? huelgaCount / turno : 0;
       const row = detail.addRow({
         zona: response.zonaNombre,
         turno: HUELGA_PERIOD_LABELS[item.turno],
@@ -179,11 +175,10 @@ export async function downloadHuelgaResultsWorkbook(
         serviciosMinimos: minimos,
         trabajan,
         huelga: huelgaCount,
-        computables,
         seguimiento,
         reviewed: response.reviewed ? 'Sí' : 'No',
       });
-      row.getCell(9).numFmt = '0.0%';
+      row.getCell(8).numFmt = '0.0%';
     }
   }
 

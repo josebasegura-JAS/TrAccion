@@ -52,7 +52,7 @@ function printResult(huelga: Huelga, collection: HuelgaResponseCollection, resul
   const rows = result.areas.map((area) => `
     <tr>
       <td>${escapeHtml(area.nombre)}</td>
-      <td>${area.personasTurno}</td><td>${area.serviciosMinimos}</td><td>${area.personasComputables}</td>
+      <td>${area.personasTurno}</td><td>${area.serviciosMinimos}</td>
       <td>${area.personasTrabajan}</td><td>${area.personasHuelga}</td><td><strong>${escapeHtml(formatSeguimiento(area.seguimiento))}</strong></td>
     </tr>`).join('');
 
@@ -67,11 +67,11 @@ function printResult(huelga: Huelga, collection: HuelgaResponseCollection, resul
       table{width:100%;border-collapse:collapse;margin-top:8px;font-size:9.5px}th{background:#333;color:white;text-align:right;padding:6px}th:first-child,td:first-child{text-align:left}td{text-align:right;padding:5px 6px;border-bottom:1px solid #ddd}tfoot td{font-weight:800;border-top:2px solid #333}.footer{margin-top:14px;border-top:1px solid #ddd;padding-top:7px;color:#777;font-size:9px}
     </style></head><body>
     <div class="top"><div><div class="eyebrow">Metro Bilbao · Relaciones Laborales · TrAcción</div><div class="title">Resultados de huelga · ${escapeHtml(HUELGA_PERIOD_LABELS[result.period])}</div><div class="meta">${escapeHtml(formatDate(huelga.fecha))} · ${escapeHtml(huelga.sindicatos.join(' · '))}</div></div><div class="stamp"><strong>DATOS VALIDADOS</strong><br>${escapeHtml(new Date(collection.updatedAt).toLocaleString('es-ES'))}</div></div>
-    <div class="kpis"><div class="kpi"><small>Computables</small><strong>${result.totals.personasComputables}</strong></div><div class="kpi red"><small>En huelga</small><strong>${result.totals.personasHuelga}</strong></div><div class="kpi red"><small>Seguimiento</small><strong>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</strong></div><div class="kpi"><small>Trabajan</small><strong>${result.totals.personasTrabajan}</strong></div></div>
+    <div class="kpis"><div class="kpi"><small>Personas con turno</small><strong>${result.totals.personasTurno}</strong></div><div class="kpi red"><small>En huelga</small><strong>${result.totals.personasHuelga}</strong></div><div class="kpi red"><small>Seguimiento</small><strong>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</strong></div><div class="kpi"><small>Trabajan</small><strong>${result.totals.personasTrabajan}</strong></div></div>
     <div class="summary">${escapeHtml(huelgaExecutiveSummary(result))}</div>
     <div class="section-title">Seguimiento por área / circuito</div>${bars || '<p>Sin datos para este corte.</p>'}
-    <div class="section-title">Detalle</div><table><thead><tr><th>Área / circuito</th><th>Con turno</th><th>SS.MM.</th><th>Computables</th><th>Trabajan</th><th>Huelga</th><th>Seguimiento</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td>${result.totals.personasTurno}</td><td>${result.totals.serviciosMinimos}</td><td>${result.totals.personasComputables}</td><td>${result.totals.personasTrabajan}</td><td>${result.totals.personasHuelga}</td><td>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</td></tr></tfoot></table>
-    <div class="footer">Seguimiento = personas en huelga / (personas que trabajan + personas en huelga). Los servicios mínimos quedan fuera de la base computable.</div>
+    <div class="section-title">Detalle</div><table><thead><tr><th>Área / circuito</th><th>Con turno</th><th>SS.MM.</th><th>Trabajan</th><th>Huelga</th><th>Seguimiento</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td>${result.totals.personasTurno}</td><td>${result.totals.serviciosMinimos}</td><td>${result.totals.personasTrabajan}</td><td>${result.totals.personasHuelga}</td><td>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</td></tr></tfoot></table>
+    <div class="footer">Seguimiento = personas en huelga / personas con turno. Los servicios mínimos están incluidos en personas con turno, aunque no en personas que trabajan.</div>
     </body></html>`);
   printWindow.document.close();
   printWindow.focus();
@@ -139,9 +139,9 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
 
         <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-metro-muted">Computables</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-metro-text">{result.totals.personasComputables.toLocaleString('es-ES')}</p>
-            <p className="mt-1 text-[10px] text-metro-muted">Trabajan + huelga</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-metro-muted">Personas con turno</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-metro-text">{result.totals.personasTurno.toLocaleString('es-ES')}</p>
+            <p className="mt-1 text-[10px] text-metro-muted">Incluye servicios mínimos</p>
           </div>
           <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-metro-muted">En huelga</p>
@@ -183,12 +183,12 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-metro-raised">
                       <div className="h-full rounded-full bg-metro-red" style={{ width: `${Math.min(100, shift.totals.seguimiento)}%` }} />
                     </div>
-                    <p className="mt-2 text-[10px] text-metro-muted">{shift.hasData ? `${shift.totals.personasHuelga} huelga / ${shift.totals.personasComputables} computables` : 'Sin desglose disponible'}</p>
+                    <p className="mt-2 text-[10px] text-metro-muted">{shift.hasData ? `${shift.totals.personasHuelga} huelga / ${shift.totals.personasTurno} con turno` : 'Sin desglose disponible'}</p>
                   </div>
                 );
               })}
             </div>
-            <p className="mt-3 text-[10px] text-metro-muted">El Global se calcula sobre la suma real de personas computables y huelguistas; no es la media aritmética de los tres porcentajes.</p>
+            <p className="mt-3 text-[10px] text-metro-muted">El Global se calcula sobre la suma real de personas en huelga y personas con turno; no es la media aritmética de los tres porcentajes.</p>
           </section>
         )}
 
@@ -210,7 +210,7 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
                   <div className="h-3 overflow-hidden rounded-full bg-metro-raised">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-metro-red to-red-400"
-                      style={{ width: `${area.personasComputables > 0 ? Math.max(2, (area.seguimiento / maxArea) * 100) : 0}%` }}
+                      style={{ width: `${area.personasTurno > 0 ? Math.max(2, (area.seguimiento / maxArea) * 100) : 0}%` }}
                     />
                   </div>
                   <div className="text-right text-xs font-bold tabular-nums text-metro-text">{formatSeguimiento(area.seguimiento)}</div>
@@ -223,28 +223,28 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
           <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel/35">
             <div className="border-b border-metro-border px-4 py-3"><h3 className="text-sm font-semibold text-metro-text">Detalle</h3></div>
             <div className="max-h-[330px] overflow-auto">
-              <table className="w-full min-w-[650px] text-left text-[11px] text-metro-text">
+              <table className="w-full min-w-[600px] text-left text-[11px] text-metro-text">
                 <thead className="sticky top-0 bg-metro-panel text-metro-muted">
                   <tr className="border-b border-metro-border">
-                    <th className="px-3 py-2">Área / circuito</th><th className="px-2 py-2 text-right">Con turno</th><th className="px-2 py-2 text-right">SS.MM.</th><th className="px-2 py-2 text-right">Computables</th><th className="px-2 py-2 text-right">Huelga</th><th className="px-3 py-2 text-right">Seguimiento</th>
+                    <th className="px-3 py-2">Área / circuito</th><th className="px-2 py-2 text-right">Con turno</th><th className="px-2 py-2 text-right">SS.MM.</th><th className="px-2 py-2 text-right">Trabajan</th><th className="px-2 py-2 text-right">Huelga</th><th className="px-3 py-2 text-right">Seguimiento</th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.areas.map((area) => (
                     <tr className="border-b border-metro-border/60" key={area.id}>
-                      <td className="px-3 py-2 font-medium">{area.nombre}</td><td className="px-2 py-2 text-right tabular-nums">{area.personasTurno}</td><td className="px-2 py-2 text-right tabular-nums">{area.serviciosMinimos}</td><td className="px-2 py-2 text-right tabular-nums">{area.personasComputables}</td><td className="px-2 py-2 text-right font-semibold tabular-nums">{area.personasHuelga}</td><td className="px-3 py-2 text-right font-bold tabular-nums text-metro-red">{formatSeguimiento(area.seguimiento)}</td>
+                      <td className="px-3 py-2 font-medium">{area.nombre}</td><td className="px-2 py-2 text-right tabular-nums">{area.personasTurno}</td><td className="px-2 py-2 text-right tabular-nums">{area.serviciosMinimos}</td><td className="px-2 py-2 text-right tabular-nums">{area.personasTrabajan}</td><td className="px-2 py-2 text-right font-semibold tabular-nums">{area.personasHuelga}</td><td className="px-3 py-2 text-right font-bold tabular-nums text-metro-red">{formatSeguimiento(area.seguimiento)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="sticky bottom-0 bg-metro-panel font-bold">
-                  <tr className="border-t-2 border-metro-border"><td className="px-3 py-2">TOTAL</td><td className="px-2 py-2 text-right">{result.totals.personasTurno}</td><td className="px-2 py-2 text-right">{result.totals.serviciosMinimos}</td><td className="px-2 py-2 text-right">{result.totals.personasComputables}</td><td className="px-2 py-2 text-right">{result.totals.personasHuelga}</td><td className="px-3 py-2 text-right text-metro-red">{formatSeguimiento(result.totals.seguimiento)}</td></tr>
+                  <tr className="border-t-2 border-metro-border"><td className="px-3 py-2">TOTAL</td><td className="px-2 py-2 text-right">{result.totals.personasTurno}</td><td className="px-2 py-2 text-right">{result.totals.serviciosMinimos}</td><td className="px-2 py-2 text-right">{result.totals.personasTrabajan}</td><td className="px-2 py-2 text-right">{result.totals.personasHuelga}</td><td className="px-3 py-2 text-right text-metro-red">{formatSeguimiento(result.totals.seguimiento)}</td></tr>
                 </tfoot>
               </table>
             </div>
           </div>
         </section>
 
-        <p className="mt-3 text-[10px] text-metro-muted">Criterio de cálculo: seguimiento = personas en huelga / (personas que trabajan + personas en huelga). Los servicios mínimos no forman parte de la base computable.</p>
+        <p className="mt-3 text-[10px] text-metro-muted">Criterio de cálculo: seguimiento = personas en huelga / personas con turno. Los servicios mínimos forman parte de personas con turno, pero no de personas que trabajan.</p>
       </div>
 
       <ModalFooter className="justify-between">

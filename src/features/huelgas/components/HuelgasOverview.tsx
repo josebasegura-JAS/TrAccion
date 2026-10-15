@@ -35,7 +35,7 @@ const HUELGAS_HELP_SECTIONS: ModuleHelpSection[] = [
       'Si un fichero tiene un formato distinto o ha sido modificado, los valores se pueden completar o corregir manualmente antes de validarlo.',
       'Las incoherencias entre con turno, servicios mínimos, trabajan y huelga se explican en los errores bloqueantes. Las casillas implicadas se resaltan en ámbar y las filas afectadas muestran un indicador rojo.',
       'Resultados es de solo lectura y se habilita únicamente cuando la recogida guardada está revisada y sin errores bloqueantes.',
-      'El seguimiento se calcula sobre personas computables (trabajan + huelga), dejando fuera los servicios mínimos. El Global se pondera sobre personas y nunca promedia porcentajes.',
+      'El seguimiento se calcula como personas en huelga / personas con turno. Los servicios mínimos están incluidos en personas con turno, aunque no en personas que trabajan. El Global se pondera sobre las personas reales y nunca promedia porcentajes.',
     ],
   },
 ];
