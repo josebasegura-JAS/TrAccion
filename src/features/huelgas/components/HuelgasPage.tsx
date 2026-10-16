@@ -6,6 +6,7 @@ import { HuelgasCollectionMailsModal } from './HuelgasCollectionMailsModal';
 import { HuelgasResponseCollectionModal } from './HuelgasResponseCollectionModal';
 import { HuelgasResultsModal } from './HuelgasResultsModal';
 import { HuelgaImportHistoryPanel } from './HuelgaImportHistoryPanel';
+import { deriveHuelgaOperationalStatus } from './huelgasOperationalStatus';
 import { isHuelgaResultsReady, loadHuelgaResultsCollection } from './huelgasResultsAccess';
 import type { Huelga } from './huelgasPageModel';
 import { useHuelgaIncrementalResponseCollection } from './useHuelgaIncrementalResponseCollection';
@@ -64,6 +65,16 @@ export function HuelgasPage() {
   const [resultsTarget, setResultsTarget] = useState<Huelga | null>(null);
   const resultsCollection = resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null;
   const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id), huelga, zonas);
+  const operationalStatusFor = (huelga: Huelga) => {
+    const selectedZoneIds = huelga.circuitosZonaIds?.length
+      ? huelga.circuitosZonaIds
+      : zonas.filter((zona) => zona.active && zona.correoActivo).map((zona) => zona.id);
+    return deriveHuelgaOperationalStatus(
+      responseCollection.collectionStatusFor(huelga),
+      loadHuelgaResultsCollection(huelga.id),
+      selectedZoneIds,
+    );
+  };
 
   return (
     <div className="ui3-huelgas space-y-3">
@@ -74,6 +85,7 @@ export function HuelgasPage() {
         zonas={zonas}
         generatingCollectionForId={generatingCollectionForId}
         collectionStatusFor={responseCollection.collectionStatusFor}
+        operationalStatusFor={operationalStatusFor}
         resultsReadyFor={resultsReadyFor}
         onOpenZones={openZones}
         onOpenNew={openNew}
