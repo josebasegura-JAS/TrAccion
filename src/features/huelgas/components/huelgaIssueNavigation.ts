@@ -27,12 +27,12 @@ function normalized(message: string): string {
 function targetForMessage(message: string): HuelgaIssueTarget {
   const text = normalized(message);
   if (text.includes('excel de respuesta') || text.includes('circuito del fichero')) return 'source';
-  if (text.includes('desglose') || text.includes('turno') || text.includes('colectivo')) return 'detail';
   if (text.includes('listado nominal') || text.includes('huelguista') || text.includes('nº de empleado') || text.includes('empleado')) return 'huelguistas';
   if (text.includes('servicios minimos') || text.includes('ss.mm')) return 'serviciosMinimos';
   if (text.includes('personas que trabajan') || text.includes('trabajan')) return 'personasTrabajan';
   if (text.includes('personas en huelga') || text.includes('en huelga')) return 'personasHuelga';
   if (text.includes('personas con turno') || text.includes('con turno')) return 'personasTurno';
+  if (text.includes('desglose') || text.includes('turno') || text.includes('colectivo')) return 'detail';
   return 'circuit';
 }
 
