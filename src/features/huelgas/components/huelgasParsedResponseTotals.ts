@@ -95,18 +95,14 @@ function readMetricPairs(
   },
   genderRow: number,
   femaleColumn: number,
+  blockEndRow: number,
 ): MetricPairs {
   const result = emptyMetricPairs();
   const found = new Set<DetailMetric>();
-  const lastRow = Math.min(genderRow + 12, worksheet.actualRowCount);
+  const lastRow = Math.min(blockEndRow, genderRow + 16, worksheet.actualRowCount);
   const lastLabelColumn = Math.min(Math.max(1, femaleColumn - 1), worksheet.actualColumnCount);
 
   for (let row = genderRow + 1; row <= lastRow; row += 1) {
-    if (
-      normalize(worksheet.getCell(row, femaleColumn).text) === 'mujeres' &&
-      normalize(worksheet.getCell(row, femaleColumn + 1).text) === 'hombres'
-    ) break;
-
     let metric: DetailMetric | null = null;
     for (let column = 1; column <= lastLabelColumn && !metric; column += 1) {
       const label = worksheet.getCell(row, column).text;
@@ -130,6 +126,37 @@ function readMetricPairs(
   return result;
 }
 
+type ShiftBoundary = {
+  row: number;
+  turno: HuelgaGeneralShift;
+};
+
+function findShiftBoundaries(
+  worksheet: {
+    getCell: (row: number, column: number) => { text: string };
+    actualColumnCount: number;
+    actualRowCount: number;
+  },
+): ShiftBoundary[] {
+  const boundaries: ShiftBoundary[] = [];
+  const maxRows = Math.min(worksheet.actualRowCount, 160);
+  const maxColumns = Math.min(worksheet.actualColumnCount, 16);
+
+  for (let row = 1; row <= maxRows; row += 1) {
+    let turno: HuelgaGeneralShift | null = null;
+    for (let column = 1; column <= maxColumns && !turno; column += 1) {
+      turno = shiftKey(worksheet.getCell(row, column).text);
+    }
+    if (!turno) continue;
+
+    // La misma fila puede contener más de una celda con texto equivalente al turno.
+    // Guardamos una sola frontera por fila.
+    if (boundaries.at(-1)?.row !== row) boundaries.push({ row, turno });
+  }
+
+  return boundaries;
+}
+
 async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGeneralDetail[]> {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
@@ -139,38 +166,38 @@ async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGe
   const seen = new Set<string>();
 
   for (const worksheet of workbook.worksheets) {
-    for (let row = 1; row <= Math.min(worksheet.actualRowCount, 160); row += 1) {
-      for (let column = 1; column < Math.min(worksheet.actualColumnCount, 50); column += 1) {
-        if (
-          normalize(worksheet.getCell(row, column).text) !== 'mujeres' ||
-          normalize(worksheet.getCell(row, column + 1).text) !== 'hombres'
-        ) continue;
+    const boundaries = findShiftBoundaries(worksheet);
 
-        const colectivo = canonicalColectivo(worksheet.getCell(row - 1, column).text);
-        if (!colectivo) continue;
+    for (let boundaryIndex = 0; boundaryIndex < boundaries.length; boundaryIndex += 1) {
+      const boundary = boundaries[boundaryIndex];
+      const nextBoundaryRow = boundaries[boundaryIndex + 1]?.row ?? worksheet.actualRowCount + 1;
+      const blockEndRow = Math.min(nextBoundaryRow - 1, worksheet.actualRowCount);
+      const headerSearchEnd = Math.min(blockEndRow, boundary.row + 6);
 
-        let turno: HuelgaGeneralShift | null = null;
-        for (let previous = row - 2; previous >= Math.max(1, row - 8) && !turno; previous -= 1) {
-          for (let scanColumn = 1; scanColumn <= Math.min(worksheet.actualColumnCount, 16); scanColumn += 1) {
-            turno = shiftKey(worksheet.getCell(previous, scanColumn).text);
-            if (turno) break;
-          }
+      for (let row = boundary.row + 1; row <= headerSearchEnd; row += 1) {
+        for (let column = 1; column < Math.min(worksheet.actualColumnCount, 50); column += 1) {
+          if (
+            normalize(worksheet.getCell(row, column).text) !== 'mujeres' ||
+            normalize(worksheet.getCell(row, column + 1).text) !== 'hombres'
+          ) continue;
+
+          const colectivo = canonicalColectivo(worksheet.getCell(row - 1, column).text);
+          if (!colectivo) continue;
+
+          const key = `${boundary.turno}::${colectivo}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const metrics = readMetricPairs(worksheet, row, column, blockEndRow);
+          result.push({
+            turno: boundary.turno,
+            colectivo,
+            huelga: metrics.huelga,
+            trabajan: metrics.trabajan,
+            personasTurno: metrics.personasTurno,
+            serviciosMinimos: metrics.serviciosMinimos,
+          });
         }
-        if (!turno) continue;
-
-        const key = `${turno}::${colectivo}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        const metrics = readMetricPairs(worksheet, row, column);
-        result.push({
-          turno,
-          colectivo,
-          huelga: metrics.huelga,
-          trabajan: metrics.trabajan,
-          personasTurno: metrics.personasTurno,
-          serviciosMinimos: metrics.serviciosMinimos,
-        });
       }
     }
   }
