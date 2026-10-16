@@ -1,4 +1,4 @@
-import { BarChart3, CalendarDays, ClipboardCheck, MailPlus, Settings2 } from 'lucide-react';
+import { CalendarDays, ClipboardCheck, Settings2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { HuelgaOperationalStatusBadge, HuelgaOperationalSummary } from './HuelgaOperationalSummary';
 import type { HuelgaOperationalStatus } from './huelgasOperationalStatus';
+import type { HuelgaWorkspaceTab } from './HuelgaWorkspace';
 import type { HuelgaZona } from './huelgasZones';
 import { convocatoriaLabel, formatDate, huelgaStatus, type Huelga } from './huelgasPageModel';
 
@@ -24,10 +25,10 @@ const HUELGAS_HELP_SECTIONS: ModuleHelpSection[] = [
     ordered: true,
     items: [
       'Crear la convocatoria indicando fecha, sindicatos, jornada completa o paros y circuitos afectados.',
-      'Revisar la configuración de los circuitos y preparar las comunicaciones de Outlook.',
-      'Cuando vuelvan los Excel, abrir Recogida e importar la respuesta de cada circuito.',
+      'Abrir la huelga para trabajar siempre dentro de su espacio de gestión.',
+      'Preparar las comunicaciones de Outlook y recoger las respuestas de cada circuito.',
       'Revisar los totales detectados, corregirlos si fuese necesario y marcar cada circuito como revisado.',
-      'Cuando la recogida esté validada, abrir Resultados para consultar Noche, Mañana, Tarde y Global, imprimir el informe o exportarlo a Excel.',
+      'Cuando la recogida esté validada, consultar Noche, Mañana, Tarde y Global desde Resultados.',
     ],
   },
   {
@@ -35,9 +36,9 @@ const HUELGAS_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'El importador intenta reconocer automáticamente personas con turno, servicios mínimos, personas que trabajan y personas en huelga.',
       'Si un fichero tiene un formato distinto o ha sido modificado, los valores se pueden completar o corregir manualmente antes de validarlo.',
-      'Las incoherencias entre con turno, servicios mínimos, trabajan y huelga se explican en los errores bloqueantes. Las casillas implicadas se resaltan en ámbar y las filas afectadas muestran un indicador rojo.',
+      'Las incoherencias entre con turno, servicios mínimos, trabajan y huelga se explican en los errores bloqueantes.',
       'Resultados es de solo lectura y se habilita únicamente cuando la recogida guardada está revisada y sin errores bloqueantes.',
-      'El seguimiento se calcula como personas en huelga / personas con turno. Los servicios mínimos están incluidos en personas con turno, aunque no en personas que trabajan. El Global se pondera sobre las personas reales y nunca promedia porcentajes.',
+      'El seguimiento se calcula como personas en huelga / personas con turno. El Global se pondera sobre las personas reales y nunca promedia porcentajes.',
     ],
   },
 ];
@@ -77,9 +78,7 @@ type Props = {
   onOpenZones: () => void;
   onOpenNew: () => void;
   onOpenEdit: (huelga: Huelga) => void;
-  onOpenCollectionMails: (huelga: Huelga) => void;
-  onOpenResponseCollection: (huelga: Huelga) => void;
-  onOpenResults: (huelga: Huelga) => void;
+  onOpenWorkspace: (huelga: Huelga, tab?: HuelgaWorkspaceTab) => void;
   onRemove: (huelga: Huelga) => void;
 };
 
@@ -100,9 +99,7 @@ export function HuelgasOverview({
   onOpenZones,
   onOpenNew,
   onOpenEdit,
-  onOpenCollectionMails,
-  onOpenResponseCollection,
-  onOpenResults,
+  onOpenWorkspace,
   onRemove,
 }: Props) {
   const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
@@ -203,58 +200,32 @@ export function HuelgasOverview({
     {
       id: 'acciones',
       header: 'Acciones',
-      width: 440,
-      minWidth: 410,
+      width: 180,
+      minWidth: 170,
       sortable: false,
       resizable: false,
       reorderable: false,
       isActionColumn: true,
       headerClassName: 'text-right',
       className: 'text-right',
-      render: (huelga) => {
-        const resultsReady = resultsReadyFor(huelga);
-        return (
-          <div className="flex items-center justify-end gap-1.5">
-            <ActionButton
-              variant="primary"
-              size="sm"
-              iconOnly={false}
-              icon={MailPlus}
-              loading={generatingCollectionForId === huelga.id}
-              onClick={() => onOpenCollectionMails(huelga)}
-              title="Revisar y preparar los correos de recogida"
-            >
-              Comunicaciones
-            </ActionButton>
-            <ActionButton
-              variant="secondary"
-              size="sm"
-              iconOnly={false}
-              icon={ClipboardCheck}
-              onClick={() => onOpenResponseCollection(huelga)}
-              title="Importar y consolidar las respuestas de los circuitos"
-            >
-              Recogida
-            </ActionButton>
-            <ActionButton
-              variant="secondary"
-              size="sm"
-              iconOnly={false}
-              icon={BarChart3}
-              disabled={!resultsReady}
-              onClick={() => onOpenResults(huelga)}
-              title={resultsReady ? 'Abrir resultados ejecutivos' : 'Disponible cuando la recogida esté validada y sin errores'}
-            >
-              Resultados
-            </ActionButton>
-            <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-metro-border" />
-            <ActionButton variant="edit" size="sm" onClick={() => onOpenEdit(huelga)} title="Editar huelga" iconOnly />
-            <ActionButton variant="delete" size="sm" onClick={() => onRemove(huelga)} title="Eliminar huelga" iconOnly />
-          </div>
-        );
-      },
+      render: (huelga) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <ActionButton
+            variant="primary"
+            size="sm"
+            icon={ClipboardCheck}
+            iconOnly={false}
+            onClick={() => onOpenWorkspace(huelga)}
+            title="Abrir el espacio de gestión de esta huelga"
+          >
+            Abrir
+          </ActionButton>
+          <ActionButton variant="edit" size="sm" onClick={() => onOpenEdit(huelga)} title="Editar huelga" iconOnly />
+          <ActionButton variant="delete" size="sm" onClick={() => onRemove(huelga)} title="Eliminar huelga" iconOnly />
+        </div>
+      ),
     },
-  ], [collectionStatusFor, generatingCollectionForId, onOpenCollectionMails, onOpenEdit, onOpenResponseCollection, onOpenResults, onRemove, operationalStatusFor, resultsReadyFor, zonas]);
+  ], [collectionStatusFor, onOpenEdit, onOpenWorkspace, onRemove, operationalStatusFor, zonas]);
 
   const highlightedStatus = nextHuelga ? operationalStatusFor(nextHuelga) : null;
 
@@ -278,9 +249,9 @@ export function HuelgasOverview({
           status={highlightedStatus}
           resultsReady={resultsReadyFor(nextHuelga)}
           generatingMail={generatingCollectionForId === nextHuelga.id}
-          onOpenCollectionMails={() => onOpenCollectionMails(nextHuelga)}
-          onOpenResponseCollection={() => onOpenResponseCollection(nextHuelga)}
-          onOpenResults={() => onOpenResults(nextHuelga)}
+          onOpenCollectionMails={() => onOpenWorkspace(nextHuelga, 'comunicaciones')}
+          onOpenResponseCollection={() => onOpenWorkspace(nextHuelga, 'recogida')}
+          onOpenResults={() => onOpenWorkspace(nextHuelga, 'resultados')}
         />
       )}
 
