@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Filter, Save, Upload } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { HuelgaIssuesPanel } from './HuelgaIssuesPanel';
+import { resolveHuelgaIssueNavigation } from './huelgaIssueNavigation';
 import type { HuelgaZoneResponse } from './huelgasResponseCollection';
 import type { HuelgaValidationIssue, HuelgaValidationSummary } from './huelgasResponseValidation';
 
@@ -14,6 +16,7 @@ type Props = {
   reviewedCount: number;
   validationByZone: Record<string, HuelgaValidationIssue[]>;
   validationSummary: HuelgaValidationSummary;
+  globalIssues: HuelgaValidationIssue[];
   dirty: boolean;
   saving: boolean;
   importingZoneId: string | null;
@@ -40,9 +43,9 @@ function issueCounts(issues: HuelgaValidationIssue[]) {
 }
 
 function responseStatus(response: HuelgaZoneResponse, issues: HuelgaValidationIssue[]) {
+  if (!hasData(response)) return { label: 'Pendiente', tone: 'muted' as const };
   const counts = issueCounts(issues);
   if (counts.errors > 0) return { label: 'Error', tone: 'error' as const };
-  if (!hasData(response)) return { label: 'Pendiente', tone: 'muted' as const };
   if (counts.warnings > 0) return { label: 'Aviso', tone: 'warning' as const };
   if (response.reviewed) return { label: 'Validado', tone: 'success' as const };
   return { label: 'Por revisar', tone: 'warning' as const };
@@ -54,18 +57,23 @@ function pct(response: HuelgaZoneResponse): string {
 }
 
 function NumberField({
+  id,
   label,
   value,
+  highlighted,
   onChange,
 }: {
+  id: string;
   label: string;
   value: number | null;
+  highlighted?: boolean;
   onChange: (value: number | null) => void;
 }) {
   return (
-    <label className="space-y-1 text-[11px] font-medium text-metro-muted">
+    <label className={`space-y-1 rounded-lg text-[11px] font-medium text-metro-muted ${highlighted ? 'ring-2 ring-amber-400/60 ring-offset-2 ring-offset-transparent' : ''}`}>
       <span>{label}</span>
       <input
+        id={id}
         className="w-full rounded-lg border border-metro-border bg-metro-panel px-2.5 py-2 text-right text-sm font-semibold tabular-nums text-metro-text outline-none focus:border-metro-red focus:ring-2 focus:ring-metro-red/20"
         min={0}
         step={1}
@@ -87,6 +95,7 @@ export function HuelgaCollectionWorkspace({
   reviewedCount,
   validationByZone,
   validationSummary,
+  globalIssues,
   dirty,
   saving,
   importingZoneId,
@@ -103,23 +112,59 @@ export function HuelgaCollectionWorkspace({
   const [filter, setFilter] = useState<FilterId>('all');
   const [search, setSearch] = useState('');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(responses[0]?.zonaId ?? null);
+  const [highlightedTarget, setHighlightedTarget] = useState<string | null>(null);
+
+  const visibleDataIssues = useMemo(() => {
+    const zoneIssues = responses
+      .filter(hasData)
+      .flatMap((response) => validationByZone[response.zonaId] ?? []);
+    return [...zoneIssues, ...globalIssues];
+  }, [globalIssues, responses, validationByZone]);
+  const visibleIssueCounts = useMemo(() => issueCounts(visibleDataIssues), [visibleDataIssues]);
+  const zoneNames = useMemo(() => Object.fromEntries(responses.map((response) => [response.zonaId, response.zonaNombre])), [responses]);
 
   const filtered = useMemo(() => responses.filter((response) => {
     const issues = validationByZone[response.zonaId] ?? [];
     const counts = issueCounts(issues);
+    const received = hasData(response);
     const textMatch = response.zonaNombre.toLocaleLowerCase('es-ES').includes(search.trim().toLocaleLowerCase('es-ES'));
     if (!textMatch) return false;
-    if (filter === 'pending') return !hasData(response);
-    if (filter === 'errors') return counts.errors > 0;
-    if (filter === 'warnings') return counts.warnings > 0 && counts.errors === 0;
-    if (filter === 'validated') return response.reviewed && counts.errors === 0;
+    if (filter === 'pending') return !received;
+    if (filter === 'errors') return received && counts.errors > 0;
+    if (filter === 'warnings') return received && counts.warnings > 0 && counts.errors === 0;
+    if (filter === 'validated') return received && response.reviewed && counts.errors === 0;
     return true;
   }), [filter, responses, search, validationByZone]);
 
   const selected = responses.find((response) => response.zonaId === selectedZoneId) ?? filtered[0] ?? responses[0] ?? null;
-  const selectedIssues = selected ? validationByZone[selected.zonaId] ?? [] : [];
+  const selectedIssues = selected && hasData(selected) ? validationByZone[selected.zonaId] ?? [] : [];
   const selectedCounts = issueCounts(selectedIssues);
   const pending = Math.max(0, responses.length - receivedCount);
+
+  const navigateToIssue = (issue: HuelgaValidationIssue) => {
+    const navigation = resolveHuelgaIssueNavigation(issue, responses);
+    if (navigation.zoneId) {
+      setFilter('all');
+      setSearch('');
+      setSelectedZoneId(navigation.zoneId);
+    }
+    setHighlightedTarget(navigation.target);
+
+    window.setTimeout(() => {
+      if (navigation.target === 'detail' || navigation.target === 'huelguistas') {
+        onOpenFullEditor();
+        return;
+      }
+      const zoneId = navigation.zoneId;
+      if (!zoneId) return;
+      const fieldId = navigation.target === 'circuit' || navigation.target === 'source'
+        ? `huelga-zone-${zoneId}`
+        : `huelga-field-${zoneId}-${navigation.target}`;
+      const element = document.getElementById(fieldId);
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) element.focus();
+    }, 0);
+  };
 
   return (
     <div className="space-y-3">
@@ -127,9 +172,11 @@ export function HuelgaCollectionWorkspace({
         <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2"><p className="text-[10px] uppercase text-metro-muted">Recibidos</p><strong className="text-lg tabular-nums text-metro-text">{receivedCount}/{responses.length}</strong></div>
         <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2"><p className="text-[10px] uppercase text-metro-muted">Pendientes</p><strong className="text-lg tabular-nums text-metro-text">{pending}</strong></div>
         <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2"><p className="text-[10px] uppercase text-metro-muted">Revisados</p><strong className="text-lg tabular-nums text-metro-text">{reviewedCount}/{responses.length}</strong></div>
-        <div className={`rounded-lg border px-3 py-2 ${validationSummary.errors > 0 ? 'border-red-500/35 bg-red-500/5' : 'border-metro-border bg-metro-panel/45'}`}><p className="text-[10px] uppercase text-metro-muted">Errores</p><strong className={validationSummary.errors > 0 ? 'text-lg tabular-nums text-red-300' : 'text-lg tabular-nums text-metro-text'}>{validationSummary.errors}</strong></div>
-        <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2"><p className="text-[10px] uppercase text-metro-muted">Avisos</p><strong className="text-lg tabular-nums text-metro-text">{validationSummary.warnings}</strong></div>
+        <div className={`rounded-lg border px-3 py-2 ${visibleIssueCounts.errors > 0 ? 'border-red-500/35 bg-red-500/5' : 'border-metro-border bg-metro-panel/45'}`}><p className="text-[10px] uppercase text-metro-muted">Errores de datos</p><strong className={visibleIssueCounts.errors > 0 ? 'text-lg tabular-nums text-red-300' : 'text-lg tabular-nums text-metro-text'}>{visibleIssueCounts.errors}</strong></div>
+        <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2"><p className="text-[10px] uppercase text-metro-muted">Avisos</p><strong className="text-lg tabular-nums text-metro-text">{visibleIssueCounts.warnings}</strong></div>
       </section>
+
+      <HuelgaIssuesPanel issues={visibleDataIssues} zoneNames={zoneNames} onNavigate={navigateToIssue} />
 
       <section className="rounded-xl border border-metro-border bg-metro-panel/45 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -168,7 +215,7 @@ export function HuelgaCollectionWorkspace({
                 const status = responseStatus(response, issues);
                 const isSelected = selected?.zonaId === response.zonaId;
                 return (
-                  <tr key={response.zonaId} onClick={() => setSelectedZoneId(response.zonaId)} className={`cursor-pointer border-t border-metro-border/60 ${isSelected ? 'bg-metro-red/8' : 'hover:bg-metro-raised/60'}`}>
+                  <tr key={response.zonaId} onClick={() => { setSelectedZoneId(response.zonaId); setHighlightedTarget(null); }} className={`cursor-pointer border-t border-metro-border/60 ${isSelected ? 'bg-metro-red/8' : 'hover:bg-metro-raised/60'}`}>
                     <td className="px-2.5 py-2"><StatusBadge tone={status.tone} size="xs">{status.label}</StatusBadge></td>
                     <td className="px-2.5 py-2 font-semibold text-metro-text">{response.zonaNombre}</td>
                     <td className="max-w-[210px] truncate px-2.5 py-2 text-metro-muted" title={response.sourceFileName || 'Manual'}>{response.sourceFileName || (hasData(response) ? 'Manual' : '—')}</td>
@@ -188,37 +235,37 @@ export function HuelgaCollectionWorkspace({
       </section>
 
       {selected && (
-        <section className={`rounded-xl border p-3 ${selectedCounts.errors > 0 ? 'border-red-500/35 bg-red-500/5' : 'border-metro-border bg-metro-panel/45'}`}>
+        <section id={`huelga-zone-${selected.zonaId}`} className={`rounded-xl border p-3 ${selectedCounts.errors > 0 ? 'border-red-500/35 bg-red-500/5' : 'border-metro-border bg-metro-panel/45'}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2"><h3 className="text-sm font-semibold text-metro-text">{selected.zonaNombre}</h3>{selected.reviewed && <StatusBadge tone="success" size="xs">Revisado</StatusBadge>}</div>
               <p className="mt-1 text-[11px] text-metro-muted">{selected.sourceFileName || 'Datos manuales'}{selected.importedAt ? ` · ${new Date(selected.importedAt).toLocaleString('es-ES')}` : ''}</p>
             </div>
             <div className="flex items-center gap-1.5">
-              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-metro-border bg-metro-panel/85 px-2.5 text-xs font-semibold text-metro-text hover:border-metro-red"><FileSpreadsheet size={14} />{hasData(selected) ? 'Reimportar' : 'Importar Excel'}<input className="hidden" type="file" accept=".xlsx,.xlsm" onChange={(event) => { const file = event.target.files?.[0]; if (file) onImport(selected.zonaId, file); event.currentTarget.value = ''; }} /></label>
+              <label className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border bg-metro-panel/85 px-2.5 text-xs font-semibold text-metro-text hover:border-metro-red ${highlightedTarget === 'source' ? 'border-amber-400 ring-2 ring-amber-400/40' : 'border-metro-border'}`}><FileSpreadsheet size={14} />{hasData(selected) ? 'Reimportar' : 'Importar Excel'}<input className="hidden" type="file" accept=".xlsx,.xlsm" onChange={(event) => { const file = event.target.files?.[0]; if (file) onImport(selected.zonaId, file); event.currentTarget.value = ''; }} /></label>
               <ActionButton variant="secondary" size="sm" iconOnly={false} onClick={onOpenFullEditor}>Desglose H/M</ActionButton>
             </div>
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <NumberField label="Con turno" value={selected.personasTurno} onChange={(value) => onChange(selected.zonaId, 'personasTurno', value)} />
-            <NumberField label="Servicios mínimos" value={selected.serviciosMinimos} onChange={(value) => onChange(selected.zonaId, 'serviciosMinimos', value)} />
-            <NumberField label="Trabajan" value={selected.personasTrabajan} onChange={(value) => onChange(selected.zonaId, 'personasTrabajan', value)} />
-            <NumberField label="En huelga" value={selected.personasHuelga} onChange={(value) => onChange(selected.zonaId, 'personasHuelga', value)} />
+            <NumberField id={`huelga-field-${selected.zonaId}-personasTurno`} label="Con turno" value={selected.personasTurno} highlighted={highlightedTarget === 'personasTurno'} onChange={(value) => onChange(selected.zonaId, 'personasTurno', value)} />
+            <NumberField id={`huelga-field-${selected.zonaId}-serviciosMinimos`} label="Servicios mínimos" value={selected.serviciosMinimos} highlighted={highlightedTarget === 'serviciosMinimos'} onChange={(value) => onChange(selected.zonaId, 'serviciosMinimos', value)} />
+            <NumberField id={`huelga-field-${selected.zonaId}-personasTrabajan`} label="Trabajan" value={selected.personasTrabajan} highlighted={highlightedTarget === 'personasTrabajan'} onChange={(value) => onChange(selected.zonaId, 'personasTrabajan', value)} />
+            <NumberField id={`huelga-field-${selected.zonaId}-personasHuelga`} label="En huelga" value={selected.personasHuelga} highlighted={highlightedTarget === 'personasHuelga'} onChange={(value) => onChange(selected.zonaId, 'personasHuelga', value)} />
           </div>
 
           <label className="mt-3 block space-y-1 text-[11px] font-medium text-metro-muted"><span>Observaciones</span><textarea rows={2} value={selected.observaciones} onChange={(event) => onChange(selected.zonaId, 'observaciones', event.target.value)} className="w-full resize-y rounded-lg border border-metro-border bg-metro-panel px-2.5 py-2 text-xs text-metro-text outline-none focus:border-metro-red" /></label>
 
-          {selected.generalDetail?.length ? <p className="mt-2 rounded-lg border border-metro-border bg-metro-panel/50 px-3 py-2 text-[11px] text-metro-muted">Desglose disponible: {selected.generalDetail.length} filas por turno/colectivo. Usa <strong className="text-metro-text">Desglose H/M</strong> para editar celdas individuales.</p> : null}
+          {selected.generalDetail?.length ? <p className={`mt-2 rounded-lg border bg-metro-panel/50 px-3 py-2 text-[11px] text-metro-muted ${highlightedTarget === 'detail' ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-metro-border'}`}>Desglose disponible: {selected.generalDetail.length} filas por turno/colectivo. Usa <strong className="text-metro-text">Desglose H/M</strong> para editar celdas individuales.</p> : null}
 
           {selectedIssues.length > 0 && (
             <div className="mt-3 space-y-1.5">
-              {selectedIssues.slice(0, 8).map((issue, index) => <p key={`${issue.message}-${index}`} className={`flex items-start gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] ${issue.severity === 'error' ? 'border-red-500/30 bg-red-500/5 text-red-200' : 'border-amber-500/25 bg-amber-500/5 text-amber-200'}`}>{issue.severity === 'error' ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <AlertTriangle size={13} className="mt-0.5 shrink-0" />}{issue.message}</p>)}
+              {selectedIssues.slice(0, 8).map((issue, index) => <p key={`${issue.message}-${index}`} className={`flex items-start gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] ${issue.severity === 'error' ? 'border-red-500/30 bg-red-500/5 text-red-200' : 'border-amber-500/25 bg-amber-500/5 text-amber-200'}`}><AlertTriangle size={13} className="mt-0.5 shrink-0" />{issue.message}</p>)}
             </div>
           )}
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-metro-border pt-3">
-            <p className="text-[11px] text-metro-muted">{selectedCounts.errors > 0 ? 'Corrige los errores antes de marcar este circuito como revisado.' : selected.reviewed ? 'Circuito revisado.' : 'Sin errores bloqueantes. Puedes marcarlo como revisado.'}</p>
+            <p className="text-[11px] text-metro-muted">{selectedCounts.errors > 0 ? 'Corrige los errores antes de marcar este circuito como revisado.' : selected.reviewed ? 'Circuito revisado.' : hasData(selected) ? 'Sin errores bloqueantes. Puedes marcarlo como revisado.' : 'Pendiente de recibir datos.'}</p>
             <div className="flex items-center gap-1.5">
               {!selected.reviewed && <ActionButton variant="approve" size="sm" icon={CheckCircle2} iconOnly={false} disabled={selectedCounts.errors > 0 || !hasData(selected)} onClick={() => onReview(selected.zonaId)}>Marcar revisado</ActionButton>}
               {dirty && <ActionButton variant="save" size="sm" icon={Save} iconOnly={false} loading={saving} onClick={onSave}>Guardar cambios</ActionButton>}

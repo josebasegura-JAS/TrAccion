@@ -119,6 +119,7 @@ export function HuelgasPage() {
               reviewedCount={responseCollection.reviewedCount}
               validationByZone={responseCollection.validationByZone}
               validationSummary={responseCollection.validationSummary}
+              globalIssues={responseCollection.globalIssues}
               dirty={responseCollection.dirty}
               saving={responseCollection.saving}
               importingZoneId={responseCollection.importingZoneId}
