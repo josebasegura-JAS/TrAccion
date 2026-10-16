@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { HuelgasOverview } from './HuelgasOverview';
 import { HuelgaWorkspace, type HuelgaWorkspaceTab } from './HuelgaWorkspace';
 import { HuelgaCollectionWorkspace } from './HuelgaCollectionWorkspace';
+import { HuelgaResultsWorkspace } from './HuelgaResultsWorkspace';
 import { HuelgaEditorModal } from './HuelgaEditorModal';
 import { HuelgasZonesModals } from './HuelgasZonesModals';
 import { HuelgasCollectionMailsModal } from './HuelgasCollectionMailsModal';
@@ -70,6 +71,7 @@ export function HuelgasPage() {
   const [responseCollectionModalOpen, setResponseCollectionModalOpen] = useState(false);
   const workspaceHuelga = workspaceHuelgaId ? huelgas.find((item) => item.id === workspaceHuelgaId) ?? null : null;
   const resultsCollection = resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null;
+  const workspaceResultsCollection = workspaceHuelga ? loadHuelgaResultsCollection(workspaceHuelga.id) : null;
   const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id), huelga, zonas);
   const operationalStatusFor = (huelga: Huelga) => {
     const selectedZoneIds = huelga.circuitosZonaIds?.length
@@ -132,6 +134,13 @@ export function HuelgasPage() {
               onSave={() => void responseCollection.save()}
               onExport={() => void responseCollection.exportReport()}
               onOpenFullEditor={() => setResponseCollectionModalOpen(true)}
+            />
+          ) : undefined}
+          resultsContent={workspaceTab === 'resultados' && workspaceResultsCollection && resultsReadyFor(workspaceHuelga) ? (
+            <HuelgaResultsWorkspace
+              huelga={workspaceHuelga}
+              collection={workspaceResultsCollection}
+              onOpenPrintable={() => setResultsTarget(workspaceHuelga)}
             />
           ) : undefined}
           onTabChange={(tab) => changeWorkspaceTab(workspaceHuelga, tab)}

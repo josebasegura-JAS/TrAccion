@@ -15,6 +15,7 @@ type Props = {
   resultsReady: boolean;
   generatingMail: boolean;
   collectionContent?: ReactNode;
+  resultsContent?: ReactNode;
   onTabChange: (tab: HuelgaWorkspaceTab) => void;
   onBack: () => void;
   onEdit: () => void;
@@ -45,6 +46,7 @@ export function HuelgaWorkspace({
   resultsReady,
   generatingMail,
   collectionContent,
+  resultsContent,
   onTabChange,
   onBack,
   onEdit,
@@ -123,7 +125,7 @@ export function HuelgaWorkspace({
               {status.state === 'preparacion' ? (
                 <ActionButton variant="primary" icon={MailPlus} iconOnly={false} loading={generatingMail} onClick={onOpenCollectionMails}>Abrir comunicaciones</ActionButton>
               ) : status.state === 'validada' && resultsReady ? (
-                <ActionButton variant="primary" icon={BarChart3} iconOnly={false} onClick={onOpenResults}>Abrir resultados</ActionButton>
+                <ActionButton variant="primary" icon={BarChart3} iconOnly={false} onClick={() => onTabChange('resultados')}>Ver resultados</ActionButton>
               ) : (
                 <ActionButton variant="primary" icon={ClipboardCheck} iconOnly={false} onClick={onOpenResponseCollection}>Ir a recogida</ActionButton>
               )}
@@ -153,15 +155,17 @@ export function HuelgaWorkspace({
       )}
 
       {activeTab === 'resultados' && (
-        <section className="rounded-xl border border-metro-border bg-metro-panel/45 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-metro-text">Resultados ejecutivos</h3>
-              <p className="mt-1 text-xs text-metro-muted">{resultsReady ? 'La recogida está validada. Puedes consultar Noche, Mañana, Tarde y Global.' : 'Disponible cuando todos los circuitos estén recibidos, revisados y sin errores bloqueantes.'}</p>
+        resultsReady && resultsContent ? resultsContent : (
+          <section className="rounded-xl border border-metro-border bg-metro-panel/45 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-metro-text">Resultados ejecutivos</h3>
+                <p className="mt-1 text-xs text-metro-muted">Disponible cuando todos los circuitos estén recibidos, revisados y sin errores bloqueantes.</p>
+              </div>
+              <ActionButton variant="primary" icon={ClipboardCheck} iconOnly={false} onClick={onOpenResponseCollection}>Ir a recogida</ActionButton>
             </div>
-            <ActionButton variant="primary" icon={BarChart3} iconOnly={false} disabled={!resultsReady} onClick={onOpenResults}>Abrir resultados</ActionButton>
-          </div>
-        </section>
+          </section>
+        )
       )}
     </div>
   );
