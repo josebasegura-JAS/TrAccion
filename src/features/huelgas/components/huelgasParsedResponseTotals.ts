@@ -66,6 +66,13 @@ const METRIC_ALIASES = {
   serviciosMinimos: ['servicios minimos', 'servicio minimo', 'ssmm'],
 } as const;
 
+const AUTO_TOTAL_WARNINGS = new Set([
+  'No se ha localizado automáticamente el total de personas con turno.',
+  'No se ha localizado automáticamente el total de servicios mínimos.',
+  'No se ha localizado automáticamente el total de personas que trabajan.',
+  'No se ha localizado automáticamente el total de personas en huelga.',
+].map(normalize));
+
 type DetailMetric = keyof typeof METRIC_ALIASES;
 type MetricPairs = Record<DetailMetric, HuelgaGeneralMetricValues>;
 
@@ -261,9 +268,14 @@ export function huelgaTotalsFromDetail(detail: HuelgaGeneralDetail[]) {
 
 export function normalizeParsedHuelgaResponseTotals(parsed: ParsedHuelgaResponse): ParsedHuelgaResponse {
   if (!parsed.generalDetail?.length) return parsed;
+  const totals = huelgaTotalsFromDetail(parsed.generalDetail);
   return {
     ...parsed,
-    ...huelgaTotalsFromDetail(parsed.generalDetail),
+    ...totals,
+    // El parser base puede no encontrar una celda TOTAL aunque el detalle H/M sí
+    // esté completo. Una vez reconstruidos los totales desde ese detalle, esos
+    // avisos dejan de representar un dato ausente y no deben mostrarse al usuario.
+    warnings: parsed.warnings.filter((warning) => !AUTO_TOTAL_WARNINGS.has(normalize(warning))),
   };
 }
 
