@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ArrowLeft, BarChart3, CheckCircle2, ClipboardCheck, MailPlus, Pencil, TriangleAlert } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
@@ -13,6 +14,7 @@ type Props = {
   status: HuelgaOperationalStatus;
   resultsReady: boolean;
   generatingMail: boolean;
+  collectionContent?: ReactNode;
   onTabChange: (tab: HuelgaWorkspaceTab) => void;
   onBack: () => void;
   onEdit: () => void;
@@ -42,6 +44,7 @@ export function HuelgaWorkspace({
   status,
   resultsReady,
   generatingMail,
+  collectionContent,
   onTabChange,
   onBack,
   onEdit,
@@ -122,7 +125,7 @@ export function HuelgaWorkspace({
               ) : status.state === 'validada' && resultsReady ? (
                 <ActionButton variant="primary" icon={BarChart3} iconOnly={false} onClick={onOpenResults}>Abrir resultados</ActionButton>
               ) : (
-                <ActionButton variant="primary" icon={ClipboardCheck} iconOnly={false} onClick={onOpenResponseCollection}>Abrir recogida</ActionButton>
+                <ActionButton variant="primary" icon={ClipboardCheck} iconOnly={false} onClick={onOpenResponseCollection}>Ir a recogida</ActionButton>
               )}
             </div>
           </div>
@@ -142,16 +145,11 @@ export function HuelgaWorkspace({
       )}
 
       {activeTab === 'recogida' && (
-        <section className={`rounded-xl border p-4 ${status.errors > 0 ? 'border-red-500/35 bg-red-500/5' : 'border-metro-border bg-metro-panel/45'}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-metro-text">Recogida y validación</h3>
-              <p className="mt-1 text-xs text-metro-muted">{status.received}/{status.total} circuitos recibidos · {status.reviewed}/{status.total} revisados · {status.errors} errores · {status.warnings} avisos.</p>
-            </div>
-            <ActionButton variant="primary" icon={ClipboardCheck} iconOnly={false} onClick={onOpenResponseCollection}>Abrir recogida</ActionButton>
-          </div>
-          {status.errors > 0 && <p className="mt-3 text-xs font-medium text-red-300">Los resultados permanecen bloqueados hasta corregir las incidencias y revisar la recogida.</p>}
-        </section>
+        collectionContent ?? (
+          <section className="rounded-xl border border-metro-border bg-metro-panel/45 p-4">
+            <p className="text-xs text-metro-muted">Preparando la recogida…</p>
+          </section>
+        )
       )}
 
       {activeTab === 'resultados' && (
