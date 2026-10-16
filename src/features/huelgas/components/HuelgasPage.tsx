@@ -63,7 +63,7 @@ export function HuelgasPage() {
   const responseCollection = useHuelgaIncrementalResponseCollection(huelgas, zonas);
   const [resultsTarget, setResultsTarget] = useState<Huelga | null>(null);
   const resultsCollection = resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null;
-  const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id));
+  const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id), huelga, zonas);
 
   return (
     <div className="ui3-huelgas space-y-3">

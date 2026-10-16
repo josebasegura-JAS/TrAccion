@@ -35,6 +35,28 @@ describe('huelgasPageModel', () => {
     expect(validateDraft({ ...baseDraft, tipo: 'paros-parciales', tramos: [{ id: '1', inicio: '09:00', fin: '10:00' }] })).toBeNull();
   });
 
+  it('rechaza tramos de paros parciales solapados aunque estén desordenados', () => {
+    expect(validateDraft({
+      ...baseDraft,
+      tipo: 'paros-parciales',
+      tramos: [
+        { id: '2', inicio: '08:30', fin: '10:00' },
+        { id: '1', inicio: '07:00', fin: '09:00' },
+      ],
+    })).toBe('Hay tramos de paro que se solapan. Revisa los horarios de la convocatoria.');
+  });
+
+  it('permite tramos consecutivos sin solapamiento', () => {
+    expect(validateDraft({
+      ...baseDraft,
+      tipo: 'paros-parciales',
+      tramos: [
+        { id: '1', inicio: '07:00', fin: '09:00' },
+        { id: '2', inicio: '09:00', fin: '10:00' },
+      ],
+    })).toBeNull();
+  });
+
   it('genera la etiqueta de convocatoria sin cambiar el formato previo', () => {
     expect(convocatoriaLabel(baseDraft)).toBe('Jornada completa');
     expect(convocatoriaLabel({ tipo: 'paros-parciales', tramos: [{ id: '1', inicio: '09:00', fin: '10:30' }] })).toBe('09:00–10:30');
