@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { isHuelgaResultsReady } from './huelgasResultsAccess';
 import { emptyZoneResponse, type HuelgaResponseCollection } from './huelgasResponseCollection';
 import type { Huelga } from './huelgasPageModel';
-import type { HuelgaZona } from './huelgasZones';
 
 function response(zoneId: string) {
   return {
@@ -37,14 +36,12 @@ const huelga: Huelga = {
   circuitosZonaIds: ['zona-a'],
 };
 
-const zonas: HuelgaZona[] = [];
-
 describe('isHuelgaResultsReady', () => {
   it('acepta una colección validada con los circuitos actuales y SSGG interno', () => {
     expect(isHuelgaResultsReady(
       collection(['zona-a', 'zona-ssgg-interno']),
       huelga,
-      zonas,
+      [],
     )).toBe(true);
   });
 
@@ -52,7 +49,7 @@ describe('isHuelgaResultsReady', () => {
     expect(isHuelgaResultsReady(
       collection(['zona-a', 'zona-ssgg-interno']),
       { ...huelga, circuitosZonaIds: ['zona-a', 'zona-b'] },
-      zonas,
+      [],
     )).toBe(false);
   });
 
@@ -60,7 +57,7 @@ describe('isHuelgaResultsReady', () => {
     expect(isHuelgaResultsReady(
       collection(['zona-a', 'zona-b', 'zona-ssgg-interno']),
       huelga,
-      zonas,
+      [],
     )).toBe(false);
   });
 });
