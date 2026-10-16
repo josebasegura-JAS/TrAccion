@@ -6,6 +6,8 @@ import { StatusBadge } from '../../../components/ui/StatusBadge';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
+import { HuelgaOperationalStatusBadge, HuelgaOperationalSummary } from './HuelgaOperationalSummary';
+import type { HuelgaOperationalStatus } from './huelgasOperationalStatus';
 import type { HuelgaZona } from './huelgasZones';
 import { convocatoriaLabel, formatDate, huelgaStatus, type Huelga } from './huelgasPageModel';
 
@@ -70,6 +72,7 @@ type Props = {
   zonas: HuelgaZona[];
   generatingCollectionForId: string | null;
   collectionStatusFor: (huelga: Huelga) => CollectionStatus;
+  operationalStatusFor: (huelga: Huelga) => HuelgaOperationalStatus;
   resultsReadyFor: (huelga: Huelga) => boolean;
   onOpenZones: () => void;
   onOpenNew: () => void;
@@ -92,6 +95,7 @@ export function HuelgasOverview({
   zonas,
   generatingCollectionForId,
   collectionStatusFor,
+  operationalStatusFor,
   resultsReadyFor,
   onOpenZones,
   onOpenNew,
@@ -113,9 +117,17 @@ export function HuelgasOverview({
       id: 'fecha',
       header: 'Fecha',
       accessor: (huelga) => huelga.fecha,
-      render: (huelga) => <span className="whitespace-nowrap font-medium text-metro-text">{formatDate(huelga.fecha)}</span>,
-      width: 125,
-      minWidth: 110,
+      render: (huelga) => {
+        const temporal = huelgaStatus(huelga.fecha);
+        return (
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="font-medium text-metro-text">{formatDate(huelga.fecha)}</span>
+            {temporal !== 'Finalizada' && <StatusBadge tone={temporal === 'Hoy' ? 'error' : 'warning'} size="xs">{temporal}</StatusBadge>}
+          </div>
+        );
+      },
+      width: 170,
+      minWidth: 145,
       tone: 'start',
     },
     {
@@ -123,28 +135,24 @@ export function HuelgasOverview({
       header: 'Convocantes',
       accessor: (huelga) => huelga.sindicatos.join(' · '),
       render: (huelga) => <span className="text-metro-text">{huelga.sindicatos.join(' · ')}</span>,
-      width: 170,
-      minWidth: 135,
+      width: 165,
+      minWidth: 130,
     },
     {
       id: 'tipo',
       header: 'Tipo',
       accessor: convocatoriaLabel,
       render: (huelga) => <span className="text-metro-muted">{convocatoriaLabel(huelga)}</span>,
-      width: 150,
-      minWidth: 125,
+      width: 145,
+      minWidth: 120,
     },
     {
       id: 'estado',
-      header: 'Estado',
-      accessor: (huelga) => huelgaStatus(huelga.fecha),
-      render: (huelga) => {
-        const currentStatus = huelgaStatus(huelga.fecha);
-        const tone = currentStatus === 'Hoy' ? 'error' : currentStatus === 'Próxima' ? 'warning' : 'muted';
-        return <StatusBadge tone={tone} size="xs">{currentStatus}</StatusBadge>;
-      },
-      width: 105,
-      minWidth: 95,
+      header: 'Estado gestión',
+      accessor: (huelga) => operationalStatusFor(huelga).label,
+      render: (huelga) => <HuelgaOperationalStatusBadge status={operationalStatusFor(huelga)} />,
+      width: 150,
+      minWidth: 135,
     },
     {
       id: 'circuitos',
@@ -178,16 +186,19 @@ export function HuelgasOverview({
       header: 'Recogida',
       accessor: (huelga) => collectionStatusFor(huelga).reviewed,
       render: (huelga) => {
-        const status = collectionStatusFor(huelga);
-        const complete = status.total > 0 && status.reviewed === status.total;
-        const tone = complete ? 'success' : status.received > 0 ? 'warning' : 'muted';
-        const label = complete
+        const status = operationalStatusFor(huelga);
+        const label = status.reviewed === status.total && status.total > 0
           ? `${status.reviewed}/${status.total} revisados`
           : `${status.received}/${status.total} recibidos`;
-        return <StatusBadge tone={tone} size="xs">{label}</StatusBadge>;
+        return (
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <StatusBadge tone={status.reviewed === status.total && status.total > 0 ? 'success' : status.received > 0 ? 'warning' : 'muted'} size="xs">{label}</StatusBadge>
+            {status.errors > 0 && <StatusBadge tone="error" size="xs">{status.errors} error{status.errors === 1 ? '' : 'es'}</StatusBadge>}
+          </div>
+        );
       },
-      width: 135,
-      minWidth: 120,
+      width: 200,
+      minWidth: 160,
     },
     {
       id: 'acciones',
@@ -243,7 +254,9 @@ export function HuelgasOverview({
         );
       },
     },
-  ], [collectionStatusFor, generatingCollectionForId, onOpenCollectionMails, onOpenEdit, onOpenResponseCollection, onOpenResults, onRemove, resultsReadyFor, zonas]);
+  ], [collectionStatusFor, generatingCollectionForId, onOpenCollectionMails, onOpenEdit, onOpenResponseCollection, onOpenResults, onRemove, operationalStatusFor, resultsReadyFor, zonas]);
+
+  const highlightedStatus = nextHuelga ? operationalStatusFor(nextHuelga) : null;
 
   return (
     <>
@@ -259,16 +272,16 @@ export function HuelgasOverview({
         )}
       />
 
-      {nextHuelga && (
-        <section className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <CalendarDays className="text-amber-300" size={20} />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-200/80">Próxima convocatoria</p>
-              <p className="truncate text-sm font-semibold text-metro-text">{formatDate(nextHuelga.fecha)} · {nextHuelga.sindicatos.join(' · ')} · {convocatoriaLabel(nextHuelga)}</p>
-            </div>
-          </div>
-        </section>
+      {nextHuelga && highlightedStatus && (
+        <HuelgaOperationalSummary
+          huelga={nextHuelga}
+          status={highlightedStatus}
+          resultsReady={resultsReadyFor(nextHuelga)}
+          generatingMail={generatingCollectionForId === nextHuelga.id}
+          onOpenCollectionMails={() => onOpenCollectionMails(nextHuelga)}
+          onOpenResponseCollection={() => onOpenResponseCollection(nextHuelga)}
+          onOpenResults={() => onOpenResults(nextHuelga)}
+        />
       )}
 
       <section className="rounded-xl border border-metro-border bg-metro-panel/45 p-3">
@@ -298,7 +311,7 @@ export function HuelgasOverview({
             strongZebra
             density="compact"
             stickyActionColumn
-            maxHeightClassName="max-h-[58vh]"
+            maxHeightClassName="max-h-[50vh]"
           />
         )}
       </section>
