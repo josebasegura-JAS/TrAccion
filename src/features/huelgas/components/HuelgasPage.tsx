@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { HuelgasOverview } from './HuelgasOverview';
 import { HuelgaWorkspace, type HuelgaWorkspaceTab } from './HuelgaWorkspace';
+import { HuelgaCollectionWorkspace } from './HuelgaCollectionWorkspace';
 import { HuelgaEditorModal } from './HuelgaEditorModal';
 import { HuelgasZonesModals } from './HuelgasZonesModals';
 import { HuelgasCollectionMailsModal } from './HuelgasCollectionMailsModal';
@@ -66,6 +67,7 @@ export function HuelgasPage() {
   const [resultsTarget, setResultsTarget] = useState<Huelga | null>(null);
   const [workspaceHuelgaId, setWorkspaceHuelgaId] = useState<string | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<HuelgaWorkspaceTab>('resumen');
+  const [responseCollectionModalOpen, setResponseCollectionModalOpen] = useState(false);
   const workspaceHuelga = workspaceHuelgaId ? huelgas.find((item) => item.id === workspaceHuelgaId) ?? null : null;
   const resultsCollection = resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null;
   const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id), huelga, zonas);
@@ -79,9 +81,25 @@ export function HuelgasPage() {
       selectedZoneIds,
     );
   };
+
+  const prepareCollectionWorkspace = (huelga: Huelga) => {
+    if (responseCollection.target?.id !== huelga.id) responseCollection.open(huelga);
+  };
+
   const openWorkspace = (huelga: Huelga, tab: HuelgaWorkspaceTab = 'resumen') => {
     setWorkspaceHuelgaId(huelga.id);
     setWorkspaceTab(tab);
+    if (tab === 'recogida') prepareCollectionWorkspace(huelga);
+  };
+
+  const changeWorkspaceTab = (huelga: Huelga, tab: HuelgaWorkspaceTab) => {
+    setWorkspaceTab(tab);
+    if (tab === 'recogida') prepareCollectionWorkspace(huelga);
+  };
+
+  const openEmbeddedCollection = (huelga: Huelga) => {
+    prepareCollectionWorkspace(huelga);
+    setWorkspaceTab('recogida');
   };
 
   return (
@@ -93,14 +111,37 @@ export function HuelgasPage() {
           status={operationalStatusFor(workspaceHuelga)}
           resultsReady={resultsReadyFor(workspaceHuelga)}
           generatingMail={generatingCollectionForId === workspaceHuelga.id}
-          onTabChange={setWorkspaceTab}
+          collectionContent={workspaceTab === 'recogida' && responseCollection.target?.id === workspaceHuelga.id ? (
+            <HuelgaCollectionWorkspace
+              responses={responseCollection.responses}
+              totals={responseCollection.totals}
+              receivedCount={responseCollection.receivedCount}
+              reviewedCount={responseCollection.reviewedCount}
+              validationByZone={responseCollection.validationByZone}
+              validationSummary={responseCollection.validationSummary}
+              dirty={responseCollection.dirty}
+              saving={responseCollection.saving}
+              importingZoneId={responseCollection.importingZoneId}
+              importingMessage={responseCollection.importingMessage}
+              exporting={responseCollection.exporting}
+              onImport={(zoneId, file) => void responseCollection.importResponse(zoneId, file)}
+              onImportMessage={(file) => void responseCollection.importOutlookMessage(file)}
+              onChange={responseCollection.updateResponse}
+              onReview={(zoneId) => void responseCollection.markReviewed(zoneId)}
+              onSave={() => void responseCollection.save()}
+              onExport={() => void responseCollection.exportReport()}
+              onOpenFullEditor={() => setResponseCollectionModalOpen(true)}
+            />
+          ) : undefined}
+          onTabChange={(tab) => changeWorkspaceTab(workspaceHuelga, tab)}
           onBack={() => {
+            setResponseCollectionModalOpen(false);
             setWorkspaceHuelgaId(null);
             setWorkspaceTab('resumen');
           }}
           onEdit={() => openEdit(workspaceHuelga)}
           onOpenCollectionMails={() => void openCollectionMails(workspaceHuelga)}
-          onOpenResponseCollection={() => responseCollection.open(workspaceHuelga)}
+          onOpenResponseCollection={() => openEmbeddedCollection(workspaceHuelga)}
           onOpenResults={() => setResultsTarget(workspaceHuelga)}
         />
       ) : (
@@ -152,7 +193,7 @@ export function HuelgasPage() {
       />
 
       <HuelgasResponseCollectionModal
-        target={responseCollection.target}
+        target={responseCollectionModalOpen ? responseCollection.target : null}
         responses={responseCollection.responses}
         totals={responseCollection.totals}
         receivedCount={responseCollection.receivedCount}
@@ -165,7 +206,7 @@ export function HuelgasPage() {
         importingZoneId={responseCollection.importingZoneId}
         importingMessage={responseCollection.importingMessage}
         exporting={responseCollection.exporting}
-        onClose={() => void responseCollection.close()}
+        onClose={() => setResponseCollectionModalOpen(false)}
         onImport={(zoneId, file) => void responseCollection.importResponse(zoneId, file)}
         onImportMessage={(file) => void responseCollection.importOutlookMessage(file)}
         onChange={responseCollection.updateResponse}
@@ -177,7 +218,7 @@ export function HuelgasPage() {
       />
 
       <HuelgaImportHistoryPanel
-        open={Boolean(responseCollection.target)}
+        open={responseCollectionModalOpen && Boolean(responseCollection.target)}
         batches={responseCollection.importHistory}
       />
 
