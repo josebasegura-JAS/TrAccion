@@ -152,7 +152,6 @@ export function HuelgasPage() {
           onEdit={() => openEdit(workspaceHuelga)}
           onOpenCollectionMails={() => void openCollectionMails(workspaceHuelga)}
           onOpenResponseCollection={() => openEmbeddedCollection(workspaceHuelga)}
-          onOpenResults={() => setResultsTarget(workspaceHuelga)}
         />
       ) : (
         <HuelgasOverview
