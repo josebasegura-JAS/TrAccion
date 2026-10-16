@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { HuelgasOverview } from './HuelgasOverview';
+import { HuelgaWorkspace, type HuelgaWorkspaceTab } from './HuelgaWorkspace';
 import { HuelgaEditorModal } from './HuelgaEditorModal';
 import { HuelgasZonesModals } from './HuelgasZonesModals';
 import { HuelgasCollectionMailsModal } from './HuelgasCollectionMailsModal';
@@ -63,6 +64,9 @@ export function HuelgasPage() {
 
   const responseCollection = useHuelgaIncrementalResponseCollection(huelgas, zonas);
   const [resultsTarget, setResultsTarget] = useState<Huelga | null>(null);
+  const [workspaceHuelgaId, setWorkspaceHuelgaId] = useState<string | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<HuelgaWorkspaceTab>('resumen');
+  const workspaceHuelga = workspaceHuelgaId ? huelgas.find((item) => item.id === workspaceHuelgaId) ?? null : null;
   const resultsCollection = resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null;
   const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id), huelga, zonas);
   const operationalStatusFor = (huelga: Huelga) => {
@@ -75,26 +79,50 @@ export function HuelgasPage() {
       selectedZoneIds,
     );
   };
+  const openWorkspace = (huelga: Huelga, tab: HuelgaWorkspaceTab = 'resumen') => {
+    setWorkspaceHuelgaId(huelga.id);
+    setWorkspaceTab(tab);
+  };
 
   return (
     <div className="ui3-huelgas space-y-3">
-      <HuelgasOverview
-        huelgas={huelgas}
-        sortedHuelgas={sortedHuelgas}
-        nextHuelga={nextHuelga ?? null}
-        zonas={zonas}
-        generatingCollectionForId={generatingCollectionForId}
-        collectionStatusFor={responseCollection.collectionStatusFor}
-        operationalStatusFor={operationalStatusFor}
-        resultsReadyFor={resultsReadyFor}
-        onOpenZones={openZones}
-        onOpenNew={openNew}
-        onOpenEdit={openEdit}
-        onOpenCollectionMails={(huelga) => void openCollectionMails(huelga)}
-        onOpenResponseCollection={responseCollection.open}
-        onOpenResults={setResultsTarget}
-        onRemove={(huelga) => void remove(huelga)}
-      />
+      {workspaceHuelga ? (
+        <HuelgaWorkspace
+          huelga={workspaceHuelga}
+          activeTab={workspaceTab}
+          status={operationalStatusFor(workspaceHuelga)}
+          resultsReady={resultsReadyFor(workspaceHuelga)}
+          generatingMail={generatingCollectionForId === workspaceHuelga.id}
+          onTabChange={setWorkspaceTab}
+          onBack={() => {
+            setWorkspaceHuelgaId(null);
+            setWorkspaceTab('resumen');
+          }}
+          onEdit={() => openEdit(workspaceHuelga)}
+          onOpenCollectionMails={() => void openCollectionMails(workspaceHuelga)}
+          onOpenResponseCollection={() => responseCollection.open(workspaceHuelga)}
+          onOpenResults={() => setResultsTarget(workspaceHuelga)}
+        />
+      ) : (
+        <HuelgasOverview
+          huelgas={huelgas}
+          sortedHuelgas={sortedHuelgas}
+          nextHuelga={nextHuelga ?? null}
+          zonas={zonas}
+          generatingCollectionForId={generatingCollectionForId}
+          collectionStatusFor={responseCollection.collectionStatusFor}
+          operationalStatusFor={operationalStatusFor}
+          resultsReadyFor={resultsReadyFor}
+          onOpenZones={openZones}
+          onOpenNew={openNew}
+          onOpenEdit={openEdit}
+          onOpenWorkspace={openWorkspace}
+          onOpenCollectionMails={(huelga) => void openCollectionMails(huelga)}
+          onOpenResponseCollection={responseCollection.open}
+          onOpenResults={setResultsTarget}
+          onRemove={(huelga) => void remove(huelga)}
+        />
+      )}
 
       <HuelgasZonesModals
         zonesOpen={zonesOpen}
