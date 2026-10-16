@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
-import { parseHuelgaResponseWorkbook } from './huelgasResponseCollection';
-import { normalizeParsedHuelgaResponseTotals } from './huelgasParsedResponseTotals';
+import { parseHuelgaResponseWorkbookForImport } from './huelgasParsedResponseTotals';
 
 function toArrayBuffer(value: ArrayBuffer | Uint8Array): ArrayBuffer {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
@@ -54,8 +53,9 @@ describe('Huelgas — importación MM Ariz multibloque', () => {
       minimos: 4,
     });
 
-    const raw = await parseHuelgaResponseWorkbook(toArrayBuffer(await workbook.xlsx.writeBuffer()));
-    const parsed = normalizeParsedHuelgaResponseTotals(raw);
+    const parsed = await parseHuelgaResponseWorkbookForImport(
+      toArrayBuffer(await workbook.xlsx.writeBuffer()),
+    );
 
     expect(parsed.generalDetail).toEqual([
       {
