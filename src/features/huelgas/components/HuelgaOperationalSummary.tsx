@@ -20,6 +20,7 @@ type Props = {
   status: HuelgaOperationalStatus;
   resultsReady: boolean;
   generatingMail: boolean;
+  allowResultsNavigation?: boolean;
   onOpenCollectionMails: () => void;
   onOpenResponseCollection: () => void;
   onOpenResults: () => void;
@@ -30,6 +31,7 @@ export function HuelgaOperationalSummary({
   status,
   resultsReady,
   generatingMail,
+  allowResultsNavigation = false,
   onOpenCollectionMails,
   onOpenResponseCollection,
   onOpenResults,
@@ -80,8 +82,8 @@ export function HuelgaOperationalSummary({
             size="sm"
             icon={BarChart3}
             iconOnly={false}
-            disabled={!resultsReady}
-            title={resultsReady ? 'Abrir resultados ejecutivos' : 'Disponible cuando la recogida esté validada y sin errores'}
+            disabled={!resultsReady && !allowResultsNavigation}
+            title={resultsReady ? 'Abrir resultados ejecutivos' : allowResultsNavigation ? 'Abrir la sección de resultados' : 'Disponible cuando la recogida esté validada y sin errores'}
             onClick={onOpenResults}
           >
             Resultados
