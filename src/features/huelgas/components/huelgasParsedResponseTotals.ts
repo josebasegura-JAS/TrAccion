@@ -63,17 +63,18 @@ const METRIC_ALIASES = {
 } as const;
 
 type DetailMetric = keyof typeof METRIC_ALIASES;
-
 type MetricPairs = Record<DetailMetric, HuelgaGeneralMetricValues>;
 
-function matchesMetric(value: string, aliases: readonly string[]): boolean {
-  const normalized = normalize(value);
-  return aliases.some((alias) => normalized.includes(normalize(alias)));
-}
+type SheetLike = {
+  getCell: (row: number, column: number) => { text: string };
+  actualColumnCount: number;
+  actualRowCount: number;
+};
 
 function metricKeyFromLabel(value: string): DetailMetric | null {
+  const normalized = normalize(value);
   for (const [metric, aliases] of Object.entries(METRIC_ALIASES) as Array<[DetailMetric, readonly string[]]>) {
-    if (matchesMetric(value, aliases)) return metric;
+    if (aliases.some((alias) => normalized.includes(normalize(alias)))) return metric;
   }
   return null;
 }
@@ -87,26 +88,31 @@ function emptyMetricPairs(): MetricPairs {
   };
 }
 
-function readMetricPairs(
-  worksheet: {
-    getCell: (row: number, column: number) => { text: string };
-    actualColumnCount: number;
-    actualRowCount: number;
-  },
+function shiftInRow(worksheet: SheetLike, row: number): HuelgaGeneralShift | null {
+  const maxColumns = Math.min(worksheet.actualColumnCount, 16);
+  for (let column = 1; column <= maxColumns; column += 1) {
+    const shift = shiftKey(worksheet.getCell(row, column).text);
+    if (shift) return shift;
+  }
+  return null;
+}
+
+function readMetricsUntilNextShift(
+  worksheet: SheetLike,
   genderRow: number,
   femaleColumn: number,
-  blockEndRow: number,
 ): MetricPairs {
   const result = emptyMetricPairs();
   const found = new Set<DetailMetric>();
-  const lastRow = Math.min(blockEndRow, genderRow + 16, worksheet.actualRowCount);
-  const lastLabelColumn = Math.min(Math.max(1, femaleColumn - 1), worksheet.actualColumnCount);
+  const maxRow = Math.min(worksheet.actualRowCount, genderRow + 20);
 
-  for (let row = genderRow + 1; row <= lastRow; row += 1) {
+  for (let row = genderRow + 1; row <= maxRow; row += 1) {
+    if (shiftInRow(worksheet, row)) break;
+
     let metric: DetailMetric | null = null;
-    for (let column = 1; column <= lastLabelColumn && !metric; column += 1) {
-      const label = worksheet.getCell(row, column).text;
-      if (label) metric = metricKeyFromLabel(label);
+    for (let column = 1; column < femaleColumn && !metric; column += 1) {
+      const text = worksheet.getCell(row, column).text;
+      if (text) metric = metricKeyFromLabel(text);
     }
     if (!metric || found.has(metric)) continue;
 
@@ -120,41 +126,10 @@ function readMetricPairs(
     };
     found.add(metric);
 
-    if (found.size === Object.keys(METRIC_ALIASES).length) break;
+    if (found.size === 4) break;
   }
 
   return result;
-}
-
-type ShiftBoundary = {
-  row: number;
-  turno: HuelgaGeneralShift;
-};
-
-function findShiftBoundaries(
-  worksheet: {
-    getCell: (row: number, column: number) => { text: string };
-    actualColumnCount: number;
-    actualRowCount: number;
-  },
-): ShiftBoundary[] {
-  const boundaries: ShiftBoundary[] = [];
-  const maxRows = Math.min(worksheet.actualRowCount, 160);
-  const maxColumns = Math.min(worksheet.actualColumnCount, 16);
-
-  for (let row = 1; row <= maxRows; row += 1) {
-    let turno: HuelgaGeneralShift | null = null;
-    for (let column = 1; column <= maxColumns && !turno; column += 1) {
-      turno = shiftKey(worksheet.getCell(row, column).text);
-    }
-    if (!turno) continue;
-
-    // La misma fila puede contener más de una celda con texto equivalente al turno.
-    // Guardamos una sola frontera por fila.
-    if (boundaries.at(-1)?.row !== row) boundaries.push({ row, turno });
-  }
-
-  return boundaries;
 }
 
 async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGeneralDetail[]> {
@@ -166,38 +141,42 @@ async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGe
   const seen = new Set<string>();
 
   for (const worksheet of workbook.worksheets) {
-    const boundaries = findShiftBoundaries(worksheet);
+    let activeShift: HuelgaGeneralShift | null = null;
+    const maxRows = Math.min(worksheet.actualRowCount, 160);
+    const maxColumns = Math.min(worksheet.actualColumnCount, 50);
 
-    for (let boundaryIndex = 0; boundaryIndex < boundaries.length; boundaryIndex += 1) {
-      const boundary = boundaries[boundaryIndex];
-      const nextBoundaryRow = boundaries[boundaryIndex + 1]?.row ?? worksheet.actualRowCount + 1;
-      const blockEndRow = Math.min(nextBoundaryRow - 1, worksheet.actualRowCount);
-      const headerSearchEnd = Math.min(blockEndRow, boundary.row + 6);
+    for (let row = 1; row <= maxRows; row += 1) {
+      const rowShift = shiftInRow(worksheet, row);
+      if (rowShift) {
+        activeShift = rowShift;
+        continue;
+      }
+      if (!activeShift) continue;
 
-      for (let row = boundary.row + 1; row <= headerSearchEnd; row += 1) {
-        for (let column = 1; column < Math.min(worksheet.actualColumnCount, 50); column += 1) {
-          if (
-            normalize(worksheet.getCell(row, column).text) !== 'mujeres' ||
-            normalize(worksheet.getCell(row, column + 1).text) !== 'hombres'
-          ) continue;
+      for (let column = 1; column < maxColumns; column += 1) {
+        const female = normalize(worksheet.getCell(row, column).text);
+        const male = normalize(worksheet.getCell(row, column + 1).text);
+        if (female !== 'mujeres' || male !== 'hombres') continue;
 
-          const colectivo = canonicalColectivo(worksheet.getCell(row - 1, column).text);
-          if (!colectivo) continue;
+        const colectivo = canonicalColectivo(worksheet.getCell(row - 1, column).text);
+        if (!colectivo) continue;
 
-          const key = `${boundary.turno}::${colectivo}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
+        const key = `${activeShift}::${colectivo}`;
+        if (seen.has(key)) continue;
 
-          const metrics = readMetricPairs(worksheet, row, column, blockEndRow);
-          result.push({
-            turno: boundary.turno,
-            colectivo,
-            huelga: metrics.huelga,
-            trabajan: metrics.trabajan,
-            personasTurno: metrics.personasTurno,
-            serviciosMinimos: metrics.serviciosMinimos,
-          });
-        }
+        const metrics = readMetricsUntilNextShift(worksheet, row, column);
+        const hasAnyMetric = Object.values(metrics).some((pair) => pair.mujeres > 0 || pair.hombres > 0);
+        if (!hasAnyMetric) continue;
+
+        seen.add(key);
+        result.push({
+          turno: activeShift,
+          colectivo,
+          huelga: metrics.huelga,
+          trabajan: metrics.trabajan,
+          personasTurno: metrics.personasTurno,
+          serviciosMinimos: metrics.serviciosMinimos,
+        });
       }
     }
   }
@@ -227,11 +206,11 @@ function mergeGeneralDetail(
   const fallbackByKey = new Map(
     fallbackDetail.map((row) => [`${row.turno}::${normalize(row.colectivo)}`, row] as const),
   );
+  const robustKeys = new Set(robustDetail.map((row) => `${row.turno}::${normalize(row.colectivo)}`));
 
-  return robustDetail.map((row) => {
+  const merged = robustDetail.map((row) => {
     const fallback = fallbackByKey.get(`${row.turno}::${normalize(row.colectivo)}`);
     if (!fallback) return row;
-
     return {
       ...row,
       huelga: richerPair(row.huelga, fallback.huelga),
@@ -240,6 +219,13 @@ function mergeGeneralDetail(
       serviciosMinimos: richerPair(row.serviciosMinimos, fallback.serviciosMinimos),
     };
   });
+
+  for (const fallback of fallbackDetail) {
+    const key = `${fallback.turno}::${normalize(fallback.colectivo)}`;
+    if (!robustKeys.has(key)) merged.push(fallback);
+  }
+
+  return merged;
 }
 
 export function huelgaTotalsFromDetail(detail: HuelgaGeneralDetail[]) {
@@ -256,7 +242,6 @@ export function huelgaTotalsFromDetail(detail: HuelgaGeneralDetail[]) {
 
 export function normalizeParsedHuelgaResponseTotals(parsed: ParsedHuelgaResponse): ParsedHuelgaResponse {
   if (!parsed.generalDetail?.length) return parsed;
-
   return {
     ...parsed,
     ...huelgaTotalsFromDetail(parsed.generalDetail),
