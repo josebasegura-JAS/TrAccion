@@ -117,9 +117,6 @@ export function HuelgasPage() {
           onOpenNew={openNew}
           onOpenEdit={openEdit}
           onOpenWorkspace={openWorkspace}
-          onOpenCollectionMails={(huelga) => void openCollectionMails(huelga)}
-          onOpenResponseCollection={responseCollection.open}
-          onOpenResults={setResultsTarget}
           onRemove={(huelga) => void remove(huelga)}
         />
       )}
