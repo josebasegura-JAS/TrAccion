@@ -62,12 +62,32 @@ const METRIC_ALIASES = {
   serviciosMinimos: ['servicios minimos', 'servicio minimo', 'ssmm'],
 } as const;
 
+type DetailMetric = keyof typeof METRIC_ALIASES;
+
+type MetricPairs = Record<DetailMetric, HuelgaGeneralMetricValues>;
+
 function matchesMetric(value: string, aliases: readonly string[]): boolean {
   const normalized = normalize(value);
   return aliases.some((alias) => normalized.includes(normalize(alias)));
 }
 
-function readMetricPair(
+function metricKeyFromLabel(value: string): DetailMetric | null {
+  for (const [metric, aliases] of Object.entries(METRIC_ALIASES) as Array<[DetailMetric, readonly string[]]>) {
+    if (matchesMetric(value, aliases)) return metric;
+  }
+  return null;
+}
+
+function emptyMetricPairs(): MetricPairs {
+  return {
+    huelga: { mujeres: 0, hombres: 0 },
+    trabajan: { mujeres: 0, hombres: 0 },
+    personasTurno: { mujeres: 0, hombres: 0 },
+    serviciosMinimos: { mujeres: 0, hombres: 0 },
+  };
+}
+
+function readMetricPairs(
   worksheet: {
     getCell: (row: number, column: number) => { text: string };
     actualColumnCount: number;
@@ -75,34 +95,46 @@ function readMetricPair(
   },
   genderRow: number,
   femaleColumn: number,
-  aliases: readonly string[],
-): HuelgaGeneralMetricValues {
+): MetricPairs {
+  const result = emptyMetricPairs();
+  const found = new Set<DetailMetric>();
   const lastRow = Math.min(genderRow + 12, worksheet.actualRowCount);
   const lastLabelColumn = Math.min(Math.max(1, femaleColumn - 1), worksheet.actualColumnCount);
 
   for (let row = genderRow + 1; row <= lastRow; row += 1) {
+    // Un bloque termina al llegar a una nueva cabecera H/M. Esto evita que una
+    // métrica ausente en el bloque actual se complete accidentalmente con datos
+    // del bloque siguiente.
     if (
       normalize(worksheet.getCell(row, femaleColumn).text) === 'mujeres' &&
       normalize(worksheet.getCell(row, femaleColumn + 1).text) === 'hombres'
     ) break;
 
-    let matched = false;
-    for (let column = 1; column <= lastLabelColumn; column += 1) {
+    let metric: DetailMetric | null = null;
+    for (let column = 1; column <= lastLabelColumn && !metric; column += 1) {
       const label = worksheet.getCell(row, column).text;
-      if (label && matchesMetric(label, aliases)) {
-        matched = true;
-        break;
-      }
+      if (label) metric = metricKeyFromLabel(label);
     }
-    if (!matched) continue;
+    if (!metric || found.has(metric)) continue;
 
-    return {
-      mujeres: parseInteger(worksheet.getCell(row, femaleColumn).text) ?? 0,
-      hombres: parseInteger(worksheet.getCell(row, femaleColumn + 1).text) ?? 0,
+    const mujeres = parseInteger(worksheet.getCell(row, femaleColumn).text);
+    const hombres = parseInteger(worksheet.getCell(row, femaleColumn + 1).text);
+
+    // No damos por encontrada una métrica si la fila solo contiene el rótulo y
+    // ambos valores están realmente vacíos. Así podemos seguir buscando dentro
+    // del mismo bloque sin convertir un falso positivo en ceros definitivos.
+    if (mujeres === null && hombres === null) continue;
+
+    result[metric] = {
+      mujeres: mujeres ?? 0,
+      hombres: hombres ?? 0,
     };
+    found.add(metric);
+
+    if (found.size === Object.keys(METRIC_ALIASES).length) break;
   }
 
-  return { mujeres: 0, hombres: 0 };
+  return result;
 }
 
 async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGeneralDetail[]> {
@@ -137,13 +169,14 @@ async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGe
         if (seen.has(key)) continue;
         seen.add(key);
 
+        const metrics = readMetricPairs(worksheet, row, column);
         result.push({
           turno,
           colectivo,
-          huelga: readMetricPair(worksheet, row, column, METRIC_ALIASES.huelga),
-          trabajan: readMetricPair(worksheet, row, column, METRIC_ALIASES.trabajan),
-          personasTurno: readMetricPair(worksheet, row, column, METRIC_ALIASES.personasTurno),
-          serviciosMinimos: readMetricPair(worksheet, row, column, METRIC_ALIASES.serviciosMinimos),
+          huelga: metrics.huelga,
+          trabajan: metrics.trabajan,
+          personasTurno: metrics.personasTurno,
+          serviciosMinimos: metrics.serviciosMinimos,
         });
       }
     }
