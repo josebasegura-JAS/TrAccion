@@ -2,12 +2,11 @@ import { useMemo, useState } from 'react';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
 import type { Huelga } from './huelgasPageModel';
-import {
-  parseHuelgaResponseWorkbook,
-  type HuelgaGeneralDetail,
-  type HuelgaStrikePerson,
+import type {
+  HuelgaGeneralDetail,
+  HuelgaStrikePerson,
 } from './huelgasResponseCollection';
-import { normalizeParsedHuelgaResponseTotals } from './huelgasParsedResponseTotals';
+import { parseHuelgaResponseWorkbookForImport } from './huelgasParsedResponseTotals';
 import {
   analyzeHuelgaResponseWorkbook,
   fileCircuitMismatchWarning,
@@ -167,11 +166,10 @@ export function useHuelgaIncrementalResponseCollection(huelgas: Huelga[], zonas:
     const zone = zonas.find((item) => item.id === zoneId);
     if (!target || !current) return false;
 
-    const [rawParsed, findings] = await Promise.all([
-      parseHuelgaResponseWorkbook(buffer),
+    const [parsed, findings] = await Promise.all([
+      parseHuelgaResponseWorkbookForImport(buffer),
       analyzeHuelgaResponseWorkbook(buffer),
     ]);
-    const parsed = normalizeParsedHuelgaResponseTotals(rawParsed);
     const incoming = await filterHuelgaDetailWithContent(buffer, parsed.generalDetail);
 
     if ((parsed.generalDetail?.length ?? 0) > 0 && incoming.length === 0) {
