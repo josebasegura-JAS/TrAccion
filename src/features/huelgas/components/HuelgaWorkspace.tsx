@@ -52,7 +52,6 @@ export function HuelgaWorkspace({
   onEdit,
   onOpenCollectionMails,
   onOpenResponseCollection,
-  onOpenResults,
 }: Props) {
   const temporal = huelgaStatus(huelga.fecha);
   const prepared = Object.keys(huelga.correosPreparadosPorZona ?? {}).length;
