@@ -29,6 +29,7 @@ export type HuelgaImportDisplayBatch = HuelgaImportBatch & {
   zoneId: string;
   zoneName: string;
 };
+
 type HuelgaMailAttachment = { name: string; size: number; contentBase64?: string };
 type HuelgaMailInspection = {
   senderName: string;
