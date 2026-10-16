@@ -12,6 +12,7 @@ import {
   fileCircuitMismatchWarning,
 } from './huelgasResponseValidation';
 import type { HuelgaZona } from './huelgasZones';
+import { normalizeHuelgaWorkbookForImport } from './huelgasWorkbookCompatibility';
 import {
   HUELGAS_IMPORT_HISTORY_STORAGE_KEY,
   blockLabel,
@@ -166,11 +167,12 @@ export function useHuelgaIncrementalResponseCollection(huelgas: Huelga[], zonas:
     const zone = zonas.find((item) => item.id === zoneId);
     if (!target || !current) return false;
 
+    const compatibleBuffer = await normalizeHuelgaWorkbookForImport(buffer);
     const [parsed, findings] = await Promise.all([
-      parseHuelgaResponseWorkbookForImport(buffer),
-      analyzeHuelgaResponseWorkbook(buffer),
+      parseHuelgaResponseWorkbookForImport(compatibleBuffer),
+      analyzeHuelgaResponseWorkbook(compatibleBuffer),
     ]);
-    const incoming = await filterHuelgaDetailWithContent(buffer, parsed.generalDetail);
+    const incoming = await filterHuelgaDetailWithContent(compatibleBuffer, parsed.generalDetail);
 
     if ((parsed.generalDetail?.length ?? 0) > 0 && incoming.length === 0) {
       await alert('El Excel contiene bloques de seguimiento, pero ninguno tiene datos introducidos. No se ha importado nada.', {
@@ -181,7 +183,7 @@ export function useHuelgaIncrementalResponseCollection(huelgas: Huelga[], zonas:
     }
 
     if (incoming.length === 0 && !(parsed.generalDetail?.length)) {
-      const synthetic = new File([buffer], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const synthetic = new File([compatibleBuffer], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       await base.importResponse(zoneId, synthetic);
       return true;
     }
