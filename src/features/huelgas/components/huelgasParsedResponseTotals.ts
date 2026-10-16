@@ -102,9 +102,6 @@ function readMetricPairs(
   const lastLabelColumn = Math.min(Math.max(1, femaleColumn - 1), worksheet.actualColumnCount);
 
   for (let row = genderRow + 1; row <= lastRow; row += 1) {
-    // Un bloque termina al llegar a una nueva cabecera H/M. Esto evita que una
-    // métrica ausente en el bloque actual se complete accidentalmente con datos
-    // del bloque siguiente.
     if (
       normalize(worksheet.getCell(row, femaleColumn).text) === 'mujeres' &&
       normalize(worksheet.getCell(row, femaleColumn + 1).text) === 'hombres'
@@ -119,10 +116,6 @@ function readMetricPairs(
 
     const mujeres = parseInteger(worksheet.getCell(row, femaleColumn).text);
     const hombres = parseInteger(worksheet.getCell(row, femaleColumn + 1).text);
-
-    // No damos por encontrada una métrica si la fila solo contiene el rótulo y
-    // ambos valores están realmente vacíos. Así podemos seguir buscando dentro
-    // del mismo bloque sin convertir un falso positivo en ceros definitivos.
     if (mujeres === null && hombres === null) continue;
 
     result[metric] = {
@@ -185,6 +178,43 @@ async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGe
   return result;
 }
 
+function pairTotal(pair: HuelgaGeneralMetricValues): number {
+  return pair.mujeres + pair.hombres;
+}
+
+function richerPair(
+  robust: HuelgaGeneralMetricValues,
+  fallback: HuelgaGeneralMetricValues | undefined,
+): HuelgaGeneralMetricValues {
+  if (!fallback) return robust;
+  return pairTotal(fallback) > pairTotal(robust) ? fallback : robust;
+}
+
+function mergeGeneralDetail(
+  robustDetail: HuelgaGeneralDetail[],
+  fallbackDetail: HuelgaGeneralDetail[] | undefined,
+): HuelgaGeneralDetail[] {
+  if (robustDetail.length === 0) return fallbackDetail ?? [];
+  if (!fallbackDetail?.length) return robustDetail;
+
+  const fallbackByKey = new Map(
+    fallbackDetail.map((row) => [`${row.turno}::${normalize(row.colectivo)}`, row] as const),
+  );
+
+  return robustDetail.map((row) => {
+    const fallback = fallbackByKey.get(`${row.turno}::${normalize(row.colectivo)}`);
+    if (!fallback) return row;
+
+    return {
+      ...row,
+      huelga: richerPair(row.huelga, fallback.huelga),
+      trabajan: richerPair(row.trabajan, fallback.trabajan),
+      personasTurno: richerPair(row.personasTurno, fallback.personasTurno),
+      serviciosMinimos: richerPair(row.serviciosMinimos, fallback.serviciosMinimos),
+    };
+  });
+}
+
 export function huelgaTotalsFromDetail(detail: HuelgaGeneralDetail[]) {
   const sum = (key: 'personasTurno' | 'serviciosMinimos' | 'trabajan' | 'huelga') =>
     detail.reduce((total, row) => total + row[key].hombres + row[key].mujeres, 0);
@@ -209,7 +239,7 @@ export function normalizeParsedHuelgaResponseTotals(parsed: ParsedHuelgaResponse
 export async function parseHuelgaResponseWorkbookForImport(buffer: ArrayBuffer): Promise<ParsedHuelgaResponse> {
   const parsed = await parseHuelgaResponseWorkbook(buffer);
   const robustDetail = await extractRobustGeneralDetail(buffer);
-  const generalDetail = robustDetail.length > 0 ? robustDetail : parsed.generalDetail;
+  const generalDetail = mergeGeneralDetail(robustDetail, parsed.generalDetail);
 
   return normalizeParsedHuelgaResponseTotals({
     ...parsed,
