@@ -61,6 +61,7 @@ function zoneAliases(zona: HuelgaZona): string[] {
       'gmo y linea',
       'linea y gmo',
       'gmo linea',
+      'linea gmo',
       // Compatibilidad con la plantilla histórica de Servicios Centrales.
       // Sus datos se integran en el bloque Oficinas (GMO) del circuito actual GMO y Línea.
       'sscc',
@@ -261,7 +262,7 @@ export function useHuelgaIncrementalResponseCollection(huelgas: Huelga[], zonas:
   const importOutlookMessage = async (input: File | File[]) => {
     const files = Array.isArray(input) ? input : [input];
     const valid = files.filter((file) => /\.(msg|xlsx|xlsm)$/i.test(file.name));
-    const invalid = files.filter((file) => !/\.(xlsx|xlsm)$/i.test(file.name) && !/\.msg$/i.test(file.name));
+    const invalid = files.filter((file) => !/\.(msg|xlsx|xlsm)$/i.test(file.name));
     if (invalid.length > 0) {
       await alert(`Se ignorarán formatos no admitidos: ${invalid.map((file) => file.name).join(', ')}.`, {
         title: 'Algunos archivos no se procesarán',
