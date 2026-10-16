@@ -43,14 +43,18 @@ function canonicalColectivo(value: string): string | null {
   if (normalized.includes('spve')) return 'SPVE';
   if (normalized.includes('material movil')) return 'Material Móvil';
   if (normalized === 'usi' || normalized.includes(' usi')) return 'USI';
-  if (normalized.includes('jefat') && (normalized.includes('mto') || normalized.includes('ingenieria'))) return 'Jefat. Mto. e Ingeniería';
+  if (normalized.includes('jefat') && (normalized.includes('mto') || normalized.includes('ingenieria'))) {
+    return 'Jefat. Mto. e Ingeniería';
+  }
   if (normalized === 'oac' || normalized.includes('oac')) return 'OAC';
   if (normalized === 'scc') return 'SCC';
   if (normalized === 'eem') return 'EEM';
   if (normalized === 'via') return 'Vía';
   if (normalized.includes('catenaria')) return 'Catenaria';
   if (normalized === 'pmc') return 'PMC';
-  if (normalized.includes('linea') || normalized.includes('auxiliares') || normalized.includes('jefes de operaciones')) return 'Línea';
+  if (normalized.includes('linea') || normalized.includes('auxiliares') || normalized.includes('jefes de operaciones')) {
+    return 'Línea';
+  }
   if (normalized.includes('gmo') || normalized.includes('oficinas')) return 'Oficinas (GMO)';
   return null;
 }
@@ -69,7 +73,22 @@ type SheetLike = {
   getCell: (row: number, column: number) => { text: string };
   actualColumnCount: number;
   actualRowCount: number;
+  rowCount?: number;
 };
+
+/**
+ * ExcelJS diferencia entre:
+ * - rowCount: índice de la última fila utilizada;
+ * - actualRowCount: número de filas no vacías.
+ *
+ * En plantillas con huecos entre bloques (p. ej. Noche en 1-7 y Jornada Cont.
+ * en 11-17), actualRowCount puede ser 14 aunque la última fila real sea la 17.
+ * Usarlo como límite de índice trunca el segundo bloque. Siempre tomamos el
+ * mayor de ambos valores para recorrer posiciones reales de fila.
+ */
+function lastRowIndex(worksheet: SheetLike): number {
+  return Math.max(worksheet.rowCount ?? 0, worksheet.actualRowCount ?? 0);
+}
 
 function metricKeyFromLabel(value: string): DetailMetric | null {
   const normalized = normalize(value);
@@ -104,7 +123,7 @@ function readMetricsUntilNextShift(
 ): MetricPairs {
   const result = emptyMetricPairs();
   const found = new Set<DetailMetric>();
-  const maxRow = Math.min(worksheet.actualRowCount, genderRow + 20);
+  const maxRow = Math.min(lastRowIndex(worksheet), genderRow + 20);
 
   for (let row = genderRow + 1; row <= maxRow; row += 1) {
     if (shiftInRow(worksheet, row)) break;
@@ -142,7 +161,7 @@ async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGe
 
   for (const worksheet of workbook.worksheets) {
     let activeShift: HuelgaGeneralShift | null = null;
-    const maxRows = Math.min(worksheet.actualRowCount, 160);
+    const maxRows = Math.min(lastRowIndex(worksheet), 160);
     const maxColumns = Math.min(worksheet.actualColumnCount, 50);
 
     for (let row = 1; row <= maxRows; row += 1) {
