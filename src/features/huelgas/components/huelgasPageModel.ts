@@ -101,9 +101,15 @@ export function validateDraft(draft: HuelgaDraft): string | null {
   if ((draft.circuitosZonaIds ?? []).length === 0) return 'Selecciona al menos un circuito de recogida.';
   if (draft.tipo === 'paros-parciales') {
     if (draft.tramos.length === 0) return 'Añade al menos un tramo horario para los paros parciales.';
-    for (const tramo of draft.tramos) {
+    const ordered = [...draft.tramos].sort((left, right) => left.inicio.localeCompare(right.inicio));
+    for (const tramo of ordered) {
       if (!tramo.inicio || !tramo.fin) return 'Completa la hora de inicio y fin de todos los tramos.';
       if (tramo.inicio >= tramo.fin) return 'La hora de fin de cada tramo debe ser posterior a la de inicio.';
+    }
+    for (let index = 1; index < ordered.length; index += 1) {
+      if (ordered[index].inicio < ordered[index - 1].fin) {
+        return 'Hay tramos de paro que se solapan. Revisa los horarios de la convocatoria.';
+      }
     }
   }
   return null;
