@@ -21,7 +21,6 @@ type Props = {
   onEdit: () => void;
   onOpenCollectionMails: () => void;
   onOpenResponseCollection: () => void;
-  onOpenResults: () => void;
 };
 
 const TABS: Array<{ id: HuelgaWorkspaceTab; label: string; icon: typeof MailPlus }> = [
