@@ -58,5 +58,6 @@ export function isHuelgaResultsReady(
   _huelga?: Huelga,
   _zonas: HuelgaZona[] = [],
 ): boolean {
+  void _zonas;
   return usableHuelgaResultsCollection(collection) !== null;
 }
