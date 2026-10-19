@@ -1,3 +1,4 @@
+import { buildUpdateProgressWindowScript } from './updateProgressWindow.js';
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -313,9 +314,22 @@ export async function applyAppUpdate(
   }
 
   const scriptPath = path.join(stagingDir, 'traccion-apply-update.cmd');
-  const batScript = buildUpdateApplyScript(currentExePath, targetExePath, stagedExePath);
+  const progressPath = path.join(stagingDir, 'progress.txt');
+  const progressScriptPath = path.join(stagingDir, 'traccion-update-progress.ps1');
+  const batScript = buildUpdateApplyScript(currentExePath, targetExePath, stagedExePath)
+    .replace('set /a ATTEMPTS=0', [
+      'set "STATUS='+progressPath+'"',
+      'start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+progressScriptPath+'" "%STATUS%"',
+      '> "%STATUS%" echo closing',
+      'set /a ATTEMPTS=0',
+    ].join('\r\n'))
+    .replace(':copy_new', ':copy_new\r\n> "%STATUS%" echo installing')
+    .replace('start "" "%TARGET%"', '> "%STATUS%" echo starting\r\nstart "" "%TARGET%" --traccion-update-relaunch')
+    .replace(':giveup', ':giveup\r\n> "%STATUS%" echo error');
 
   try {
+    await writeFile(progressPath, 'validated', 'utf8');
+    await writeFile(progressScriptPath, buildUpdateProgressWindowScript(), 'utf8');
     await writeFile(scriptPath, batScript, 'utf8');
     const child = spawn('cmd.exe', ['/c', scriptPath], { detached: true, stdio: 'ignore', windowsHide: true });
     child.unref();
