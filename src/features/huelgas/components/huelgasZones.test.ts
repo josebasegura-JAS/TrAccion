@@ -33,16 +33,17 @@ function zona(overrides: Partial<HuelgaZona>): HuelgaZona {
 }
 
 describe('huelgasZones — caracterización', () => {
-  it('crea exactamente los siete circuitos reales y todos quedan preparados para correo', () => {
+  it('conserva los siete circuitos de correo y Servicios Generales para recepción SSCC', () => {
     const result = ensureDefaultZonas([]);
 
     expect(result).toHaveLength(DEFAULT_HUELGA_ZONE_NAMES.length);
     expect(result.map((item) => item.nombre).sort()).toEqual([...DEFAULT_HUELGA_ZONE_NAMES].sort());
     expect(result.some((item) => item.nombre === 'SSCC')).toBe(false);
-    expect(result.every((item) => item.correoActivo && item.active)).toBe(true);
+    expect(result.filter((item) => item.correoActivo && item.active)).toHaveLength(7);
+    expect(result.find((item) => item.nombre === 'Servicios Generales')?.correoActivo).toBe(false);
   });
 
-  it('retira una zona legacy SSCC y mantiene únicamente los siete circuitos reales', () => {
+  it('migra SSCC legacy a Servicios Generales sin enviarle correos', () => {
     const result = ensureDefaultZonas([
       zona({
         id: 'existing-sscc',
@@ -56,6 +57,8 @@ describe('huelgasZones — caracterización', () => {
 
     expect(result).toHaveLength(DEFAULT_HUELGA_ZONE_NAMES.length);
     expect(result.some((item) => item.nombre.trim().toLocaleLowerCase('es-ES') === 'sscc')).toBe(false);
+    expect(result.find((item) => item.nombre === 'Servicios Generales')?.id).toBe('existing-sscc');
+    expect(result.find((item) => item.nombre === 'Servicios Generales')?.correoActivo).toBe(false);
     expect(result.every((item) => item.correoAsunto === DEFAULT_HUELGA_MAIL_SUBJECT)).toBe(true);
     expect(result.every((item) => item.correoCuerpoHtml === DEFAULT_HUELGA_MAIL_BODY)).toBe(true);
   });
