@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -14,6 +15,14 @@ const shutdownHtmlPath = path.join(__dirname, '../build/icon/shutdown.html');
 const splashMinimumVisibleMs = 2_000;
 const splashMaximumVisibleMs = 60_000;
 const shutdownPerformanceFileName = 'last-shutdown-performance.json';
+const isUpdateRelaunch = process.argv.includes('--traccion-update-relaunch');
+const updateProgressPath = path.join(tmpdir(), 'traccion-update-staging', 'progress.txt');
+
+function markUpdatedAppReady(): void {
+  if (!isUpdateRelaunch) return;
+  void writeFile(updateProgressPath, 'ready', 'utf8')
+    .catch((error: unknown) => console.warn('No se pudo confirmar el arranque al indicador de actualizacion.', error));
+}
 
 interface PersistedShutdownPerformance {
   recordedAt: string;
@@ -207,6 +216,7 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   const requestMainWindowShow = (markInterfaceReady = true): void => {
     if (hasRequestedMainWindowShow || mainWindow.isDestroyed()) return;
     hasRequestedMainWindowShow = true;
+    if (markInterfaceReady) markUpdatedAppReady();
     clearTimeout(forceShowTimer);
     if (markInterfaceReady) updateSplashStep(splashWindow, 'interface', 'done');
     showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
