@@ -325,7 +325,7 @@ export async function applyAppUpdate(
     ].join('\r\n'))
     .replace(':copy_new', ':copy_new\r\n> "%STATUS%" echo installing')
     .replace('start "" "%TARGET%"', '> "%STATUS%" echo starting\r\nstart "" "%TARGET%" --traccion-update-relaunch')
-    .replace(':giveup', ':giveup\r\n> "%STATUS%" echo error');
+    .replace('\r\n:giveup\r\n', '\r\n:giveup\r\n> "%STATUS%" echo error\r\n');
 
   try {
     await writeFile(progressPath, 'validated', 'utf8');
