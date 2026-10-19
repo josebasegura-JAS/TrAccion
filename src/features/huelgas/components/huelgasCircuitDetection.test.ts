@@ -7,7 +7,7 @@ function generatedFileName(pattern: string): string {
 }
 
 describe('detección automática del circuito en Excel de huelgas', () => {
-  it('reconoce los siete nombres exactos que TrAcción genera y adjunta a los correos', () => {
+  it('reconoce los siete nombres de envío y el circuito separado de SSCC', () => {
     const zonas = ensureDefaultZonas([]);
 
     for (const zona of zonas) {
@@ -25,12 +25,15 @@ describe('detección automática del circuito en Excel de huelgas', () => {
     expect(detectZone('PRUEBA_FICTICIA_GMO_LINEA.xlsx', '', '', zonas)?.id).toBe(expected?.id);
   });
 
-  it('integra el nombre histórico SSCC en el bloque actual GMO y Línea', () => {
+  it('dirige SSCC exclusivamente a Servicios Generales, nunca a GMO y Línea', () => {
     const zonas = ensureDefaultZonas([]);
-    const expected = zonas.find((zona) => zona.nombre === 'GMO y Línea');
+    const expected = zonas.find((zona) => zona.nombre === 'Servicios Generales');
+    const linea = zonas.find((zona) => zona.nombre === 'GMO y Línea');
 
     expect(expected).toBeDefined();
     expect(detectZone('PRUEBA_FICTICIA_SSCC.xlsx', '', '', zonas)?.id).toBe(expected?.id);
     expect(detectZone('SSCC - Seguimiento huelga 17-03-2026.xlsx', '', '', zonas)?.id).toBe(expected?.id);
+    expect(detectZone('Servicios Centrales - Seguimiento huelga.xlsx', '', '', zonas)?.id).toBe(expected?.id);
+    expect(detectZone('PRUEBA_FICTICIA_SSCC.xlsx', '', '', zonas)?.id).not.toBe(linea?.id);
   });
 });
