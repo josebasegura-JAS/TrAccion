@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { syncActividadesExternasExcelBackup } from '../services/actividadesExternasExcelBackup';
 import { readStorageItem } from '../../../services/persistence';
 import { deleteSharedArrayRecord, saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
-import { parseActividadesExternas, type ActividadExterna, type ActividadExternaDraft, type ActividadExternaEstado, type ActividadExternaComunicacion } from '../domain/actividadExterna';
+import { parseActividadesExternas, type ActividadExterna, type ActividadExternaDraft, type ActividadExternaComunicacion } from '../domain/actividadExterna';
 
 const KEY = 'traccion.v1.actividadesExternas.records';
 type Result = { ok: boolean; message: string };
