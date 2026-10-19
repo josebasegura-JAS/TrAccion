@@ -659,7 +659,7 @@ function setTotalFormula(sheet: {
   sheet.getCell(row, 29).value = { formula: `SUM(${maleColumns.map((column) => `${column}${row}`).join(',')})` };
 }
 
-function writePercentFormulas(
+export function writePercentFormulas(
   sheet: { getCell: (row: number, column: number) => { value: unknown } },
   rows: typeof MASTER_ROWS[HuelgaGeneralShift],
 ) {
@@ -675,7 +675,8 @@ function writePercentFormulas(
     sheet.getCell(rows.porcentajeColectivo, femaleColumn).value = {
       formula: `IF(SUM(${f}${rows.personasTurno}:${m}${rows.personasTurno})=0,0,SUM(${f}${rows.huelga}:${m}${rows.huelga})/SUM(${f}${rows.personasTurno}:${m}${rows.personasTurno}))`,
     };
-    sheet.getCell(rows.porcentajeColectivo, maleColumn).value = null;
+    // La plantilla histórica fusiona ambas celdas del colectivo: escribir null
+    // en la segunda celda borra la fórmula almacenada en la primera.
   }
 
   sheet.getCell(rows.porcentajeSexo, 28).value = {
@@ -687,7 +688,7 @@ function writePercentFormulas(
   sheet.getCell(rows.porcentajeColectivo, 28).value = {
     formula: `IF(SUM(AB${rows.personasTurno}:AC${rows.personasTurno})=0,0,SUM(AB${rows.huelga}:AC${rows.huelga})/SUM(AB${rows.personasTurno}:AC${rows.personasTurno}))`,
   };
-  sheet.getCell(rows.porcentajeColectivo, 29).value = null;
+  // AB:AC también están fusionadas; no escribir en AC41/30/20/10.
 }
 
 function formatSheetName(fecha: string): string {
