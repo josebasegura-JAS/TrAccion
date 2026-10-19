@@ -69,10 +69,10 @@ describe('Huelgas — bloques separados y totales verificables', () => {
     const morning = parsed.generalDetail?.find((r) => r.turno === 'manana');
     const afternoon = parsed.generalDetail?.find((r) => r.turno === 'tarde');
     expect(parsed.generalDetail).toHaveLength(2);
-    expect(morning?.personasTurno.hombres! + morning?.personasTurno.mujeres!).toBe(
+    expect((morning?.personasTurno.hombres ?? 0) + (morning?.personasTurno.mujeres ?? 0)).toBe(
       blocks[0].turno[0] + blocks[0].turno[1] + blocks[1].turno[0] + blocks[1].turno[1],
     );
-    expect(afternoon?.personasTurno.hombres! + afternoon?.personasTurno.mujeres!).toBe(
+    expect((afternoon?.personasTurno.hombres ?? 0) + (afternoon?.personasTurno.mujeres ?? 0)).toBe(
       blocks[2].turno[0] + blocks[2].turno[1],
     );
     for (const row of parsed.generalDetail ?? []) {
