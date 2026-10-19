@@ -96,6 +96,36 @@ describe('huelgas incremental imports', () => {
     expect(filtered.reduce((total, item) => total + item.personasTurno.hombres, 0)).toBe(14);
   });
 
+  it('conserva Catenaria de Tarde en las filas 142-148 de Instalaciones N2', async () => {
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Seguimiento');
+    const addBlock = (start: number, shift: string, colectivo: string, turno: number, minimos: number) => {
+      sheet.getCell(start, 2).value = shift;
+      sheet.getCell(start + 1, 2).value = colectivo;
+      sheet.getCell(start + 2, 2).value = 'Mujeres';
+      sheet.getCell(start + 2, 3).value = 'Hombres';
+      for (const [offset, name, amount] of [
+        [3, 'huelga', 0],
+        [4, 'trabajan', turno - minimos],
+        [5, 'Personas con turno', turno],
+        [6, 'Servicios mínimos', minimos],
+      ] as const) {
+        sheet.getCell(start + offset, 1).value = name;
+        sheet.getCell(start + offset, 2).value = 0;
+        sheet.getCell(start + offset, 3).value = amount;
+      }
+    };
+    addBlock(132, 'Tarde', 'Vía', 2, 2);
+    addBlock(142, 'Tarde', 'Catenaria', 2, 2);
+    const bytes = await workbook.xlsx.writeBuffer();
+    const buffer = new Uint8Array(bytes as ArrayBuffer).buffer;
+    const input = [detail('tarde', 'Vía', 2), detail('tarde', 'Catenaria', 2)];
+    const filtered = await filterHuelgaDetailWithContent(buffer, input);
+    expect(filtered.map((item) => item.colectivo)).toEqual(['Vía', 'Catenaria']);
+    expect(filtered.reduce((total, item) => total + item.personasTurno.hombres, 0)).toBe(4);
+  });
+
   it('replaces only conflicting turno+colectivo and preserves the rest', () => {
     const existing = [detail('noche', 'Línea', 5), detail('manana', 'Línea', 4)];
     const incoming = [detail('manana', 'Línea', 6), detail('tarde', 'Línea', 7)];
