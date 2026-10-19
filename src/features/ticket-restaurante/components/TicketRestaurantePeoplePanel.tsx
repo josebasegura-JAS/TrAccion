@@ -88,13 +88,14 @@ export function PeoplePanel({
   onExportModel: () => void;
   onImport: () => void;
   onRemove: (empleado: string) => void;
-  onSave: () => void;
+  onSave: () => Promise<boolean>;
   people: TicketPerson[];
 }) {
   const canSave = draft.empleado.trim() && draft.nombre.trim() && draft.calendarId;
   const { confirm, dialogNode } = useAppDialog();
   const [isPersonFormOpen, setIsPersonFormOpen] = useState(Boolean(editingPersonId));
   const [employeeSearch, setEmployeeSearch] = useState('');
+  const [isSavingPerson, setIsSavingPerson] = useState(false);
 
   useEffect(() => {
     if (editingPersonId) {
@@ -126,10 +127,18 @@ export function PeoplePanel({
     setEmployeeSearch(`${employee.empleado} · ${employee.nombreApellidos}`);
   };
 
-  const handleSavePerson = () => {
-    onSave();
-    setEmployeeSearch('');
-    setIsPersonFormOpen(false);
+  const handleSavePerson = async () => {
+    if (isSavingPerson) return;
+    setIsSavingPerson(true);
+    try {
+      const saved = await onSave();
+      if (saved) {
+        setEmployeeSearch('');
+        setIsPersonFormOpen(false);
+      }
+    } finally {
+      setIsSavingPerson(false);
+    }
   };
 
   const handleCancelPerson = () => {
@@ -398,11 +407,11 @@ export function PeoplePanel({
             <div className="flex gap-2">
               <button
                 className="flex-1 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!canSave}
-                onClick={handleSavePerson}
+                disabled={!canSave || isSavingPerson}
+                onClick={() => void handleSavePerson()}
                 type="button"
               >
-                Guardar
+                {isSavingPerson ? 'Guardando…' : 'Guardar'}
               </button>
               {editingPersonId ? (
                 <button

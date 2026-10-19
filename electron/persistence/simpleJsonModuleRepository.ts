@@ -105,7 +105,21 @@ function saveJsonModuleRecordInTransaction(
   const row = db.prepare(`SELECT updated_at FROM ${options.tableName} WHERE id = ?`).get(record.id);
   const currentUpdatedAt = deps.isUpdatedAtRow(row) ? row.updated_at : null;
 
-  if (currentUpdatedAt !== record.expectedUpdatedAt) {
+  // En Ticket Restaurante, un alta puede reutilizar el número de una persona
+  // dada de baja. El listado no carga tombstones, aunque SQLite conserva su id.
+  // La reactivación solo se admite si sigue eliminada al ejecutar la transacción.
+  const canRestoreDeletedPerson =
+    options.tableName === 'ticket_restaurante_person_records' &&
+    record.expectedUpdatedAt === null &&
+    currentUpdatedAt !== null &&
+    (() => {
+      const existing = db
+        .prepare(`SELECT deleted_at FROM ${options.tableName} WHERE id = ?`)
+        .get(record.id) as { deleted_at?: string | null } | undefined;
+      return typeof existing?.deleted_at === 'string';
+    })();
+
+  if (currentUpdatedAt !== record.expectedUpdatedAt && !canRestoreDeletedPerson) {
     return {
       ok: false,
       status: currentStatus,
@@ -116,7 +130,23 @@ function saveJsonModuleRecordInTransaction(
 
   const { createdAt, updatedAt, deletedAt } = extractJsonRecordTimestamps(record.value);
 
-  if (currentUpdatedAt === null) {
+  if (canRestoreDeletedPerson) {
+    const restoreResult = db
+      .prepare(
+        `UPDATE ${options.tableName}
+         SET value_json = ?, created_at = ?, updated_at = ?, deleted_at = NULL
+         WHERE id = ? AND updated_at = ? AND deleted_at IS NOT NULL`,
+      )
+      .run(record.value, createdAt, updatedAt, record.id, currentUpdatedAt);
+    if (restoreResult.changes !== 1) {
+      return {
+        ok: false,
+        status: currentStatus,
+        currentUpdatedAt,
+        message: `${options.moduleLabel} ha sido modificado por otro usuario. Recarga antes de guardar.`,
+      };
+    }
+  } else if (currentUpdatedAt === null) {
     const insertResult = db
       .prepare(
         `INSERT OR IGNORE INTO ${options.tableName} (id, value_json, created_at, updated_at, deleted_at)

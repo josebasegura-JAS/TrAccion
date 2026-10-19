@@ -467,15 +467,16 @@ export function TicketRestaurantePage({
 
   const savePerson = async () => {
     if (!personDraft.empleado.trim() || !personDraft.nombre.trim() || !personDraft.calendarId) {
-      return;
+      return false;
     }
 
     const result = await upsertPerson(personDraft);
     if (!result.ok) {
       await alert(result.message ?? 'No se ha podido guardar la persona.');
-      return;
+      return false;
     }
     resetPersonForm();
+    return true;
   };
 
   const editPerson = (person: TicketPerson) => {
