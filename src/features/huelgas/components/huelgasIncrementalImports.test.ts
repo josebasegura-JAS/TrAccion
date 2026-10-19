@@ -56,6 +56,46 @@ describe('huelgas incremental imports', () => {
     expect(filtered.map((row) => row.turno)).toEqual(['manana']);
   });
 
+  it('detects Tarde after sparse rows: actualRowCount is not the last row index', async () => {
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Seguimiento');
+
+    const addBlock = (start: number, shift: string, persons: number) => {
+      sheet.getCell(start, 2).value = shift;
+      sheet.getCell(start + 1, 2).value = 'Conducción';
+      sheet.getCell(start + 2, 2).value = 'Mujeres';
+      sheet.getCell(start + 2, 3).value = 'Hombres';
+      for (const [offset, label, value] of [
+        [3, 'huelga', 0],
+        [4, 'trabajan', persons],
+        [5, 'Personas con turno', persons],
+        [6, 'Servicios mínimos', 0],
+      ] as const) {
+        sheet.getCell(start + offset, 1).value = label;
+        sheet.getCell(start + offset, 2).value = 0;
+        sheet.getCell(start + offset, 3).value = value;
+      }
+    };
+
+    addBlock(2, 'Noche', 2);
+    addBlock(22, 'Mañana', 5);
+    addBlock(62, 'Tarde', 7);
+    expect(sheet.actualRowCount).toBeLessThan(62);
+    expect(sheet.rowCount).toBeGreaterThan(62);
+
+    const bytes = await workbook.xlsx.writeBuffer();
+    const buffer = Uint8Array.from(new Uint8Array(bytes as ArrayBuffer)) as unknown as ArrayBuffer;
+    const incoming = [
+      detail('noche', 'Conducción', 2),
+      detail('manana', 'Conducción', 5),
+      detail('tarde', 'Conducción', 7),
+    ];
+    const filtered = await filterHuelgaDetailWithContent(buffer, incoming);
+    expect(filtered.map((item) => item.turno)).toEqual(['noche', 'manana', 'tarde']);
+    expect(filtered.reduce((total, item) => total + item.personasTurno.hombres, 0)).toBe(14);
+  });
+
   it('replaces only conflicting turno+colectivo and preserves the rest', () => {
     const existing = [detail('noche', 'Línea', 5), detail('manana', 'Línea', 4)];
     const incoming = [detail('manana', 'Línea', 6), detail('tarde', 'Línea', 7)];
