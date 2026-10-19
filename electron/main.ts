@@ -182,13 +182,13 @@ function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promi
     splashWindow.webContents.once('did-fail-load', () => { clearTimeout(timeout); finish(); });
   });
 }
-function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow): void {
-  if (!mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, rendererReady: boolean): void {
+  if (!mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); if (rendererReady) markUpdatedAppReady(); }
   if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
 }
-function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, splashStartedAt: number): void {
+function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, splashStartedAt: number, rendererReady = false): void {
   const remainingMs = Math.max(0, splashMinimumVisibleMs - (Date.now() - splashStartedAt));
-  setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow), remainingMs);
+  setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow, rendererReady), remainingMs);
 }
 function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt = Date.now(), setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void): BrowserWindow {
   const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}`;
@@ -216,10 +216,9 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   const requestMainWindowShow = (markInterfaceReady = true): void => {
     if (hasRequestedMainWindowShow || mainWindow.isDestroyed()) return;
     hasRequestedMainWindowShow = true;
-    if (markInterfaceReady) markUpdatedAppReady();
     clearTimeout(forceShowTimer);
     if (markInterfaceReady) updateSplashStep(splashWindow, 'interface', 'done');
-    showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+    showMainAfterSplash(splashWindow, mainWindow, splashStartedAt, markInterfaceReady);
   };
   const forceShowTimer: ReturnType<typeof setTimeout> = setTimeout(() => {
     updateSplashStep(splashWindow, 'interface', 'error', 'La interfaz no confirmó el arranque en 60 segundos. Se abrirá para permitir el diagnóstico.');
