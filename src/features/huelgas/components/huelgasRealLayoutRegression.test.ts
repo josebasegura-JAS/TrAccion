@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import { parseHuelgaResponseWorkbookForImport } from './huelgasParsedResponseTotals';
 
 /** Replica las posiciones reales de las plantillas OAC/Jefatura de 19-10-2026. */
-function makeWorkbook(colectivo: string, blocks: Array<{
+async function makeWorkbook(colectivo: string, blocks: Array<{
   shift: string;
   huelga: [number, number];
   trabajan: [number, number];
@@ -34,7 +34,8 @@ function makeWorkbook(colectivo: string, blocks: Array<{
       sheet.getCell(row, 5).value = { formula: `SUM(C${row})` };
     }
   }
-  return workbook.xlsx.writeBuffer() as Promise<ArrayBuffer>;
+  const bytes = await workbook.xlsx.writeBuffer();
+  return Uint8Array.from(bytes) as unknown as ArrayBuffer;
 }
 
 describe('Huelgas — bloques separados y totales verificables', () => {
