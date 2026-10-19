@@ -56,7 +56,19 @@ function zoneAliases(zona: HuelgaZona): string[] {
   const aliases = [name];
   if (name.includes('mm ariz')) aliases.push('mm ariz', 'ariz');
   if (name.includes('mm sopela')) aliases.push('mm sopela', 'sopela');
-  if (name.includes('gmo') && name.includes('linea')) aliases.push('gmo y linea', 'linea y gmo', 'gmo linea');
+  if (name.includes('gmo') && name.includes('linea')) {
+    aliases.push(
+      'gmo y linea',
+      'linea y gmo',
+      'gmo linea',
+      'linea gmo',
+      // Compatibilidad con la plantilla histórica de Servicios Centrales.
+      // Sus datos se integran en el bloque Oficinas (GMO) del circuito actual GMO y Línea.
+      'sscc',
+      'servicios centrales',
+      'servicios generales',
+    );
+  }
   if (name.includes('instalaciones')) aliases.push('instalaciones');
   if (name === 'oacs' || name.includes('oac')) aliases.push('oacs', 'oac');
   if (name === 'pmc' || name.includes('pmc')) aliases.push('pmc');
@@ -72,7 +84,7 @@ function splitEmails(value: string): string[] {
     .filter(Boolean);
 }
 
-function detectZone(
+export function detectZone(
   attachmentName: string,
   subject: string,
   senderEmail: string,
