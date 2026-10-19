@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Clock3, ClipboardCheck, CheckCircle2, FileSpreadsheet, Mail, Pencil, Plus, Printer, Search, Trash2 } from 'lucide-react';
+import { ChevronRight, Clock3, ClipboardCheck, CheckCircle2, Eye, RefreshCw, FileSpreadsheet, Mail, Pencil, Plus, Printer, Search, Trash2 } from 'lucide-react';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -170,7 +170,7 @@ export function ActividadesExternasPage() {
           <button disabled={busy} type="submit" className="rounded-lg bg-red-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Guardar pendiente</button>
         </div>
       </form>}
-      <div className="mb-2 flex items-center justify-end gap-2 pt-2">
+      <div className="mb-1 flex items-center justify-end gap-2 pt-1">
         <button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><FileSpreadsheet size={14}/> Actualizar Excel</button>
       </div>
       {message && <p role="status" className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2 text-xs text-metro-text">{message}</p>}
@@ -186,23 +186,27 @@ export function ActividadesExternasPage() {
           return <section key={group.heading} className={`rounded-2xl border border-metro-border bg-metro-panel p-3 ${group.icon === 'rrll' || group.icon === 'comite' ? '' : 'lg:col-span-2'}`}>
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="flex items-start gap-3"><span className="rounded-xl border border-metro-border p-2 text-metro-muted">{group.icon === 'rrll' ? <Clock3 size={17}/> : group.icon === 'comite' ? <ClipboardCheck size={17}/> : <CheckCircle2 size={17}/>}</span><div><h3 className="text-sm font-bold text-metro-text">{group.heading} <span className="ml-1 rounded-full border border-metro-border px-2 py-0.5 text-xs">{groupRecords.length}</span></h3>
-              <p className="mt-1 text-xs text-metro-muted">{group.description}</p></div></div>
+              <p className="mt-1 text-xs text-metro-muted">{group.description}</p></div></div><button type="button" disabled={busy} title="Recargar tabla" onClick={() => load()} className="rounded-md border border-metro-border p-2 text-metro-muted"><RefreshCw size={14}/></button>
             </div>
             <div className="overflow-x-auto rounded-lg border border-metro-border">
-              <table className={`w-full ${group.icon === 'rrll' || group.icon === 'comite' ? 'min-w-[440px]' : 'min-w-[700px]'} text-left text-xs text-metro-text`}>
-                <thead className="bg-metro-panel text-metro-muted"><tr><th className="px-3 py-2">Nº</th><th className="px-3 py-2">Nombre</th><th className="px-3 py-2">Actividad</th><th className="px-3 py-2">Solicitud</th><th className="px-3 py-2">Estado</th><th className="px-3 py-2 text-right">Acciones</th></tr></thead>
+              <table className={`w-full ${group.icon === 'rrll' || group.icon === 'comite' ? 'min-w-[540px]' : 'min-w-[1000px]'} text-left text-xs text-metro-text`}>
+                <thead className="bg-metro-panel text-metro-muted"><tr><th className="px-3 py-2">Nº</th><th className="px-3 py-2">Nombre</th><th className="px-3 py-2">Actividad</th>{group.icon !== 'rrll' && group.icon !== 'comite' && <th className="px-3 py-2">Solicitud</th>}{group.icon !== 'rrll' && group.icon !== 'comite' && <><th className="px-3 py-2">Estado</th><th className="px-3 py-2">Última actualización</th></>}<th className="px-3 py-2 text-right">ACCIONES</th></tr></thead>
                 <tbody>
-                  {groupRecords.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-metro-muted">Sin registros</td></tr>}
+                  {groupRecords.length === 0 && <tr><td colSpan={group.icon === 'rrll' || group.icon === 'comite' ? 4 : 7} className="px-3 py-8 text-center text-metro-muted">Sin registros</td></tr>}
                   {groupRecords.map((record) => <Fragment key={record.id}>
                     <tr className="cursor-pointer border-t border-metro-border hover:bg-metro-panel" onClick={() => setSelectedRecordId((id) => id === record.id ? null : record.id)}>
                       <td className="px-3 py-2">{record.empleado}</td>
                       <td className="px-3 py-2 font-semibold">{record.nombre}</td>
                       <td className="max-w-[360px] truncate px-3 py-2" title={record.actividad}>{record.actividad}</td>
-                      <td className="px-3 py-2">{record.fechaSolicitud}</td>
-                      <td className="px-3 py-2">{label(record.estado)}</td>
-                      <td className="px-3 py-2 text-right"><button type="button" className="rounded-lg border border-metro-border px-2 py-1" aria-label={`Ver detalles de ${record.nombre}`} aria-expanded={selectedRecordId === record.id} onClick={(event) => { event.stopPropagation(); setSelectedRecordId((id) => id === record.id ? null : record.id); }}><ChevronRight size={14} className={selectedRecordId === record.id ? 'rotate-90' : ''}/></button></td>
+                      {group.icon !== 'rrll' && group.icon !== 'comite' && <td className="px-3 py-2">{record.fechaSolicitud}</td>}
+                      {group.icon !== 'rrll' && group.icon !== 'comite' && <><td className="px-3 py-2"><span className={`rounded-full border px-2 py-1 ${record.estado === 'autorizada' ? 'border-emerald-700 bg-emerald-950/40 text-emerald-300' : 'border-red-700 text-red-300'}`}>{record.estado === 'autorizada' ? 'Autorizada' : label(record.estado)}</span></td><td className="px-3 py-2">{(record.fechaResolucion || record.updatedAt).slice(0,10)}</td></>}
+                      <td className="px-3 py-2 text-right"><div className="flex justify-end gap-2">
+                      <button type="button" className="rounded-lg border border-metro-border px-3 py-1.5 font-semibold" onClick={(event) => { event.stopPropagation(); setSelectedRecordId((id) => id === record.id ? null : record.id); }}>{group.icon === 'rrll' ? 'Revisar' : group.icon === 'comite' ? 'Resolver' : <span className="inline-flex items-center gap-1"><Eye size={13}/> Ver detalle</span>}</button>
+                      {group.icon !== 'rrll' && group.icon !== 'comite' && <button type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); startEdit(record); }} className="rounded-lg border border-metro-border px-2 py-1.5"><Pencil size={13}/></button>}
+                      <button type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); void requestDelete(record); }} className="rounded-lg border border-red-700/60 px-2 py-1.5 text-red-400"><Trash2 size={13}/></button>
+                      </div></td>
                     </tr>
-                    {selectedRecordId === record.id && <tr><td colSpan={6} className="border-t border-metro-border bg-metro-panel p-3">
+                    {selectedRecordId === record.id && <tr><td colSpan={group.icon === 'rrll' || group.icon === 'comite' ? 4 : 7} className="border-t border-metro-border bg-metro-panel p-3">
 {[record].map((record) => <article key={record.id} className="rounded-lg border border-metro-border bg-metro-surface p-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div><div className="font-semibold text-metro-text">{record.nombre} <span className="text-xs font-normal text-metro-muted">({record.empleado})</span></div><div className="mt-1 whitespace-pre-wrap text-sm text-metro-text">{record.actividad}</div><div className="mt-1 text-xs text-metro-muted">Solicitud: {record.fechaSolicitud} · {record.remunerada ? 'Remunerada' : 'No remunerada'}</div></div>
@@ -231,7 +235,7 @@ export function ActividadesExternasPage() {
               <span className="text-xs text-metro-muted">{groupRecords.length} registros visibles</span>
               <div className="flex gap-2">
                 {group.icon === 'history' && <button type="button" onClick={() => setShowHistory(false)} className="rounded-md border border-metro-border px-2 py-1 text-xs">Ocultar histórico</button>}
-                <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border border-metro-border px-2 py-1 text-xs text-metro-text"><Printer size={13}/> Imprimir</button>
+                <button type="button" onClick={() => setSelectedRecordId(groupRecords[0]?.id ?? null)} className="rounded-md border border-metro-border px-2 py-1 text-xs">Vista</button><button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-md border border-metro-border px-2 py-1 text-xs"><FileSpreadsheet size={13}/> Exportar Excel</button><button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border border-metro-border px-2 py-1 text-xs text-metro-text"><Printer size={13}/> Imprimir</button>
               </div>
             </div>
           </section>;
