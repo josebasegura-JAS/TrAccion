@@ -96,7 +96,7 @@ export async function detectHuelgaWorkbookContentKeys(buffer: ArrayBuffer): Prom
     // actualRowCount cuenta filas ocupadas, no la posicion de la ultima fila.
     // Las plantillas de huelgas contienen huecos entre Noche, Manana y Tarde.
     const lastRow = Math.max(worksheet.rowCount, worksheet.actualRowCount);
-    for (let row = 1; row <= Math.min(lastRow, 140); row += 1) {
+    for (let row = 1; row <= Math.min(lastRow, 2000); row += 1) {
       for (let column = 1; column < Math.min(worksheet.actualColumnCount, 40); column += 1) {
         const female = normalize(worksheet.getCell(row, column).text);
         const male = normalize(worksheet.getCell(row, column + 1).text);
