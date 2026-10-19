@@ -62,18 +62,13 @@ function zoneAliases(zona: HuelgaZona): string[] {
       'linea y gmo',
       'gmo linea',
       'linea gmo',
-      // Compatibilidad con la plantilla histórica de Servicios Centrales.
-      // Sus datos se integran en el bloque Oficinas (GMO) del circuito actual GMO y Línea.
-      'sscc',
-      'servicios centrales',
-      'servicios generales',
     );
   }
   if (name.includes('instalaciones')) aliases.push('instalaciones');
   if (name === 'oacs' || name.includes('oac')) aliases.push('oacs', 'oac');
   if (name === 'pmc' || name.includes('pmc')) aliases.push('pmc');
   if (name.includes('jefatura') && name.includes('operaciones')) aliases.push('jefatura de operaciones', 'jefatura operaciones');
-  if (name.includes('servicios generales') || name.includes('ssgg')) aliases.push('servicios generales', 'ssgg', 'sscc', 'servicios centrales');
+  if (name.includes('servicios generales') || name.includes('ssgg') || name === 'sscc') aliases.push('servicios generales', 'ssgg', 'sscc', 'servicios centrales');
   return [...new Set(aliases.map(normalizeSearchText).filter((item) => item.length >= 3))];
 }
 
