@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
-import { BarChart3, CheckCircle2, Printer, TrendingDown, TrendingUp } from 'lucide-react';
+import { BarChart3, CheckCircle2, Printer, TrendingDown, TrendingUp, Users, UserRoundCheck, ShieldCheck } from 'lucide-react';
+import { HuelgaDonutCard } from './HuelgaDonutCard';
+import { huelgaFormatPercent } from './huelgaDonut';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import type { Huelga } from './huelgasPageModel';
@@ -17,7 +19,7 @@ import { downloadHuelgaResponseReport } from './huelgasResponseCollection';
 import { downloadHuelgaGroupedReport } from './huelgasGroupedReport';
 
 const PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde', 'global'];
-const SHIFT_PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde'];
+const CHART_PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde', 'global'];
 
 function previousPeriod(period: HuelgaResultPeriod): HuelgaResultPeriod | undefined {
   if (period === 'manana') return 'noche';
@@ -107,7 +109,7 @@ export function HuelgaResultsWorkspace({ huelga, collection, provisional, onOpen
       <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
         <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2">
           <p className="text-[9px] font-semibold uppercase tracking-wide text-metro-muted">Con turno</p>
-          <p className="mt-0.5 text-xl font-bold tabular-nums text-metro-text">{result.totals.personasTurno.toLocaleString('es-ES')}</p>
+          <p className="mt-0.5 inline-flex items-center gap-2 text-xl font-bold tabular-nums text-metro-text"><Users size={17} className="text-slate-300" />{result.totals.personasTurno.toLocaleString('es-ES')}</p>
         </div>
         <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2">
           <p className="text-[9px] font-semibold uppercase tracking-wide text-metro-muted">En huelga</p>
@@ -125,11 +127,11 @@ export function HuelgaResultsWorkspace({ huelga, collection, provisional, onOpen
         </div>
         <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2">
           <p className="text-[9px] font-semibold uppercase tracking-wide text-metro-muted">Trabajan</p>
-          <p className="mt-0.5 text-xl font-bold tabular-nums text-metro-text">{result.totals.personasTrabajan.toLocaleString('es-ES')}</p>
+          <p className="mt-0.5 inline-flex items-center gap-2 text-xl font-bold tabular-nums text-metro-text"><UserRoundCheck size={17} className="text-[#3299ff]" />{result.totals.personasTrabajan.toLocaleString('es-ES')}</p><p className="text-[9px] text-[#3299ff]">{huelgaFormatPercent(result.totals.personasTurno ? result.totals.personasTrabajan / result.totals.personasTurno * 100 : 0)} del turno</p>
         </div>
         <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2">
           <p className="text-[9px] font-semibold uppercase tracking-wide text-metro-muted">SS.MM.</p>
-          <p className="mt-0.5 text-xl font-bold tabular-nums text-metro-text">{result.totals.serviciosMinimos.toLocaleString('es-ES')}</p>
+          <p className="mt-0.5 inline-flex items-center gap-2 text-xl font-bold tabular-nums text-metro-text"><ShieldCheck size={17} className="text-[#f5a623]" />{result.totals.serviciosMinimos.toLocaleString('es-ES')}</p>
           <p className="text-[9px] text-metro-muted">Incluidos en con turno</p>
         </div>
       </section>
@@ -139,24 +141,13 @@ export function HuelgaResultsWorkspace({ huelga, collection, provisional, onOpen
         <p className="mt-1.5 border-l-2 border-metro-red pl-3 text-xs leading-relaxed text-metro-text">{huelgaExecutiveSummary(result)}</p>
       </section>
 
-      {period === 'global' && (
-        <section className="rounded-xl border border-metro-border bg-metro-panel/35 p-3">
-          <div className="mb-2 flex items-center gap-2"><BarChart3 size={14} className="text-metro-red" /><h3 className="text-xs font-semibold text-metro-text">Evolución de la jornada</h3></div>
-          <div className="grid gap-2 md:grid-cols-3">
-            {SHIFT_PERIODS.map((item) => {
-              const shift = results[item];
-              return (
-                <button key={item} type="button" disabled={!shift.hasData} onClick={() => shift.hasData && setPeriod(item)} className="rounded-lg border border-metro-border bg-metro-panel/55 p-2.5 text-left transition hover:border-metro-red disabled:cursor-default disabled:opacity-60">
-                  <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-semibold text-metro-text">{HUELGA_PERIOD_LABELS[item]}</span><strong className="text-xs tabular-nums text-metro-red">{shift.hasData ? formatSeguimiento(shift.totals.seguimiento) : '—'}</strong></div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-metro-raised"><div className="h-full rounded-full bg-metro-red" style={{ width: `${Math.min(100, shift.totals.seguimiento)}%` }} /></div>
-                  <p className="mt-1.5 text-[9px] text-metro-muted">{shift.hasData ? `${shift.totals.personasHuelga} huelga / ${shift.totals.personasTurno} con turno` : 'Sin desglose disponible'}</p>
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-[9px] text-metro-muted">Global suma personas reales y calcula el porcentaje sobre el acumulado; no promedia porcentajes.</p>
-        </section>
-      )}
+      <section className="rounded-xl border border-metro-border bg-metro-panel/35 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2"><BarChart3 size={14} className="text-metro-red" /><h3 className="text-xs font-semibold text-metro-text">Evolución de la jornada</h3></div><span className="text-[9px] text-metro-muted">Azul: trabajan · Ámbar: SS.MM. · Rojo: huelga</span></div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {CHART_PERIODS.map((item) => <HuelgaDonutCard key={item} result={results[item]} onSelect={item === 'global' ? undefined : setPeriod} />)}
+        </div>
+        <p className="mt-2 text-[9px] text-metro-muted">Cada gráfico distribuye todas las personas con turno. Global suma personas reales; no promedia porcentajes.</p>
+      </section>
 
       <section className="grid gap-2.5 lg:grid-cols-[minmax(0,0.95fr)_minmax(470px,1.05fr)]">
         <div className="rounded-xl border border-metro-border bg-metro-panel/35 p-3">
