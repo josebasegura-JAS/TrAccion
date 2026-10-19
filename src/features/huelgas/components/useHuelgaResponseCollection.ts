@@ -27,7 +27,7 @@ import {
 
 const INTERNAL_SSGG_ZONE_ID = 'zona-ssgg-interno';
 
-const INTERNAL_SSGG_ZONE: HuelgaZona = {
+export const INTERNAL_SSGG_ZONE: HuelgaZona = {
   id: INTERNAL_SSGG_ZONE_ID,
   nombre: 'Servicios Generales (SSGG)',
   responsableNombre: 'Recogida interna RRLL',
