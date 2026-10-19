@@ -12,5 +12,7 @@ describe('ventana de progreso de actualizacion', () => {
     expect(script).toContain("'ready'");
     expect(script).toContain("'error'");
     expect(script).toContain('ShowDialog()');
+    expect(script).toContain('WriteAllText($readyFile');
+    expect(script).toContain('$form.ControlBox = $true');
   });
 });
