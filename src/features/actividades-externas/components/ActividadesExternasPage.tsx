@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Clock3, ClipboardCheck, CheckCircle2, Eye, RefreshCw, FileSpreadsheet, Mail, Pencil, Plus, Printer, Search, Trash2 } from 'lucide-react';
+import { Clock3, ClipboardCheck, CheckCircle2, Eye, RefreshCw, FileSpreadsheet, Mail, Pencil, Plus, Printer, Search, Trash2 } from 'lucide-react';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
