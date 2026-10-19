@@ -316,10 +316,10 @@ export async function applyAppUpdate(
   const scriptPath = path.join(stagingDir, 'traccion-apply-update.cmd');
   const progressPath = path.join(stagingDir, 'progress.txt');
   const progressScriptPath = path.join(stagingDir, 'traccion-update-progress.ps1');
+  const progressReadyPath = path.join(stagingDir, 'progress-visible.txt');
   const batScript = buildUpdateApplyScript(currentExePath, targetExePath, stagedExePath)
     .replace('set /a ATTEMPTS=0', [
       'set "STATUS='+progressPath+'"',
-      'start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+progressScriptPath+'" "%STATUS%"',
       '> "%STATUS%" echo closing',
       'set /a ATTEMPTS=0',
     ].join('\r\n'))
@@ -331,6 +331,24 @@ export async function applyAppUpdate(
     await writeFile(progressPath, 'validated', 'utf8');
     await writeFile(progressScriptPath, buildUpdateProgressWindowScript(), 'utf8');
     await writeFile(scriptPath, batScript, 'utf8');
+    // Se lanza primero la ventana auxiliar: no depende de que Electron siga vivo.
+    // Si PowerShell está bloqueado, el .cmd continuará igualmente.
+    const windowStartedAt = Date.now();
+    try {
+      const progressWindow = spawn('powershell.exe', [
+        '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass',
+        '-WindowStyle', 'Hidden', '-File', progressScriptPath, progressPath, progressReadyPath,
+      ], { detached: true, stdio: 'ignore', windowsHide: true });
+      progressWindow.unref();
+      const { access } = await import('node:fs/promises');
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        try { await access(progressReadyPath); break; } catch { /* Windows Forms aún está cargando. */ }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      console.info('[updater] Ventana de progreso: %d ms hasta continuar con el instalador.', Date.now() - windowStartedAt);
+    } catch (error) {
+      console.warn('[updater] No se pudo abrir la ventana auxiliar; se mantiene la instalación estándar.', error);
+    }
     const child = spawn('cmd.exe', ['/c', scriptPath], { detached: true, stdio: 'ignore', windowsHide: true });
     child.unref();
   } catch (error) {
