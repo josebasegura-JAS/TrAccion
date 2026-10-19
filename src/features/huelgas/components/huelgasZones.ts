@@ -21,9 +21,10 @@ export type HuelgaZona = {
   updatedAt: string;
 };
 
-export const DEFAULT_HUELGA_ZONE_NAMES = ['MM Ariz','MM Sopela','GMO y Línea','Instalaciones','OACs','PMC','Jefatura de Operaciones'] as const;
+export const DEFAULT_HUELGA_ZONE_NAMES = ['MM Ariz','MM Sopela','GMO y Línea','Instalaciones','OACs','PMC','Jefatura de Operaciones','Servicios Generales'] as const;
 
 const DEFAULT_ZONE_CONFIG: Record<string, Partial<HuelgaZona>> = {
+  'servicios generales': { responsableNombre: '', responsableEmail: '', plantillaExcelNombrePatron: 'SSCC - Seguimiento huelga {{FECHA_HUELGA_ARCHIVO}}.xlsx', correoInstruccionesHabituales: 'Seguimiento de huelga de Servicios Generales / SSCC.' },
   'mm ariz': { responsableNombre: 'Izaskun Lindosa · Josu Goicoechea · Aitor Alvarez · José Antonio Fernández', responsableEmail: 'ilindosa@metrobilbao.eus; jgoicoechea@metrobilbao.eus; aalvarezv@metrobilbao.eus; jafernandez@metrobilbao.eus', plantillaExcelNombrePatron: 'MM Ariz - Seguimiento huelga {{FECHA_HUELGA_ARCHIVO}}.xlsx', correoInstruccionesHabituales: 'Supervisores y Técnicos de Mantenimiento de noche y jornada continuada de Ariz. Incluye las excepciones de adscripción que correspondan en las instrucciones específicas de cada convocatoria.' },
   'mm sopela': { responsableNombre: 'Laura Asorey · Ibon Garrido · Unai Uliarte · José Antonio Fernández · Irene Yabar', responsableEmail: 'lasorey@metrobilbao.eus; igarrido@metrobilbao.eus; uuliarte@metrobilbao.eus; jafernandez@metrobilbao.eus; ybalenciaga@metrobilbao.eus', plantillaExcelNombrePatron: 'MM Sopela - Seguimiento huelga {{FECHA_HUELGA_ARCHIVO}}.xlsx', correoInstruccionesHabituales: 'Supervisores y Técnicos de Mantenimiento de noche y jornada partida de Sopela, almacén y personal administrativo. El personal que pertenezca a otro colectivo pero esté ejerciendo en Material Móvil se contabilizará como Material Móvil.' },
   'gmo y linea': { responsableNombre: 'Arkaitz Zenarrutzabeitia', responsableEmail: 'azenarruzabeitia@metrobilbao.eus', plantillaExcelNombrePatron: 'Línea y GMO - Seguimiento huelga {{FECHA_HUELGA_ARCHIVO}}.xlsx', correoInstruccionesHabituales: 'Personal de GMO y Línea: Maquinistas de Tracción Eléctrica, personal USI/SPVE en funciones de Maquinista, Supervisión y Auxiliares de Estaciones y USI. El personal que esté realizando funciones en otro colectivo se contabilizará en el colectivo de las funciones que realice ese día.' },
@@ -55,7 +56,7 @@ function hydrateMailFields(zona: HuelgaZona): HuelgaZona {
     responsableNombre: normalize(zona.responsableNombre) || defaults.responsableNombre || '',
     responsableEmail: normalize(zona.responsableEmail) || defaults.responsableEmail || '',
     correoCc: normalize(zona.correoCc || '') || 'RELACIONES_LABORALES@metrobilbao.eus',
-    correoActivo: true,
+    correoActivo: key === 'servicios generales' ? false : true,
     correoAsunto: zona.correoAsunto || DEFAULT_HUELGA_MAIL_SUBJECT,
     correoCuerpoHtml: !zona.correoCuerpoHtml || isLegacyAssignmentMailBody(zona.correoCuerpoHtml) ? DEFAULT_HUELGA_MAIL_BODY : zona.correoCuerpoHtml,
     correoPlazos: zona.correoPlazos || defaultDeadlineForZone(zona.nombre),
@@ -68,7 +69,10 @@ function hydrateMailFields(zona: HuelgaZona): HuelgaZona {
 export function ensureDefaultZonas(current: HuelgaZona[]): HuelgaZona[] {
   const now = new Date().toISOString();
   const allowedNames = new Set(DEFAULT_HUELGA_ZONE_NAMES.map((name) => normalizeKey(name)));
-  const hydratedCurrent = current.filter((zona) => allowedNames.has(normalizeKey(zona.nombre))).map(hydrateMailFields);
+  const hydratedCurrent = current
+    .map((zona) => ({ ...zona, nombre: normalizeKey(zona.nombre) === 'sscc' || normalizeKey(zona.nombre) === 'servicios centrales' ? 'Servicios Generales' : zona.nombre }))
+    .filter((zona) => allowedNames.has(normalizeKey(zona.nombre)))
+    .map(hydrateMailFields);
   const existingNames = new Set(hydratedCurrent.map((zona) => normalizeKey(zona.nombre)));
   const missingDefaults = DEFAULT_HUELGA_ZONE_NAMES.filter((nombre) => !existingNames.has(normalizeKey(nombre))).map((nombre) => hydrateMailFields({ id: defaultId(nombre), nombre, responsableNombre: '', responsableEmail: '', correoCc: 'RELACIONES_LABORALES@metrobilbao.eus', correoActivo: true, correoAsunto: DEFAULT_HUELGA_MAIL_SUBJECT, correoCuerpoHtml: DEFAULT_HUELGA_MAIL_BODY, correoPlazos: defaultDeadlineForZone(nombre), correoInstruccionesHabituales: '', plantillaExcelNombrePatron: '', active: true, createdAt: now, updatedAt: now }));
   return [...hydratedCurrent, ...missingDefaults].sort((a, b) => DEFAULT_HUELGA_ZONE_NAMES.indexOf(a.nombre as (typeof DEFAULT_HUELGA_ZONE_NAMES)[number]) - DEFAULT_HUELGA_ZONE_NAMES.indexOf(b.nombre as (typeof DEFAULT_HUELGA_ZONE_NAMES)[number]));
