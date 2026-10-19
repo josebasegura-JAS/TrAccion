@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { BriefcaseBusiness, ChevronRight, FileSpreadsheet, Mail, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronRight, Clock3, ClipboardCheck, CheckCircle2, FileSpreadsheet, Mail, Pencil, Plus, Printer, Search, Trash2 } from 'lucide-react';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -71,6 +71,8 @@ export function ActividadesExternasPage() {
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
+  const [yearFilter, setYearFilter] = useState('todos');
+  const [showHistory, setShowHistory] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -100,9 +102,10 @@ export function ActividadesExternasPage() {
   }, [employees, employeeQuery]);
   const visible = useMemo(() => records.filter((item) =>
     (statusFilter === 'todos' || item.estado === statusFilter)
+    && (yearFilter === 'todos' || item.fechaSolicitud.startsWith(yearFilter))
     && [item.nombre, item.empleado, item.actividad].join(' ').toLocaleLowerCase('es').includes(filter.toLocaleLowerCase('es'))
-  ).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [records, filter, statusFilter]);
-  const count = (status: ActividadExternaEstado) => records.filter((item) => item.estado === status).length;
+  ).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [records, filter, statusFilter, yearFilter]);
+  const years = useMemo(() => Array.from(new Set(records.map((item) => item.fechaSolicitud.slice(0, 4)))).filter((year) => /^\d{4}$/.test(year)).sort().reverse(), [records]);
   const act = async (operation: () => Promise<{ok: boolean; message: string}>, after?: () => void) => {
     setBusy(true);
     try {
@@ -128,16 +131,12 @@ export function ActividadesExternasPage() {
   };
   return <section className="space-y-3">
     <PageHeader title="Actividades Externas" helpSections={ACTIVIDADES_EXTERNAS_HELP_SECTIONS} helpSubtitle="Solicitudes de compatibilidad, resolución y comunicaciones." />
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-      {(['pendiente', 'propuesta', 'autorizada', 'rechazada_rrll', 'denegada'] as const).map((status) => <div key={status} className="rounded-xl border border-metro-border bg-metro-panel p-3">
-        <div className="text-xs text-metro-muted">{label(status)}</div><div className="text-2xl font-bold text-metro-text">{count(status)}</div>
-      </div>)}
-    </div>
-    <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 font-semibold text-metro-text"><BriefcaseBusiness size={17}/> Solicitudes de compatibilidad</h2>
-        <div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-text disabled:opacity-50"><FileSpreadsheet size={14}/> Actualizar Excel</button>
-        <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/> Nueva solicitud</button></div>
+    <div className="rounded-2xl border border-metro-border bg-metro-panel p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex min-w-[240px] flex-1 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3"><Search size={15} className="text-metro-muted"/><input aria-label="Buscar solicitudes" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Buscar por número, nombre o actividad" className="w-full bg-transparent py-2 text-sm text-metro-text outline-none"/></label>
+        <select aria-label="Filtrar estado" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-text"><option value="todos">Todos los estados</option><option value="pendiente">Pendiente RRLL</option><option value="propuesta">Pendiente Comité</option><option value="autorizada">Autorizadas</option><option value="rechazada_rrll">Rechazadas RRLL</option><option value="denegada">Denegadas Comité</option></select>
+        <select aria-label="Filtrar año" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-text"><option value="todos">Todos los años</option>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select>
+        <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/> Nueva solicitud</button>
       </div>
       {creating && <form className="mb-3 space-y-3 rounded-xl border border-metro-border bg-metro-surface p-3" onSubmit={(event) => {
         event.preventDefault();
@@ -171,26 +170,27 @@ export function ActividadesExternasPage() {
           <button disabled={busy} type="submit" className="rounded-lg bg-red-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Guardar pendiente</button>
         </div>
       </form>}
-      <div className="mb-3 flex flex-wrap gap-2">
-        <label className="flex flex-1 items-center gap-2 rounded-lg border border-metro-border px-2"><Search size={15} className="text-metro-muted"/><input aria-label="Buscar solicitudes" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Buscar persona, número o actividad" className="min-w-0 flex-1 bg-transparent p-2 text-sm text-metro-text outline-none"/></label>
-        <select aria-label="Filtrar estado" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-metro-border bg-metro-panel p-2 text-sm text-metro-text"><option value="todos">Todos los estados</option><option value="pendiente">Pendientes RRLL</option><option value="propuesta">Pendientes Comité</option><option value="autorizada">Autorizadas</option><option value="rechazada_rrll">Rechazadas RRLL</option><option value="denegada">Denegadas Comité</option></select>
+      <div className="mb-2 flex items-center justify-end gap-2 pt-2">
+        <button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><FileSpreadsheet size={14}/> Actualizar Excel</button>
       </div>
       {message && <p role="status" className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2 text-xs text-metro-text">{message}</p>}
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {([
-          { heading: 'Solicitudes pendientes', description: 'Pendientes de revisión por RRLL o de resolución por el Comité de Dirección.', states: ['pendiente', 'propuesta'] },
-          { heading: 'Actividades externas autorizadas', description: 'Solicitudes aceptadas por el Comité de Dirección.', states: ['autorizada'] },
-          { heading: 'Histórico de solicitudes rechazadas y denegadas', description: 'Solicitudes rechazadas por RRLL o denegadas por el Comité.', states: ['rechazada_rrll', 'denegada'] },
+          { heading: 'Pendientes de RRLL', description: 'Solicitudes pendientes de revisión inicial por Relaciones Laborales.', states: ['pendiente'], icon: 'rrll' },
+          { heading: 'Pendientes de Comité de Dirección', description: 'Propuestas favorables pendientes de resolución por el Comité.', states: ['propuesta'], icon: 'comite' },
+          { heading: 'Autorizadas', description: 'Actividades externas aprobadas por el Comité de Dirección.', states: ['autorizada'], icon: 'ok' },
+          { heading: 'Histórico de rechazadas y denegadas', description: 'Solicitudes rechazadas por RRLL o denegadas por el Comité.', states: ['rechazada_rrll', 'denegada'], icon: 'history' },
         ] as const).map((group) => {
           const groupRecords = visible.filter((record) => (group.states as readonly string[]).includes(record.estado));
-          return <section key={group.heading} className="rounded-xl border border-metro-border bg-metro-surface p-3">
+          if (group.icon === 'history' && !showHistory) return <div key={group.heading} className="lg:col-span-2"><button type="button" onClick={() => setShowHistory(true)} className="rounded-lg border border-metro-border px-3 py-2 text-xs text-metro-text">Mostrar histórico de rechazadas y denegadas ({groupRecords.length})</button></div>;
+          return <section key={group.heading} className={`rounded-2xl border border-metro-border bg-metro-panel p-3 ${group.icon === 'rrll' || group.icon === 'comite' ? '' : 'lg:col-span-2'}`}>
             <div className="mb-3 flex items-start justify-between gap-3">
-              <div><h3 className="text-sm font-bold text-metro-text">{group.heading} <span className="ml-1 rounded-full border border-metro-border px-2 py-0.5 text-xs">{groupRecords.length}</span></h3>
-              <p className="mt-1 text-xs text-metro-muted">{group.description}</p></div>
+              <div className="flex items-start gap-3"><span className="rounded-xl border border-metro-border p-2 text-metro-muted">{group.icon === 'rrll' ? <Clock3 size={17}/> : group.icon === 'comite' ? <ClipboardCheck size={17}/> : <CheckCircle2 size={17}/>}</span><div><h3 className="text-sm font-bold text-metro-text">{group.heading} <span className="ml-1 rounded-full border border-metro-border px-2 py-0.5 text-xs">{groupRecords.length}</span></h3>
+              <p className="mt-1 text-xs text-metro-muted">{group.description}</p></div></div>
             </div>
             <div className="overflow-x-auto rounded-lg border border-metro-border">
-              <table className="w-full min-w-[600px] text-left text-xs text-metro-text">
-                <thead className="bg-metro-panel text-metro-muted"><tr><th className="px-3 py-2">Nº</th><th className="px-3 py-2">Nombre</th><th className="px-3 py-2">Actividad</th><th className="px-3 py-2">Solicitud</th><th className="px-3 py-2">Estado</th><th className="px-3 py-2 text-right">Detalle</th></tr></thead>
+              <table className={`w-full ${group.icon === 'rrll' || group.icon === 'comite' ? 'min-w-[440px]' : 'min-w-[700px]'} text-left text-xs text-metro-text`}>
+                <thead className="bg-metro-panel text-metro-muted"><tr><th className="px-3 py-2">Nº</th><th className="px-3 py-2">Nombre</th><th className="px-3 py-2">Actividad</th><th className="px-3 py-2">Solicitud</th><th className="px-3 py-2">Estado</th><th className="px-3 py-2 text-right">Acciones</th></tr></thead>
                 <tbody>
                   {groupRecords.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-metro-muted">Sin registros</td></tr>}
                   {groupRecords.map((record) => <Fragment key={record.id}>
@@ -226,6 +226,13 @@ export function ActividadesExternasPage() {
                   </Fragment>)}
                 </tbody>
               </table>
+            </div>
+            <div className="mt-2 flex items-center justify-between rounded-lg border border-metro-border px-3 py-2">
+              <span className="text-xs text-metro-muted">{groupRecords.length} registros visibles</span>
+              <div className="flex gap-2">
+                {group.icon === 'history' && <button type="button" onClick={() => setShowHistory(false)} className="rounded-md border border-metro-border px-2 py-1 text-xs">Ocultar histórico</button>}
+                <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border border-metro-border px-2 py-1 text-xs text-metro-text"><Printer size={13}/> Imprimir</button>
+              </div>
             </div>
           </section>;
         })}
