@@ -21,9 +21,10 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Resolución',
     items: [
-      'Autorizar y Denegar abren un diálogo de confirmación con observaciones. Para denegar es obligatorio indicar el motivo; para autorizar es opcional.',
+      'RRLL puede rechazar la solicitud o elevarla con propuesta favorable al Comité de Dirección.',
+      'El Comité decide aprobar o denegar las solicitudes elevadas. El rechazo o denegación requiere motivo.',
       'Las observaciones se conservan en el registro y se incluyen en el borrador de correo correspondiente.',
-      'Una solicitud ya resuelta no vuelve a resolverse desde los botones de pendiente.',
+      'No es posible aprobar directamente una solicitud sin propuesta favorable previa de RRLL.',
     ],
   },
   {
@@ -55,7 +56,7 @@ const today = () => {
   const date = new Date();
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
-const label = (status: ActividadExternaEstado) => status === 'pendiente' ? 'Pendiente' : status === 'autorizada' ? 'Autorizada' : 'Denegada';
+const label = (status: ActividadExternaEstado) => ({ pendiente: 'Pendiente de RRLL', propuesta: 'Pendiente de Comité de Dirección', rechazada_rrll: 'Rechazada por RRLL', autorizada: 'Autorizada por Comité', denegada: 'Denegada por Comité' } as const)[status];
 
 export function ActividadesExternasPage() {
   const employees = useEmployeeStore((state) => state.employees);
@@ -73,7 +74,7 @@ export function ActividadesExternasPage() {
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [resolution, setResolution] = useState<{ record: ActividadExterna; estado: 'autorizada' | 'denegada' } | null>(null);
+  const [resolution, setResolution] = useState<{ record: ActividadExterna; estado: 'propuesta' | 'rechazada_rrll' | 'autorizada' | 'denegada' } | null>(null);
   const [reason, setReason] = useState('');
   const [editing, setEditing] = useState<ActividadExterna | null>(null);
   const [editActivity, setEditActivity] = useState('');
@@ -137,8 +138,8 @@ export function ActividadesExternasPage() {
   };
   return <section className="space-y-3">
     <PageHeader title="Actividades Externas" helpSections={ACTIVIDADES_EXTERNAS_HELP_SECTIONS} helpSubtitle="Solicitudes de compatibilidad, resolución y comunicaciones." />
-    <div className="grid grid-cols-3 gap-2">
-      {(['pendiente', 'autorizada', 'denegada'] as const).map((status) => <div key={status} className="rounded-xl border border-metro-border bg-metro-panel p-3">
+    <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+      {(['pendiente', 'propuesta', 'autorizada', 'rechazada_rrll', 'denegada'] as const).map((status) => <div key={status} className="rounded-xl border border-metro-border bg-metro-panel p-3">
         <div className="text-xs text-metro-muted">{label(status)}</div><div className="text-2xl font-bold text-metro-text">{count(status)}</div>
       </div>)}
     </div>
@@ -182,7 +183,7 @@ export function ActividadesExternasPage() {
       </form>}
       <div className="mb-3 flex flex-wrap gap-2">
         <label className="flex flex-1 items-center gap-2 rounded-lg border border-metro-border px-2"><Search size={15} className="text-metro-muted"/><input aria-label="Buscar solicitudes" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Buscar persona, número o actividad" className="min-w-0 flex-1 bg-transparent p-2 text-sm text-metro-text outline-none"/></label>
-        <select aria-label="Filtrar estado" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-metro-border bg-metro-panel p-2 text-sm text-metro-text"><option value="todos">Todos los estados</option><option value="pendiente">Pendientes</option><option value="autorizada">Autorizadas</option><option value="denegada">Denegadas</option></select>
+        <select aria-label="Filtrar estado" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-metro-border bg-metro-panel p-2 text-sm text-metro-text"><option value="todos">Todos los estados</option><option value="pendiente">Pendientes RRLL</option><option value="propuesta">Pendientes Comité</option><option value="autorizada">Autorizadas</option><option value="rechazada_rrll">Rechazadas RRLL</option><option value="denegada">Denegadas Comité</option></select>
       </div>
       {message && <p role="status" className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2 text-xs text-metro-text">{message}</p>}
       <div className="grid min-h-[320px] gap-3 lg:grid-cols-[minmax(220px,0.36fr)_minmax(0,1fr)]">
@@ -221,9 +222,9 @@ export function ActividadesExternasPage() {
             <button type="button" disabled={busy} onClick={() => void requestDelete(record)} className="inline-flex items-center gap-1 rounded-lg border border-red-700/60 px-2.5 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50"><Trash2 size={13}/> Eliminar</button>
           </div>
           {record.estado === 'pendiente' ? <div className="mt-3 flex gap-2">
-            <button disabled={busy} onClick={() => { setResolution({ record, estado: 'autorizada' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Autorizar</button>
-            <button disabled={busy} onClick={() => { setResolution({ record, estado: 'denegada' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Denegar</button>
-          </div> : <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button disabled={busy} onClick={() => { setResolution({ record, estado: 'propuesta' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Elevar al Comité</button>
+            <button disabled={busy} onClick={() => { setResolution({ record, estado: 'rechazada_rrll' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Rechazar RRLL</button>
+          </div> : record.estado === 'propuesta' ? <div className="mt-3 flex gap-2"><button disabled={busy} onClick={() => { setResolution({ record, estado: 'autorizada' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Comité: aprobar</button><button disabled={busy} onClick={() => { setResolution({ record, estado: 'denegada' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Comité: denegar</button></div> : <div className="mt-3 flex flex-wrap items-center gap-2">
             {(record.observacionesResolucion || record.motivoDenegacion) && <p className="w-full whitespace-pre-wrap text-xs text-metro-muted">{record.estado === 'denegada' ? 'Motivo' : 'Observaciones'}: {record.observacionesResolucion || record.motivoDenegacion}</p>}
             <span className="text-xs text-metro-muted">Comunicación: {record.comunicacion === 'confirmada' ? 'Envío confirmado' : record.comunicacion === 'borrador' ? 'Borrador preparado' : 'Pendiente'}</span>
             <button disabled={busy} onClick={() => void openDraft(record)} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><Mail size={14}/> Preparar correo en Outlook</button>
@@ -262,12 +263,12 @@ export function ActividadesExternasPage() {
     {dialogNode}
     {resolution && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
       <div role="dialog" aria-modal="true" aria-label="Resolver solicitud" className="w-full max-w-lg space-y-3 rounded-xl border border-metro-border bg-metro-panel p-5 text-metro-text">
-        <h3 className="font-bold">{resolution.estado === 'autorizada' ? 'Autorizar' : 'Denegar'} solicitud de {resolution.record.nombre}</h3>
-        <p className="text-xs text-metro-muted">{resolution.estado === 'autorizada' ? 'Puedes indicar observaciones para la autorización.' : 'Indica el motivo de la denegación.'} Las observaciones se incorporarán al borrador de Outlook.</p>
-        <label htmlFor="actividad-resolution-notes" className="block text-xs font-semibold">Observaciones {resolution.estado === 'denegada' ? '(obligatorias)' : '(opcionales)'}</label>
+        <h3 className="font-bold">{resolution.estado === 'propuesta' ? 'Elevar al Comité' : resolution.estado === 'rechazada_rrll' ? 'Rechazar en RRLL' : resolution.estado === 'autorizada' ? 'Aprobar en Comité' : 'Denegar en Comité'} solicitud de {resolution.record.nombre}</h3>
+        <p className="text-xs text-metro-muted">{resolution.estado === 'propuesta' ? 'Puedes añadir observaciones de RRLL.' : resolution.estado === 'autorizada' ? 'Puedes indicar observaciones de aprobación.' : 'Indica el motivo del rechazo o denegación.'} Las observaciones se incorporarán al borrador de Outlook.</p>
+        <label htmlFor="actividad-resolution-notes" className="block text-xs font-semibold">Observaciones {(resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') ? '(obligatorias)' : '(opcionales)'}</label>
         <textarea id="actividad-resolution-notes" autoFocus value={reason} onChange={(event) => setReason(event.target.value)} rows={4} className="w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm"/>
         <div className="flex justify-end gap-2"><button type="button" onClick={() => setResolution(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
-          <button type="button" disabled={busy || (resolution.estado === 'denegada' && !reason.trim())} onClick={() => void act(() => resolve(resolution.record.id, resolution.estado, reason), () => setResolution(null))} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{resolution.estado === 'autorizada' ? 'Confirmar autorización' : 'Confirmar denegación'}</button>
+          <button type="button" disabled={busy || ((resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') && !reason.trim())} onClick={() => void act(() => resolve(resolution.record.id, resolution.estado, reason), () => setResolution(null))} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{resolution.estado === 'propuesta' ? 'Elevar al Comité' : resolution.estado === 'rechazada_rrll' ? 'Confirmar rechazo RRLL' : resolution.estado === 'autorizada' ? 'Confirmar aprobación Comité' : 'Confirmar denegación Comité'}</button>
         </div>
       </div>
     </div>}
