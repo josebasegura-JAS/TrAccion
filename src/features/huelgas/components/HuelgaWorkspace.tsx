@@ -164,7 +164,7 @@ export function HuelgaWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold text-metro-text">Resultados pendientes de validación</h3>
-                <p className="mt-1 text-[11px] text-metro-muted">Recibe y revisa todos los circuitos y corrige los errores bloqueantes para habilitar el informe ejecutivo.</p>
+                <p className="mt-1 text-[11px] text-metro-muted">Revisa al menos un circuito sin errores para disponer de resultados provisionales. Los circuitos pendientes se incorporarán a medida que se validen.</p>
               </div>
               <ActionButton variant="primary" icon={ClipboardCheck} iconOnly={false} onClick={onOpenResponseCollection}>Ir a recogida</ActionButton>
             </div>
