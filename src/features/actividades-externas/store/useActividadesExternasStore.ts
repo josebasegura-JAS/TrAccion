@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { syncActividadesExternasExcelBackup } from '../services/actividadesExternasExcelBackup';
 import { readStorageItem } from '../../../services/persistence';
 import { deleteSharedArrayRecord, saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
-import { parseActividadesExternas, type ActividadExterna, type ActividadExternaDraft, type ActividadExternaEstado, type ActividadExternaComunicacion } from '../domain/actividadExterna';
+import { parseActividadesExternas, type ActividadExterna, type ActividadExternaDraft, type ActividadExternaComunicacion } from '../domain/actividadExterna';
 
 const KEY = 'traccion.v1.actividadesExternas.records';
 type Result = { ok: boolean; message: string };
@@ -12,7 +12,7 @@ interface State {
   create: (draft: ActividadExternaDraft) => Promise<Result>;
   update: (id: string, draft: ActividadExternaDraft) => Promise<Result>;
   remove: (id: string) => Promise<Result>;
-  resolve: (id: string, estado: Exclude<ActividadExternaEstado, 'pendiente'>, motivo: string) => Promise<Result>;
+  resolve: (id: string, estado: 'propuesta' | 'rechazada_rrll' | 'autorizada' | 'denegada', motivo: string) => Promise<Result>;
   setComunicacion: (id: string, comunicacion: ActividadExternaComunicacion) => Promise<Result>;
 }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -27,7 +27,7 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
     const createdAt = now();
     const record: ActividadExterna = {
       ...draft, actividad: draft.actividad.trim(), id: crypto.randomUUID(),
-      estado: 'pendiente', motivoDenegacion: '', observacionesResolucion: '', fechaResolucion: null,
+      estado: 'pendiente', motivoDenegacion: '', observacionesResolucion: '', fechaResolucion: null, fechaRevisionRrll: null, observacionesRrll: '',
       comunicacion: 'pendiente', fechaComunicacion: null, createdAt, updatedAt: createdAt,
     };
     try {
@@ -78,24 +78,24 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
   },
   resolve: async (id, estado, motivo) => {
     const record = get().records.find((item) => item.id === id);
-    if (!record || record.estado !== 'pendiente') return { ok: false, message: 'La solicitud ya no está pendiente. Recarga los datos.' };
-    if (estado === 'denegada' && !motivo.trim()) return { ok: false, message: 'Indica el motivo de la denegación.' };
+    if (!record || !((record.estado === 'pendiente' && (estado === 'propuesta' || estado === 'rechazada_rrll')) || (record.estado === 'propuesta' && (estado === 'autorizada' || estado === 'denegada')))) return { ok: false, message: 'Transición de estado no permitida. Recarga los datos.' };
+    if ((estado === 'denegada' || estado === 'rechazada_rrll') && !motivo.trim()) return { ok: false, message: 'Indica el motivo de la denegación.' };
     try {
       const result = await saveSharedArrayRecord<ActividadExterna>({
         storageKey: KEY, recordId: id, expectedUpdatedAt: record.updatedAt,
         parseRecords: parseActividadesExternas, getRecordId: (item) => item.id,
         getRecordUpdatedAt: (item) => item.updatedAt,
         updateRecord: (latest) => {
-          if (latest.estado !== 'pendiente') throw new Error('La solicitud ya ha sido resuelta por otro usuario.');
+          if (!((latest.estado === 'pendiente' && (estado === 'propuesta' || estado === 'rechazada_rrll')) || (latest.estado === 'propuesta' && (estado === 'autorizada' || estado === 'denegada')))) throw new Error('La solicitud ha cambiado de fase.');
           const stamp = now();
-          return { ...latest, estado, observacionesResolucion: motivo.trim(), motivoDenegacion: estado === 'denegada' ? motivo.trim() : '',
-            fechaResolucion: stamp, comunicacion: 'pendiente', updatedAt: stamp };
+          return { ...latest, estado, ...(estado === 'propuesta' || estado === 'rechazada_rrll' ? { fechaRevisionRrll: stamp, observacionesRrll: motivo.trim() } : { observacionesResolucion: motivo.trim(), fechaResolucion: stamp }),
+            motivoDenegacion: estado === 'denegada' || estado === 'rechazada_rrll' ? motivo.trim() : '', comunicacion: 'pendiente', updatedAt: stamp };
         },
         missingMessage: 'Solicitud no encontrada.', conflictMessage: 'Otro usuario ha modificado la solicitud. Recarga antes de continuar.',
       });
       set({ records: result.records });
       const excelWarning = await syncActividadesExternasExcelBackup(result.records);
-      return { ok: true, message: `${estado === 'autorizada' ? 'Solicitud autorizada.' : 'Solicitud denegada.'}${excelWarning ? ` ${excelWarning}` : ''}` };
+      return { ok: true, message: `${estado === 'propuesta' ? 'Elevada al Comité de Dirección.' : estado === 'rechazada_rrll' ? 'Rechazada por RRLL.' : estado === 'autorizada' ? 'Autorizada por el Comité.' : 'Denegada por el Comité.'}${excelWarning ? ` ${excelWarning}` : ''}` };
     } catch (error) { return { ok: false, message: message(error) }; }
   },
   setComunicacion: async (id, comunicacion) => {
@@ -107,7 +107,7 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
         parseRecords: parseActividadesExternas, getRecordId: (item) => item.id,
         getRecordUpdatedAt: (item) => item.updatedAt,
         updateRecord: (latest) => {
-          if (latest.estado === 'pendiente') throw new Error('La solicitud no está resuelta.');
+          if (latest.estado === 'pendiente' || latest.estado === 'propuesta') throw new Error('La solicitud no está resuelta.');
           const stamp = now();
           return { ...latest, comunicacion, fechaComunicacion: comunicacion === 'confirmada' ? stamp : latest.fechaComunicacion, updatedAt: stamp };
         },
