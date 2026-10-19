@@ -228,7 +228,13 @@ function richerPair(
   fallback: HuelgaGeneralMetricValues | undefined,
 ): HuelgaGeneralMetricValues {
   if (!fallback) return robust;
-  return pairTotal(fallback) > pairTotal(robust) ? fallback : robust;
+  // El lector robusto agrega los bloques independientes (p. ej. Mañana y
+  // Jornada Partida). El lector antiguo puede ver sólo uno de ellos.
+  // Comparar únicamente el total y escoger el mayor oculta discrepancias
+  // y puede sustituir un desglose por sexo por otro incorrecto.
+  // El fallback sólo es válido cuando el lector robusto no encontró ningún
+  // valor en este concepto.
+  return pairTotal(robust) === 0 ? fallback : robust;
 }
 
 function mergeGeneralDetail(
