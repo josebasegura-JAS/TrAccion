@@ -164,7 +164,7 @@ async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGe
   await workbook.xlsx.load(buffer);
 
   const result: HuelgaGeneralDetail[] = [];
-  const seen = new Set<string>();
+  const byKey = new Map<string, HuelgaGeneralDetail>();
 
   for (const worksheet of workbook.worksheets) {
     let activeShift: HuelgaGeneralShift | null = null;
@@ -188,21 +188,30 @@ async function extractRobustGeneralDetail(buffer: ArrayBuffer): Promise<HuelgaGe
         if (!colectivo) continue;
 
         const key = `${activeShift}::${colectivo}`;
-        if (seen.has(key)) continue;
-
         const metrics = readMetricsUntilNextShift(worksheet, row, column);
         const hasAnyMetric = Object.values(metrics).some((pair) => pair.mujeres > 0 || pair.hombres > 0);
         if (!hasAnyMetric) continue;
 
-        seen.add(key);
-        result.push({
-          turno: activeShift,
-          colectivo,
-          huelga: metrics.huelga,
-          trabajan: metrics.trabajan,
-          personasTurno: metrics.personasTurno,
-          serviciosMinimos: metrics.serviciosMinimos,
-        });
+        // Mañana y Jornada Partida pueden aparecer en bloques independientes
+        // del mismo colectivo. Ambos pertenecen al corte de mañana y se suman.
+        const previous = byKey.get(key);
+        if (previous) {
+          for (const metric of ['huelga', 'trabajan', 'personasTurno', 'serviciosMinimos'] as const) {
+            previous[metric].mujeres += metrics[metric].mujeres;
+            previous[metric].hombres += metrics[metric].hombres;
+          }
+        } else {
+          const detail: HuelgaGeneralDetail = {
+            turno: activeShift,
+            colectivo,
+            huelga: metrics.huelga,
+            trabajan: metrics.trabajan,
+            personasTurno: metrics.personasTurno,
+            serviciosMinimos: metrics.serviciosMinimos,
+          };
+          byKey.set(key, detail);
+          result.push(detail);
+        }
       }
     }
   }
