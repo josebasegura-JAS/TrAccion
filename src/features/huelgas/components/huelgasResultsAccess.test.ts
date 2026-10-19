@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHuelgaResultsReady } from './huelgasResultsAccess';
+import { isHuelgaResultsReady, isHuelgaResultsComplete, usableHuelgaResultsCollection } from './huelgasResultsAccess';
 import { emptyZoneResponse, type HuelgaResponseCollection } from './huelgasResponseCollection';
 import type { Huelga } from './huelgasPageModel';
 
@@ -45,19 +45,38 @@ describe('isHuelgaResultsReady', () => {
     )).toBe(true);
   });
 
-  it('invalida resultados si se añade un circuito después de guardar la recogida', () => {
+  it('permite resultados parciales si se añade un circuito después de guardar la recogida', () => {
     expect(isHuelgaResultsReady(
       collection(['zona-a', 'zona-ssgg-interno']),
       { ...huelga, circuitosZonaIds: ['zona-a', 'zona-b'] },
       [],
-    )).toBe(false);
+    )).toBe(true);
   });
 
-  it('invalida resultados si la colección conserva un circuito ya retirado', () => {
+  it('mantiene acceso a resultados aunque la recogida conserve un circuito retirado', () => {
     expect(isHuelgaResultsReady(
       collection(['zona-a', 'zona-b', 'zona-ssgg-interno']),
       huelga,
       [],
-    )).toBe(false);
+    )).toBe(true);
+  });
+  it('excluye del informe los circuitos pendientes de revisión o con datos incoherentes', () => {
+    const pending = { ...response('zona-b'), reviewed: false };
+    const invalid = { ...response('zona-c'), personasTurno: 2 };
+    const collectionWithPending: HuelgaResponseCollection = {
+      ...collection(['zona-a']),
+      responses: { 'zona-a': response('zona-a'), 'zona-b': pending, 'zona-c': invalid },
+    };
+    const usable = usableHuelgaResultsCollection(collectionWithPending);
+    expect(Object.keys(usable?.responses ?? {})).toEqual(['zona-a']);
+    expect(isHuelgaResultsReady(collectionWithPending, huelga, [])).toBe(true);
+    expect(isHuelgaResultsComplete(collectionWithPending, huelga, [])).toBe(false);
+  });
+
+  it('bloquea resultados si no hay ningún circuito revisado y válido', () => {
+    const pending = { ...response('zona-a'), reviewed: false };
+    const noReviewed = { ...collection(['zona-a']), responses: { 'zona-a': pending } };
+    expect(usableHuelgaResultsCollection(noReviewed)).toBeNull();
+    expect(isHuelgaResultsReady(noReviewed, huelga, [])).toBe(false);
   });
 });
