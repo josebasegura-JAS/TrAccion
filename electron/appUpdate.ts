@@ -339,6 +339,7 @@ export async function applyAppUpdate(
         '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass',
         '-WindowStyle', 'Hidden', '-File', progressScriptPath, progressPath, progressReadyPath,
       ], { detached: true, stdio: 'ignore', windowsHide: true });
+      progressWindow.on('error', (error) => console.warn('[updater] No se pudo iniciar PowerShell:', error));
       progressWindow.unref();
       const { access } = await import('node:fs/promises');
       for (let attempt = 0; attempt < 12; attempt += 1) {
