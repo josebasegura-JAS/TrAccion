@@ -24,7 +24,7 @@ import {
   type HuelgaImportBatch,
   type HuelgaImportHistory,
 } from './huelgasIncrementalImports';
-import { useHuelgaResponseCollection } from './useHuelgaResponseCollection';
+import { INTERNAL_SSGG_ZONE, useHuelgaResponseCollection } from './useHuelgaResponseCollection';
 
 export type HuelgaImportDisplayBatch = HuelgaImportBatch & {
   zoneId: string;
@@ -62,11 +62,6 @@ function zoneAliases(zona: HuelgaZona): string[] {
       'linea y gmo',
       'gmo linea',
       'linea gmo',
-      // Compatibilidad con la plantilla histórica de Servicios Centrales.
-      // Sus datos se integran en el bloque Oficinas (GMO) del circuito actual GMO y Línea.
-      'sscc',
-      'servicios centrales',
-      'servicios generales',
     );
   }
   if (name.includes('instalaciones')) aliases.push('instalaciones');
@@ -93,7 +88,10 @@ export function detectZone(
   const fileText = normalizeSearchText(attachmentName);
   const subjectText = normalizeSearchText(subject);
   const sender = senderEmail.trim().toLocaleLowerCase('es-ES');
-  const scored = zonas.map((zona) => {
+  const availableZones = zonas.some((zona) => zona.id === INTERNAL_SSGG_ZONE.id)
+    ? zonas
+    : [...zonas, INTERNAL_SSGG_ZONE];
+  const scored = availableZones.map((zona) => {
     const aliases = zoneAliases(zona);
     let score = 0;
     if (aliases.some((alias) => fileText.includes(alias))) score += 10;
@@ -176,7 +174,7 @@ export function useHuelgaIncrementalResponseCollection(huelgas: Huelga[], zonas:
   const importBuffer = async (zoneId: string, fileName: string, buffer: ArrayBuffer): Promise<boolean> => {
     const target = base.target;
     const current = base.responses.find((response) => response.zonaId === zoneId);
-    const zone = zonas.find((item) => item.id === zoneId);
+    const zone = [...zonas, INTERNAL_SSGG_ZONE].find((item) => item.id === zoneId);
     if (!target || !current) return false;
 
     const compatibleBuffer = await normalizeHuelgaWorkbookForImport(buffer);
