@@ -41,7 +41,7 @@ async function makeWorkbook(colectivo: string, blocks: WorkbookBlock[]): Promise
 }
 
 describe('Huelgas — bloques separados y totales verificables', () => {
-  it.each<Array<{ label: string; colectivo: string; blocks: WorkbookBlock[]; expected: number[] }>>([
+  it.each<{ label: string; colectivo: string; blocks: WorkbookBlock[]; expected: number[] }>([
     {
       label: 'OAC',
       colectivo: 'OAC',
