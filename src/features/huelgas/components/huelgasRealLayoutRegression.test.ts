@@ -3,13 +3,15 @@ import ExcelJS from 'exceljs';
 import { parseHuelgaResponseWorkbookForImport } from './huelgasParsedResponseTotals';
 
 /** Replica las posiciones reales de las plantillas OAC/Jefatura de 19-10-2026. */
-async function makeWorkbook(colectivo: string, blocks: Array<{
+type WorkbookBlock = {
   shift: string;
   huelga: [number, number];
   trabajan: [number, number];
   turno: [number, number];
   minimos: [number, number];
-}>): Promise<ArrayBuffer> {
+};
+
+async function makeWorkbook(colectivo: string, blocks: WorkbookBlock[]): Promise<ArrayBuffer> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('17-03-2026');
   for (const [index, block] of blocks.entries()) {
@@ -35,11 +37,11 @@ async function makeWorkbook(colectivo: string, blocks: Array<{
     }
   }
   const bytes = await workbook.xlsx.writeBuffer();
-  return Uint8Array.from(bytes) as unknown as ArrayBuffer;
+  return new Uint8Array(bytes as ArrayBuffer).buffer;
 }
 
 describe('Huelgas — bloques separados y totales verificables', () => {
-  it.each([
+  it.each<Array<{ label: string; colectivo: string; blocks: WorkbookBlock[]; expected: number[] }>>([
     {
       label: 'OAC',
       colectivo: 'OAC',
