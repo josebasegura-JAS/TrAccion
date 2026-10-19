@@ -10,7 +10,7 @@ import { HuelgasResponseCollectionModal } from './HuelgasResponseCollectionModal
 import { HuelgasResultsModal } from './HuelgasResultsModal';
 import { HuelgaImportHistoryPanel } from './HuelgaImportHistoryPanel';
 import { deriveHuelgaOperationalStatus } from './huelgasOperationalStatus';
-import { isHuelgaResultsReady, loadHuelgaResultsCollection } from './huelgasResultsAccess';
+import { isHuelgaResultsComplete, isHuelgaResultsReady, loadHuelgaResultsCollection, usableHuelgaResultsCollection } from './huelgasResultsAccess';
 import type { Huelga } from './huelgasPageModel';
 import { useHuelgaIncrementalResponseCollection } from './useHuelgaIncrementalResponseCollection';
 import { useHuelgasPageController } from './useHuelgasPageController';
@@ -70,8 +70,8 @@ export function HuelgasPage() {
   const [workspaceTab, setWorkspaceTab] = useState<HuelgaWorkspaceTab>('resumen');
   const [responseCollectionModalOpen, setResponseCollectionModalOpen] = useState(false);
   const workspaceHuelga = workspaceHuelgaId ? huelgas.find((item) => item.id === workspaceHuelgaId) ?? null : null;
-  const resultsCollection = resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null;
-  const workspaceResultsCollection = workspaceHuelga ? loadHuelgaResultsCollection(workspaceHuelga.id) : null;
+  const resultsCollection = resultsTarget ? usableHuelgaResultsCollection(loadHuelgaResultsCollection(resultsTarget.id)) : null;
+  const workspaceResultsCollection = workspaceHuelga ? usableHuelgaResultsCollection(loadHuelgaResultsCollection(workspaceHuelga.id)) : null;
   const resultsReadyFor = (huelga: Huelga) => isHuelgaResultsReady(loadHuelgaResultsCollection(huelga.id), huelga, zonas);
   const operationalStatusFor = (huelga: Huelga) => {
     const selectedZoneIds = huelga.circuitosZonaIds?.length
@@ -140,6 +140,7 @@ export function HuelgasPage() {
             <HuelgaResultsWorkspace
               huelga={workspaceHuelga}
               collection={workspaceResultsCollection}
+              provisional={!isHuelgaResultsComplete(loadHuelgaResultsCollection(workspaceHuelga.id), workspaceHuelga, zonas)}
               onOpenPrintable={() => setResultsTarget(workspaceHuelga)}
             />
           ) : undefined}
@@ -234,6 +235,7 @@ export function HuelgasPage() {
       <HuelgasResultsModal
         target={resultsTarget}
         collection={resultsCollection}
+        provisional={Boolean(resultsTarget) && !isHuelgaResultsComplete(resultsTarget ? loadHuelgaResultsCollection(resultsTarget.id) : null, resultsTarget ?? undefined, zonas)}
         onClose={() => setResultsTarget(null)}
       />
 

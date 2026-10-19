@@ -13,6 +13,8 @@ import {
   type HuelgaResultPeriod,
 } from './huelgasResults';
 import { downloadHuelgaResultsWorkbook } from './huelgasResultsExport';
+import { downloadHuelgaResponseReport } from './huelgasResponseCollection';
+import { downloadHuelgaGroupedReport } from './huelgasGroupedReport';
 
 const PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde', 'global'];
 const SHIFT_PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde'];
@@ -32,22 +34,40 @@ function deltaText(value: number | null): string {
 type Props = {
   huelga: Huelga;
   collection: HuelgaResponseCollection;
+  provisional: boolean;
   onOpenPrintable: () => void;
 };
 
-export function HuelgaResultsWorkspace({ huelga, collection, onOpenPrintable }: Props) {
+export function HuelgaResultsWorkspace({ huelga, collection, provisional, onOpenPrintable }: Props) {
   const [period, setPeriod] = useState<HuelgaResultPeriod>('global');
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const results = useMemo(() => buildHuelgaResults(collection), [collection]);
   const result = results[period];
   const previous = previousPeriod(period);
   const delta = previous ? seguimientoDelta(result, results[previous]) : null;
   const maxArea = Math.max(1, ...result.areas.map((area) => area.seguimiento));
 
+  const exportHistoric = async (grouped: boolean) => {
+    setExportError(null);
+    setExporting(true);
+    try {
+      if (grouped) await downloadHuelgaGroupedReport(huelga.fecha);
+      else await downloadHuelgaResponseReport(huelga.fecha, huelga.sindicatos, Object.values(collection.responses));
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'No se ha podido exportar el informe.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const exportExcel = async () => {
+    setExportError(null);
     setExporting(true);
     try {
       await downloadHuelgaResultsWorkbook(huelga, collection, results);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'No se ha podido exportar el Excel.');
     } finally {
       setExporting(false);
     }
@@ -73,13 +93,17 @@ export function HuelgaResultsWorkspace({ huelga, collection, onOpenPrintable }: 
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <StatusBadge tone="success" size="xs"><CheckCircle2 size={12} /> Datos validados</StatusBadge>
+            <StatusBadge tone={provisional ? 'warning' : 'success'} size="xs"><CheckCircle2 size={12} /> {provisional ? 'Resultados provisionales' : 'Datos validados'}</StatusBadge>
+            <ActionButton variant="excel" size="sm" iconOnly={false} loading={exporting} onClick={() => void exportHistoric(false)}>Excel maestra</ActionButton>
+            <ActionButton variant="excel" size="sm" iconOnly={false} loading={exporting} onClick={() => void exportHistoric(true)}>Informe agrupado</ActionButton>
             <ActionButton variant="print" size="sm" icon={Printer} iconOnly={false} disabled={!result.hasData} onClick={onOpenPrintable}>Imprimir / PDF</ActionButton>
             <ActionButton variant="excel" size="sm" iconOnly={false} loading={exporting} onClick={() => void exportExcel()}>Excel</ActionButton>
           </div>
         </div>
       </section>
 
+      {provisional && <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-metro-text">Corte provisional: solo se incluyen circuitos revisados y sin errores. Los pendientes no se contabilizan como cero. Descarga la Excel maestra y el informe agrupado en la misma carpeta, sin cambiar sus nombres, para actualizar vínculos.</p>}
+      {exportError && <p role="alert" className="rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-400">{exportError}</p>}
       <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
         <div className="rounded-lg border border-metro-border bg-metro-panel/45 px-3 py-2">
           <p className="text-[9px] font-semibold uppercase tracking-wide text-metro-muted">Con turno</p>

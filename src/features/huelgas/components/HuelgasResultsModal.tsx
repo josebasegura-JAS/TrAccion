@@ -16,6 +16,8 @@ import {
   type HuelgaResultPeriod,
 } from './huelgasResults';
 import { downloadHuelgaResultsWorkbook } from './huelgasResultsExport';
+import { downloadHuelgaResponseReport } from './huelgasResponseCollection';
+import { downloadHuelgaGroupedReport } from './huelgasGroupedReport';
 
 const PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde', 'global'];
 const SHIFT_PERIODS: HuelgaResultPeriod[] = ['noche', 'manana', 'tarde'];
@@ -78,7 +80,7 @@ function printHtml(html: string) {
   iframe.srcdoc = html;
 }
 
-function printResult(huelga: Huelga, collection: HuelgaResponseCollection, result: HuelgaPeriodResult) {
+function printResult(huelga: Huelga, collection: HuelgaResponseCollection, result: HuelgaPeriodResult, provisional: boolean) {
   const max = Math.max(1, ...result.areas.map((area) => area.seguimiento));
   const bars = result.areas.map((area) => `
     <div class="bar-row">
@@ -101,7 +103,7 @@ function printResult(huelga: Huelga, collection: HuelgaResponseCollection, resul
       .summary{border-left:4px solid #b91c2c;background:#f7f7f7;padding:8px 10px;margin:10px 0 12px;line-height:1.4}.section-title{font-size:12px;font-weight:800;margin:13px 0 7px}.bar-row{display:grid;grid-template-columns:180px 1fr 58px;gap:8px;align-items:center;margin:4px 0}.bar-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar-track{height:9px;background:#ececec;border-radius:99px;overflow:hidden}.bar-track span{display:block;height:100%;background:#b91c2c;border-radius:99px}.bar-value{text-align:right;font-weight:700}
       table{width:100%;border-collapse:collapse;margin-top:6px;font-size:9px;break-inside:avoid}th{background:#333;color:white;text-align:right;padding:5px;border:1px solid #666}th:first-child,td:first-child{text-align:left}td{text-align:right;padding:4px 5px;border:1px solid #ddd}tfoot td{font-weight:800;background:#f3d1d1;border-top:2px solid #333}.footer{margin-top:10px;border-top:1px solid #ddd;padding-top:6px;color:#777;font-size:8px}
     </style></head><body>
-    <div class="top"><div><div class="eyebrow">Metro Bilbao · Relaciones Laborales · TrAcción</div><div class="title">Resultados de huelga · ${escapeHtml(HUELGA_PERIOD_LABELS[result.period])}</div><div class="meta">${escapeHtml(formatDate(huelga.fecha))} · ${escapeHtml(huelga.sindicatos.join(' · '))}</div></div><div class="stamp"><strong>DATOS VALIDADOS</strong><br>${escapeHtml(new Date(collection.updatedAt).toLocaleString('es-ES'))}</div></div>
+    <div class="top"><div><div class="eyebrow">Metro Bilbao · Relaciones Laborales · TrAcción</div><div class="title">Resultados de huelga · ${escapeHtml(HUELGA_PERIOD_LABELS[result.period])}</div><div class="meta">${escapeHtml(formatDate(huelga.fecha))} · ${escapeHtml(huelga.sindicatos.join(' · '))}</div></div><div class="stamp"><strong>${provisional ? 'RESULTADOS PROVISIONALES' : 'DATOS VALIDADOS'}</strong><br>${escapeHtml(new Date(collection.updatedAt).toLocaleString('es-ES'))}</div></div>
     <div class="kpis"><div class="kpi"><small>Personas con turno</small><strong>${result.totals.personasTurno}</strong></div><div class="kpi red"><small>En huelga</small><strong>${result.totals.personasHuelga}</strong></div><div class="kpi red"><small>Seguimiento</small><strong>${escapeHtml(formatSeguimiento(result.totals.seguimiento))}</strong></div><div class="kpi"><small>Trabajan</small><strong>${result.totals.personasTrabajan}</strong></div></div>
     <div class="summary">${escapeHtml(huelgaExecutiveSummary(result))}</div>
     <div class="section-title">Seguimiento por área / circuito</div>${bars || '<p>Sin datos para este corte.</p>'}
@@ -114,11 +116,13 @@ type Props = {
   target: Huelga | null;
   collection: HuelgaResponseCollection | null;
   onClose: () => void;
+  provisional: boolean;
 };
 
-export function HuelgasResultsModal({ target, collection, onClose }: Props) {
+export function HuelgasResultsModal({ target, collection, onClose, provisional }: Props) {
   const [period, setPeriod] = useState<HuelgaResultPeriod>('global');
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const results = useMemo(() => collection ? buildHuelgaResults(collection) : null, [collection]);
 
   if (!target || !collection || !results) return null;
@@ -127,10 +131,26 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
   const delta = previous ? seguimientoDelta(result, results[previous]) : null;
   const maxArea = Math.max(1, ...result.areas.map((area) => area.seguimiento));
 
+  const exportHistoric = async (grouped: boolean) => {
+    if (!target || !collection) return;
+    setExportError(null);
+    setExporting(true);
+    try {
+      if (grouped) await downloadHuelgaGroupedReport(target.fecha);
+      else await downloadHuelgaResponseReport(target.fecha, target.sindicatos, Object.values(collection.responses));
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'No se ha podido generar el informe.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const exportExcel = async () => {
     setExporting(true);
     try {
       await downloadHuelgaResultsWorkbook(target, collection, results);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'No se ha podido exportar el Excel.');
     } finally {
       setExporting(false);
     }
@@ -141,7 +161,7 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
       <ModalHeader>
         <ModalTitle
           id="huelga-results-title"
-          subtitle={`${target.sindicatos.join(' · ')} · Datos validados ${new Date(collection.updatedAt).toLocaleString('es-ES')}`}
+          subtitle={`${target.sindicatos.join(' · ')} · ${provisional ? 'Resultados provisionales' : 'Datos validados'} ${new Date(collection.updatedAt).toLocaleString('es-ES')}`}
         >
           Resultados de huelga · {formatDate(target.fecha)}
         </ModalTitle>
@@ -149,6 +169,8 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
       </ModalHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {provisional && <p className="mb-3 text-xs text-amber-400">Informe provisional: solo circuitos revisados sin errores. Los pendientes no se incluyen. La Excel maestra y el informe agrupado deben guardarse juntos, con sus nombres originales.</p>}
+        {exportError && <p role="alert" className="mb-3 text-xs text-red-400">{exportError}</p>}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex rounded-xl border border-metro-border bg-metro-panel/50 p-1">
             {PERIODS.map((item) => {
@@ -166,7 +188,7 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
               );
             })}
           </div>
-          <StatusBadge tone="success" size="xs"><CheckCircle2 size={12} /> Datos validados</StatusBadge>
+          <div className="flex flex-wrap items-center gap-2"><StatusBadge tone={provisional ? 'warning' : 'success'} size="xs"><CheckCircle2 size={12} /> {provisional ? 'Resultados provisionales' : 'Datos validados'}</StatusBadge><ActionButton variant="excel" size="sm" loading={exporting} onClick={() => void exportHistoric(false)}>Excel maestra</ActionButton><ActionButton variant="excel" size="sm" loading={exporting} onClick={() => void exportHistoric(true)}>Informe agrupado</ActionButton></div>
         </div>
 
         <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -282,7 +304,7 @@ export function HuelgasResultsModal({ target, collection, onClose }: Props) {
       <ModalFooter className="justify-between">
         <p className="text-xs text-metro-muted">Informe de solo lectura generado a partir de la recogida validada.</p>
         <div className="flex items-center gap-2">
-          <ActionButton variant="print" iconOnly={false} disabled={!result.hasData} onClick={() => printResult(target, collection, result)}>Imprimir / PDF</ActionButton>
+          <ActionButton variant="print" iconOnly={false} disabled={!result.hasData} onClick={() => printResult(target, collection, result, provisional)}>Imprimir / PDF</ActionButton>
           <ActionButton variant="excel" iconOnly={false} loading={exporting} onClick={() => void exportExcel()}>Exportar Excel</ActionButton>
         </div>
       </ModalFooter>

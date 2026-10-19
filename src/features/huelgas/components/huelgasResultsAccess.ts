@@ -6,7 +6,7 @@ import {
   type HuelgaResponseCollection,
 } from './huelgasResponseCollection';
 import type { Huelga } from './huelgasPageModel';
-import { validateHuelgaCollection } from './huelgasResponseValidation';
+import { validateHuelgaCollection, validateHuelgaZoneResponse } from './huelgasResponseValidation';
 import type { HuelgaZona } from './huelgasZones';
 
 const INTERNAL_SSGG_ZONE_ID = 'zona-ssgg-interno';
@@ -23,21 +23,41 @@ export function loadHuelgaResultsCollection(huelgaId: string): HuelgaResponseCol
   return collections[huelgaId] ?? null;
 }
 
-export function isHuelgaResultsReady(
+/** Los cortes provisionales solo utilizan circuitos revisados y sin errores.
+ * Los circuitos pendientes no se convierten en cero ni bloquean a los ya validados. */
+export function usableHuelgaResultsCollection(collection: HuelgaResponseCollection | null): HuelgaResponseCollection | null {
+  if (!collection) return null;
+  const valid = Object.entries(collection.responses).filter(([, response]) =>
+    response.reviewed && responseHasData(response) &&
+    response.personasTurno !== null && response.personasHuelga !== null &&
+    validateHuelgaZoneResponse(response).every((issue) => issue.severity !== 'error'),
+  );
+  if (!valid.length) return null;
+  return { ...collection, responses: Object.fromEntries(valid) };
+}
+
+export function isHuelgaResultsComplete(
   collection: HuelgaResponseCollection | null,
   huelga?: Huelga,
   zonas: HuelgaZona[] = [],
 ): boolean {
   if (!collection) return false;
   const responses = Object.values(collection.responses);
-  if (responses.length === 0) return false;
-
+  if (!responses.length) return false;
   if (huelga) {
     const expected = expectedCollectionZoneIds(huelga, zonas);
     const persisted = new Set(Object.keys(collection.responses));
-    if (expected.size !== persisted.size || [...expected].some((zoneId) => !persisted.has(zoneId))) return false;
+    if (expected.size !== persisted.size || [...expected].some((id) => !persisted.has(id))) return false;
   }
-
   if (responses.some((response) => !responseHasData(response) || !response.reviewed)) return false;
   return validateHuelgaCollection(responses).every((issue) => issue.severity !== 'error');
+}
+
+export function isHuelgaResultsReady(
+  collection: HuelgaResponseCollection | null,
+  _huelga?: Huelga,
+  _zonas: HuelgaZona[] = [],
+): boolean {
+  void _zonas;
+  return usableHuelgaResultsCollection(collection) !== null;
 }
