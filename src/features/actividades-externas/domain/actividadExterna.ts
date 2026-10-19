@@ -1,4 +1,4 @@
-export type ActividadExternaEstado = 'pendiente' | 'autorizada' | 'denegada';
+export type ActividadExternaEstado = 'pendiente' | 'propuesta' | 'rechazada_rrll' | 'autorizada' | 'denegada';
 export type ActividadExternaComunicacion = 'pendiente' | 'borrador' | 'confirmada';
 
 export interface ActividadExterna {
@@ -13,6 +13,8 @@ export interface ActividadExterna {
   motivoDenegacion: string;
   observacionesResolucion?: string;
   fechaResolucion: string | null;
+  fechaRevisionRrll?: string | null;
+  observacionesRrll?: string;
   comunicacion: ActividadExternaComunicacion;
   fechaComunicacion: string | null;
   createdAt: string;
@@ -37,7 +39,7 @@ export function parseActividadesExternas(raw: string | null): ActividadExterna[]
     const item = value as Partial<ActividadExterna>;
     return typeof item.id === 'string' && typeof item.empleado === 'string'
       && typeof item.actividad === 'string' && typeof item.updatedAt === 'string'
-      && (item.estado === 'pendiente' || item.estado === 'autorizada' || item.estado === 'denegada');
+      && (['pendiente', 'propuesta', 'rechazada_rrll', 'autorizada', 'denegada'] as string[]).includes(item.estado ?? '');
   });
 }
 
