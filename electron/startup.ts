@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
 
 const SPLASH_TITLE = 'Cargando TrAcción';
 const MAIN_WINDOW_TITLE_PREFIX = 'Cuadro de Mando RRLL - TrAcción';
@@ -132,12 +132,13 @@ app.on('browser-window-created', (_event, window) => {
   }
 
   if (title.startsWith(MAIN_WINDOW_TITLE_PREFIX)) {
-    window.maximize();
+    // Ajustar las dimensiones antes de mostrar, sin llamar maximize() sobre ventana oculta.
+    window.setBounds(screen.getDisplayMatching(window.getBounds()).workArea);
   }
 });
 
 app.whenReady().then(() => {
   preloaderWindow = createPreloaderWindow();
+  // El indicador se solicita antes de importar el proceso principal.
+  void import('./main.js').catch((error: unknown) => console.error('[startup] No se pudo cargar main.js.', error));
 });
-
-void import('./main.js');
