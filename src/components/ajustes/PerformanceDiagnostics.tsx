@@ -57,6 +57,13 @@ export function PerformanceDiagnostics() {
     const timer = window.setInterval(refresh, 5_000);
     return () => window.clearInterval(timer);
   }, []);
+  const [watchdog, setWatchdog] = useState<Array<{ at: string; phase: string; durationMs: number; thresholdMs: number }>>([]);
+  useEffect(() => {
+    const load = () => { void window.traccion?.getMainWatchdogReport?.().then(setWatchdog).catch(() => undefined); };
+    load();
+    const interval = window.setInterval(load, 5_000);
+    return () => window.clearInterval(interval);
+  }, []);
   const [startup, setStartup] = useState<TraccionStartupPerformance | null>(null);
   const [copyState, setCopyState] = useState('');
   useEffect(() => {
@@ -90,6 +97,19 @@ export function PerformanceDiagnostics() {
         </div>
       </summary>
       <div className="border-t border-metro-border p-4">
+        <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Bloqueos del proceso principal">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h4 className="text-sm font-bold text-metro-text">Bloqueos de Electron · Registro local</h4>
+            <button type="button" className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text"
+              onClick={() => {
+                const report = ['TrAcción · Bloqueos del proceso principal', ...watchdog.map((event) => `${event.at} · ${event.phase} · ${event.durationMs} ms · umbral ${event.thresholdMs} ms`)].join('\n');
+                void navigator.clipboard.writeText(report).then(() => setCopyState('Diagnóstico de bloqueos copiado')).catch(() => setCopyState('No se pudo copiar'));
+              }}><ClipboardCopy size={13} className="mr-1 inline" /> Copiar bloqueos</button>
+          </div>
+          <p className="text-xs text-metro-muted">Supervisor independiente: registra si el proceso principal no responde durante al menos 15 segundos. Los registros se conservan localmente después de reiniciar. No modifica SQLite ni los guardados.</p>
+          <p className="mt-2 text-xs font-semibold text-metro-text">Incidencias registradas: {watchdog.filter((event) => event.phase === 'stalled').length}</p>
+          {watchdog.slice(-5).map((event, index) => <p key={`${event.at}-${index}`} className="mt-1 text-xs text-metro-muted">{event.at} · {event.phase === 'stalled' ? 'Sin respuesta' : 'Recuperado'} · {Math.round(event.durationMs / 1000)} s</p>)}
+        </section>
         <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Registro local de incidencias SQLite">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h4 className="text-sm font-bold text-metro-text">Registro local de escrituras SQLite</h4>

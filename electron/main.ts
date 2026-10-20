@@ -1,10 +1,11 @@
 import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
 import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -116,6 +117,19 @@ async function requestRendererAppClose(mainWindow: BrowserWindow): Promise<void>
 let restartRequestInProgress = false;
 ipcMain.handle('database:ipc-queue-diagnostics', () => getSqliteIpcQueueDiagnostics());
 ipcMain.handle('database:incident-report', () => getSqliteIncidentReport());
+ipcMain.handle('app:main-watchdog-report', () => {
+  const file = path.join(app.getPath('userData'), 'electron-main-watchdog.jsonl');
+  try {
+    if (!existsSync(file)) return [];
+    return readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(-40).flatMap((line) => {
+      try {
+        const event: unknown = JSON.parse(line);
+        if (event && typeof event === 'object' && 'phase' in event && 'at' in event) return [event];
+      } catch { /* ignorar líneas parciales tras un cuelgue */ }
+      return [];
+    });
+  } catch { return []; }
+});
 
 ipcMain.handle('app:request-safe-restart', async (event) => {
   if (restartRequestInProgress || isShutdownInProgress) return { ok: false, message: 'Ya se está cerrando TrAcción.' };
@@ -306,6 +320,22 @@ if (!app.requestSingleInstanceLock()) {
     const startupStartedAt = Date.now();
     startupMark('Electron preparado');
     app.setAppUserModelId('com.metro.rrll.traccion');
+    // El watchdog reside fuera del event loop principal; solo escribe diagnósticos locales.
+    try {
+      const watchdog = utilityProcess.fork(path.join(__dirname, 'mainWatchdogWorker.js'), [], {
+        serviceName: 'TrAcción main watchdog',
+      });
+      const sendHeartbeat = () => watchdog.postMessage({ kind: 'heartbeat', at: Date.now(), file: app.getPath('userData') });
+      sendHeartbeat();
+      const heartbeatTimer = setInterval(sendHeartbeat, 2_000);
+      watchdog.on('exit', () => clearInterval(heartbeatTimer));
+      app.on('will-quit', () => {
+        clearInterval(heartbeatTimer);
+        try { watchdog.postMessage({ kind: 'shutdown', at: Date.now() }); } catch { /* ya cerrado */ }
+      });
+    } catch (error) {
+      console.warn('[main-watchdog] No se pudo iniciar el supervisor independiente.', error);
+    }
     Menu.setApplicationMenu(null);
     const splashStartedAt = Date.now();
     const splashWindow = createSplashWindow();
