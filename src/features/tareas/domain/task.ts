@@ -22,6 +22,7 @@ export interface TaskQuickAction {
   fechaObjetivo?: string;
   createdAt: string;
   completedAt?: string;
+  asignadaA?: string;
 }
 
 export interface TaskSeguimientoEntry {
