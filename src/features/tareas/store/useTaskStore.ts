@@ -36,7 +36,7 @@ interface TaskStateStore {
     draft: TaskDraft,
     seguimientoText: string | undefined,
     expectedUpdatedAt: string | null,
-    quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo'>,
+    quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo' | 'asignadaA'>,
   ) => Promise<TaskUpdateResult>;
   removeWithConcurrencyCheck: (
     id: string,
