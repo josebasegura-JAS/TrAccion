@@ -38,6 +38,7 @@ interface TraccionOpenPathResult { ok: boolean; message: string; }
 interface TraccionDocxTextResult { ok: boolean; text?: string; message?: string; }
 
 interface TraccionDatabaseLockInfo { ownerId: string; username: string; hostname: string; pid: number; createdAt: string; updatedAt: string; }
+interface TraccionStartupPerformance { kind: string; measuredFrom: string; recordedAt: string; steps: Array<{ label: string; elapsedMs: number }> }
 interface TraccionShutdownPerformance { recordedAt: string; totalMs: number; vacuumMs: number; shutdownBackupMs: number; closeDatabaseMs: number; shutdownBackupPrepareMs?: number; shutdownBackupJsonMs?: number; shutdownBackupLocalSqliteMs?: number; shutdownBackupSharedSqliteMs?: number; shutdownBackupDailySqliteMs?: number; }
 interface TraccionDatabaseStatus { ready: boolean; engine: string; phase: string; path?: string; schemaVersion?: number; isDefaultPath?: boolean; lockPath?: string; lock?: TraccionDatabaseLockInfo; message?: string; applicationId?: string; databaseUuid?: string; databaseCreatedAt?: string; environment?: string; }
 interface TraccionDatabaseHealthCheckResult { ok: boolean; status: TraccionDatabaseStatus; checkedAt: string; message: string; }
@@ -162,6 +163,7 @@ interface TraccionApi {
   getAppVersion?: () => Promise<string>;
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   getLastShutdownPerformance?: () => Promise<TraccionShutdownPerformance | null>;
+  getStartupPerformance?: () => Promise<TraccionStartupPerformance>;
   databaseHealthCheck: () => Promise<TraccionDatabaseHealthCheckResult>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
