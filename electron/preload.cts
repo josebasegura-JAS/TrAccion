@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('traccion', {
   requestSafeRestart: () => ipcRenderer.invoke('app:request-safe-restart'),
   getSqliteQueueDiagnostics: () => ipcRenderer.invoke('database:ipc-queue-diagnostics'),
   getSqliteIncidentReport: () => ipcRenderer.invoke('database:incident-report'),
+  getMainWatchdogReport: () => ipcRenderer.invoke('app:main-watchdog-report'),
   updateCommitteeSummaryWord: (payload: { folderPath: string; code: string; date: string; points: string[] }) =>
     ipcRenderer.invoke('comite:update-summary-word', payload),
   updateParitariaSummaryWord: (payload: { folderPath: string; code: string; date: string; points: string[] }) =>
