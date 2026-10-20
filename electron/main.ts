@@ -15,6 +15,20 @@ const shutdownHtmlPath = path.join(__dirname, '../build/icon/shutdown.html');
 const splashMinimumVisibleMs = 2_000;
 const splashMaximumVisibleMs = 60_000;
 const shutdownPerformanceFileName = 'last-shutdown-performance.json';
+const startupBeganAt = Date.now();
+const startupTimeline: Array<{ label: string; elapsedMs: number }> = [];
+const startupKind = isUpdateRelaunch ? 'actualización' : 'normal';
+function startupMark(label: string): void {
+  startupTimeline.push({ label, elapsedMs: Date.now() - startupBeganAt });
+}
+function startupReport() {
+  return { kind: startupKind, measuredFrom: 'inicio del proceso principal Electron', recordedAt: new Date(startupBeganAt).toISOString(), steps: [...startupTimeline] };
+}
+function saveStartupReport(): void {
+  void writeFile(path.join(app.getPath('userData'), 'last-startup-performance.json'), JSON.stringify(startupReport()), 'utf8')
+    .catch((error: unknown) => console.warn('[startup] No se pudo guardar diagnóstico.', error));
+}
+
 const isUpdateRelaunch = process.argv.includes('--traccion-update-relaunch');
 const updateProgressPath = path.join(tmpdir(), 'traccion-update-staging', 'progress.txt');
 
@@ -183,7 +197,7 @@ function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promi
   });
 }
 function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, rendererReady: boolean): void {
-  if (!mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); if (rendererReady) markUpdatedAppReady(); }
+  if (!mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); startupMark('Dashboard visible'); saveStartupReport(); if (rendererReady) markUpdatedAppReady(); }
   if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
 }
 function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, splashStartedAt: number, rendererReady = false): void {
@@ -225,7 +239,7 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     requestMainWindowShow(false);
   }, splashMaximumVisibleMs);
   const onBootVisible = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(); };
-  const onRendererReady = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(); };
+  const onRendererReady = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) { startupMark('React preparado'); requestMainWindowShow(); } };
   mainWindow.webContents.once('did-finish-load', () => {
     updateSplashStep(splashWindow, 'interface', 'active', 'Interfaz cargada. Esperando a que termine su inicialización…');
   });
@@ -239,6 +253,7 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
 
 async function registerIpcHandlers(): Promise<void> {
   ipcMain.handle('performance:last-shutdown', () => readShutdownPerformance());
+  ipcMain.handle('performance:startup-report', () => startupReport());
   const [
     { registerCoreDatabaseIpc }, { registerSorteosIpc }, { registerPlantillaIpc }, { registerTareasIpc }, { registerSesionesIpc }, { registerVinculogramaIpc }, { registerCriteriosRrllIpc }, { registerTicketRestauranteIpc }, { registerPresupuestosIpc }, { registerEspecialesIpc }, { registerTeletrabajoIpc }, { registerConfiguracionIpc }, { registerLicenciasSinSueldoIpc }, { registerSharedDocumentIpc }, { registerLoteriaIpc }, { registerOperationalExcelBackupIpc }, { registerAyudaEscolarIpc },
   ] = await Promise.all([
@@ -256,11 +271,13 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.whenReady().then(async () => {
     const startupStartedAt = Date.now();
+    startupMark('Electron preparado');
     app.setAppUserModelId('com.metro.rrll.traccion');
     Menu.setApplicationMenu(null);
     const splashStartedAt = Date.now();
     const splashWindow = createSplashWindow();
     await waitForSplashPaint(splashWindow);
+    startupMark('Splash principal preparado');
     updateSplashStep(splashWindow, 'electron', 'done');
     updateSplashStep(splashWindow, 'persistence', 'active');
     logStartupPhase(startupStartedAt, 'splash visible');
@@ -272,12 +289,14 @@ if (!app.requestSingleInstanceLock()) {
         throw error;
       });
       updateSplashStep(splashWindow, 'persistence', 'done');
+      startupMark('Motor SQLite importado');
       logStartupPhase(startupStartedAt, 'persistence module loaded');
 
       updateSplashStep(splashWindow, 'database', 'active');
       updateSplashStep(splashWindow, 'services', 'active');
       await Promise.all([
         persistence.initializeSqlitePersistence().then(() => {
+          startupMark('SQLite inicializada');
           updateSplashStep(splashWindow, 'database', 'done');
         }).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
@@ -285,6 +304,7 @@ if (!app.requestSingleInstanceLock()) {
           throw error;
         }),
         registerIpcHandlers().then(() => {
+          startupMark('Servicios IPC registrados');
           updateSplashStep(splashWindow, 'services', 'done');
         }).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
@@ -295,6 +315,7 @@ if (!app.requestSingleInstanceLock()) {
       logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
 
       updateSplashStep(splashWindow, 'interface', 'active');
+      startupMark('Creación de ventana principal');
       createWindow(splashWindow, splashStartedAt, persistence.setDatabaseConnectivityIssueNotifier);
       logStartupPhase(startupStartedAt, 'main window loading');
       app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(null, Date.now(), persistence.setDatabaseConnectivityIssueNotifier); });
