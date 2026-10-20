@@ -331,24 +331,35 @@ export async function applyAppUpdate(
     await writeFile(progressPath, 'validated', 'utf8');
     await writeFile(progressScriptPath, buildUpdateProgressWindowScript(), 'utf8');
     await writeFile(scriptPath, batScript, 'utf8');
-    // Se lanza primero la ventana auxiliar: no depende de que Electron siga vivo.
-    // Si PowerShell está bloqueado, el .cmd continuará igualmente.
+    // El actualizador no se ejecuta si no existe confirmación de ventana visible.
+    // Evita cerrar TrAcción y dejar al usuario sin información.
+    const { access } = await import('node:fs/promises');
     const windowStartedAt = Date.now();
-    try {
-      const progressWindow = spawn('powershell.exe', [
-        '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass',
-        '-WindowStyle', 'Hidden', '-File', progressScriptPath, progressPath, progressReadyPath,
-      ], { detached: true, stdio: 'ignore', windowsHide: true });
-      progressWindow.on('error', (error) => console.warn('[updater] No se pudo iniciar PowerShell:', error));
-      progressWindow.unref();
-      const { access } = await import('node:fs/promises');
-      for (let attempt = 0; attempt < 12; attempt += 1) {
-        try { await access(progressReadyPath); break; } catch { /* Windows Forms aún está cargando. */ }
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      console.info('[updater] Ventana de progreso: %d ms hasta continuar con el instalador.', Date.now() - windowStartedAt);
-    } catch (error) {
-      console.warn('[updater] No se pudo abrir la ventana auxiliar; se mantiene la instalación estándar.', error);
+    const progressWindow = spawn('powershell.exe', [
+      '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass',
+      '-WindowStyle', 'Hidden', '-File', progressScriptPath, progressPath, progressReadyPath,
+    ], { detached: true, stdio: 'ignore', windowsHide: true });
+    const launchFailure = new Promise<Error>((resolve) => {
+      progressWindow.once('error', resolve);
+    });
+    progressWindow.unref();
+    let visible = false;
+    let failure: Error | null = null;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const outcome = await Promise.race([
+        launchFailure.then((error) => ({ error })),
+        new Promise<{ error?: undefined }>((resolve) => setTimeout(() => resolve({}), 100)),
+      ]);
+      if (outcome.error) { failure = outcome.error; break; }
+      try { await access(progressReadyPath); visible = true; break; } catch { /* Ventana aún no visible */ }
+      if (progressWindow.exitCode !== null) break;
+    }
+    console.info('[updater] Indicador visible=%s tras %d ms', visible, Date.now() - windowStartedAt);
+    if (!visible) {
+      try { progressWindow.kill(); } catch { /* Ya finalizado */ }
+      return { ok: false, message: failure
+        ? `No se pudo iniciar el indicador de actualización: ${failure.message}`
+        : 'No se ha podido mostrar la ventana de actualización. No se cerrará TrAcción; vuelve a intentarlo o consulta con soporte.' };
     }
     const child = spawn('cmd.exe', ['/c', scriptPath], { detached: true, stdio: 'ignore', windowsHide: true });
     child.unref();

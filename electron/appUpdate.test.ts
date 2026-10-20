@@ -195,3 +195,12 @@ describe('script de aplicación del actualizador', () => {
     expect(script).toContain('if exist "%CURRENT%" start "" "%CURRENT%"');
   });
 });
+
+
+describe('seguridad del indicador de actualización', () => {
+  it('el aplicador devuelve error si la ventana no puede confirmarse antes de cerrar la aplicación', async () => {
+    const { applyAppUpdate } = await import('./appUpdate.js');
+    const result = await applyAppUpdate('1.2.1', null);
+    expect(result.ok).toBe(false);
+  });
+});
