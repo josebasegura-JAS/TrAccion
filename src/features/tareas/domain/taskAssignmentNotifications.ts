@@ -80,3 +80,55 @@ export function markTaskAssignmentsSeen(windowsUser: string, tasks: readonly Tas
   }
   writeSeenNoticeIds(windowsUser, seen);
 }
+
+/** Avisos por acción vinculada, independientes de la asignación de la tarea. */
+const ACTION_STORAGE_PREFIX = 'traccion.quickActionAssignments.seen.v1';
+
+export interface PendingLinkedAction {
+  task: Task;
+  actionId: string;
+  noticeId: string;
+  title: string;
+  assignedAt: string;
+}
+
+function actionSeenKey(windowsUser: string): string {
+  return `${ACTION_STORAGE_PREFIX}.${normalize(windowsUser)}`;
+}
+
+function readActionSeen(windowsUser: string): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = window.localStorage.getItem(actionSeenKey(windowsUser));
+    const values: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === 'string') : []);
+  } catch { return new Set(); }
+}
+
+export function getUnseenLinkedActionAssignments(tasks: readonly Task[], windowsUser: string): PendingLinkedAction[] {
+  const currentUser = normalize(windowsUser);
+  if (!currentUser) return [];
+  const seen = readActionSeen(windowsUser);
+  const notices: PendingLinkedAction[] = [];
+  const unique = new Set<string>();
+  for (const task of tasks) {
+    if (task.deletedAt) continue;
+    for (const tracking of task.seguimiento ?? []) {
+      for (const action of tracking.quickActions ?? []) {
+        if (action.completedAt || normalize(action.asignadaA ?? '') !== currentUser) continue;
+        const noticeId = `${task.id}:${action.id}`;
+        if (seen.has(noticeId) || unique.has(noticeId)) continue;
+        unique.add(noticeId);
+        notices.push({ task, actionId: action.id, noticeId, title: action.titulo, assignedAt: action.createdAt });
+      }
+    }
+  }
+  return notices.sort((a, b) => b.assignedAt.localeCompare(a.assignedAt));
+}
+
+export function markLinkedActionAssignmentsSeen(windowsUser: string, notices: readonly PendingLinkedAction[]): void {
+  if (typeof window === 'undefined') return;
+  const seen = readActionSeen(windowsUser);
+  notices.forEach((notice) => seen.add(notice.noticeId));
+  window.localStorage.setItem(actionSeenKey(windowsUser), JSON.stringify(Array.from(seen).slice(-MAX_SEEN_NOTICE_IDS)));
+}
