@@ -82,9 +82,10 @@ describe('enqueueSqliteIpc', () => {
   it('si una escritura falla tras una interrupción, la cola procesa la siguiente sin duplicar el intento', async () => {
     const execution = vi.fn(async () => { throw new Error('SMB disconnected'); });
     const failed = enqueueSqliteIpc('tasks:save-record-if-unchanged', execution);
+    const failedObserved = failed.then(() => null, (error: unknown) => error);
     const later = enqueueSqliteIpc('tasks:load-records', async () => 'ok');
     await vi.runAllTimersAsync();
-    await expect(failed).rejects.toThrow('SMB disconnected');
+    expect((await failedObserved) as Error).toHaveProperty('message', 'SMB disconnected');
     await expect(later).resolves.toBe('ok');
     expect(execution).toHaveBeenCalledTimes(1);
   });
