@@ -53,6 +53,42 @@ describe('enqueueSqliteIpc', () => {
     expect(getSqliteIpcQueueDiagnostics().timedOut).toBe(false);
   });
 
+
+  it('un corte simulado durante una escritura no permite ejecutar la siguiente hasta conocer su resultado', async () => {
+    let finishWrite!: () => void;
+    const inFlight = new Promise<void>((resolve) => { finishWrite = resolve; });
+    const order: string[] = [];
+    const first = enqueueSqliteIpc('tasks:save-record-if-unchanged', async () => {
+      order.push('write-start');
+      await inFlight;
+      order.push('write-finished');
+    });
+    const observed = first.then(() => 'ok', () => 'timeout');
+    const second = enqueueSqliteIpc('tasks:load-records', async () => {
+      order.push('read-after-write');
+      return 'fresh-snapshot';
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await observed).toBe('timeout');
+    expect(order).toEqual(['write-start']);
+    expect(getSqliteIpcQueueDiagnostics().timedOut).toBe(true);
+    finishWrite();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await second).toBe('fresh-snapshot');
+    expect(order).toEqual(['write-start', 'write-finished', 'read-after-write']);
+  });
+
+  it('si una escritura falla tras una interrupción, la cola procesa la siguiente sin duplicar el intento', async () => {
+    const execution = vi.fn(async () => { throw new Error('SMB disconnected'); });
+    const failed = enqueueSqliteIpc('tasks:save-record-if-unchanged', execution);
+    const later = enqueueSqliteIpc('tasks:load-records', async () => 'ok');
+    await vi.runAllTimersAsync();
+    await expect(failed).rejects.toThrow('SMB disconnected');
+    await expect(later).resolves.toBe('ok');
+    expect(execution).toHaveBeenCalledTimes(1);
+  });
+
   it('mantiene un límite corto para las operaciones ordinarias', () => {
     expect(resolveSqliteIpcTimeoutMs('database:save-local-storage-record')).toBe(12_000);
   });
