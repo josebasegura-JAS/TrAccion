@@ -162,6 +162,7 @@ interface TraccionApi {
   getWindowsUser?: () => Promise<string>;
   getAppVersion?: () => Promise<string>;
   requestSafeRestart?: () => Promise<{ ok: boolean; message?: string }>;
+  getSqliteQueueDiagnostics?: () => Promise<{ queuedOperations: number; runningOperation: string | null; runningMs: number | null; timedOut: boolean }>;
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   getLastShutdownPerformance?: () => Promise<TraccionShutdownPerformance | null>;
   getStartupPerformance?: () => Promise<TraccionStartupPerformance>;
