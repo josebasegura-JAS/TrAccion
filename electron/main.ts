@@ -197,7 +197,13 @@ function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promi
   });
 }
 function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, rendererReady: boolean): void {
-  if (!mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); startupMark('Dashboard visible'); saveStartupReport(); if (rendererReady) markUpdatedAppReady(); }
+  if (mainWindow.isDestroyed()) return;
+  // La ventana principal sigue oculta mientras Chromium y React construyen su primera imagen.
+  mainWindow.show();
+  mainWindow.focus();
+  startupMark(rendererReady ? 'Dashboard visible' : 'Dashboard visible en modo diagnóstico');
+  saveStartupReport();
+  if (rendererReady) markUpdatedAppReady();
   if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
 }
 function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, splashStartedAt: number, rendererReady = false): void {
@@ -232,6 +238,7 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     hasRequestedMainWindowShow = true;
     clearTimeout(forceShowTimer);
     if (markInterfaceReady) updateSplashStep(splashWindow, 'interface', 'done');
+    startupMark(markInterfaceReady ? 'Transición: render completado' : 'Transición: espera agotada');
     showMainAfterSplash(splashWindow, mainWindow, splashStartedAt, markInterfaceReady);
   };
   const forceShowTimer: ReturnType<typeof setTimeout> = setTimeout(() => {
