@@ -23,11 +23,7 @@ function waitForNextPaint(): Promise<void> {
 }
 
 function notifyRendererReady(): void {
-  window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(() => {
-      window.traccion?.notifyRendererReady?.();
-    });
-  });
+  window.traccion?.notifyRendererReady?.();
 }
 
 function renderFatalError(error: unknown): void {
@@ -53,8 +49,11 @@ const root = ReactDOM.createRoot(document.getElementById('root')!);
 type AppModule = typeof import('./App');
 
 async function renderApp(appModulePromise: Promise<AppModule> = import('./App')): Promise<void> {
+  const importWaitStartedAt = performance.now();
   const { App } = await appModulePromise;
+  recordPerformanceMetric('arranque', 'Interfaz: espera por importación de App', performance.now() - importWaitStartedAt);
 
+  const renderStartedAt = performance.now();
   root.render(
     <React.StrictMode>
       <>
@@ -66,6 +65,7 @@ async function renderApp(appModulePromise: Promise<AppModule> = import('./App'))
   );
 
   await waitForNextPaint();
+  recordPerformanceMetric('arranque', 'Interfaz: primer render y dos frames', performance.now() - renderStartedAt);
   notifyRendererReady();
 }
 
@@ -86,6 +86,7 @@ async function startApp(): Promise<void> {
   recordPerformanceMetric('arranque', 'Hidratación SQLite', performance.now() - hydrationStartedAt);
   reportStartupHydrationResult(hydrationResult);
 
+  recordPerformanceMetric('arranque', 'Interfaz: desde inicio renderer hasta hidratación', performance.now() - startupStartedAt);
   await renderApp(appModulePromise);
   recordPerformanceMetric('arranque', 'Arranque hasta interfaz lista', performance.now() - startupStartedAt);
 }
