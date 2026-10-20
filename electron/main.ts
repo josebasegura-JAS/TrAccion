@@ -17,7 +17,7 @@ const splashMaximumVisibleMs = 60_000;
 const shutdownPerformanceFileName = 'last-shutdown-performance.json';
 const startupBeganAt = Date.now();
 const startupTimeline: Array<{ label: string; elapsedMs: number }> = [];
-const startupKind = isUpdateRelaunch ? 'actualización' : 'normal';
+const startupKind = process.argv.includes('--traccion-update-relaunch') ? 'actualización' : 'normal';
 function startupMark(label: string): void {
   startupTimeline.push({ label, elapsedMs: Date.now() - startupBeganAt });
 }
