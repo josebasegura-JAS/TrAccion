@@ -208,7 +208,7 @@ export function enqueueSqliteIpc<T>(
       await operationPromise;
       if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'completed');
     } catch (error) {
-      if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'failed', error instanceof Error ? error.message : String(error));
+      if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'failed', error instanceof Error ? error.name : 'Error no tipificado');
       throw error;
     } finally {
       runningOperation = null;
