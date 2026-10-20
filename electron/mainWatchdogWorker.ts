@@ -1,4 +1,3 @@
-import { parentPort } from 'electron';
 import { appendFileSync, existsSync, statSync, renameSync } from 'node:fs';
 import path from 'node:path';
 
@@ -22,8 +21,8 @@ function record(phase: 'stalled' | 'recovered', durationMs: number): void {
   }
 }
 
-parentPort?.on('message', (event) => {
-  const data = event.data as Pulse & { file?: string };
+process.parentPort.on('message', (event: { data: Pulse & { file?: string } }) => {
+  const data = event.data;
   if (data.kind === 'shutdown') { process.exit(0); }
   if (data.kind !== 'heartbeat') return;
   if (data.file && !file) file = path.join(data.file, 'electron-main-watchdog.jsonl');
