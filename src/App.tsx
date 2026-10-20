@@ -10,7 +10,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { resolveActiveViewForNavigation, resolveCommitteeOrganForNavigation, type AppView } from './navigation/navigation';
 import { startExternalDataSyncPolling, stopExternalDataSyncPolling } from './services/externalDataSync';
-import { requestDatabaseReconnectCheck, startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './services/databaseHealthMonitor';
+import { getConnectionDiagnostics, subscribeConnectionDiagnostics, requestDatabaseReconnectCheck, startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './services/databaseHealthMonitor';
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
 import { useDatabaseConnectivityState } from './services/databaseConnectivityState';
@@ -120,6 +120,12 @@ function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }
 
 function ConnectionRecoveryBanner() {
   const connectivity = useDatabaseConnectivityState();
+  const [diagnostics, setDiagnostics] = useState(getConnectionDiagnostics);
+  const [restarting, setRestarting] = useState(false);
+  const [restartError, setRestartError] = useState('');
+  useEffect(() => subscribeConnectionDiagnostics(() => setDiagnostics(getConnectionDiagnostics())), []);
+  const staleConnectionMs = diagnostics.lastFailureAt ? Date.now() - new Date(diagnostics.lastFailureAt).getTime() : 0;
+  const offerRestart = connectivity.phase === 'reconnecting' && (diagnostics.consecutiveFailures >= 5 || staleConnectionMs >= 30_000);
   if (connectivity.phase === 'connected') return null;
 
   const recovered = connectivity.phase === 'recovered';
@@ -149,6 +155,22 @@ function ConnectionRecoveryBanner() {
         </strong>
         <p className="mt-0.5 truncate text-xs opacity-80">{connectivity.message}</p>
       </div>
+      {offerRestart && (
+        <button type="button" disabled={restarting || !window.traccion?.requestSafeRestart}
+          className="shrink-0 rounded-lg border border-amber-300/25 px-3 py-1.5 text-xs font-semibold text-amber-50 disabled:opacity-50"
+          onClick={() => {
+            if (!window.traccion?.requestSafeRestart) return;
+            setRestarting(true);
+            setRestartError('');
+            void window.traccion.requestSafeRestart().then((result) => {
+              if (!result.ok) setRestartError(result.message ?? 'No se pudo reiniciar TrAcción.');
+            }).catch((error: unknown) => setRestartError(error instanceof Error ? error.message : 'Error al solicitar el reinicio.'))
+              .finally(() => setRestarting(false));
+          }}>
+          {restarting ? 'Preparando reinicio…' : 'Reiniciar TrAcción'}
+        </button>
+      )}
+      {restartError && <span className="text-xs text-amber-100" role="alert">{restartError}</span>}
       {!recovered && !syncing ? (
         <button
           className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-300/15"
