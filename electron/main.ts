@@ -240,7 +240,9 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   }, splashMaximumVisibleMs);
   const onBootVisible = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(); };
   const onRendererReady = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) { startupMark('React preparado'); requestMainWindowShow(); } };
+  const rendererLoadStartedAt = Date.now();
   mainWindow.webContents.once('did-finish-load', () => {
+    startupMark(`HTML del renderer cargado (${Date.now() - rendererLoadStartedAt} ms)`);
     updateSplashStep(splashWindow, 'interface', 'active', 'Interfaz cargada. Esperando a que termine su inicialización…');
   });
   ipcMain.on('app:boot-visible', onBootVisible);
