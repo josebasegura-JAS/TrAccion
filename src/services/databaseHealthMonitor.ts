@@ -20,6 +20,26 @@ type NetworkInformationLike = {
   removeEventListener?: (type: 'change', listener: () => void) => void;
 };
 
+export interface ConnectionDiagnostics {
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastError: string | null;
+  consecutiveFailures: number;
+  lastCheckDurationMs: number | null;
+  checking: boolean;
+}
+let diagnostics: ConnectionDiagnostics = { lastSuccessAt: null, lastFailureAt: null, lastError: null, consecutiveFailures: 0, lastCheckDurationMs: null, checking: false };
+const diagnosticsListeners = new Set<() => void>();
+function updateDiagnostics(patch: Partial<ConnectionDiagnostics>): void {
+  diagnostics = { ...diagnostics, ...patch };
+  diagnosticsListeners.forEach((listener) => listener());
+}
+export function getConnectionDiagnostics(): ConnectionDiagnostics { return diagnostics; }
+export function subscribeConnectionDiagnostics(listener: () => void): () => void {
+  diagnosticsListeners.add(listener);
+  return () => diagnosticsListeners.delete(listener);
+}
+
 let timerId: number | null = null;
 let checkInProgress = false;
 let consecutiveFailures = 0;
@@ -115,6 +135,7 @@ async function completeRecovery(): Promise<void> {
   blockedByHealthMonitor = false;
   consecutiveFailures = 0;
   publishDatabaseConnectivityBlock(false, 'Conexión SQLite recuperada y datos compartidos actualizados.', 'health-monitor');
+  updateDiagnostics({ lastSuccessAt: new Date().toISOString(), lastError: null, consecutiveFailures: 0 });
   publishDatabaseConnectivityState(
     'recovered',
     'Conexión restablecida · datos compartidos actualizados.',
@@ -128,16 +149,20 @@ async function runHealthCheck(): Promise<void> {
   }
 
   checkInProgress = true;
+  const checkStartedAt = performance.now();
+  updateDiagnostics({ checking: true });
   try {
     const result = await withTimeout(window.traccion.databaseHealthCheck(), HEALTH_CHECK_TIMEOUT_MS);
     publishDatabaseStatus(result.status);
 
     if (!result.ok) {
       consecutiveFailures += 1;
+      updateDiagnostics({ lastFailureAt: new Date().toISOString(), lastError: result.message, consecutiveFailures });
       blockEditing(`${CONNECTIVITY_MESSAGE} ${result.message}`);
       return;
     }
 
+    updateDiagnostics({ lastSuccessAt: new Date().toISOString(), lastError: null, consecutiveFailures: 0 });
     if (!blockedByHealthMonitor) {
       consecutiveFailures = 0;
       publishDatabaseConnectivityState('connected', result.message);
@@ -148,8 +173,10 @@ async function runHealthCheck(): Promise<void> {
   } catch (error) {
     consecutiveFailures += 1;
     const message = error instanceof Error ? error.message : 'Error verificando SQLite.';
+    updateDiagnostics({ lastFailureAt: new Date().toISOString(), lastError: message, consecutiveFailures });
     blockEditing(`${CONNECTIVITY_MESSAGE} ${message}`);
   } finally {
+    updateDiagnostics({ checking: false, lastCheckDurationMs: Math.round(performance.now() - checkStartedAt) });
     checkInProgress = false;
     scheduleNextCheck();
   }

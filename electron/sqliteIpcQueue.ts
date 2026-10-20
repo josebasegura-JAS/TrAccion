@@ -45,6 +45,23 @@ const EXPLICIT_READ_ONLY_OPERATIONS = new Set([
 const sqliteIpcContext = new AsyncLocalStorage<SqliteIpcOperationContext>();
 
 let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
+let queuedOperations = 0;
+let runningOperation: { name: string; startedAt: number; timedOut: boolean } | null = null;
+
+export function getSqliteIpcQueueDiagnostics(): {
+  queuedOperations: number;
+  runningOperation: string | null;
+  runningMs: number | null;
+  timedOut: boolean;
+} {
+  return {
+    queuedOperations,
+    runningOperation: runningOperation?.name ?? null,
+    runningMs: runningOperation ? Date.now() - runningOperation.startedAt : null,
+    timedOut: runningOperation?.timedOut ?? false,
+  };
+}
+
 
 export function isSqliteIpcReadOnlyOperation(operationName: string): boolean {
   if (EXPLICIT_READ_ONLY_OPERATIONS.has(operationName)) {
@@ -105,6 +122,7 @@ export function resolveSqliteIpcTimeoutMs(operationName: string): number {
 function withTimeout<T>(promise: Promise<T>, ms: number, operationName: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutTimer = setTimeout(() => {
+      if (runningOperation?.name === operationName) runningOperation.timedOut = true;
       console.error(
         `[sqlite-ipc-queue] ${operationName} superó el límite de ${ms} ms. ` +
           'La operación subyacente no puede cancelarse de forma segura; ' +
@@ -153,6 +171,7 @@ export function enqueueSqliteIpc<T>(
   operation: QueuedIpcOperation<T>,
 ): Promise<Awaited<T>> {
   const startedAt = Date.now();
+  queuedOperations += 1;
   const timeoutMs = resolveSqliteIpcTimeoutMs(operationName);
   const readOnly = isSqliteIpcReadOnlyOperation(operationName);
 
@@ -170,6 +189,8 @@ export function enqueueSqliteIpc<T>(
     }
 
     const operationStartedAt = Date.now();
+    queuedOperations = Math.max(0, queuedOperations - 1);
+    runningOperation = { name: operationName, startedAt: operationStartedAt, timedOut: false };
     const operationPromise = sqliteIpcContext.run(
       { operationName, readOnly },
       () => Promise.resolve().then(() => operation()),
@@ -183,6 +204,7 @@ export function enqueueSqliteIpc<T>(
     try {
       await operationPromise;
     } finally {
+      runningOperation = null;
       const operationMs = Date.now() - operationStartedAt;
       if (operationMs > 250 && operationMs < timeoutMs) {
         console.warn(`[sqlite-ipc-queue] ${operationName} tardó ${operationMs} ms.`);
