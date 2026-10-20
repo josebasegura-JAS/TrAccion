@@ -163,6 +163,7 @@ interface TraccionApi {
   getAppVersion?: () => Promise<string>;
   requestSafeRestart?: () => Promise<{ ok: boolean; message?: string }>;
   getSqliteQueueDiagnostics?: () => Promise<{ queuedOperations: number; runningOperation: string | null; runningMs: number | null; timedOut: boolean }>;
+  getSqliteIncidentReport?: () => Promise<{ events: Array<{ id: string; at: string; operation: string; phase: string; outcome?: string }>; uncertain: Array<{ id: string; at: string; operation: string; phase: string; outcome?: string }> }>;
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   getLastShutdownPerformance?: () => Promise<TraccionShutdownPerformance | null>;
   getStartupPerformance?: () => Promise<TraccionStartupPerformance>;

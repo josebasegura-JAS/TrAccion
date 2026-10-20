@@ -1,3 +1,4 @@
+import { beginSqliteWrite, finishSqliteWrite } from './sqliteIncidentJournal.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
@@ -119,10 +120,11 @@ export function resolveSqliteIpcTimeoutMs(operationName: string): number {
   return DEFAULT_OPERATION_TIMEOUT_MS;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, operationName: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, operationName: string, onTimeout?: () => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutTimer = setTimeout(() => {
       if (runningOperation?.name === operationName) runningOperation.timedOut = true;
+      onTimeout?.();
       console.error(
         `[sqlite-ipc-queue] ${operationName} superó el límite de ${ms} ms. ` +
           'La operación subyacente no puede cancelarse de forma segura; ' +
@@ -191,18 +193,23 @@ export function enqueueSqliteIpc<T>(
     const operationStartedAt = Date.now();
     queuedOperations = Math.max(0, queuedOperations - 1);
     runningOperation = { name: operationName, startedAt: operationStartedAt, timedOut: false };
+    const writeJournalId = readOnly ? null : beginSqliteWrite(operationName);
     const operationPromise = sqliteIpcContext.run(
       { operationName, readOnly },
       () => Promise.resolve().then(() => operation()),
     ) as Promise<Awaited<T>>;
 
-    void withTimeout(operationPromise, timeoutMs, operationName).then(
+    void withTimeout(operationPromise, timeoutMs, operationName, () => { if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'timeout', 'Resultado aún indeterminado'); }).then(
       resolveObservedOperation,
       rejectObservedOperation,
     );
 
     try {
       await operationPromise;
+      if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'completed');
+    } catch (error) {
+      if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'failed', error instanceof Error ? error.name : 'Error no tipificado');
+      throw error;
     } finally {
       runningOperation = null;
       const operationMs = Date.now() - operationStartedAt;

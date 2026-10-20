@@ -1,3 +1,4 @@
+import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
 import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
@@ -114,6 +115,7 @@ async function requestRendererAppClose(mainWindow: BrowserWindow): Promise<void>
 // Reinicio voluntario: respeta la confirmación de formularios y el cierre SQLite existente.
 let restartRequestInProgress = false;
 ipcMain.handle('database:ipc-queue-diagnostics', () => getSqliteIpcQueueDiagnostics());
+ipcMain.handle('database:incident-report', () => getSqliteIncidentReport());
 
 ipcMain.handle('app:request-safe-restart', async (event) => {
   if (restartRequestInProgress || isShutdownInProgress) return { ok: false, message: 'Ya se está cerrando TrAcción.' };

@@ -50,6 +50,13 @@ export function PerformanceDiagnostics() {
   }, []);
   const [connectionDiagnostics, setConnectionDiagnostics] = useState(getConnectionDiagnostics);
   useEffect(() => subscribeConnectionDiagnostics(() => setConnectionDiagnostics(getConnectionDiagnostics())), []);
+  const [incidents, setIncidents] = useState<{ events: Array<{ id: string; at: string; operation: string; phase: string; outcome?: string }>; uncertain: Array<{ id: string; at: string; operation: string; phase: string; outcome?: string }> } | null>(null);
+  useEffect(() => {
+    const refresh = () => { void window.traccion?.getSqliteIncidentReport?.().then(setIncidents).catch(() => setIncidents(null)); };
+    refresh();
+    const timer = window.setInterval(refresh, 5_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [startup, setStartup] = useState<TraccionStartupPerformance | null>(null);
   const [copyState, setCopyState] = useState('');
   useEffect(() => {
@@ -83,6 +90,22 @@ export function PerformanceDiagnostics() {
         </div>
       </summary>
       <div className="border-t border-metro-border p-4">
+        <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Registro local de incidencias SQLite">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h4 className="text-sm font-bold text-metro-text">Registro local de escrituras SQLite</h4>
+            <button type="button" className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text"
+              onClick={() => {
+                const report = ['TrAcción · Registro local SQLite', 'Pendientes de verificación:', ...((incidents?.uncertain ?? []).map((event) => `${event.at} · ${event.operation} · ${event.phase} · ${event.outcome ?? ''}`)), 'Últimos eventos:', ...((incidents?.events ?? []).map((event) => `${event.at} · ${event.operation} · ${event.phase}`))].join('\n');
+                void navigator.clipboard.writeText(report).then(() => setCopyState('Registro local copiado')).catch(() => setCopyState('No se pudo copiar'));
+              }}>Copiar registro local</button>
+          </div>
+          <p className="text-xs text-metro-muted">Se conserva en este equipo incluso si se reinicia TrAcción. No contiene contenidos de tareas ni datos personales, solo nombres técnicos de operaciones y tiempos.</p>
+          <p className={`mt-2 text-xs font-semibold ${incidents?.uncertain.length ? 'text-amber-300' : 'text-metro-success'}`}>
+            Operaciones que requieren comprobación: {incidents?.uncertain.length ?? 'Sin datos'}
+          </p>
+          {incidents?.uncertain.slice(-5).map((event) => <p key={event.id} className="mt-1 text-xs text-amber-200">{event.at} · {event.operation} · {event.phase}</p>)}
+          {incidents?.uncertain.length ? <p className="mt-2 text-xs text-amber-200">Antes de repetir una escritura, verifica si sus cambios figuran ya en la base compartida. Un error o cierre inesperado no demuestra que la operación no se guardó.</p> : null}
+        </section>
         <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Conectividad SQLite">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h4 className="text-sm font-bold text-metro-text">Conectividad SQLite · Esta sesión</h4>
