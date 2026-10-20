@@ -193,6 +193,9 @@ export function TaskEditor({
                 setQuickActionTitle={setQuickActionTitle}
                 quickActionDate={quickActionDate}
                 setQuickActionDate={setQuickActionDate}
+                quickActionAssignee={quickActionAssignee}
+                setQuickActionAssignee={setQuickActionAssignee}
+                quickActionAssigneeOptions={quickActionAssigneeOptions}
                 onCompleteQuickAction={completeQuickAction}
               />
 
