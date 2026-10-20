@@ -100,7 +100,7 @@ export function buildUpdatedTask(
   task: Task,
   draft: TaskDraft,
   seguimientoText: string | undefined,
-  quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo'>,
+  quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo' | 'asignadaA'>,
   options?: { now?: string; skipAudit?: boolean },
 ): Task {
   const now = options?.now ?? new Date().toISOString();
@@ -111,7 +111,7 @@ export function buildUpdatedTask(
     createdBy: task.createdBy ?? draft.createdBy,
     phaseBeforeClose: resolvePhaseBeforeClose(task, draft),
     ...buildAssignmentNoticeFields(task.id, task.responsable, draft.responsable, now, task.assignmentNoticeId, task.assignmentNoticeAt),
-    seguimiento: [...buildSeguimiento(seguimientoText, now).map((entry) => ({ ...entry, quickActions: quickAction ? [{ id: now, titulo: quickAction.titulo, fechaObjetivo: quickAction.fechaObjetivo, createdAt: now }] : [] })), ...task.seguimiento],
+    seguimiento: [...buildSeguimiento(seguimientoText, now).map((entry) => ({ ...entry, quickActions: quickAction ? [{ id: now, titulo: quickAction.titulo, fechaObjetivo: quickAction.fechaObjetivo, asignadaA: quickAction.asignadaA, createdAt: now }] : [] })), ...task.seguimiento],
     closedAt: resolveClosedAt(task, draft, now),
     updatedAt: now,
   };

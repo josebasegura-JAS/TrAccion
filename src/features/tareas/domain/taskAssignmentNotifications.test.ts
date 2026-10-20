@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Task } from './task';
-import { getUnseenTaskAssignments } from './taskAssignmentNotifications';
+import { getUnseenTaskAssignments, getUnseenLinkedActionAssignments, markLinkedActionAssignmentsSeen } from './taskAssignmentNotifications';
 
 function buildTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -64,5 +64,29 @@ describe('taskAssignmentNotifications', () => {
     const result = getUnseenTaskAssignments([task, { ...task }], 'Joseba Segura', 'jasegura');
 
     expect(result).toHaveLength(1);
+  });
+});
+
+describe('linked quick-action notices', () => {
+  beforeEach(() => window.localStorage.clear());
+  const withAction = (assigned: string, completedAt?: string): Task => buildTask({
+    seguimiento: [{
+      id: 'followup-1', fechaHora: '2026-10-20T09:00:00.000Z', texto: 'Revisar',
+      quickActions: [{ id: 'action-1', titulo: 'Trasladar a Dirección', createdAt: '2026-10-20T09:00:00.000Z', asignadaA: assigned, completedAt }],
+    }],
+  });
+
+  it('notifica solo al usuario asignado y no duplica snapshots', () => {
+    const task = withAction('acabrera');
+    expect(getUnseenLinkedActionAssignments([task, { ...task }], 'ACABRERA')).toHaveLength(1);
+    expect(getUnseenLinkedActionAssignments([task], 'ahueso')).toHaveLength(0);
+  });
+
+  it('conserva el visto por usuario y no notifica acciones completadas', () => {
+    const task = withAction('ahueso');
+    const notices = getUnseenLinkedActionAssignments([task], 'ahueso');
+    markLinkedActionAssignmentsSeen('ahueso', notices);
+    expect(getUnseenLinkedActionAssignments([task], 'ahueso')).toHaveLength(0);
+    expect(getUnseenLinkedActionAssignments([withAction('ahueso', '2026-10-20T10:00:00.000Z')], 'ahueso')).toHaveLength(0);
   });
 });

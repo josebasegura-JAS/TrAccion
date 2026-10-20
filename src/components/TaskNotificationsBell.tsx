@@ -6,6 +6,8 @@ import type { Task } from '../features/tareas/domain/task';
 import {
   getUnseenTaskAssignments,
   markTaskAssignmentsSeen,
+  getUnseenLinkedActionAssignments,
+  markLinkedActionAssignmentsSeen,
 } from '../features/tareas/domain/taskAssignmentNotifications';
 import {
   getUnseenTaskCreations,
@@ -52,6 +54,8 @@ export function TaskNotificationsBell({
     [currentResponsible, openedAssignmentIds, tasks, windowsUserName],
   );
 
+  const [openedActionIds, setOpenedActionIds] = useState<Set<string>>(() => new Set());
+  const unseenActions = useMemo(() => getUnseenLinkedActionAssignments(tasks, windowsUserName).filter((notice) => !openedActionIds.has(notice.noticeId)), [tasks, windowsUserName, openedActionIds]);
   const unseenCreations = useMemo(
     () => isCreationBaselineReady
       ? getUnseenTaskCreations(tasks, windowsUserName)
@@ -60,7 +64,7 @@ export function TaskNotificationsBell({
     [dismissedCreationIds, isCreationBaselineReady, tasks, windowsUserName],
   );
 
-  const totalNotifications = unseenAssignments.length + unseenCreations.length;
+  const totalNotifications = unseenAssignments.length + unseenCreations.length + unseenActions.length;
 
   useEffect(() => {
     loadConfiguracion();
@@ -82,6 +86,10 @@ export function TaskNotificationsBell({
     newlyAssigned.forEach((task) => announcedAssignmentIds.current.add(task.assignmentNoticeId!));
     setIsOpen(true);
   }, [currentResponsible, dbStatus?.ready, unseenAssignments]);
+
+  useEffect(() => {
+    if (dbStatus?.ready && unseenActions.length > 0) setIsOpen(true);
+  }, [dbStatus?.ready, unseenActions.length]);
 
   useEffect(() => {
     if (!dbStatus?.ready || !isCreationBaselineReady) return;
@@ -110,6 +118,13 @@ export function TaskNotificationsBell({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen]);
+
+  const handleOpenLinkedAction = (notice: (typeof unseenActions)[number]) => {
+    markLinkedActionAssignmentsSeen(windowsUserName, [notice]);
+    setOpenedActionIds((current) => new Set(current).add(notice.noticeId));
+    setIsOpen(false);
+    onViewChange({ view: 'tareas', recordId: notice.task.id });
+  };
 
   const handleOpenAssignment = (task: Task) => {
     markTaskAssignmentsSeen(windowsUserName, [task]);
@@ -198,12 +213,24 @@ export function TaskNotificationsBell({
                 {unseenAssignments.length > 0 ? `${unseenAssignments.length} asignada${unseenAssignments.length === 1 ? '' : 's'}` : 'Sin asignaciones'}
                 {' · '}
                 {unseenCreations.length > 0 ? `${unseenCreations.length} nueva${unseenCreations.length === 1 ? '' : 's'}` : 'Sin tareas nuevas'}
+                {' · '}{unseenActions.length} acciones
               </p>
             </div>
             <button aria-label="Cerrar notificaciones" className="rounded-lg p-1 text-metro-muted hover:bg-white/10 hover:text-metro-text" onClick={() => setIsOpen(false)} type="button"><X size={17} /></button>
           </div>
 
           <div className="max-h-[24rem] overflow-y-auto p-2">
+            {unseenActions.length > 0 && <div className="mb-2">
+              <p className="px-2 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.12em] text-amber-300">Acciones vinculadas asignadas ({unseenActions.length})</p>
+              {unseenActions.slice(0, 5).map((notice) => (
+                <button key={notice.noticeId} type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-metro-raised" onClick={() => handleOpenLinkedAction(notice)}>
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" />
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{notice.title}</span><span className="block truncate text-xs text-metro-muted">Tarea: {notice.task.titulo}</span></span>
+                  <ChevronRight size={17} className="text-amber-300" />
+                </button>
+              ))}
+              {unseenActions.length > 5 && <p className="px-3 py-1 text-xs text-metro-muted">Y {unseenActions.length - 5} más</p>}
+            </div>}
             {unseenAssignments.length > 0 ? (
               <div className="mb-2">
                 <div className="flex items-center justify-between px-2 py-1.5">

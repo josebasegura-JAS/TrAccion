@@ -116,7 +116,7 @@ export function TaskEditor({
     trackingItems,
     trackingText,
     trackingUser,
-    quickActionEnabled, setQuickActionEnabled, quickActionTitle, setQuickActionTitle, quickActionDate, setQuickActionDate,
+    quickActionEnabled, setQuickActionEnabled, quickActionTitle, setQuickActionTitle, quickActionDate, setQuickActionDate, quickActionAssignee, setQuickActionAssignee, quickActionAssigneeOptions,
     unionCircuitOptions,
   } = useTaskEditorController({ task, mode, onDone, initialDraft, initialTrackingText, onCreated, createTaskOverride });
 
@@ -193,6 +193,9 @@ export function TaskEditor({
                 setQuickActionTitle={setQuickActionTitle}
                 quickActionDate={quickActionDate}
                 setQuickActionDate={setQuickActionDate}
+                quickActionAssignee={quickActionAssignee}
+                setQuickActionAssignee={setQuickActionAssignee}
+                quickActionAssigneeOptions={quickActionAssigneeOptions}
                 onCompleteQuickAction={completeQuickAction}
               />
 

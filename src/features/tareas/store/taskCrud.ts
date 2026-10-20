@@ -255,7 +255,7 @@ export async function updateTaskWithConcurrencyCheck(
   seguimientoText: string | undefined,
   expectedUpdatedAt: string | null,
   setState: SetTaskCrudState,
-  quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo'>,
+  quickAction?: Pick<TaskQuickAction, 'titulo' | 'fechaObjetivo' | 'asignadaA'>,
 ): Promise<TaskUpdateResult> {
   try {
     if (hasTaskSqliteRepository()) {
