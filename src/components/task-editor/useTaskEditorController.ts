@@ -102,6 +102,12 @@ export function useTaskEditorController({
   const [quickActionEnabled, setQuickActionEnabled] = useState(false);
   const [quickActionTitle, setQuickActionTitle] = useState('');
   const [quickActionDate, setQuickActionDate] = useState('');
+  const [quickActionAssignee, setQuickActionAssignee] = useState('');
+  const taskUsers = useTaskStore((state) => state.tasks);
+  const quickActionAssigneeOptions = useMemo(() => Array.from(new Set([
+    ...taskResponsibles.filter((item) => item.active && item.windowsUser.trim()).map((item) => item.windowsUser.trim()),
+    ...taskUsers.map((item) => item.createdBy?.trim() ?? '').filter(Boolean),
+  ])).sort((a, b) => a.localeCompare(b, 'es')), [taskResponsibles, taskUsers]);
   const [trackingDate, setTrackingDate] = useState(todayIsoDate);
   const [trackingUser, setTrackingUser] = useState(getActiveUser);
   const [manualDocumentPath, setManualDocumentPath] = useState('');
@@ -224,6 +230,7 @@ export function useTaskEditorController({
     setQuickActionEnabled(false);
     setQuickActionTitle('');
     setQuickActionDate('');
+    setQuickActionAssignee('');
     setTrackingDate(nextTrackingDate);
     setRecoveryBaseline({
       draft: nextDraft,
@@ -389,7 +396,7 @@ export function useTaskEditorController({
       return false;
     }
 
-    const result = await updateTask(task.id, draft, seguimientoForSave, loadedUpdatedAt, quickActionEnabled ? { titulo: quickActionTitle.trim(), fechaObjetivo: quickActionDate || undefined } : undefined);
+    const result = await updateTask(task.id, draft, seguimientoForSave, loadedUpdatedAt, quickActionEnabled ? { titulo: quickActionTitle.trim(), fechaObjetivo: quickActionDate || undefined, asignadaA: quickActionAssignee || undefined } : undefined);
     if (!result.ok) {
       setSaveStatus(result.message);
       setSaveStatusIsError(true);
@@ -427,6 +434,7 @@ export function useTaskEditorController({
     setQuickActionEnabled(false);
     setQuickActionTitle('');
     setQuickActionDate('');
+    setQuickActionAssignee('');
     setTrackingDate(nextTrackingDate);
     clearRecoveryDraft();
     setSaveStatus(coordinationResult.ok
@@ -900,6 +908,9 @@ export function useTaskEditorController({
     setQuickActionTitle,
     quickActionDate,
     setQuickActionDate,
+    quickActionAssignee,
+    setQuickActionAssignee,
+    quickActionAssigneeOptions,
     unionCircuitOptions,
   };
 }
