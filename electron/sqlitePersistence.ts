@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
-import { runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
+import { getSqliteIpcQueueDiagnostics, runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import {
   createVolatileOwnerId,
   resolveStableOwnerId,
@@ -616,6 +616,19 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
         (currentStatus.isDefaultPath
           ? 'No hay una base SQLite compartida activa.'
           : 'SQLite no está activa.'),
+    };
+  }
+
+  // Un timeout IPC no cancela la operación SQLite subyacente. Una consulta
+  // SELECT 1 desde este canal podría dar un falso positivo de recuperación
+  // mientras una escritura anterior sigue bloqueada o con resultado incierto.
+  const queue = getSqliteIpcQueueDiagnostics();
+  if (queue.timedOut) {
+    return {
+      ok: false,
+      status: currentStatus,
+      checkedAt,
+      message: `Hay una operación SQLite cuyo resultado sigue indeterminado: ${queue.runningOperation ?? 'desconocida'} (${queue.runningMs ?? 0} ms). No se desbloqueará la edición hasta que termine.`,
     };
   }
 
