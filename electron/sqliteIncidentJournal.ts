@@ -36,11 +36,14 @@ function appendEvent(event: SqliteIncidentEvent): void {
   try {
     const file = filePath();
     if (existsSync(file) && statSync(file).size > MAX_FILE_BYTES) {
-      const previous = readEvents().slice(-100);
+      const previous = readEvents();
+      const pending = getSqliteIncidentReport().uncertain;
+      const preservedIds = new Set(pending.map((item) => item.id));
+      const preserved = previous.filter((item) => preservedIds.has(item.id) || item.phase === 'timeout').slice(-200);
       const archived = file + '.old';
       try { renameSync(file, archived); } catch { /* preserve original log */ }
       // Previous events remain accessible in the current file after rotation.
-      if (!existsSync(file)) previous.forEach((item) => appendFileSync(file, JSON.stringify(item) + '\n'));
+      if (!existsSync(file)) preserved.forEach((item) => appendFileSync(file, JSON.stringify(item) + '\n'));
     }
     appendFileSync(file, JSON.stringify(event) + '\n');
   } catch (error) {
