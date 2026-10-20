@@ -161,6 +161,7 @@ interface TraccionApi {
   notifyRendererReady?: () => void;
   getWindowsUser?: () => Promise<string>;
   getAppVersion?: () => Promise<string>;
+  requestSafeRestart?: () => Promise<{ ok: boolean; message?: string }>;
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   getLastShutdownPerformance?: () => Promise<TraccionShutdownPerformance | null>;
   getStartupPerformance?: () => Promise<TraccionStartupPerformance>;
