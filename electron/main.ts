@@ -121,7 +121,7 @@ ipcMain.handle('app:main-watchdog-report', () => {
   const file = path.join(app.getPath('userData'), 'electron-main-watchdog.jsonl');
   try {
     if (!existsSync(file)) return [];
-    return readFileSync(file, 'utf8').split('\\n').filter(Boolean).slice(-40).flatMap((line) => {
+    return readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(-40).flatMap((line) => {
       try {
         const event: unknown = JSON.parse(line);
         if (event && typeof event === 'object' && 'phase' in event && 'at' in event) return [event];
