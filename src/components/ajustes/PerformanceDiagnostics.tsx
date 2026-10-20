@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Trash2 } from 'lucide-react';
+import { Activity, ClipboardCopy, Trash2 } from 'lucide-react';
 import {
   clearPerformanceMetrics,
   getPerformanceMetrics,
@@ -38,6 +38,13 @@ function severity(durationMs: number): string {
 
 export function PerformanceDiagnostics() {
   const [metrics, setMetrics] = useState<PerformanceMetric[]>(() => getPerformanceMetrics());
+  const [startup, setStartup] = useState<TraccionStartupPerformance | null>(null);
+  const [copyState, setCopyState] = useState('');
+  useEffect(() => {
+    void window.traccion?.getStartupPerformance?.().then(setStartup).catch(() => setStartup(null));
+  }, []);
+  const startupSteps = startup?.steps ?? [];
+  const startupTotal = startupSteps.find((step) => step.label === 'Dashboard visible')?.elapsedMs;
 
   useEffect(() => {
     const unsubscribe = subscribePerformanceMetrics(() => setMetrics(getPerformanceMetrics()));
@@ -62,6 +69,36 @@ export function PerformanceDiagnostics() {
         </div>
       </summary>
       <div className="border-t border-metro-border p-4">
+        <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Rendimiento de arranque">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-bold text-metro-text">Rendimiento de arranque · Último inicio</h4>
+              <p className="text-xs text-metro-muted">Desde la entrada en Electron hasta que el dashboard es visible; no incluye la extracción inicial del EXE portable por Windows.</p>
+            </div>
+            <button type="button" className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text" disabled={!startup}
+              onClick={() => {
+                if (!startup) return;
+                const report = [`TrAcción · Arranque ${startup.kind} · ${startup.recordedAt}`, startup.measuredFrom,
+                  ...startupSteps.map((step) => `${step.label}: ${step.elapsedMs} ms`)].join('\n');
+                void navigator.clipboard.writeText(report).then(() => setCopyState('Informe copiado')).catch(() => setCopyState('No se pudo copiar'));
+              }}><ClipboardCopy size={13} className="mr-1 inline" /> Copiar informe</button>
+          </div>
+          {copyState && <p className="mb-2 text-xs text-metro-muted">{copyState}</p>}
+          {startup ? (
+            <>
+              <p className="mb-2 text-sm font-semibold text-metro-text">
+                Inicio {startup.kind} · {startupTotal === undefined ? 'Inicio aún sin completar' : `${startupTotal} ms hasta dashboard visible`}
+              </p>
+              <table className="w-full text-left text-xs"><thead><tr><th className="py-1">Etapa</th><th className="py-1 text-right">Acumulado</th><th className="py-1 text-right">Desde anterior</th></tr></thead>
+                <tbody>{startupSteps.map((step, index) => <tr key={`${step.label}-${index}`} className="border-t border-metro-border">
+                  <td className="py-1.5">{step.label}</td><td className="py-1.5 text-right">{step.elapsedMs} ms</td>
+                  <td className="py-1.5 text-right">{index === 0 ? '—' : `${Math.max(0, step.elapsedMs - startupSteps[index - 1].elapsedMs)} ms`}</td>
+                </tr>)}</tbody>
+              </table>
+              <p className="mt-2 text-xs text-metro-muted">Las operaciones paralelas se muestran por su instante de finalización. El intervalo entre marcas no siempre corresponde únicamente a esa operación.</p>
+            </>
+          ) : <p className="text-xs text-metro-muted">Diagnóstico no disponible fuera de Electron.</p>}
+        </section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-xs text-metro-muted">Se muestran las operaciones más lentas. Las métricas normales son temporales; el último cierre se conserva solo para diagnosticar el siguiente arranque.</p>
           <button className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:bg-metro-surface" onClick={clearPerformanceMetrics} type="button">
