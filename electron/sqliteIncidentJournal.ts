@@ -63,7 +63,8 @@ export function getSqliteIncidentReport(): { events: SqliteIncidentEvent[]; unce
   const active = new Map<string, SqliteIncidentEvent>();
   for (const event of events) {
     if (event.phase === 'started') active.set(event.id, event);
-    else if (event.phase === 'completed' || event.phase === 'failed') active.delete(event.id);
+    else if (event.phase === 'completed') active.delete(event.id);
+    else if (event.phase === 'failed') active.set(event.id, event);
     else if (event.phase === 'timeout') active.set(event.id, event);
   }
   return { events: events.slice(-40), uncertain: [...active.values()] };
