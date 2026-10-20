@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   enqueueSqliteIpc,
+  getSqliteIpcQueueDiagnostics,
   isCurrentSqliteIpcReadOnly,
   isSqliteIpcReadOnlyOperation,
   resolveSqliteIpcTimeoutMs,
@@ -33,6 +34,23 @@ describe('enqueueSqliteIpc', () => {
     expect(await first).toBe(1);
     expect(await second).toBe(2);
     expect(order).toEqual(['primera', 'segunda']);
+  });
+
+  it('mantiene marcada una operación vencida hasta que termina realmente, sin liberarla por timeout', async () => {
+    let finish!: (value: string) => void;
+    const pending = new Promise<string>((resolve) => { finish = resolve; });
+    const observed = enqueueSqliteIpc('network:save-operation', () => pending);
+    // Adjuntar rechazo antes de avanzar el reloj para evitar rechazo no observado.
+    const result = observed.then(() => 'ok', () => 'timeout');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getSqliteIpcQueueDiagnostics().runningOperation).toBe('network:save-operation');
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await result).toBe('timeout');
+    expect(getSqliteIpcQueueDiagnostics().timedOut).toBe(true);
+    finish('finally-done');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getSqliteIpcQueueDiagnostics().runningOperation).toBeNull();
+    expect(getSqliteIpcQueueDiagnostics().timedOut).toBe(false);
   });
 
   it('mantiene un límite corto para las operaciones ordinarias', () => {
