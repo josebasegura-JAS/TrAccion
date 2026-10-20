@@ -1,3 +1,5 @@
+import { getConnectionDiagnostics, subscribeConnectionDiagnostics } from '../../services/databaseHealthMonitor';
+import { useDatabaseConnectivityState } from '../../services/databaseConnectivityState';
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, ClipboardCopy, Trash2 } from 'lucide-react';
 import {
@@ -38,6 +40,9 @@ function severity(durationMs: number): string {
 
 export function PerformanceDiagnostics() {
   const [metrics, setMetrics] = useState<PerformanceMetric[]>(() => getPerformanceMetrics());
+  const connectivity = useDatabaseConnectivityState();
+  const [connectionDiagnostics, setConnectionDiagnostics] = useState(getConnectionDiagnostics);
+  useEffect(() => subscribeConnectionDiagnostics(() => setConnectionDiagnostics(getConnectionDiagnostics())), []);
   const [startup, setStartup] = useState<TraccionStartupPerformance | null>(null);
   const [copyState, setCopyState] = useState('');
   useEffect(() => {
@@ -71,6 +76,35 @@ export function PerformanceDiagnostics() {
         </div>
       </summary>
       <div className="border-t border-metro-border p-4">
+        <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Conectividad SQLite">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h4 className="text-sm font-bold text-metro-text">Conectividad SQLite · Esta sesión</h4>
+            <button type="button" className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text"
+              onClick={() => {
+                const report = [
+                  'TrAcción · Diagnóstico de conectividad SQLite',
+                  `Estado: ${connectivity.phase}`,
+                  `Detalle: ${connectivity.message}`,
+                  `Última comprobación correcta: ${connectionDiagnostics.lastSuccessAt ?? 'Sin datos'}`,
+                  `Último fallo: ${connectionDiagnostics.lastFailureAt ?? 'Ninguno'}`,
+                  `Error: ${connectionDiagnostics.lastError ?? 'Ninguno'}`,
+                  `Fallos consecutivos: ${connectionDiagnostics.consecutiveFailures}`,
+                  `Última comprobación: ${connectionDiagnostics.lastCheckDurationMs ?? 'Sin datos'} ms`,
+                  `Comprobación en curso: ${connectionDiagnostics.checking ? 'Sí' : 'No'}`,
+                ].join('\\n');
+                void navigator.clipboard.writeText(report).then(() => setCopyState('Diagnóstico de conexión copiado')).catch(() => setCopyState('No se pudo copiar'));
+              }}><ClipboardCopy size={13} className="mr-1 inline" /> Copiar diagnóstico</button>
+          </div>
+          <table className="w-full text-left text-xs"><tbody>
+            <tr><td className="py-1">Estado</td><td className="py-1 text-right">{connectivity.phase}</td></tr>
+            <tr><td className="py-1">Última conexión verificada</td><td className="py-1 text-right">{connectionDiagnostics.lastSuccessAt ?? '—'}</td></tr>
+            <tr><td className="py-1">Último error</td><td className="py-1 text-right">{connectionDiagnostics.lastError ?? '—'}</td></tr>
+            <tr><td className="py-1">Fallos consecutivos</td><td className="py-1 text-right">{connectionDiagnostics.consecutiveFailures}</td></tr>
+            <tr><td className="py-1">Duración de comprobación</td><td className="py-1 text-right">{connectionDiagnostics.lastCheckDurationMs ?? '—'} ms</td></tr>
+            <tr><td className="py-1">Comprobación activa</td><td className="py-1 text-right">{connectionDiagnostics.checking ? 'Sí' : 'No'}</td></tr>
+          </tbody></table>
+          <p className="mt-2 text-xs text-metro-muted">El monitor observa la salud SQLite, pero no puede cancelar operaciones de red o escrituras nativas bloqueadas.</p>
+        </section>
         <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Rendimiento de arranque">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
