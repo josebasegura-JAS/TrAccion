@@ -1,4 +1,3 @@
-import { buildUpdateProgressWindowScript } from './updateProgressWindow.js';
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -314,53 +313,12 @@ export async function applyAppUpdate(
   }
 
   const scriptPath = path.join(stagingDir, 'traccion-apply-update.cmd');
-  const progressPath = path.join(stagingDir, 'progress.txt');
-  const progressScriptPath = path.join(stagingDir, 'traccion-update-progress.ps1');
-  const progressReadyPath = path.join(stagingDir, 'progress-visible.txt');
-  const batScript = buildUpdateApplyScript(currentExePath, targetExePath, stagedExePath)
-    .replace('set /a ATTEMPTS=0', [
-      'set "STATUS='+progressPath+'"',
-      '> "%STATUS%" echo closing',
-      'set /a ATTEMPTS=0',
-    ].join('\r\n'))
-    .replace(':copy_new', ':copy_new\r\n> "%STATUS%" echo installing')
-    .replace('start "" "%TARGET%"', '> "%STATUS%" echo starting\r\nstart "" "%TARGET%" --traccion-update-relaunch')
-    .replace('\r\n:giveup\r\n', '\r\n:giveup\r\n> "%STATUS%" echo error\r\n');
+  // Restaurado el actualizador portable probado: sin dependencias de PowerShell.
+  // El cierre ordenado y su indicador Electron los gestiona main.ts.
+  const batScript = buildUpdateApplyScript(currentExePath, targetExePath, stagedExePath);
 
   try {
-    await writeFile(progressPath, 'validated', 'utf8');
-    await writeFile(progressScriptPath, buildUpdateProgressWindowScript(), 'utf8');
     await writeFile(scriptPath, batScript, 'utf8');
-    // El actualizador no se ejecuta si no existe confirmación de ventana visible.
-    // Evita cerrar TrAcción y dejar al usuario sin información.
-    const { access } = await import('node:fs/promises');
-    const windowStartedAt = Date.now();
-    const progressWindow = spawn('powershell.exe', [
-      '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass',
-      '-WindowStyle', 'Hidden', '-File', progressScriptPath, progressPath, progressReadyPath,
-    ], { detached: true, stdio: 'ignore', windowsHide: true });
-    const launchFailure = new Promise<Error>((resolve) => {
-      progressWindow.once('error', resolve);
-    });
-    progressWindow.unref();
-    let visible = false;
-    let failure: Error | null = null;
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      const outcome = await Promise.race([
-        launchFailure.then((error) => ({ error })),
-        new Promise<{ error?: undefined }>((resolve) => setTimeout(() => resolve({}), 100)),
-      ]);
-      if (outcome.error) { failure = outcome.error; break; }
-      try { await access(progressReadyPath); visible = true; break; } catch { /* Ventana aún no visible */ }
-      if (progressWindow.exitCode !== null) break;
-    }
-    console.info('[updater] Indicador visible=%s tras %d ms', visible, Date.now() - windowStartedAt);
-    if (!visible) {
-      try { progressWindow.kill(); } catch { /* Ya finalizado */ }
-      return { ok: false, message: failure
-        ? `No se pudo iniciar el indicador de actualización: ${failure.message}`
-        : 'No se ha podido mostrar la ventana de actualización. No se cerrará TrAcción; vuelve a intentarlo o consulta con soporte.' };
-    }
     const child = spawn('cmd.exe', ['/c', scriptPath], { detached: true, stdio: 'ignore', windowsHide: true });
     child.unref();
   } catch (error) {
