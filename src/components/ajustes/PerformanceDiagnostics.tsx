@@ -52,6 +52,8 @@ export function PerformanceDiagnostics() {
     return unsubscribe;
   }, []);
 
+  const rendererStartupMetrics = useMemo(() => metrics.filter((metric) => metric.category === 'arranque').reverse(), [metrics]);
+
   const slowest = useMemo(
     () => [...metrics].sort((a, b) => b.durationMs - a.durationMs).slice(0, 12),
     [metrics],
@@ -79,7 +81,8 @@ export function PerformanceDiagnostics() {
               onClick={() => {
                 if (!startup) return;
                 const report = [`TrAcción · Arranque ${startup.kind} · ${startup.recordedAt}`, startup.measuredFrom,
-                  ...startupSteps.map((step) => `${step.label}: ${step.elapsedMs} ms`)].join('\n');
+                  ...startupSteps.map((step) => `${step.label}: ${step.elapsedMs} ms`),
+                  '--- Detalle interfaz ---', ...rendererStartupMetrics.map((metric) => `${metric.label}: ${metric.durationMs} ms`)].join('\n');
                 void navigator.clipboard.writeText(report).then(() => setCopyState('Informe copiado')).catch(() => setCopyState('No se pudo copiar'));
               }}><ClipboardCopy size={13} className="mr-1 inline" /> Copiar informe</button>
           </div>
@@ -98,6 +101,16 @@ export function PerformanceDiagnostics() {
               <p className="mt-2 text-xs text-metro-muted">Las operaciones paralelas se muestran por su instante de finalización. El intervalo entre marcas no siempre corresponde únicamente a esa operación.</p>
             </>
           ) : <p className="text-xs text-metro-muted">Diagnóstico no disponible fuera de Electron.</p>}
+        </section>
+        <section className="mb-5 rounded-lg border border-metro-border p-3" aria-label="Detalle de preparación de interfaz">
+          <h4 className="mb-1 text-sm font-bold text-metro-text">Detalle de preparación de interfaz (React y SQLite)</h4>
+          <p className="mb-3 text-xs text-metro-muted">Duraciones de operaciones individuales durante esta sesión. Importación de módulos y carga de SQLite se solapan, por lo que sus tiempos no deben sumarse. La señal de interfaz preparada se envía tras el primer render.</p>
+          {rendererStartupMetrics.length === 0 ? <p className="text-xs text-metro-muted">Todavía no se han registrado métricas de interfaz.</p> :
+            <table className="w-full text-left text-xs"><thead><tr><th className="py-1">Operación</th><th className="py-1 text-right">Duración</th></tr></thead>
+              <tbody>{rendererStartupMetrics.map((metric) => <tr className="border-t border-metro-border" key={metric.id}>
+                <td className="py-1.5">{metric.label}</td><td className="py-1.5 text-right font-semibold">{metric.durationMs} ms</td>
+              </tr>)}</tbody>
+            </table>}
         </section>
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-xs text-metro-muted">Se muestran las operaciones más lentas. Las métricas normales son temporales; el último cierre se conserva solo para diagnosticar el siguiente arranque.</p>
