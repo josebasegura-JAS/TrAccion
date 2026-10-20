@@ -41,6 +41,13 @@ function severity(durationMs: number): string {
 export function PerformanceDiagnostics() {
   const [metrics, setMetrics] = useState<PerformanceMetric[]>(() => getPerformanceMetrics());
   const connectivity = useDatabaseConnectivityState();
+  const [queue, setQueue] = useState<{ queuedOperations: number; runningOperation: string | null; runningMs: number | null; timedOut: boolean } | null>(null);
+  useEffect(() => {
+    const refresh = () => { void window.traccion?.getSqliteQueueDiagnostics?.().then(setQueue).catch(() => setQueue(null)); };
+    refresh();
+    const timer = window.setInterval(refresh, 2_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [connectionDiagnostics, setConnectionDiagnostics] = useState(getConnectionDiagnostics);
   useEffect(() => subscribeConnectionDiagnostics(() => setConnectionDiagnostics(getConnectionDiagnostics())), []);
   const [startup, setStartup] = useState<TraccionStartupPerformance | null>(null);
@@ -91,6 +98,10 @@ export function PerformanceDiagnostics() {
                   `Fallos consecutivos: ${connectionDiagnostics.consecutiveFailures}`,
                   `Última comprobación: ${connectionDiagnostics.lastCheckDurationMs ?? 'Sin datos'} ms`,
                   `Comprobación en curso: ${connectionDiagnostics.checking ? 'Sí' : 'No'}`,
+                  `Operación SQLite activa: ${queue?.runningOperation ?? 'Ninguna'}`,
+                  `Duración de operación activa: ${queue?.runningMs ?? 0} ms`,
+                  `Operación vencida: ${queue?.timedOut ? 'Sí' : 'No'}`,
+                  `Operaciones en espera: ${queue?.queuedOperations ?? 'Sin datos'}`,
                 ].join('\\n');
                 void navigator.clipboard.writeText(report).then(() => setCopyState('Diagnóstico de conexión copiado')).catch(() => setCopyState('No se pudo copiar'));
               }}><ClipboardCopy size={13} className="mr-1 inline" /> Copiar diagnóstico</button>
@@ -102,6 +113,9 @@ export function PerformanceDiagnostics() {
             <tr><td className="py-1">Fallos consecutivos</td><td className="py-1 text-right">{connectionDiagnostics.consecutiveFailures}</td></tr>
             <tr><td className="py-1">Duración de comprobación</td><td className="py-1 text-right">{connectionDiagnostics.lastCheckDurationMs ?? '—'} ms</td></tr>
             <tr><td className="py-1">Comprobación activa</td><td className="py-1 text-right">{connectionDiagnostics.checking ? 'Sí' : 'No'}</td></tr>
+            <tr><td className="py-1">Operación SQLite activa</td><td className="py-1 text-right">{queue?.runningOperation ?? '—'}{queue?.timedOut ? ' (timeout)' : ''}</td></tr>
+            <tr><td className="py-1">Tiempo operación activa</td><td className="py-1 text-right">{queue?.runningMs ?? '—'} ms</td></tr>
+            <tr><td className="py-1">Operaciones en espera</td><td className="py-1 text-right">{queue?.queuedOperations ?? '—'}</td></tr>
           </tbody></table>
           <p className="mt-2 text-xs text-metro-muted">El monitor observa la salud SQLite, pero no puede cancelar operaciones de red o escrituras nativas bloqueadas.</p>
         </section>
