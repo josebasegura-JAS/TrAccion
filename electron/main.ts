@@ -110,6 +110,25 @@ async function requestRendererAppClose(mainWindow: BrowserWindow): Promise<void>
   }
 }
 
+// Reinicio voluntario: respeta la confirmación de formularios y el cierre SQLite existente.
+let restartRequestInProgress = false;
+ipcMain.handle('app:request-safe-restart', async (event) => {
+  if (restartRequestInProgress || isShutdownInProgress) return { ok: false, message: 'Ya se está cerrando TrAcción.' };
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || window.isDestroyed()) return { ok: false, message: 'La ventana ya no está disponible.' };
+  restartRequestInProgress = true;
+  try {
+    const approved = await rendererAllowsAppClose(window);
+    if (!approved) return { ok: false, message: 'Reinicio cancelado para conservar los cambios.' };
+    isRendererCloseApproved = true;
+    app.relaunch();
+    setImmediate(() => app.quit());
+    return { ok: true };
+  } finally {
+    restartRequestInProgress = false;
+  }
+});
+
 function logStartupPhase(startedAt: number, phase: string): void { console.info(`[startup] ${phase}: ${Date.now() - startedAt} ms`); }
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
