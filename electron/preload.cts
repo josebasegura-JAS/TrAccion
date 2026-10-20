@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('traccion', {
   updateParitariaSummaryWord: (payload: { folderPath: string; code: string; date: string; points: string[] }) =>
     ipcRenderer.invoke('paritaria:update-summary-word', payload),
   getLastShutdownPerformance: () => ipcRenderer.invoke('performance:last-shutdown'),
+  getStartupPerformance: () => ipcRenderer.invoke('performance:startup-report'),
   databaseStatus: () => ipcRenderer.invoke('database:status'),
   databaseHealthCheck: () => ipcRenderer.invoke('database:health-check'),
   selectDatabaseDirectory: () => ipcRenderer.invoke('database:select-directory'),
