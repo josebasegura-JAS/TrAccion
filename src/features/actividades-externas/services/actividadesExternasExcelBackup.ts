@@ -72,7 +72,7 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
       row.height = 32;
       row.eachCell({ includeEmpty: true }, (cell) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: background } };
-        cell.font = { name: 'Calibri', size: 11, color: { argb: denied ? 'FF991B1B' : 'FF1F2937' }, bold: denied && cell.col === 6 };
+        cell.font = { name: 'Calibri', size: 11, color: { argb: denied ? 'FF991B1B' : 'FF1F2937' }, bold: false };
         cell.alignment = { vertical: 'middle', wrapText: true, indent: 1 };
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } };
       });
