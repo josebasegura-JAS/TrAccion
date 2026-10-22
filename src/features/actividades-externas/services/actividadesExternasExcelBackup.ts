@@ -80,8 +80,8 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
         row.getCell(6).font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFB91C1C' } };
       }
     });
-    sheet.printOptions = { horizontalCentered: true };
-    sheet.printArea = `A1:G${Math.max(4, sheet.rowCount)}`;
+    sheet.pageSetup.horizontalCentered = true;
+    sheet.pageSetup.printArea = `A1:G${Math.max(4, sheet.rowCount)}`;
     const raw = await workbook.xlsx.writeBuffer();
     const buffer = raw instanceof ArrayBuffer
       ? raw
