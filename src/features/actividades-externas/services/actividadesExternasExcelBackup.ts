@@ -42,6 +42,18 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
     sheet.getRow(4).values = ['Nº empleado', 'Nombre y apellidos', 'Actividad externa', 'Fecha solicitud', 'Remunerada', 'Estado', 'Observaciones resolución'];
     const safe = (value: string) => /^\s*[=+@-]/.test(value) ? `'${value}` : value;
     const sortedRecords = [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const exportNotes = (record: ActividadExterna): string => {
+      const rrll = (record.observacionesRrll ?? '').trim();
+      const committee = (record.observacionesResolucion ?? '').trim();
+      const legacyReason = (record.motivoDenegacion ?? '').trim();
+      const lines: string[] = [];
+      if (rrll) lines.push(`RRLL: ${rrll}`);
+      if (committee) lines.push(`Comité: ${committee}`);
+      if (!committee && legacyReason && !(rrll && record.estado === 'rechazada_rrll')) {
+        lines.push(`${record.estado === 'rechazada_rrll' ? 'RRLL' : 'Comité'}: ${legacyReason}`);
+      }
+      return lines.join('\n');
+    };
     sortedRecords.forEach((record) => {
       sheet.addRow({
         empleado: safe(record.empleado),
@@ -50,7 +62,7 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
         fechaSolicitud: record.fechaSolicitud,
         remunerada: record.remunerada ? 'Sí' : 'No',
         estado: ({ pendiente: 'Pendiente de RRLL', propuesta: 'Pendiente de Comité', rechazada_rrll: 'Rechazada por RRLL', autorizada: 'Autorizada', denegada: 'Denegada' } as const)[record.estado],
-        observaciones: safe(record.observacionesResolucion || record.motivoDenegacion || ''),
+        observaciones: safe(exportNotes(record)),
       });
     });
     sheet.properties.defaultRowHeight = 22;
