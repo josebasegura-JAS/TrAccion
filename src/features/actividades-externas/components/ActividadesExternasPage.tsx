@@ -203,7 +203,7 @@ export function ActividadesExternasPage() {
                       {group.icon !== 'rrll' && group.icon !== 'comite' && <><td className="px-3 py-2"><span className={`rounded-full border px-2 py-1 ${record.estado === 'autorizada' ? 'border-emerald-700 bg-emerald-950/40 text-emerald-300' : 'border-red-700 text-red-300'}`}>{record.estado === 'autorizada' ? 'Autorizada' : label(record.estado)}</span></td><td className="px-3 py-2">{(record.fechaResolucion || record.updatedAt).slice(0,10)}</td></>}
                       <td className="px-3 py-2 text-right"><div className="flex justify-end gap-2">
                       <button type="button" className="rounded-lg border border-metro-border px-3 py-1.5 font-semibold" onClick={(event) => { event.stopPropagation(); setSelectedRecordId((id) => id === record.id ? null : record.id); }}>{group.icon === 'rrll' ? 'Revisar' : group.icon === 'comite' ? 'Resolver' : <span className="inline-flex items-center gap-1"><Eye size={13}/> Ver detalle</span>}</button>
-                      <button type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); startEdit(record); }} className="rounded-lg border border-metro-border px-2 py-1.5"><Pencil size={13}/></button>}
+                      <button type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); startEdit(record); }} className="rounded-lg border border-metro-border px-2 py-1.5"><Pencil size={13}/></button>
                       <button type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); void requestDelete(record); }} className="rounded-lg border border-red-700/60 px-2 py-1.5 text-red-400"><Trash2 size={13}/></button>
                       </div></td>
                     </tr>
