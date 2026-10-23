@@ -10,7 +10,7 @@ interface State {
   records: ActividadExterna[];
   load: () => void;
   create: (draft: ActividadExternaDraft) => Promise<Result>;
-  update: (id: string, draft: ActividadExternaDraft) => Promise<Result>;
+  update: (id: string, draft: ActividadExternaDraft, observacionesRrll?: string) => Promise<Result>;
   remove: (id: string) => Promise<Result>;
   resolve: (id: string, estado: 'propuesta' | 'rechazada_rrll' | 'autorizada' | 'denegada', motivo: string) => Promise<Result>;
   setComunicacion: (id: string, comunicacion: ActividadExternaComunicacion) => Promise<Result>;
@@ -39,7 +39,7 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
       return { ok: true, message: excelWarning ? `Solicitud registrada. ${excelWarning}` : 'Solicitud registrada.' };
     } catch (error) { return { ok: false, message: message(error) }; }
   },
-  update: async (id, draft) => {
+  update: async (id, draft, observacionesRrll) => {
     const record = get().records.find((item) => item.id === id);
     if (!record) return { ok: false, message: 'Solicitud no encontrada. Recarga los datos.' };
     if (!draft.empleado.trim() || !draft.nombre.trim() || !draft.actividad.trim() || !draft.fechaSolicitud) {
@@ -51,7 +51,9 @@ export const useActividadesExternasStore = create<State>((set, get) => ({
         parseRecords: parseActividadesExternas, getRecordId: (item) => item.id,
         getRecordUpdatedAt: (item) => item.updatedAt,
         updateRecord: (latest) => ({
-          ...latest, ...draft, actividad: draft.actividad.trim(), updatedAt: now(),
+          ...latest, ...draft, actividad: draft.actividad.trim(),
+          ...(observacionesRrll === undefined ? {} : { observacionesRrll: observacionesRrll.trim() }),
+          updatedAt: now(),
         }),
         missingMessage: 'La solicitud ya no existe.',
         conflictMessage: 'Otro usuario ha modificado esta solicitud. Recarga antes de editar.',

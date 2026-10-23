@@ -30,7 +30,7 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Edición y eliminación',
     items: [
-      'Editar permite corregir actividad, fecha y carácter remunerado; conserva la persona, la resolución y el estado de comunicación.',
+      'Editar permite corregir actividad, fecha, remuneración y observaciones RRLL, conservando la resolución del Comité.',
       'Eliminar pide confirmación y borra la solicitud de la base compartida. Comprueba los datos antes de confirmar.',
       'Si otro usuario ha modificado la solicitud, TrAcción evita sobrescribirla y solicita recargar.',
     ],
@@ -82,9 +82,10 @@ export function ActividadesExternasPage() {
   const [editActivity, setEditActivity] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editPaid, setEditPaid] = useState(false);
+  const [editRrllNotes, setEditRrllNotes] = useState('');
   const { confirm, dialogNode } = useAppDialog();
   const startEdit = (record: ActividadExterna) => {
-    setEditing(record); setEditActivity(record.actividad); setEditDate(record.fechaSolicitud); setEditPaid(record.remunerada);
+    setEditing(record); setEditActivity(record.actividad); setEditDate(record.fechaSolicitud); setEditPaid(record.remunerada); setEditRrllNotes(record.observacionesRrll ?? '');
   };
   const requestDelete = async (record: ActividadExterna) => {
     const accepted = await confirm(`Se eliminará definitivamente la solicitud de ${record.nombre}. Esta acción no se puede deshacer.`, {
@@ -202,7 +203,7 @@ export function ActividadesExternasPage() {
                       {group.icon !== 'rrll' && group.icon !== 'comite' && <><td className="px-3 py-2"><span className={`rounded-full border px-2 py-1 ${record.estado === 'autorizada' ? 'border-emerald-700 bg-emerald-950/40 text-emerald-300' : 'border-red-700 text-red-300'}`}>{record.estado === 'autorizada' ? 'Autorizada' : label(record.estado)}</span></td><td className="px-3 py-2">{(record.fechaResolucion || record.updatedAt).slice(0,10)}</td></>}
                       <td className="px-3 py-2 text-right"><div className="flex justify-end gap-2">
                       <button type="button" className="rounded-lg border border-metro-border px-3 py-1.5 font-semibold" onClick={(event) => { event.stopPropagation(); setSelectedRecordId((id) => id === record.id ? null : record.id); }}>{group.icon === 'rrll' ? 'Revisar' : group.icon === 'comite' ? 'Resolver' : <span className="inline-flex items-center gap-1"><Eye size={13}/> Ver detalle</span>}</button>
-                      {group.icon !== 'rrll' && group.icon !== 'comite' && <button type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); startEdit(record); }} className="rounded-lg border border-metro-border px-2 py-1.5"><Pencil size={13}/></button>}
+                      <button type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); startEdit(record); }} className="rounded-lg border border-metro-border px-2 py-1.5"><Pencil size={13}/></button>
                       <button type="button" disabled={busy} onClick={(event) => { event.stopPropagation(); void requestDelete(record); }} className="rounded-lg border border-red-700/60 px-2 py-1.5 text-red-400"><Trash2 size={13}/></button>
                       </div></td>
                     </tr>
@@ -216,7 +217,8 @@ export function ActividadesExternasPage() {
             <button type="button" disabled={busy} onClick={() => startEdit(record)} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><Pencil size={13}/> Editar</button>
             <button type="button" disabled={busy} onClick={() => void requestDelete(record)} className="inline-flex items-center gap-1 rounded-lg border border-red-700/60 px-2.5 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50"><Trash2 size={13}/> Eliminar</button>
           </div>
-          {record.estado === 'pendiente' ? <div className="mt-3 flex gap-2">
+          {record.observacionesRrll?.trim() && <p className="mt-2 whitespace-pre-wrap text-xs text-metro-muted"><strong>RRLL:</strong> {record.observacionesRrll}</p>}
+           {record.estado === 'pendiente' ? <div className="mt-3 flex gap-2">
             <button disabled={busy} onClick={() => { setResolution({ record, estado: 'propuesta' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Elevar al Comité</button>
             <button disabled={busy} onClick={() => { setResolution({ record, estado: 'rechazada_rrll' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Rechazar RRLL</button>
           </div> : record.estado === 'propuesta' ? <div className="mt-3 flex gap-2"><button disabled={busy} onClick={() => { setResolution({ record, estado: 'autorizada' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Comité: aprobar</button><button disabled={busy} onClick={() => { setResolution({ record, estado: 'denegada' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Comité: denegar</button></div> : <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -248,7 +250,7 @@ export function ActividadesExternasPage() {
         void act(() => update(editing.id, {
           empleado: editing.empleado, nombre: editing.nombre, email: editing.email,
           actividad: editActivity, fechaSolicitud: editDate, remunerada: editPaid,
-        }), () => setEditing(null));
+        }, editRrllNotes), () => setEditing(null));
       }}>
         <h3 className="font-bold">Editar actividad externa</h3>
         <p className="text-xs text-metro-muted">{editing.nombre} · Nº {editing.empleado} · {label(editing.estado)}</p>
@@ -259,7 +261,10 @@ export function ActividadesExternasPage() {
           <input required type="date" value={editDate} onChange={(event) => setEditDate(event.target.value)} className="mt-1 block rounded-lg border border-metro-border bg-metro-surface p-2 text-sm text-metro-text"/>
         </label>
         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={editPaid} onChange={(event) => setEditPaid(event.target.checked)}/> Actividad remunerada</label>
-        <p className="text-xs text-metro-muted">Se conservan la resolución, sus observaciones y el estado de comunicación. Si ya se comunicó, revisa si procede enviar una actualización.</p>
+        <label className="block text-xs font-semibold">Observaciones de RRLL
+          <textarea value={editRrllNotes} onChange={(event) => setEditRrllNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm text-metro-text"/>
+        </label>
+        <p className="text-xs text-metro-muted">Se conservan la resolución del Comité, sus observaciones y el estado de comunicación. Si ya se comunicó, revisa si procede enviar una actualización.</p>
         <div className="flex justify-end gap-2">
           <button type="button" disabled={busy} onClick={() => setEditing(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
           <button type="submit" disabled={busy || !editActivity.trim() || !editDate} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Guardar cambios</button>
