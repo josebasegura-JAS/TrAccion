@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { syncCriteriosRrllExcelBackup } from '../services/criteriosRrllExcelBackup';
 import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
@@ -108,6 +109,11 @@ function buildCriterioFromDraft(draft: CriterioRrllDraft, now: string, id = crea
     updatedAt: now,
     deletedAt: previous?.deletedAt ?? null,
   };
+}
+
+async function exportAfterSave(criterios: CriterioRrll[], message: string): Promise<string> {
+  const warning = await syncCriteriosRrllExcelBackup(criterios);
+  return warning ? `${message} ${warning}` : message;
 }
 
 function mirrorCriteriosRrll(criterios: CriterioRrll[]): void {
@@ -233,7 +239,7 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
           : [...get().criterios, criterio];
         mirrorCriteriosRrll(criterios);
         set({ criterios, selectedCriterioId: criterio.id });
-        return { ok: true, message: result.message, recordId: criterio.id };
+        return { ok: true, message: await exportAfterSave(criterios, result.message), recordId: criterio.id };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear el criterio.' };
       }
@@ -248,7 +254,7 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
         duplicateMessage: 'El criterio ya existe en la base compartida. Recarga antes de continuar.',
       });
       set({ criterios: result.records, selectedCriterioId: result.newRecord.id });
-      return { ok: true, message: 'Criterio creado.', recordId: result.newRecord.id };
+      return { ok: true, message: await exportAfterSave(result.records, 'Criterio creado.'), recordId: result.newRecord.id };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear el criterio.' };
     }
@@ -276,7 +282,7 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
           : get().criterios.map((current) => (current.id === id ? criterio : current));
         mirrorCriteriosRrll(criterios);
         set({ criterios, selectedCriterioId: id });
-        return { ok: true, message: result.message };
+        return { ok: true, message: await exportAfterSave(criterios, result.message) };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar el criterio.' };
       }
@@ -295,7 +301,7 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
         conflictMessage: 'Este criterio ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
       });
       set({ criterios: result.records, selectedCriterioId: id });
-      return { ok: true, message: 'Criterio guardado.' };
+      return { ok: true, message: await exportAfterSave(result.records, 'Criterio guardado.') };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar el criterio.' };
     }
@@ -322,7 +328,7 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
           : get().criterios.filter((criterio) => criterio.id !== id);
         mirrorCriteriosRrll(criterios);
         set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
-        return { ok: true, message: result.message };
+        return { ok: true, message: await exportAfterSave(criterios, result.message) };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar el criterio.' };
       }
@@ -342,7 +348,7 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
         conflictMessage: 'Este criterio ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
       });
       set({ criterios: result.records, selectedCriterioId: firstActiveCriterioId(result.records) });
-      return { ok: true, message: 'Criterio eliminado.' };
+      return { ok: true, message: await exportAfterSave(result.records, 'Criterio eliminado.') };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar el criterio.' };
     }
@@ -373,6 +379,8 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
         : criterios;
       mirrorCriteriosRrll(sqliteCriterios);
       set({ criterios: sqliteCriterios, selectedCriterioId: firstActiveCriterioId(sqliteCriterios) });
+      const warning = await syncCriteriosRrllExcelBackup(sqliteCriterios);
+      if (warning) throw new Error(`Importación guardada en SQLite, pero ${warning}`);
       return;
     }
 
