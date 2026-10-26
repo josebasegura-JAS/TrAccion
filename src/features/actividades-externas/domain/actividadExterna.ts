@@ -54,7 +54,7 @@ export function buildActividadMail(record: ActividadExterna, puestoTrabajo?: str
     const puesto = escapeMailHtml(puestoTrabajo?.trim() || '[PUESTO DE TRABAJO]');
     return {
       subject: 'Resolución favorable de solicitud de actividad externa',
-      html: `<p>Kaixo <strong>${name}</strong>,</p><p>Atendiendo a las explicaciones de las actividades concretas que nos ha hecho llegar, te comunicamos que una vez revisada tu solicitud no existe incompatibilidad con tu puesto de ${puesto}.</p><p>Cualquier aclaración estamos a tu disposición.</p><p>Ondo izan</p>`,
+      html: `<div style="font-family:Verdana, Geneva, sans-serif;font-size:10pt;font-weight:normal;"><p>Kaixo ${escapeMailHtml(record.nombre.trim().split(/\\s+/)[0] || '')},</p><p>Atendiendo a las explicaciones de las actividades concretas que nos ha hecho llegar, te comunicamos que una vez revisada tu solicitud no existe incompatibilidad con tu puesto de ${puesto}.</p><p>Cualquier aclaración estamos a tu disposición.</p><p>Ondo izan</p></div>`,
     };
   }
   const activity = escapeMailHtml(record.actividad).replace(/\\n/g, '<br>');
