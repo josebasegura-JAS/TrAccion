@@ -99,7 +99,6 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaExportacionActividadesExternas: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionCriteriosRrll: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionTicketRestaurante: (ruta: string) => Promise<{ ok: boolean; message: string }>;
-  setRutaExportacionTicketRestaurante: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaResumenComites: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaResumenParitaria: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaAyudaEscolar: (ruta: string) => Promise<{ ok: boolean; message: string }>;
