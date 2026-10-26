@@ -263,6 +263,27 @@ export function LoteriaPage() {
   };
 
 
+  const setOctoberReviewed = async (checked: boolean) => {
+    const previous = draft;
+    const next: LotteryCampaign = {
+      ...draft,
+      workflow: {
+        ...draft.workflow,
+        participantesPreparados: checked,
+        avisoPersonasEnviado: checked,
+      },
+    };
+    setDraft(next);
+    const result = await saveCampaign(next);
+    if (!result.ok) {
+      setDraft(previous);
+      setMessage(result.message || 'No se ha podido guardar la revisión de octubre.');
+      return;
+    }
+    clearRecoveryDraft();
+    setMessage(checked ? 'Octubre revisado. Puedes seguir incorporando participantes.' : 'Octubre vuelve a quedar pendiente.');
+  };
+
   const setCampaignClosed = (value: boolean) => {
     if (value) {
       const available1 = lotteryAvailableCountByNumber(draft, 1);
@@ -460,7 +481,7 @@ export function LoteriaPage() {
             </div>
             <div className="grid gap-2 lg:grid-cols-4">
               <StepCard active={recommendedStep.section === 'septiembre'} done={septemberDone} icon={CalendarDays} month="1 · Septiembre" title="Encargo" detail={septemberDone ? 'Encargo preparado y confirmado.' : 'Números, cantidades y lotero.'} onClick={() => setActiveSection('septiembre')} reviewed={septemberDone} onReviewChange={(checked) => void setSeptemberReviewed(checked)} />
-              <StepCard active={recommendedStep.section === 'octubre'} done={octoberDone} icon={UserRoundPlus} month="2 · Octubre" title="Participantes" detail={octoberDone ? 'Participantes preparados y avisados.' : 'Altas, cantidades y aviso CCO.'} onClick={() => setActiveSection('octubre')} />
+              <StepCard active={recommendedStep.section === 'octubre'} done={octoberDone} icon={UserRoundPlus} month="2 · Octubre" title="Participantes" detail={octoberDone ? 'Participantes preparados y avisados.' : 'Altas, cantidades y aviso CCO.'} onClick={() => setActiveSection('octubre')} reviewed={octoberDone} onReviewChange={(checked) => void setOctoberReviewed(checked)} />
               <StepCard active={recommendedStep.section === 'seguimiento'} done={seguimientoDone && pendingAmount === 0 && availableNumero1 >= 0 && availableNumero2 >= 0} icon={Euro} month="3 · Seguimiento" title="Cobros" detail={pendingAmount > 0 ? `${money(pendingAmount)} pendientes de cobro.` : 'Décimos y pagos revisados.'} onClick={() => setActiveSection('seguimiento')} />
               <StepCard active={recommendedStep.section === 'cierre'} done={cierreDone} icon={ClipboardCheck} month="4 · Cierre" title="Cuadre" detail={cierreDone ? 'Campaña cerrada.' : 'Sobrantes, caja y cierre final.'} onClick={() => setActiveSection('cierre')} />
             </div>
