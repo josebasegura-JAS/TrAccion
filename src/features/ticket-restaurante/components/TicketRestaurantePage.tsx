@@ -93,6 +93,8 @@ import {
   ticketPersonExportColumns,
 } from './ticketRestauranteExport';
 import { ManutencionesPanel } from './TicketRestauranteManutencionesPanel';
+import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
+import { syncTicketRestauranteMonthlyBackup } from '../services/ticketRestauranteMonthlyBackup';
 import {
   AbsencePreviewModal,
   AbsencesTable,
@@ -110,6 +112,7 @@ export function TicketRestaurantePage({
   const absences = useTicketRestauranteStore((state) => state.absences);
   const people = useTicketRestauranteStore((state) => state.people);
   const config = useTicketRestauranteStore((state) => state.config);
+  const rutaBackupTickets = useConfiguracionStore((state) => state.rutaExportacionTicketRestaurante);
   const manutenciones = useTicketRestauranteStore((state) => state.manutenciones);
   const loadTickets = useTicketRestauranteStore((state) => state.load);
   const {
@@ -311,6 +314,24 @@ export function TicketRestaurantePage({
     calculationMonth,
     manutenciones,
   );
+  // El Excel espejo usa el mismo preset que el botón Exportar. No modifica el pedido.
+  // Se espera a que terminen las ediciones encadenadas antes de escribir en red.
+  useEffect(() => {
+    if (!rutaBackupTickets.trim() || !people.length || !calendars.length) return;
+    const timer = window.setTimeout(() => {
+      void syncTicketRestauranteMonthlyBackup({
+        config,
+        year: calculationYear,
+        month: calculationMonth,
+        rows: sortMonthlyCalculationRows(monthCalculation.rows),
+        absences: calculationAbsences,
+      }).then((errorMessage) => {
+        if (errorMessage) console.warn(errorMessage);
+      });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [rutaBackupTickets, people, calendars, absences, manutenciones, config, calculationYear, calculationMonth, calculationAbsences]);
+
   const contributionPeople = ticketPeopleExistingInMonth(people, contributionYear, contributionMonth);
   const contributionCalculation = calculateTicketContribution(
     contributionPeople,
