@@ -173,8 +173,7 @@ export async function openWorkbookInExcel(
   }
 }
 
-export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAlert?: (message: string) => void): Promise<void> {
-  try {
+export async function buildTableExcelBuffer<T>(payload: ExportTablePayload<T>): Promise<ArrayBuffer> {
   const { default: ExcelJS } = await import('exceljs');
   const generatedAt = payload.generatedAt ?? new Date();
   const workbook = new ExcelJS.Workbook();
@@ -348,8 +347,7 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
     };
 
     const buffer = await workbook.xlsx.writeBuffer();
-    await openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, generatedAt));
-    return;
+    return normalizeWorkbookBuffer(buffer);
   }
   if (isTicketRestaurantMonthlyPreset) {
     const orange = toExcelColor('#FF9900');
@@ -553,8 +551,7 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
     worksheet.getRow(5).height = 22;
 
     const buffer = await workbook.xlsx.writeBuffer();
-    await openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, generatedAt));
-    return;
+    return normalizeWorkbookBuffer(buffer);
   }
   const lastColumnLetter = worksheet.getColumn(columnCount).letter;
 
@@ -664,7 +661,13 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
   });
 
   const buffer = await workbook.xlsx.writeBuffer();
-  await openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, generatedAt));
+  return normalizeWorkbookBuffer(buffer);
+}
+
+export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAlert?: (message: string) => void): Promise<void> {
+  try {
+    const buffer = await buildTableExcelBuffer(payload);
+    await openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, payload.generatedAt ?? new Date()));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'No se ha podido abrir Excel.';
     console.error('Error al abrir Excel:', error);

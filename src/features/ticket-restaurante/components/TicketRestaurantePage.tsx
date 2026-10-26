@@ -93,6 +93,8 @@ import {
   ticketPersonExportColumns,
 } from './ticketRestauranteExport';
 import { ManutencionesPanel } from './TicketRestauranteManutencionesPanel';
+import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
+import { syncTicketRestauranteMonthlyBackup } from '../services/ticketRestauranteMonthlyBackup';
 import {
   AbsencePreviewModal,
   AbsencesTable,
@@ -110,6 +112,7 @@ export function TicketRestaurantePage({
   const absences = useTicketRestauranteStore((state) => state.absences);
   const people = useTicketRestauranteStore((state) => state.people);
   const config = useTicketRestauranteStore((state) => state.config);
+  const rutaBackupTickets = useConfiguracionStore((state) => state.rutaExportacionTicketRestaurante);
   const manutenciones = useTicketRestauranteStore((state) => state.manutenciones);
   const loadTickets = useTicketRestauranteStore((state) => state.load);
   const {
@@ -297,20 +300,42 @@ export function TicketRestaurantePage({
     [absences, manutenciones],
   );
 
-  // Estos dos cálculos son deliberadamente directos (sin memoización). El módulo
-  // tiene un volumen pequeño y prima que cualquier edición de ausencias, deudas,
-  // calendarios o ajustes se refleje en el mismo render. Antes, cambiar de mes
-  // podía aparentar "arreglar" un dato porque forzaba la invalidación del memo.
-  const calculationPeople = ticketPeopleExistingInMonth(people, calculationYear, calculationMonth);
-  const monthCalculation = calculateMonthlyTicketOrder(
-    calculationPeople,
-    calendars,
-    absences,
-    config,
-    calculationYear,
-    calculationMonth,
-    manutenciones,
+  // El cálculo mensual se memoiza por sus datos de entrada para evitar que el
+  // efecto del backup se ejecute continuamente al renderizar sin cambios.
+  const calculationPeople = useMemo(
+    () => ticketPeopleExistingInMonth(people, calculationYear, calculationMonth),
+    [people, calculationYear, calculationMonth],
   );
+  const monthCalculation = useMemo(
+    () => calculateMonthlyTicketOrder(
+      calculationPeople,
+      calendars,
+      absences,
+      config,
+      calculationYear,
+      calculationMonth,
+      manutenciones,
+    ),
+    [calculationPeople, calendars, absences, config, calculationYear, calculationMonth, manutenciones],
+  );
+  // El Excel espejo usa el mismo preset que el botón Exportar. No modifica el pedido.
+  // Se espera a que terminen las ediciones encadenadas antes de escribir en red.
+  useEffect(() => {
+    if (!rutaBackupTickets.trim() || !people.length || !calendars.length) return;
+    const timer = window.setTimeout(() => {
+      void syncTicketRestauranteMonthlyBackup({
+        config,
+        year: calculationYear,
+        month: calculationMonth,
+        rows: sortMonthlyCalculationRows(monthCalculation.rows),
+        absences: calculationAbsences,
+      }).then((errorMessage) => {
+        if (errorMessage) console.warn(errorMessage);
+      });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [rutaBackupTickets, people, calendars, config, calculationYear, calculationMonth, calculationAbsences, monthCalculation.rows]);
+
   const contributionPeople = ticketPeopleExistingInMonth(people, contributionYear, contributionMonth);
   const contributionCalculation = calculateTicketContribution(
     contributionPeople,
