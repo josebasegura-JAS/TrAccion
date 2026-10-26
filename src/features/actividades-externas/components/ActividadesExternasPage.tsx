@@ -23,7 +23,7 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'RRLL puede rechazar la solicitud o elevarla con propuesta favorable al Comité de Dirección.',
       'El Comité decide aprobar o denegar las solicitudes elevadas. El rechazo o denegación requiere motivo.',
-      'Las observaciones se conservan en el registro y se incluyen en el borrador de correo correspondiente.',
+      'Las observaciones se conservan en el registro. Para las solicitudes aprobadas, Outlook utiliza el texto de comunicación favorable con el puesto de Plantilla.',
       'No es posible aprobar directamente una solicitud sin propuesta favorable previa de RRLL.',
     ],
   },
@@ -38,7 +38,7 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Outlook y envío',
     items: [
-      '«Preparar correo en Outlook» abre un borrador dirigido al correo almacenado en la solicitud. Revisa el destinatario y el texto antes de enviarlo.',
+      '«Preparar correo en Outlook» abre un borrador y rellena el correo disponible en Plantilla o en la solicitud. Si falta, deja el destinatario vacío para completarlo manualmente. Revisa también el puesto antes de enviarlo.',
       'Abrir un borrador no confirma el envío: usa «Confirmar envío manualmente» solo después de enviarlo realmente.',
     ],
   },
@@ -118,15 +118,18 @@ export function ActividadesExternasPage() {
     } finally { setBusy(false); }
   };
   const openDraft = async (record: ActividadExterna) => {
-    if (!record.email.trim()) { setMessage('La persona no tiene correo en Plantilla. Actualiza su ficha antes de preparar el borrador.'); return; }
     if (!window.traccion?.createOutlookDraft) { setMessage('La integración con Outlook de escritorio no está disponible.'); return; }
     setBusy(true);
     try {
-      const mail = buildActividadMail(record);
-      const result = await window.traccion.createOutlookDraft({ ...mail, to: [record.email], cc: [] });
+      const person = employees.find((item) => item.empleado === record.empleado && !item.deletedAt);
+      const puesto = person?.puestoOrganizativo?.trim() || person?.puestoNomina?.trim();
+      const email = person?.email?.trim() || record.email.trim();
+      const mail = buildActividadMail(record, puesto);
+      const result = await window.traccion.createOutlookDraft({ ...mail, to: email ? [email] : [], cc: [] });
       if (!result.ok) { setMessage(result.message); return; }
       const saved = await setComunicacion(record.id, 'borrador');
-      setMessage(saved.ok ? 'Borrador abierto en Outlook. El envío NO está confirmado.' : `Borrador abierto, pero no se pudo registrar el estado: ${saved.message}`);
+      const missing = [!email && 'destinatario', record.estado === 'autorizada' && !puesto && 'puesto de trabajo'].filter(Boolean);
+      setMessage(saved.ok ? `Borrador abierto en Outlook. El envío NO está confirmado.${missing.length ? ` Completa manualmente: ${missing.join(' y ')}.` : ''}` : `Borrador abierto, pero no se pudo registrar el estado: ${saved.message}`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'No se ha podido abrir Outlook.'); }
     finally { setBusy(false); }
   };

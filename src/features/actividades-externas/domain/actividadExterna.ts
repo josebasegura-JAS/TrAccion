@@ -48,16 +48,19 @@ export function escapeMailHtml(value: string): string {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-export function buildActividadMail(record: ActividadExterna) {
+export function buildActividadMail(record: ActividadExterna, puestoTrabajo?: string) {
   const name = escapeMailHtml(record.nombre);
-  const activity = escapeMailHtml(record.actividad).replace(/\n/g, '<br>');
-  const approved = record.estado === 'autorizada';
-  const subject = approved ? 'Resolución favorable de compatibilidad para actividad externa' : 'Resolución de solicitud de compatibilidad para actividad externa';
-  const resolution = approved
-    ? 'Te comunicamos que se ha autorizado la solicitud de compatibilidad para la actividad externa indicada.'
-    : 'Te comunicamos que no se ha autorizado la solicitud de compatibilidad para la actividad externa indicada.';
+  if (record.estado === 'autorizada') {
+    const puesto = escapeMailHtml(puestoTrabajo?.trim() || '[PUESTO DE TRABAJO]');
+    return {
+      subject: 'Resolución favorable de solicitud de actividad externa',
+      html: `<p>Kaixo <strong>${name}</strong>,</p><p>Atendiendo a las explicaciones de las actividades concretas que nos ha hecho llegar, te comunicamos que una vez revisada tu solicitud no existe incompatibilidad con tu puesto de ${puesto}.</p><p>Cualquier aclaración estamos a tu disposición.</p><p>Ondo izan</p>`,
+    };
+  }
+  const activity = escapeMailHtml(record.actividad).replace(/\\n/g, '<br>');
+  const subject = 'Resolución de solicitud de compatibilidad para actividad externa';
   const observations = record.observacionesResolucion ?? record.motivoDenegacion ?? '';
   const reason = observations.trim()
-    ? `<p><strong>${approved ? 'Observaciones' : 'Motivo'}:</strong> ${escapeMailHtml(observations).replace(/\n/g, '<br>')}</p>` : '';
-  return { subject, html: `<p>Hola, ${name}:</p><p>${resolution}</p><p><strong>Actividad:</strong> ${activity}</p>${reason}<p>Un saludo,<br>Relaciones Laborales<br>Metro Bilbao</p>` };
+    ? `<p><strong>Motivo:</strong> ${escapeMailHtml(observations).replace(/\\n/g, '<br>')}</p>` : '';
+  return { subject, html: `<p>Hola, ${name}:</p><p>Te comunicamos que no se ha autorizado la solicitud de compatibilidad para la actividad externa indicada.</p><p><strong>Actividad:</strong> ${activity}</p>${reason}<p>Un saludo,<br>Relaciones Laborales<br>Metro Bilbao</p>` };
 }
