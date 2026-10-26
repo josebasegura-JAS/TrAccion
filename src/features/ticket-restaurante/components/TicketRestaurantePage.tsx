@@ -300,19 +300,23 @@ export function TicketRestaurantePage({
     [absences, manutenciones],
   );
 
-  // Estos dos cálculos son deliberadamente directos (sin memoización). El módulo
-  // tiene un volumen pequeño y prima que cualquier edición de ausencias, deudas,
-  // calendarios o ajustes se refleje en el mismo render. Antes, cambiar de mes
-  // podía aparentar "arreglar" un dato porque forzaba la invalidación del memo.
-  const calculationPeople = ticketPeopleExistingInMonth(people, calculationYear, calculationMonth);
-  const monthCalculation = calculateMonthlyTicketOrder(
-    calculationPeople,
-    calendars,
-    absences,
-    config,
-    calculationYear,
-    calculationMonth,
-    manutenciones,
+  // El cálculo mensual se memoiza por sus datos de entrada para evitar que el
+  // efecto del backup se ejecute continuamente al renderizar sin cambios.
+  const calculationPeople = useMemo(
+    () => ticketPeopleExistingInMonth(people, calculationYear, calculationMonth),
+    [people, calculationYear, calculationMonth],
+  );
+  const monthCalculation = useMemo(
+    () => calculateMonthlyTicketOrder(
+      calculationPeople,
+      calendars,
+      absences,
+      config,
+      calculationYear,
+      calculationMonth,
+      manutenciones,
+    ),
+    [calculationPeople, calendars, absences, config, calculationYear, calculationMonth, manutenciones],
   );
   // El Excel espejo usa el mismo preset que el botón Exportar. No modifica el pedido.
   // Se espera a que terminen las ediciones encadenadas antes de escribir en red.
@@ -330,7 +334,7 @@ export function TicketRestaurantePage({
       });
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [rutaBackupTickets, people, calendars, absences, manutenciones, config, calculationYear, calculationMonth, calculationAbsences]);
+  }, [rutaBackupTickets, people, calendars, config, calculationYear, calculationMonth, calculationAbsences, monthCalculation.rows]);
 
   const contributionPeople = ticketPeopleExistingInMonth(people, contributionYear, contributionMonth);
   const contributionCalculation = calculateTicketContribution(
