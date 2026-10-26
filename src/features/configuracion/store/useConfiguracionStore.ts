@@ -51,6 +51,7 @@ interface ConfiguracionState {
   rutaExportacionCoordinacion: string;
   rutaExportacionActividadesExternas: string;
   rutaExportacionCriteriosRrll: string;
+  rutaExportacionTicketRestaurante: string;
   rutaResumenComites: string;
   rutaResumenParitaria: string;
   rutaAyudaEscolar: string;
@@ -75,6 +76,7 @@ type SharedRouteSettings = Pick<
   | 'rutaExportacionCoordinacion'
   | 'rutaExportacionActividadesExternas'
   | 'rutaExportacionCriteriosRrll'
+  | 'rutaExportacionTicketRestaurante'
   | 'rutaResumenComites'
   | 'rutaResumenParitaria'
   | 'rutaAyudaEscolar'
@@ -96,6 +98,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaExportacionCoordinacion: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionActividadesExternas: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionCriteriosRrll: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaExportacionTicketRestaurante: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaResumenComites: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaResumenParitaria: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaAyudaEscolar: (ruta: string) => Promise<{ ok: boolean; message: string }>;
@@ -131,6 +134,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaExportacionCoordinacion: state.rutaExportacionCoordinacion,
     rutaExportacionActividadesExternas: state.rutaExportacionActividadesExternas,
     rutaExportacionCriteriosRrll: state.rutaExportacionCriteriosRrll,
+    rutaExportacionTicketRestaurante: state.rutaExportacionTicketRestaurante,
     rutaResumenComites: state.rutaResumenComites,
     rutaResumenParitaria: state.rutaResumenParitaria,
     rutaAyudaEscolar: state.rutaAyudaEscolar,
@@ -263,6 +267,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaExportacionCoordinacion: '',
     rutaExportacionActividadesExternas: '',
     rutaExportacionCriteriosRrll: '',
+    rutaExportacionTicketRestaurante: '',
     rutaResumenComites: '',
     rutaResumenParitaria: '',
     rutaAyudaEscolar: getDefaultAyudaEscolarPath(),
@@ -292,6 +297,7 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
     rutaExportacionCoordinacion: typeof (parsed as { rutaExportacionCoordinacion?: unknown }).rutaExportacionCoordinacion === 'string' ? (parsed as { rutaExportacionCoordinacion: string }).rutaExportacionCoordinacion.trim() : '',
     rutaExportacionActividadesExternas: typeof (parsed as { rutaExportacionActividadesExternas?: unknown }).rutaExportacionActividadesExternas === 'string' ? (parsed as { rutaExportacionActividadesExternas: string }).rutaExportacionActividadesExternas.trim() : '',
     rutaExportacionCriteriosRrll: typeof (parsed as { rutaExportacionCriteriosRrll?: unknown }).rutaExportacionCriteriosRrll === 'string' ? (parsed as { rutaExportacionCriteriosRrll: string }).rutaExportacionCriteriosRrll.trim() : '',
+    rutaExportacionTicketRestaurante: typeof (parsed as { rutaExportacionTicketRestaurante?: unknown }).rutaExportacionTicketRestaurante === 'string' ? (parsed as { rutaExportacionTicketRestaurante: string }).rutaExportacionTicketRestaurante.trim() : '',
     rutaResumenComites: typeof (parsed as { rutaResumenComites?: unknown }).rutaResumenComites === 'string' ? (parsed as { rutaResumenComites: string }).rutaResumenComites.trim() : '',
     rutaResumenParitaria: typeof (parsed as { rutaResumenParitaria?: unknown }).rutaResumenParitaria === 'string' ? (parsed as { rutaResumenParitaria: string }).rutaResumenParitaria.trim() : '',
     rutaAyudaEscolar: normalizeAyudaEscolarPath((parsed as { rutaAyudaEscolar?: unknown }).rutaAyudaEscolar),
@@ -419,6 +425,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaExportacionCoordinacion: initialConfiguracion.rutaExportacionCoordinacion,
   rutaExportacionActividadesExternas: initialConfiguracion.rutaExportacionActividadesExternas,
   rutaExportacionCriteriosRrll: initialConfiguracion.rutaExportacionCriteriosRrll,
+  rutaExportacionTicketRestaurante: initialConfiguracion.rutaExportacionTicketRestaurante,
   rutaResumenComites: initialConfiguracion.rutaResumenComites,
   rutaResumenParitaria: initialConfiguracion.rutaResumenParitaria,
   rutaAyudaEscolar: initialConfiguracion.rutaAyudaEscolar,
@@ -432,8 +439,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   },
   reloadFromStorage: () => {
     const applyIfChanged = (configuracion: ConfiguracionState) => {
-      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaExportacionActividadesExternas, rutaExportacionCriteriosRrll, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
-      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaExportacionActividadesExternas, rutaExportacionCriteriosRrll, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
+      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaExportacionActividadesExternas, rutaExportacionCriteriosRrll, rutaExportacionTicketRestaurante, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
+      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaExportacionActividadesExternas, rutaExportacionCriteriosRrll, rutaExportacionTicketRestaurante, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
       if (!areConfiguracionesEquivalent(current, configuracion)) set(configuracion);
     };
     if (window.traccion?.loadConfiguracion) {
@@ -455,6 +462,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   setRutaExportacionCoordinacion: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionCoordinacion: ruta.trim() }),
   setRutaExportacionActividadesExternas: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionActividadesExternas: ruta.trim() }),
   setRutaExportacionCriteriosRrll: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionCriteriosRrll: ruta.trim() }),
+  setRutaExportacionTicketRestaurante: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionTicketRestaurante: ruta.trim() }),
   setRutaResumenComites: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaResumenComites: ruta.trim() }),
   setRutaResumenParitaria: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaResumenParitaria: ruta.trim() }),
   setRutaAyudaEscolar: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaAyudaEscolar: ruta.trim() }),
@@ -473,6 +481,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     rutaExportacionCoordinacion: rutas.rutaExportacionCoordinacion.trim(),
     rutaExportacionActividadesExternas: rutas.rutaExportacionActividadesExternas.trim(),
     rutaExportacionCriteriosRrll: rutas.rutaExportacionCriteriosRrll.trim(),
+    rutaExportacionTicketRestaurante: rutas.rutaExportacionTicketRestaurante.trim(),
     rutaResumenComites: rutas.rutaResumenComites.trim(),
     rutaResumenParitaria: rutas.rutaResumenParitaria.trim(),
     rutaAyudaEscolar: rutas.rutaAyudaEscolar.trim(),
