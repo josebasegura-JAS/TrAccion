@@ -21,19 +21,16 @@ export async function syncTicketRestauranteMonthlyBackup({
   const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
   const fileName = `Computo_${capitalizedMonth}_${year}.xlsx`;
   try {
-    const orderedRows = [...rows].sort((a, b) =>
-      a.calendario.localeCompare(b.calendario, 'es') ||
-      a.nombreApellidos.localeCompare(b.nombreApellidos, 'es'));
     const buffer = await buildTableExcelBuffer({
       title: 'Cómputo mensual Ticket Restaurante',
       filename: `Computo_${capitalizedMonth}_${year}`,
       columns: monthlyCalculationExportColumns(config, year, month, absences),
-      rows: orderedRows,
+      rows,
       rowGroupValue: (row) => row.calendario,
       filterLabel: buildFilterLabel([['Mes', month], ['Año', year]]),
       formatPreset: 'ticket-restaurante-monthly',
     });
-    return saveExcelBackupWithRetry({ directory, fileName, cleanupPrefix: '', buffer });
+    return saveExcelBackupWithRetry({ directory, fileName, cleanupPrefix: `Computo_${capitalizedMonth}_${year}`, buffer });
   } catch (error) {
     return `No se ha podido generar el backup de Ticket Restaurante: ${error instanceof Error ? error.message : String(error)}`;
   }
