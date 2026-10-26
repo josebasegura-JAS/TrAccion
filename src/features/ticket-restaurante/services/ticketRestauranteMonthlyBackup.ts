@@ -25,7 +25,7 @@ export async function syncTicketRestauranteMonthlyBackup({
       title: 'Cómputo mensual Ticket Restaurante',
       filename: `Computo_${capitalizedMonth}_${year}`,
       columns: monthlyCalculationExportColumns(config, year, month, absences),
-      rows,
+      rows: [...rows],
       rowGroupValue: (row) => row.calendario,
       filterLabel: buildFilterLabel([['Mes', month], ['Año', year]]),
       formatPreset: 'ticket-restaurante-monthly',
