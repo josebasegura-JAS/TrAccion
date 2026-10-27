@@ -10,9 +10,7 @@ const TICKET_RESTAURANTE_GROUP = 'Herramientas';
 const TICKET_RESTAURANTE_MODULE = 'Ticket Restaurante';
 
 async function openCalendars(page: Page): Promise<void> {
-  const tools = page.locator('details').filter({ hasText: 'Configuración y herramientas avanzadas' });
-  await tools.locator('summary').click();
-  await tools.getByRole('button', { name: /^Calendarios/ }).click();
+  await page.getByRole('button', { name: /^Calendarios\s+Configurar días$/ }).click();
   await expect(page.getByLabel('Nombre calendario')).toBeVisible();
 }
 
