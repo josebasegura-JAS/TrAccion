@@ -79,10 +79,23 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
     try {
       await navigateToModule(userB.page, TICKET_RESTAURANTE_GROUP, TICKET_RESTAURANTE_MODULE);
       await openCalendars(userB.page);
-      // El reloj del renderer B detiene el polling: el conflicto no depende
-      // de que la máquina termine la prueba antes de 12 segundos.
-      await userB.page.clock.install();
-      await userB.page.clock.pauseAt(new Date(Date.now() + 1000));
+      // Detener solo la sincronización de B, dejando activos los relojes,
+      // fotogramas y callbacks de IPC que necesita un guardado real.
+      const staleRevision = await userB.page.evaluate(async ({ syncUrl, storeUrl, id }) => {
+        const sync = await import(syncUrl);
+        sync.stopExternalDataSyncPolling();
+        // Barrera explícita: terminar la carga inicial antes de que A escriba.
+        await sync.forceExternalDataRefreshAfterRecovery();
+        sync.stopExternalDataSyncPolling();
+        const { useTicketRestauranteStore } = await import(storeUrl);
+        const calendars: Array<{ id: string; updatedAt: string }> = useTicketRestauranteStore.getState().calendars;
+        return calendars.find(calendar => calendar.id === id)?.updatedAt;
+      }, {
+        syncUrl: '/src/services/externalDataSync.ts',
+        storeUrl: '/src/features/ticket-restaurante/store/useTicketRestauranteStore.ts',
+        id: calendarId,
+      });
+      expect(staleRevision).toBeTruthy();
       await expect(userB.page.getByLabel('Selector calendario')).toContainText(calendarName, {
         timeout: 10_000,
       });
@@ -98,6 +111,7 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
       // El botón cambia de etiqueta ("Activar" <-> "Desactivar") una vez que
       // el toggle se ha aplicado, así que usamos ese cambio como señal de
       // que la escritura en SQLite ya se ha completado.
+      await userA.page.bringToFront();
       const toggleButton = userA.page.getByRole('button', { name: /^(Desactivar|Activar)$/ });
       const labelBeforeToggle = await toggleButton.innerText();
       await toggleButton.click();
@@ -112,15 +126,20 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
         nombre: calendarName, activo: labelBeforeToggle === 'Activar',
       });
 
-      // B conserva de forma controlada la revisión anterior al guardado de A.
+      expect(committedByA!.updatedAt).not.toBe(staleRevision);
+      const revisionInB = await userB.page.evaluate(async ({ storeUrl, id }) => {
+        const { useTicketRestauranteStore } = await import(storeUrl);
+        const calendars: Array<{ id: string; updatedAt: string }> = useTicketRestauranteStore.getState().calendars;
+        return calendars.find(calendar => calendar.id === id)?.updatedAt;
+      }, { storeUrl: '/src/features/ticket-restaurante/store/useTicketRestauranteStore.ts', id: calendarId });
+      expect(revisionInB).toBe(staleRevision);
+
+      // B conserva la revisión anterior; el intento debe llegar a SQLite real.
+      await userB.page.bringToFront();
       const editedName = `${calendarName} (editado por B)`;
       await userB.page.getByLabel('Nombre calendario').fill(editedName);
+      await expect(userB.page.getByLabel('Nombre calendario')).toHaveValue(editedName);
       await userB.page.getByRole('button', { name: 'Guardar', exact: true }).click();
-
-      // El guardado espera dos requestAnimationFrame antes del IPC. Con el
-      // reloj pausado hay que ejecutar esos frames, sin alcanzar el polling
-      // de 12 s ni sustituir el resultado real de SQLite.
-      await userB.page.clock.runFor(100);
 
       const conflictDialog = userB.page.getByRole('dialog', { name: 'Información', exact: true });
       await expect(conflictDialog).toBeVisible({ timeout: 10_000 });

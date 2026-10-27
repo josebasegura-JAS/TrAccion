@@ -185,24 +185,38 @@ Se exige coincidencia exacta en los tres guardados del spec, incluidos ambos
 usuarios. Se conservan las aserciones de persistencia y rechazo del conflicto;
 no se usa `.first()`, no se omiten pruebas ni se cambia la aplicación.
 
-### Reloj simulado y conflicto entre usuarios
+### Sincronización controlada en el escenario de dos usuarios
 
-El registro Windows de `b9df00bf` acredita 9/10 tests Electron; el último se
-queda esperando el aviso de conflicto. La prueba pausaba el reloj de B para
-impedir el polling, pero `saveTicketRestauranteCalendarToSqlite` espera
-`waitForNextPaint` (dos requestAnimationFrame) antes de enviar el IPC. Con el
-reloj detenido, no llegaba a ejecutarse el guardado que debía ser rechazado.
-Se ejecutan 100 ms de tiempo virtual tras pulsar Guardar, suficientes para esos
-fotogramas y por debajo de los 12 s del polling. La escritura SQLite no se
-simula y el reloj permanece controlado.
+El registro Windows de `418abfe0` vuelve a acreditar 9/10 tests Electron.
+Avanzar 100 ms no resolvió el test que congelaba el reloj global de B: ese
+control afecta también a fotogramas, callbacks y espera de guardado.
+La versión actual elimina por completo el reloj simulado del escenario.
 
-Se actualizan el nombre accesible «Información» y el botón «Cerrar» conforme
-al AppDialog actual. Se comprueba además el valor y token reales del calendario
-confirmado por A y que permanecen intactos tras el rechazo a B. El test también
-exige que ambos usuarios estén sobre el mismo calendario seleccionado.
+Se detiene únicamente el servicio de sincronización de B mediante su función
+existente y se espera a una recarga explícita antes de que A escriba. El test
+captura la revisión antigua y comprueba que B sigue teniéndola después del
+commit de A, mientras SQLite ya contiene una revisión distinta. Deja activos
+los temporizadores, los fotogramas y el IPC reales. Se lleva al frente cada
+ventana al alternar de usuario y se comprueba el texto del formulario de B.
 
-Comprobaciones locales: tipos de tests/E2E y lint pasan; 17 pruebas existentes
-de store concurrente y AppDialog pasan. Una ejecución con Chromium y la función
-real waitForNextPaint confirma que permanece pendiente con el reloj pausado y
-termina tras clock.runFor(100). La validación completa Windows del nuevo commit
-sigue siendo necesaria; estas comprobaciones no la sustituyen.
+Se mantiene la exigencia del diálogo «Información» con el rechazo por
+modificación ajena y su botón «Cerrar». Se exige que los dos clientes estén en
+el mismo calendario y que el valor y token confirmados por A permanezcan
+intactos tras el rechazo a B. No se acepta como éxito simplemente que aparezca
+cualquier aviso ni se sustituye el resultado de SQLite.
+
+Comprobaciones locales de diagnóstico (sin añadir otra batería permanente):
+
+- Dos procesos Electron, store real y SQLite compartida real: B conserva el
+  snapshot previo, A confirma su escritura y SQLite rechaza la modificación
+  de B; valor y token de A intactos. Pasa en 6,5 s.
+- Mismo escenario con edición y guardado desde la interfaz de B: aparece el
+  diálogo de conflicto real, se cierra y se verifica la base. Pasa en 7,7 s.
+  La preparación del calendario usa el store para aislar el problema previo
+  de entrada de texto de este entorno Linux.
+- Tipos y ESLint se ejecutan sobre el spec definitivo. La nueva batería Windows
+  sigue siendo necesaria para acreditar el recorrido completo con teclado.
+
+La comprobación aislada de waitForNextPaint demostraba el efecto del reloj,
+pero no validaba todo el ciclo de guardado: por eso se reemplaza esa estrategia
+por sincronización selectiva y comprobaciones explícitas de revisión.
