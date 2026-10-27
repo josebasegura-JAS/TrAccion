@@ -1334,6 +1334,8 @@ export function TicketRestaurantePage({
           absenceCount={workflowAbsenceCount}
           absencesReviewed={workflowReview.absencesReviewed}
           calculation={monthCalculation}
+          initialOrderedTickets={config.monthlyOrders?.[`${calculationYear}-${String(calculationMonth).padStart(2, '0')}`]?.totalTickets}
+          orderMovementsCount={(config.orderMovements ?? []).filter(item => item.year === calculationYear && item.month === calculationMonth).length}
           orderedTickets={(() => {
             const key = `${calculationYear}-${String(calculationMonth).padStart(2, '0')}`;
             const initial = config.monthlyOrders?.[key];
