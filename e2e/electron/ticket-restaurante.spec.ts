@@ -34,7 +34,7 @@ test('flujo crítico: crear un calendario de Ticket Restaurante desde UI y verif
       await openCalendars(page);
 
       await page.getByLabel('Nombre calendario').fill(calendarName);
-      await page.getByRole('button', { name: 'Guardar' }).click();
+      await page.getByRole('button', { name: 'Guardar', exact: true }).click();
 
       // El guardado es async contra SQLite; esperamos a que el nuevo
       // calendario aparezca seleccionado en el desplegable, y a que no
@@ -65,7 +65,7 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
     await navigateToModule(userA.page, TICKET_RESTAURANTE_GROUP, TICKET_RESTAURANTE_MODULE);
     await openCalendars(userA.page);
     await userA.page.getByLabel('Nombre calendario').fill(calendarName);
-    await userA.page.getByRole('button', { name: 'Guardar' }).click();
+    await userA.page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await expect(userA.page.getByLabel('Selector calendario')).toContainText(calendarName, {
       timeout: 10_000,
     });
@@ -101,7 +101,7 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
       // B conserva de forma controlada la revisión anterior al guardado de A.
       const editedName = `${calendarName} (editado por B)`;
       await userB.page.getByLabel('Nombre calendario').fill(editedName);
-      await userB.page.getByRole('button', { name: 'Guardar' }).click();
+      await userB.page.getByRole('button', { name: 'Guardar', exact: true }).click();
 
       // AppDialog (el componente que renderiza este aviso) no enlaza su
       // título con aria-labelledby, así que su nombre accesible queda vacío:

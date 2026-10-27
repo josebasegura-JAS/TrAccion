@@ -175,3 +175,12 @@ La observación previa de un fallo intermitente OCC en Linux sigue registrada
 en la PR; esta corrección de exportación no modifica su lógica ni pretende
 resolverla. Un resultado verde puntual no acredita estabilidad de esa prueba.
 SMB real, binarios Windows y actualizaciones entre versiones siguen pendientes.
+
+### Selector de guardado de calendarios Electron
+
+El registro Windows de `0c8dc007` confirma que pasan tipos, lint, Vitest con
+cobertura, build e interfaz web. Electron pasa 8 de 10 tests; los dos de Ticket
+fallan porque `name: 'Guardar'` encuentra tanto «Guardar» como «Guardar cambios».
+Se exige coincidencia exacta en los tres guardados del spec, incluidos ambos
+usuarios. Se conservan las aserciones de persistencia y rechazo del conflicto;
+no se usa `.first()`, no se omiten pruebas ni se cambia la aplicación.
