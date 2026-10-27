@@ -115,7 +115,7 @@ describe('humo UI de módulos principales', () => {
     ['Actas', <ActasPage />, /Actas/i],
     ['Teletrabajo', <TeletrabajoPage />, /Teletrabajo/i],
     ['Plantilla', <PlantillaPage />, /Plantilla/i],
-    ['Ticket Restaurante', <TicketRestaurantePage />, /Ticket Restaurante/i],
+    ['Ticket Restaurante', <TicketRestaurantePage />, /Mes de trabajo/i],
     ['Sorteos', <SorteosPage />, /Sorteos/i],
     ['Licencias / Excedencias', <LicenciasSinSueldoPage />, /Licencias sin sueldo/i],
     ['Comité / Paritaria', <ComitePage />, /Comité y Paritaria/i],
