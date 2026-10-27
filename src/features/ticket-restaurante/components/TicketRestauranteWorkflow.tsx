@@ -3,6 +3,7 @@ import {
   BarChart3,
   CalendarDays,
   Calculator,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Eye,
