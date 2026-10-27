@@ -6,6 +6,8 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
+  forbidOnly: !!process.env.CI,
+  retries: 0,
   fullyParallel: false,
   workers: 1,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report-electron' }]] : 'list',

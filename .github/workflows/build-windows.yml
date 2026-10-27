@@ -2,155 +2,114 @@ name: Build Windows EXE
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      format:
+        type: string
+        default: portable
+      artifact-name:
+        type: string
+        default: Traccion-windows-portable
 
 permissions:
   contents: write
 
-jobs:
-  build-windows:
-    name: Build TrAccion V1 portable EXE
-    runs-on: windows-latest
+# Compartido por EXE, Lite y ZIP. Nunca cancelar una distribución en curso.
+concurrency:
+  group: traccion-distribucion
+  cancel-in-progress: false
 
+jobs:
+  distribution:
+    name: Validar y distribuir el mismo commit
+    runs-on: windows-latest
+    timeout-minutes: 45
     env:
+      CI: 'true'
+      NODE_ENV: development
       ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
       ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
-      PYTHON: python
-      npm_config_python: python
-
+      PACKAGE_FORMAT: ${{ inputs.format || 'portable' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Exigir main y formato soportado
+        shell: pwsh
+        run: |
+          if ('${{ github.ref }}' -ne 'refs/heads/main') { throw 'Distribuir únicamente desde main.' }
+          if ($env:PACKAGE_FORMAT -notin @('portable', 'zip')) { throw 'Formato no soportado.' }
+      - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
-
-      - name: Cache npm download cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-22.13.1-npm-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-22.13.1-npm-
-
-      - name: Setup Python for node-gyp
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Cache Electron builder binaries
+          node-version-file: .nvmrc
+      - name: Crear el commit final ANTES de validar y compilar
+        shell: pwsh
+        run: |
+          npm run version:bump
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .build-version package.json package-lock.json
+          git commit -m 'ci: bump build counter'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git rev-parse HEAD
+      - name: Batería oficial sobre el commit final
+        uses: ./.github/actions/validate
+      - name: Cache de herramientas de empaquetado
         uses: actions/cache@v4
         with:
           path: |
             .cache/electron
             .cache/electron-builder
-          key: ${{ runner.os }}-electron-builder-${{ hashFiles('package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-builder-
-
-      - name: Configurar registro npm público
+          key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
+      - name: Empaquetar portable o directorio Windows
         shell: pwsh
         run: |
-          npm config set registry https://registry.npmjs.org/
-
-      - name: Install dependencies from lockfile
-        shell: pwsh
-        run: |
-          if (Test-Path node_modules) {
-            Remove-Item node_modules -Recurse -Force
-          }
-          npm ci --include=dev --no-audit --no-fund
-          npm rebuild better-sqlite3
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Unit tests
-        run: npm run test
-
-      # npm run build ejecuta tsc para renderer y Electron; evitar repetirlo.
-      - name: Build renderer and Electron main
-        run: npm run build
-
-      - name: Bump build version
-        run: npm run version:bump
-
-      - name: Build portable EXE
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Continue"
-          $maxAttempts = 3
-
-          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-            Write-Host "portable:build attempt $attempt of $maxAttempts"
-            npm run portable:build
-
-            if ($LASTEXITCODE -eq 0) {
-              exit 0
-            }
-
-            if ($attempt -lt $maxAttempts) {
-              Write-Host "portable:build failed with exit code $LASTEXITCODE. Retrying after transient download failure..."
-              Start-Sleep -Seconds (20 * $attempt)
-            }
-          }
-
-          exit $LASTEXITCODE
-
-      - name: Validate portable EXE
-        shell: pwsh
-        run: |
-          $artifactName = node --input-type=module -e "import { readFileSync } from 'node:fs'; import { getPortableArtifactName } from './scripts/release-version.mjs'; const pkg = JSON.parse(readFileSync('./package.json', 'utf8')); process.stdout.write(getPortableArtifactName(pkg.version));"
-          if (-not $artifactName) {
-            Write-Error "No se pudo determinar el nombre esperado del portable."
-            exit 1
-          }
-          $exe = Join-Path $PWD ("release\" + $artifactName)
-          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
-            Write-Error "No se ha generado el portable esperado: $exe"
-            Get-ChildItem release -Force | Format-Table Name, Length, LastWriteTime
-            exit 1
-          }
-
-          $size = (Get-Item -LiteralPath $exe).Length
-          Write-Host "Portable generado: $exe"
-          Write-Host "Tamano: $size bytes ($([math]::Round($size / 1MB, 2)) MB)"
-
-          # Un portable Electron real debe ocupar decenas de MB.
-          # Impide publicar por error un fichero de unos pocos bytes.
-          if ($size -lt 20MB) {
-            Write-Error "El EXE generado es anormalmente pequeno ($size bytes). Se cancela la publicacion."
-            exit 1
-          }
-
-      - name: Create auto-update manifest
-        run: npm run update-manifest:write
-
-      - name: Commit updated build counter
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add .build-version package.json package-lock.json
-          $changes = git status --porcelain
-
-          if ($changes) {
-            git commit -m "ci: bump build counter [skip ci]"
-            git pull --rebase origin main
-            git push origin HEAD:main
+          if ($env:PACKAGE_FORMAT -eq 'zip') {
+            npx electron-builder --win --x64 --dir
           } else {
-            Write-Host "Sin cambios en el contador de build; nada que commitear."
+            npm run portable:build
           }
-
-      - name: Upload update package
+          exit $LASTEXITCODE
+      - name: Validar paquete y crear manifiesto o ZIP
+        shell: pwsh
+        run: |
+          if ($env:PACKAGE_FORMAT -eq 'zip') {
+            $source = 'release\win-unpacked'
+            if (-not (Test-Path "$source\TrAccion.exe")) { throw 'Falta el ejecutable Windows.' }
+            $version = node -p "require('./package.json').version"
+            $parts = $version.Split('.')
+            $zip = "release\TrAccion $($parts[0]).$($parts[1]) Windows.zip"
+            Compress-Archive -Path "$source\*" -DestinationPath $zip -CompressionLevel Optimal
+          } else {
+            $artifactName = node --input-type=module -e "import {readFileSync} from 'node:fs'; import {getPortableArtifactName} from './scripts/release-version.mjs'; console.log(getPortableArtifactName(JSON.parse(readFileSync('package.json','utf8')).version));"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $exe = Join-Path 'release' $artifactName
+            if (-not (Test-Path -LiteralPath $exe)) { throw 'Falta el portable esperado.' }
+            if ((Get-Item -LiteralPath $exe).Length -lt 20MB) { throw 'Portable anormalmente pequeño.' }
+            npm run update-manifest:write
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Registrar SHA validado y publicar contador sin rebase
+        shell: pwsh
+        run: |
+          # Ningún archivo rastreado puede cambiar tras la validación.
+          git diff --exit-code HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git rev-parse HEAD | Set-Content release/validated-commit.txt
+          # Si main avanzó, el push falla: nunca empaquetar un árbol y anunciar otro.
+          git push origin HEAD:refs/heads/main
+          exit $LASTEXITCODE
+      - name: Upload paquete validado
         uses: actions/upload-artifact@v4
         with:
-          name: Traccion-windows-portable
+          name: ${{ inputs.artifact-name || 'Traccion-windows-portable' }}
           path: |
             release/Traccion *.piz
             release/version.json
+            release/TrAccion * Windows.zip
+            release/validated-commit.txt
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

@@ -1,0 +1,54 @@
+{
+  "baseline_commit": "df62803db87c485615330f755c4d8075e8713328",
+  "platform": "Linux / Node 22.13.1",
+  "vitest": {
+    "files": 205,
+    "tests": 1188,
+    "passed": 1181,
+    "failed": 7,
+    "pending": 0,
+    "wall_seconds": 88.94666040039063
+  },
+  "coverage": {
+    "lines": {
+      "total": 87141,
+      "covered": 35284,
+      "skipped": 0,
+      "pct": 40.49
+    },
+    "statements": {
+      "total": 87141,
+      "covered": 35284,
+      "skipped": 0,
+      "pct": 40.49
+    },
+    "functions": {
+      "total": 3995,
+      "covered": 1972,
+      "skipped": 0,
+      "pct": 49.36
+    },
+    "branches": {
+      "total": 9443,
+      "covered": 6611,
+      "skipped": 0,
+      "pct": 70
+    },
+    "branchesTrue": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "coverage_source_files": 496,
+  "coverage_scope": [
+    "src/**/*.{ts,tsx}",
+    "electron/**/*.ts",
+    "scripts/*.mjs"
+  ],
+  "failed_test_files": [
+    "src/features/coordinacion/components/CoordinationPointEditor.hardening.test.tsx",
+    "src/features/coordinacion/components/CoordinationPointEditor.test.tsx"
+  ]
+}

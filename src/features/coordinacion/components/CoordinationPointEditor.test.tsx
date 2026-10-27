@@ -63,7 +63,7 @@ describe('CoordinationPointEditor remote synchronization', () => {
       />,
     );
 
-    expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveValue('Resultado actualizado por otra sesión');
+    expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveTextContent('Resultado actualizado por otra sesión');
     expect(screen.queryByText('Este punto ha cambiado en otra sesión')).not.toBeInTheDocument();
     expect(onDraftChange).toHaveBeenCalledWith('point-1', expect.objectContaining({ result: remote.result }), false);
     expect(onRemoteConflictChange).toHaveBeenCalledWith('point-1', false);
@@ -74,7 +74,7 @@ describe('CoordinationPointEditor remote synchronization', () => {
     const { rerender, onDraftChange, onRemoteConflictChange } = renderEditor(initial);
     const result = screen.getByRole('textbox', { name: 'Resultado / acuerdos' });
 
-    fireEvent.change(result, { target: { value: 'Mi edición local' } });
+    fireEvent.input(result, { target: { innerHTML: 'Mi edición local' } });
 
     const remote = makePoint({
       result: 'Edición guardada desde otra sesión',
@@ -93,7 +93,7 @@ describe('CoordinationPointEditor remote synchronization', () => {
       />,
     );
 
-    expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveValue('Mi edición local');
+    expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveTextContent('Mi edición local');
     expect(screen.getByText('Este punto ha cambiado en otra sesión')).toBeInTheDocument();
     expect(onRemoteConflictChange).toHaveBeenCalledWith('point-1', true);
   });
@@ -102,8 +102,8 @@ describe('CoordinationPointEditor remote synchronization', () => {
     const initial = makePoint();
     const { rerender, onDraftChange, onRemoteConflictChange } = renderEditor(initial);
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Resultado / acuerdos' }), {
-      target: { value: 'Mi edición local' },
+    fireEvent.input(screen.getByRole('textbox', { name: 'Resultado / acuerdos' }), {
+      target: { innerHTML: 'Mi edición local' },
     });
 
     const remote = makePoint({
@@ -125,7 +125,7 @@ describe('CoordinationPointEditor remote synchronization', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Recargar cambios' }));
 
-    expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveValue('Versión remota vigente');
+    expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveTextContent('Versión remota vigente');
     expect(screen.queryByText('Este punto ha cambiado en otra sesión')).not.toBeInTheDocument();
     expect(onDraftChange).toHaveBeenLastCalledWith('point-1', expect.objectContaining({ result: remote.result }), false);
     expect(onRemoteConflictChange).toHaveBeenLastCalledWith('point-1', false);
@@ -135,8 +135,8 @@ describe('CoordinationPointEditor remote synchronization', () => {
     const initial = makePoint();
     const { rerender, onDraftChange, onRemoteConflictChange } = renderEditor(initial);
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Resultado / acuerdos' }), {
-      target: { value: 'Resultado ya guardado' },
+    fireEvent.input(screen.getByRole('textbox', { name: 'Resultado / acuerdos' }), {
+      target: { innerHTML: 'Resultado ya guardado' },
     });
 
     const saved = makePoint({

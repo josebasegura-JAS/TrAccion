@@ -2,11 +2,19 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   createSharedDatabaseDirectory,
   launchTraccionElectron,
+  launchTraccionElectronWithIsolatedSharedDatabase,
   navigateToModule,
 } from './electronTestUtils';
 
 const TICKET_RESTAURANTE_GROUP = 'Herramientas';
 const TICKET_RESTAURANTE_MODULE = 'Ticket Restaurante';
+
+async function openCalendars(page: Page): Promise<void> {
+  const tools = page.locator('details').filter({ hasText: 'Configuración y herramientas avanzadas' });
+  await tools.locator('summary').click();
+  await tools.getByRole('button', { name: 'Calendarios', exact: true }).click();
+  await expect(page.getByLabel('Nombre calendario')).toBeVisible();
+}
 
 async function expectNoConsoleErrors(page: Page, action: () => Promise<void>): Promise<void> {
   const errors: string[] = [];
@@ -19,13 +27,13 @@ async function expectNoConsoleErrors(page: Page, action: () => Promise<void>): P
 }
 
 test('flujo crítico: crear un calendario de Ticket Restaurante desde UI y verificar que queda visible', async () => {
-  const { page, close } = await launchTraccionElectron();
+  const { page, close } = await launchTraccionElectronWithIsolatedSharedDatabase();
   const calendarName = `E2E calendario ${Date.now()}`;
 
   try {
     await expectNoConsoleErrors(page, async () => {
       await navigateToModule(page, TICKET_RESTAURANTE_GROUP, TICKET_RESTAURANTE_MODULE);
-      await page.getByRole('button', { name: 'Calendarios' }).click();
+      await openCalendars(page);
 
       await page.getByLabel('Nombre calendario').fill(calendarName);
       await page.getByRole('button', { name: 'Guardar' }).click();
@@ -57,7 +65,7 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
   try {
     // Usuaria A crea el calendario que después se disputarán las dos.
     await navigateToModule(userA.page, TICKET_RESTAURANTE_GROUP, TICKET_RESTAURANTE_MODULE);
-    await userA.page.getByRole('button', { name: 'Calendarios' }).click();
+    await openCalendars(userA.page);
     await userA.page.getByLabel('Nombre calendario').fill(calendarName);
     await userA.page.getByRole('button', { name: 'Guardar' }).click();
     await expect(userA.page.getByLabel('Selector calendario')).toContainText(calendarName, {
@@ -69,7 +77,11 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
     const userB = await launchTraccionElectron({ sharedDatabaseDirectory });
     try {
       await navigateToModule(userB.page, TICKET_RESTAURANTE_GROUP, TICKET_RESTAURANTE_MODULE);
-      await userB.page.getByRole('button', { name: 'Calendarios' }).click();
+      await openCalendars(userB.page);
+      // El reloj del renderer B detiene el polling: el conflicto no depende
+      // de que la máquina termine la prueba antes de 12 segundos.
+      await userB.page.clock.install();
+      await userB.page.clock.pauseAt(new Date(Date.now() + 1000));
       await expect(userB.page.getByLabel('Selector calendario')).toContainText(calendarName, {
         timeout: 10_000,
       });
@@ -88,13 +100,7 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
       await toggleButton.click();
       await expect(toggleButton).not.toHaveText(labelBeforeToggle, { timeout: 10_000 });
 
-      // B, sin haber recargado, intenta guardar sobre el mismo calendario.
-      // Esto debe fallar con el conflicto de concurrencia (OCC) en vez de
-      // sobrescribir en silencio el cambio de A. El polling de refresco de
-      // TrAccion es de 12s (POLLING_INTERVAL_MS en externalDataSync.ts), así
-      // que todo este bloque debe completarse claramente por debajo de ese
-      // margen para que B no haya refrescado su expectedUpdatedAt antes de
-      // guardar.
+      // B conserva de forma controlada la revisión anterior al guardado de A.
       const editedName = `${calendarName} (editado por B)`;
       await userB.page.getByLabel('Nombre calendario').fill(editedName);
       await userB.page.getByRole('button', { name: 'Guardar' }).click();
@@ -112,5 +118,7 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
     }
   } finally {
     await userA.close();
+    const { rm } = await import('node:fs/promises');
+    await rm(sharedDatabaseDirectory, { recursive: true, force: true });
   }
 });

@@ -104,6 +104,9 @@ npm run test:all
 
 Antes de modificar una regla de negocio no basta con que compile: debe contrastarse el cambio con `docs/FUNCIONAMIENTO.md`, `docs/DECISIONS.md`, los tests afectados y la ayuda visible del módulo.
 
+La batería oficial por PR, sus informes, el orden de los runtimes nativos y la
+distribución del commit exacto se describen en [docs/VALIDATION.md](docs/VALIDATION.md).
+
 ## Build Windows
 
 Los workflows principales se ejecutan manualmente desde GitHub Actions.
@@ -112,13 +115,13 @@ Los workflows principales se ejecutan manualmente desde GitHub Actions.
 
 `.github/workflows/build-windows.yml`
 
-Realiza las comprobaciones de calidad configuradas en el workflow, compila la aplicación, incrementa la revisión técnica, genera el portable y prepara el paquete de actualización.
+Incrementa la revisión técnica en un commit local, ejecuta la validación integral sobre ese commit, compila y prepara el portable y el paquete de actualización. Publica el mismo SHA sin rebase; si main avanzó, falla.
 
 ### Build Lite
 
 `.github/workflows/build-windows-lite.yml`
 
-Ruta de compilación más rápida para entregas en las que no se necesita repetir toda la batería del workflow normal. No sustituye al build normal como validación completa.
+Entrada manual compatible que reutiliza el distribuidor normal y exige la misma validación integral. No omite controles de calidad.
 
 Ambos derivan los nombres desde la versión real del proyecto. Para una versión `MAJOR.MINOR.PATCH` generan internamente **`Traccion MAJOR.MINOR.exe`**, comprueban que el fichero sea válido y preparan para distribución únicamente:
 

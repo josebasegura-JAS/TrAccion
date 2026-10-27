@@ -118,7 +118,10 @@ export async function launchTraccionElectron(
   }
 
   const app = await electron.launch({
-    args: ['dist-electron/main.js', `--user-data-dir=${userDataDir}`],
+    args: [
+      ...(process.platform === 'linux' && process.env.TRACCION_E2E_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
+      'dist-electron/main.js', `--user-data-dir=${userDataDir}`,
+    ],
     env: {
       ...process.env,
       VITE_DEV_SERVER_URL: 'http://127.0.0.1:5173',
@@ -127,11 +130,16 @@ export async function launchTraccionElectron(
     },
   });
 
-  const page = await waitForMainWindow(app);
-  await page.waitForLoadState('domcontentloaded');
-  await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible();
-  if (options.sharedDatabaseDirectory) {
-    await expectSharedDatabaseReady(page);
+  let page: Page;
+  try {
+    page = await waitForMainWindow(app);
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible();
+    if (options.sharedDatabaseDirectory) await expectSharedDatabaseReady(page);
+  } catch (error) {
+    await closeTraccionElectron(app);
+    if (removeUserDataOnClose) await rm(userDataDir, { recursive: true, force: true });
+    throw error;
   }
 
   return {
