@@ -214,3 +214,12 @@ Inventario por archivo; los títulos explicitan las condiciones protegidas. Dura
 | `src/test/TeletrabajoPuestosModal.test.tsx` | Componente / React + jsdom | npm test: PR/push + manuales + builds (excepto Lite) | MANTENER; alto en datos/cálculos, medio en presentación | 4 / 138.8 | ofrece el campo Puesto como input con datalist (no como select cerrado); no muestra ningún aviso de puestos organizativos sin equivalente (Puestos Teletrabajo es de gestión manual); marca «(sin traducción)» en un puesto teletrabajable cuya traducción está pendiente; no marca nada cuando el puesto teletrabajable ya tiene traducción al euskera |
 | `src/test/ui-modules.smoke.test.tsx` | Componente / React + jsdom | npm test: PR/push + manuales + builds (excepto Lite) | MANTENER; alto en datos/cálculos, medio en presentación | 15 / 435.9 |  |
 | `src/utils/dateOnly.test.ts` | Unitario/integración / Vitest | npm test: PR/push + manuales + builds (excepto Lite) | MANTENER; alto en datos/cálculos, medio en presentación | 3 / 1.3 | formats a calendar date from local components; adds calendar days without timezone shifts; leaves invalid calendar values unchanged |
+
+## Pruebas incorporadas para corregir el umbral de funciones
+
+| Archivo | Protección | Decisión / dependencia | Casos |
+|---|---|---|---|
+| `src/shared/export/tableExport.workbook.test.ts` | Integridad del XLSX, filas vacías, fechas, importes, texto literal, límites de buffer y fallos IPC | MANTENER; ExcelJS real + IPC simulado, riesgo alto de exportaciones incompletas | 4 |
+| `src/features/ticket-restaurante/components/ticketRestauranteExport.test.ts` | Exportación mensual/cotización, precio histórico, ausencias aplicadas, orden de carga y conservación al fallar | MANTENER; cálculo real + IPC simulado, riesgo alto de importes o pedidos incorrectos | 4 |
+
+Se añaden a las pruebas previas de SQLite e histórico de Ticket de esta PR. No se elimina ninguna prueba.

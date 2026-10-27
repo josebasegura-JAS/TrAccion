@@ -145,4 +145,33 @@ SMB real, GitHub Actions remoto ni restauración en una tarea nueva del entorno.
 
 ## Resultados de implementación
 
-Se actualizará este apartado con resultados reales tras implementar y ejecutar.
+El registro Windows aportado para `7e103deb` confirma **209 archivos y
+1.202 tests aprobados** en 413,97 s. La ejecución falló exclusivamente en esa
+fase por cobertura de funciones **48,93 %**, inferior al suelo del 49 %;
+no llegó a acreditar build ni E2E. Líneas: 41,05 %; ramas: 70,16 %.
+
+Se incorporan ocho pruebas en dos archivos, sin cambiar código funcional,
+excluir fuentes de cobertura ni rebajar umbrales:
+
+- `src/shared/export/tableExport.workbook.test.ts`: XLSX real que se vuelve
+  a abrir con ExcelJS para comprobar todas las filas, importes positivos y
+  negativos, fechas entre años, texto multilínea y fórmulas tratadas como texto;
+  selección vacía, límites de buffers y propagación de errores de Electron.
+- `src/features/ticket-restaurante/components/ticketRestauranteExport.test.ts`:
+  precio histórico y ausencias aplicadas al exportar un pedido mensual,
+  columnas específicas de cotización, carga numéricamente ordenada sin mutar
+  el cálculo, y rechazo de una generación fallida conservando los datos.
+
+Tras la corrección, la batería local Node 22.13.1 ejecuta **211 archivos y
+1.210 tests aprobados**. Cobertura: **41,41 % líneas**, **49,59 % funciones**,
+**70,20 % ramas**. Se mantiene el mismo conjunto de fuentes y las 87.153 líneas
+del denominador de la revisión actual. V8 descubre funciones/ramas adicionales
+al ejercitar rutas antes no ejecutadas: sus denominadores cambian; las funciones
+cubiertas aumentan de 1.984 a 2.022. Los porcentajes Windows anteriores y Linux
+posteriores no son un benchmark idéntico de plataforma ni prueban el resultado
+Windows del nuevo commit. CI deberá confirmar las fases restantes.
+
+La observación previa de un fallo intermitente OCC en Linux sigue registrada
+en la PR; esta corrección de exportación no modifica su lógica ni pretende
+resolverla. Un resultado verde puntual no acredita estabilidad de esa prueba.
+SMB real, binarios Windows y actualizaciones entre versiones siguen pendientes.
