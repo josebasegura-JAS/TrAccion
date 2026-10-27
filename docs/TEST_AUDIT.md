@@ -184,3 +184,25 @@ fallan porque `name: 'Guardar'` encuentra tanto «Guardar» como «Guardar cambi
 Se exige coincidencia exacta en los tres guardados del spec, incluidos ambos
 usuarios. Se conservan las aserciones de persistencia y rechazo del conflicto;
 no se usa `.first()`, no se omiten pruebas ni se cambia la aplicación.
+
+### Reloj simulado y conflicto entre usuarios
+
+El registro Windows de `b9df00bf` acredita 9/10 tests Electron; el último se
+queda esperando el aviso de conflicto. La prueba pausaba el reloj de B para
+impedir el polling, pero `saveTicketRestauranteCalendarToSqlite` espera
+`waitForNextPaint` (dos requestAnimationFrame) antes de enviar el IPC. Con el
+reloj detenido, no llegaba a ejecutarse el guardado que debía ser rechazado.
+Se ejecutan 100 ms de tiempo virtual tras pulsar Guardar, suficientes para esos
+fotogramas y por debajo de los 12 s del polling. La escritura SQLite no se
+simula y el reloj permanece controlado.
+
+Se actualizan el nombre accesible «Información» y el botón «Cerrar» conforme
+al AppDialog actual. Se comprueba además el valor y token reales del calendario
+confirmado por A y que permanecen intactos tras el rechazo a B. El test también
+exige que ambos usuarios estén sobre el mismo calendario seleccionado.
+
+Comprobaciones locales: tipos de tests/E2E y lint pasan; 17 pruebas existentes
+de store concurrente y AppDialog pasan. Una ejecución con Chromium y la función
+real waitForNextPaint confirma que permanece pendiente con el reloj pausado y
+termina tras clock.runFor(100). La validación completa Windows del nuevo commit
+sigue siendo necesaria; estas comprobaciones no la sustituyen.

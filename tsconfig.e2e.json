@@ -9,7 +9,8 @@
   "include": [
     "e2e/**/*.ts",
     "playwright.config.ts",
-    "playwright.electron.config.ts"
+    "playwright.electron.config.ts",
+    "src/vite-env.d.ts"
   ],
   "exclude": []
 }
