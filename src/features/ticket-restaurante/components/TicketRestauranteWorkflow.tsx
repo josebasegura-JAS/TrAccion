@@ -1,12 +1,16 @@
+import { useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
   CalendarDays,
   Calculator,
-  Check,
-  CheckCircle2,
   ChevronDown,
-  Clock3,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Plus,
+  X,
+  Check,
   Euro,
   FileSpreadsheet,
   ReceiptText,
@@ -155,6 +159,11 @@ export interface TicketRestauranteWorkflowProps {
   effectiveTicketPrice: number;
   calculation: TicketMonthCalculation;
   orderedTickets?: number;
+  initialOrderedTickets?: number;
+  orderMovementsCount?: number;
+  historicalOrderAmount?: number;
+  orderRows?: Array<{ empleado: string; nombreApellidos: string; tickets: number; amount?: number }>;
+  orderMovementRows?: Array<{ id: string; empleado?: string; nombreApellidos?: string; tickets: number; amount?: number; reason: string; date: string }>;
   onOpenCalendars: () => void;
   onOpenPrice: () => void;
   onOpenRules: () => void;
@@ -188,6 +197,11 @@ export function TicketRestauranteWorkflow({
   effectiveTicketPrice,
   calculation,
   orderedTickets,
+  initialOrderedTickets,
+  orderMovementsCount = 0,
+  historicalOrderAmount,
+  orderRows = [],
+  orderMovementRows = [],
   onOpenCalendars,
   onOpenPrice,
   onOpenRules,
@@ -203,10 +217,12 @@ export function TicketRestauranteWorkflow({
   onOpenAnnualBalance,
   onReviewChange,
 }: TicketRestauranteWorkflowProps) {
+  const [showOrderDetail, setShowOrderDetail] = useState(false);
   const baseReady = activeCalendars > 0 && activePeople > 0 && effectiveTicketPrice > 0;
   const monthlyInputsReviewed = absencesReviewed && manutencionesReviewed;
   const adjustmentsReviewed = manualDebtsReviewed;
   const readyForOrder = baseReady && monthlyInputsReviewed && adjustmentsReviewed;
+  const actualOrderedAmount = historicalOrderAmount;
   const monthLabel = `${MONTH_OPTIONS[month - 1] ?? month} ${year}`;
   const orderRegistered = typeof orderedTickets === 'number';
 
@@ -265,34 +281,72 @@ export function TicketRestauranteWorkflow({
 
   return (
     <div className="space-y-3">
-      <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-base font-extrabold text-metro-text">Proceso mensual de Ticket Restaurante</p>
-            <p className="mt-1 text-xs text-metro-muted">Sigue los pasos en orden. La aplicación te indicará qué toca hacer a continuación.</p>
+
+      <section className="flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 shadow-card lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-red-300" /><span className="text-sm font-extrabold text-metro-text">Mes de trabajo</span></div>
+          <button aria-label="Mes anterior" title="Mes anterior" type="button" className="rounded-lg border border-metro-border px-3 py-2 text-metro-text hover:border-metro-red" onClick={() => { if (month === 1) { onYearChange(year - 1); onMonthChange(12); } else onMonthChange(month - 1); }}><ChevronLeft size={17}/></button>
+          <select aria-label="Mes de trabajo" className="h-10 min-w-[150px] rounded-lg border border-metro-red/50 bg-metro-surface px-3 text-sm font-extrabold text-metro-text" onChange={event => onMonthChange(Number(event.target.value))} value={month}>
+            {MONTH_OPTIONS.map((name,index) => <option key={name} value={index+1}>{name}</option>)}
+          </select>
+          <input aria-label="Año de trabajo" className="h-10 w-24 rounded-lg border border-metro-border bg-metro-surface px-2 text-center text-sm font-bold text-metro-text" type="number" min="1900" max="2200" value={year} onChange={event=>onYearChange(Number(event.target.value)||year)} />
+          <button aria-label="Mes siguiente" title="Mes siguiente" type="button" className="rounded-lg border border-metro-border px-3 py-2 text-metro-text hover:border-metro-red" onClick={() => { if(month===12){onYearChange(year+1);onMonthChange(1);}else onMonthChange(month+1); }}><ChevronRight size={17}/></button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold">
+          <span className="rounded-md border border-metro-border px-2 py-1 text-metro-muted">Meses pasados: registros disponibles</span>
+          <span className="rounded-md border border-metro-red/40 bg-metro-red/10 px-2 py-1 text-red-300">Actual y próximo: gestión mensual</span>
+          <span className="rounded-md border border-blue-500/30 px-2 py-1 text-blue-300">Meses futuros: previsión</span>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+        {([
+          {title:'Personas activas', value:formatInteger(activePeople), Icon:Users, action:onOpenPeople},
+          {title:'Calendarios activos',value:formatInteger(activeCalendars), Icon:CalendarDays,action:onOpenCalendars},
+          {title:'Precio del ticket',value:formatMoney(effectiveTicketPrice)+' €',Icon:Ticket,action:onOpenPrice},
+          {title:'Tickets calculados',value:formatInteger(calculation.totals.ticketsFinales),Icon:Calculator,action:onOpenMonthlyCalculation},
+          {title:'Importe calculado',value:formatMoney(calculation.totals.importe)+' €',Icon:Euro,action:onOpenMonthlyCalculation},
+        ]).map(({title,value,Icon,action})=><button type="button" key={title} onClick={action} className="flex min-w-0 items-center gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 text-left shadow-card transition hover:border-metro-red/50">
+          <span className="rounded-lg bg-metro-red/10 p-2 text-red-300"><Icon size={18}/></span><span className="min-w-0"><span className="block text-[11px] text-metro-muted">{title}</span><strong className="block truncate text-lg text-metro-text">{value}</strong></span>
+        </button>)}
+      </section>
+
+      <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2"><span className="rounded-lg bg-metro-red/10 p-2 text-red-300"><ReceiptText size={19}/></span><div><h2 className="text-base font-extrabold text-metro-text">Pedido mensual — {monthLabel}</h2><p className="text-[11px] text-metro-muted">El cálculo previsto y el pedido efectivamente registrado se muestran por separado.</p></div></div>
+          <span className={cx('rounded-full border px-3 py-1 text-xs font-bold',orderRegistered?'border-emerald-500/35 bg-emerald-500/10 text-emerald-300':'border-amber-500/35 bg-amber-500/10 text-amber-300')}>{orderRegistered?'Pedido realizado':'Pedido pendiente de registrar'}</span>
+        </div>
+        <div className="mt-3 flex flex-col gap-3 xl:flex-row">
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-px overflow-hidden rounded-xl border border-metro-border bg-metro-border sm:grid-cols-3 2xl:grid-cols-6">
+            {[
+              ['Cálculo actual',formatInteger(calculation.totals.ticketsFinales),'tickets'],
+              ['Pedido inicial',initialOrderedTickets===undefined?'—':formatInteger(initialOrderedTickets),'tickets'],
+              ['Movimientos',orderRegistered?formatInteger((orderedTickets??0)-(initialOrderedTickets??0)):'—',orderRegistered?orderMovementsCount+' movimientos':'sin registrar'],
+              ['Total solicitado',orderRegistered?formatInteger(orderedTickets??0):'—','tickets'],
+              ['Diferencia vs cálculo',orderRegistered?formatInteger((orderedTickets??0)-calculation.totals.ticketsFinales):'—','tickets'],
+              [orderRegistered?'Importe pedido':'Importe previsto',formatMoney(orderRegistered?(actualOrderedAmount??calculation.totals.importe):calculation.totals.importe)+' €',''],
+            ].map(([label,value,detail])=><div key={label} className="min-w-0 bg-metro-surface/70 px-3 py-3"><p className="text-[11px] text-metro-muted">{label}</p><strong className="mt-1 block truncate text-lg text-metro-text">{value}</strong><span className="text-[10px] text-metro-muted">{detail}</span></div>)}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              aria-label="Mes de trabajo"
-              className="h-10 min-w-[145px] rounded-xl border border-metro-border bg-metro-surface px-3 text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onMonthChange(Number(event.target.value))}
-              value={month}
-            >
-              {MONTH_OPTIONS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
-            </select>
-            <input
-              aria-label="Año de trabajo"
-              className="h-10 w-24 rounded-xl border border-metro-border bg-metro-surface px-2 text-center text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
-              max="2200"
-              min="1900"
-              onChange={(event) => onYearChange(Number(event.target.value) || year)}
-              type="number"
-              value={year}
-            />
+          <div className="grid gap-2 sm:grid-cols-2 xl:w-52 xl:grid-cols-1">
+            <button type="button" onClick={() => setShowOrderDetail(true)} className="flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-extrabold text-white hover:bg-metro-dark"><Eye size={16}/> Ver pedido mensual</button>
+<button type="button" onClick={onOpenMonthlyCalculation} className="flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"><Calculator size={16}/> Revisar cálculo</button><button type="button" onClick={onOpenMonthlyCalculation} className="flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"><Plus size={16}/> Registrar movimiento</button>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+      </section>
+
+      {showOrderDetail && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4" role="presentation" onMouseDown={event => { if(event.target===event.currentTarget) setShowOrderDetail(false); }}>
+        <section role="dialog" aria-modal="true" aria-label="Detalle del pedido mensual" className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel shadow-2xl">
+          <div className="flex items-center justify-between border-b border-metro-border p-4"><div><h2 className="text-lg font-extrabold text-metro-text">Pedido mensual — {monthLabel}</h2><p className="text-xs text-metro-muted">{orderRegistered?'Datos del pedido registrado y sus movimientos posteriores':'Pedido no registrado: muestra únicamente la previsión actual'}</p></div><button type="button" onClick={() => setShowOrderDetail(false)} aria-label="Cerrar pedido" className="rounded-lg p-2 text-metro-text hover:bg-metro-surface"><X size={20}/></button></div>
+          <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-4">{[['Cálculo actual',calculation.totals.ticketsFinales],['Pedido inicial',initialOrderedTickets],['Movimientos',orderRegistered?(orderedTickets??0)-(initialOrderedTickets??0):undefined],['Total solicitado',orderedTickets]].map(([label,value])=><div key={label} className="rounded-xl bg-metro-surface p-3"><div className="text-xs text-metro-muted">{label}</div><div className="text-xl font-extrabold text-metro-text">{typeof value==='number'?formatInteger(value):'—'}</div></div>)}</div>
+          <div className="min-h-0 overflow-auto px-4 pb-4">
+            {orderRegistered?<><h3 className="mb-2 text-sm font-bold text-metro-text">Detalle del pedido inicial</h3><table className="w-full text-left text-xs text-metro-text"><thead className="sticky top-0 bg-metro-surface"><tr><th className="p-2">Nº empleado</th><th className="p-2">Nombre y apellidos</th><th className="p-2 text-right">Tickets</th><th className="p-2 text-right">Importe</th></tr></thead><tbody>{orderRows.map((row,index)=><tr key={row.empleado+'-'+index} className="odd:bg-metro-surface/50"><td className="p-2">{row.empleado}</td><td className="p-2">{row.nombreApellidos}</td><td className="p-2 text-right">{formatInteger(row.tickets)}</td><td className="p-2 text-right">{typeof row.amount === 'number' ? `${formatMoney(row.amount)} €` : '—'}</td></tr>)}</tbody></table>{orderMovementRows.length>0&&<><h3 className="mb-2 mt-4 text-sm font-bold text-metro-text">Movimientos posteriores</h3>{orderMovementRows.map(item=><div key={item.id} className="flex flex-wrap justify-between gap-2 border-b border-metro-border p-2 text-xs text-metro-text"><span>{item.date} · {item.nombreApellidos||item.empleado||'General'} · {item.reason}</span><strong>{item.tickets>0?'+':''}{item.tickets} tickets</strong></div>)}</>}</>:<p className="rounded-lg border border-amber-500/30 p-3 text-sm text-amber-300">Todavía no existe un pedido realizado de este mes. Accede al cálculo para revisar la previsión y registrar el pedido cuando corresponda.</p>}
+          </div><div className="flex justify-end gap-2 border-t border-metro-border p-3"><button type="button" onClick={() => setShowOrderDetail(false)} className="rounded-lg border border-metro-border px-3 py-2 text-xs text-metro-text">Cerrar</button><button type="button" onClick={() => {setShowOrderDetail(false);onOpenMonthlyCalculation();}} className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white">Abrir cómputo mensual</button></div>
+        </section>
+      </div>}
+      <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-extrabold text-metro-text">Proceso mensual</h3><p className="text-[11px] text-metro-muted">Seguimiento de {monthLabel} · marca las revisiones para avanzar</p></div><span className="rounded-lg bg-metro-surface px-2 py-1 text-[11px] font-bold text-metro-secondary">{orderRegistered?'Pedido registrado':readyForOrder?'Listo para revisar pedido':'Preparación en curso'}</span></div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           <ProcessStep
             detail={`${activeCalendars} calendarios · ${activePeople} personas`}
             number={1}
@@ -344,86 +398,43 @@ export function TicketRestauranteWorkflow({
         </div>
       </section>
 
-      <section className={cx(
-        'rounded-xl border px-4 py-3 shadow-card',
-        readyForOrder
-          ? 'border-emerald-400/30 bg-emerald-500/[0.055]'
-          : 'border-metro-border bg-metro-panel',
-      )}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className={cx(
-              'grid h-9 w-9 shrink-0 place-items-center rounded-lg',
-              readyForOrder ? 'bg-emerald-500/15 text-emerald-300' : 'bg-metro-red/12 text-red-300',
-            )}>
-              {readyForOrder ? <CheckCircle2 className="h-5 w-5" /> : <NextIcon className="h-5 w-5" />}
-            </span>
-            <div className="min-w-0">
-              <p className={cx('text-[11px] font-bold uppercase tracking-[0.08em]', readyForOrder ? 'text-emerald-300' : 'text-red-300')}>{nextAction.eyebrow}</p>
-              <h2 className="mt-0.5 text-[15px] font-extrabold leading-5 text-metro-text">{nextAction.title}</h2>
-              <p className="mt-0.5 max-w-4xl text-[11px] leading-4 text-metro-secondary">{nextAction.detail}</p>
-            </div>
+      <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-panel p-3">
+        <div className="flex items-center gap-2"><NextIcon className="h-5 w-5 text-red-300"/><div><p className="text-[10px] font-bold uppercase text-metro-muted">{nextAction.eyebrow}</p><p className="text-sm font-extrabold text-metro-text">{nextAction.title}</p><p className="max-w-3xl text-[11px] text-metro-secondary">{nextAction.detail}</p></div></div>
+        <button type="button" onClick={nextAction.onClick} className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white">{nextAction.button}<ArrowRight size={15}/></button>
+      </section>
+
+      <div className="grid gap-3 xl:grid-cols-[3fr_2fr]">
+        <section className="rounded-xl border border-metro-border bg-metro-panel p-3 shadow-card">
+          <h3 className="mb-2 text-sm font-extrabold text-metro-text">Accesos rápidos</h3>
+          <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+            <AdvancedAction icon={CalendarDays} title="Calendarios" detail="Configurar días" onClick={onOpenCalendars}/>
+            <AdvancedAction icon={Users} title="Personas" detail="Derecho al ticket" onClick={onOpenPeople}/>
+            <AdvancedAction icon={FileSpreadsheet} title="Ausencias" detail="Revisar registros" onClick={onOpenAbsences}/>
+            <AdvancedAction icon={Utensils} title="Manutenciones" detail="Revisar gastos" onClick={onOpenManutenciones}/>
+            <AdvancedAction icon={ReceiptText} title="Deudas y ajustes" detail="Regularizaciones" onClick={onOpenManualDebt}/>
+            <AdvancedAction icon={BarChart3} title="Balance anual" detail="Detalle por mes" onClick={onOpenAnnualBalance}/>
+            <AdvancedAction icon={Euro} title="Precio del ticket" detail="Histórico de precios" onClick={onOpenPrice}/>
+            <AdvancedAction icon={Settings} title="Reglas de cálculo" detail="Parámetros" onClick={onOpenRules}/>
           </div>
-          <button
-            className={cx(
-              'inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-[13px] font-extrabold transition',
-              readyForOrder
-                ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                : 'bg-metro-red text-white hover:bg-metro-dark',
-            )}
-            onClick={nextAction.onClick}
-            type="button"
-          >
-            {nextAction.button}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-2 overflow-hidden rounded-xl border border-metro-border bg-metro-panel shadow-card md:grid-cols-4">
-        <div className="flex items-center gap-3 border-b border-r border-metro-border px-4 py-3 md:border-b-0">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-muted"><Users className="h-4 w-4" /></span>
-          <div><strong className="block text-base text-metro-text">{formatInteger(activePeople)}</strong><span className="text-[11px] text-metro-muted">Personas con derecho</span></div>
-        </div>
-        <div className="flex items-center gap-3 border-b border-metro-border px-4 py-3 md:border-b-0 md:border-r">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-muted"><Ticket className="h-4 w-4" /></span>
-          <div><strong className="block text-base text-metro-text">{formatInteger(calculation.totals.ticketsFinales)}</strong><span className="text-[11px] text-metro-muted">Tickets previstos</span></div>
-        </div>
-        <div className="flex items-center gap-3 border-r border-metro-border px-4 py-3">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-300"><Euro className="h-4 w-4" /></span>
-          <div><strong className="block text-base text-emerald-300">{formatMoney(calculation.totals.importe)} €</strong><span className="text-[11px] text-metro-muted">Importe estimado</span></div>
-        </div>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-300"><Clock3 className="h-4 w-4" /></span>
-          <div><strong className="block text-base text-amber-300">{formatInteger(calculation.totals.deudaPendiente)}</strong><span className="text-[11px] text-metro-muted">Deuda pendiente</span></div>
-        </div>
-      </section>
-
-      <button
-        className="group flex w-full items-center justify-between gap-4 rounded-2xl border border-blue-400/25 bg-blue-500/[0.055] p-4 text-left shadow-card transition hover:border-blue-300/45 hover:bg-blue-500/[0.085]"
-        onClick={onOpenAnnualBalance}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-500/12 text-blue-200">
-            <BarChart3 className="h-5 w-5" />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-[13px] font-extrabold text-metro-text">Balance anual</span>
-            <span className="mt-0.5 block text-xs leading-5 text-metro-muted">Consulta el acumulado del año, evolución mensual, reparto por área y detalle por persona. Exportable a Excel.</span>
-          </span>
-        </span>
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-bold text-blue-200">
-          Abrir balance <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-        </span>
-      </button>
+        </section>
+        <section className="rounded-xl border border-metro-border bg-metro-panel p-3 shadow-card">
+          <h3 className="mb-2 text-sm font-extrabold text-metro-text">Avisos y control</h3>
+          <div className="space-y-2 text-xs">
+            {!absencesReviewed&&<button type="button" onClick={onOpenAbsences} className="block w-full rounded-lg border border-amber-500/25 bg-amber-500/5 p-2 text-left text-amber-300">Ausencias pendientes de revisión</button>}
+            {!manutencionesReviewed&&<button type="button" onClick={onOpenManutenciones} className="block w-full rounded-lg border border-amber-500/25 bg-amber-500/5 p-2 text-left text-amber-300">Manutenciones pendientes de revisión</button>}
+            {!manualDebtsReviewed&&<button type="button" onClick={onOpenManualDebt} className="block w-full rounded-lg border border-amber-500/25 bg-amber-500/5 p-2 text-left text-amber-300">Deudas y ajustes sin revisar</button>}
+            {readyForOrder&&<p className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-2 text-emerald-300">Controles revisados. {orderRegistered?'Pedido registrado.':'Pedido listo para validación.'}</p>}
+          </div>
+        </section>
+      </div>
+      <button type="button" onClick={onOpenAnnualBalance} className="flex w-full items-center justify-between rounded-xl border border-metro-border bg-metro-panel p-3 text-left text-metro-text hover:border-metro-red/40"><span className="flex items-center gap-2"><BarChart3 size={20} className="text-red-300"/><span><strong className="block text-sm">Balance anual {year}</strong><span className="text-[11px] text-metro-muted">Evolución mensual, acumulados y detalle por persona</span></span></span><ArrowRight size={17}/></button>
 
       <details className="group rounded-2xl border border-metro-border bg-metro-panel shadow-card">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
           <div className="flex items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-metro-surface text-metro-secondary"><Settings className="h-4 w-4" /></span>
             <div>
-              <p className="text-[13px] font-extrabold text-metro-text">Configuración y herramientas avanzadas</p>
+              <p className="text-[13px] font-extrabold text-metro-text">Importaciones y herramientas avanzadas</p>
               <p className="mt-0.5 text-xs text-metro-muted">Calendarios, personas, precio, reglas y accesos de mantenimiento.</p>
             </div>
           </div>

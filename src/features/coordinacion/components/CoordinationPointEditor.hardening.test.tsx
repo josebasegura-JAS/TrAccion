@@ -3,6 +3,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CoordinationPoint } from '../domain/coordinacion';
 import { CoordinationPointEditor } from './CoordinationPointEditor';
 
+function editResult(value: string) {
+  const editor = screen.getByRole('textbox', { name: 'Resultado / acuerdos' });
+  editor.textContent = value;
+  fireEvent.input(editor);
+}
+
+function expectResult(value: string) {
+  expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveTextContent(value);
+}
+
 function makePoint(overrides: Partial<CoordinationPoint> = {}): CoordinationPoint {
   return {
     id: 'point-hardening',
@@ -40,9 +50,7 @@ describe('CoordinationPointEditor hardening', () => {
     const onRemoteConflictChange = vi.fn();
     const view = render(<CoordinationPointEditor {...editorProps(initial, onDraftChange, onRemoteConflictChange)} />);
 
-    fireEvent.input(screen.getByRole('textbox', { name: 'Resultado / acuerdos' }), {
-      target: { innerHTML: 'Edición local pendiente' },
-    });
+    editResult('Edición local pendiente');
 
     const remoteMetadataOnly = makePoint({
       title: 'Título actualizado fuera',
@@ -53,7 +61,7 @@ describe('CoordinationPointEditor hardening', () => {
       <CoordinationPointEditor {...editorProps(remoteMetadataOnly, onDraftChange, onRemoteConflictChange)} />,
     );
 
-    expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveTextContent('Edición local pendiente');
+    expectResult('Edición local pendiente');
     expect(screen.queryByText('Este punto ha cambiado en otra sesión')).not.toBeInTheDocument();
     expect(onRemoteConflictChange).not.toHaveBeenCalledWith('point-hardening', true);
   });
@@ -64,9 +72,7 @@ describe('CoordinationPointEditor hardening', () => {
     const onRemoteConflictChange = vi.fn();
     const view = render(<CoordinationPointEditor {...editorProps(initial, onDraftChange, onRemoteConflictChange)} />);
 
-    fireEvent.input(screen.getByRole('textbox', { name: 'Resultado / acuerdos' }), {
-      target: { innerHTML: 'Mi resultado local' },
-    });
+    editResult('Mi resultado local');
 
     const remote = makePoint({
       status: 'seguimiento',
@@ -74,7 +80,7 @@ describe('CoordinationPointEditor hardening', () => {
     });
     view.rerender(<CoordinationPointEditor {...editorProps(remote, onDraftChange, onRemoteConflictChange)} />);
 
-    expect(screen.getByRole('textbox', { name: 'Resultado / acuerdos' })).toHaveTextContent('Mi resultado local');
+    expectResult('Mi resultado local');
     expect(screen.getByText('Este punto ha cambiado en otra sesión')).toBeInTheDocument();
     expect(onRemoteConflictChange).toHaveBeenCalledWith('point-hardening', true);
   });
@@ -85,9 +91,7 @@ describe('CoordinationPointEditor hardening', () => {
     const onRemoteConflictChange = vi.fn();
     const view = render(<CoordinationPointEditor {...editorProps(initial, onDraftChange, onRemoteConflictChange)} />);
 
-    fireEvent.input(screen.getByRole('textbox', { name: 'Resultado / acuerdos' }), {
-      target: { innerHTML: 'Mi edición local' },
-    });
+    editResult('Mi edición local');
     view.rerender(
       <CoordinationPointEditor
         {...editorProps(
