@@ -1,77 +1,24 @@
-name: TrAcción · Batería de tests
+name: TrAcción — Validación integral
 
 on:
-  workflow_dispatch:
-  push:
-    branches: ["**"]
   pull_request:
-    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validacion-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  tests:
+  quality:
+    name: Validación integral
     runs-on: windows-latest
-
+    timeout-minutes: 30
     env:
-      CI: "true"
+      CI: 'true'
       NODE_ENV: development
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-
-      - name: Configurar npm
-        shell: pwsh
-        run: |
-          npm config delete production
-          npm config delete omit
-          npm config set registry https://registry.npmjs.org/
-          npm config set fund false
-          npm config set audit false
-
-      - name: Instalar dependencias
-        shell: pwsh
-        run: |
-          if (Test-Path node_modules) {
-            Remove-Item node_modules -Recurse -Force
-          }
-
-          npm ci --include=dev --no-audit --no-fund
-          npm rebuild better-sqlite3
-
-      - name: Diagnóstico
-        shell: pwsh
-        run: |
-          node --version
-          npm --version
-
-          npm ls typescript eslint vitest vite --depth=0
-
-          npm exec -- tsc --version
-          npm exec -- eslint --version
-          npm exec -- vitest --version
-          npm exec -- vite --version
-
-      - name: TypeScript tests
-        run: npm run typecheck:tests
-
-      - name: ESLint
-        run: npm run lint
-
-      - name: Tests
-        run: npm run test
-
-      - name: Build
-        run: npm run build
-
-      # La compilación ya valida TypeScript de renderer y Electron.
-      # Los tests de tipos específicos se mantienen por separado.
-      - name: Rebuild dependencias nativas Electron
-        run: npm run electron:rebuild
-
-      - name: Smoke Electron crítico
-        run: npx playwright test -c playwright.electron.config.ts e2e/electron/app-ui-smoke.spec.ts e2e/electron/critical-flows.spec.ts
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/validate

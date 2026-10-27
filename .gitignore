@@ -6,3 +6,8 @@ coverage/
 .playwright/
 .DS_Store
 *.log
+
+.cache/
+audit-results/
+playwright-report*/
+test-results/

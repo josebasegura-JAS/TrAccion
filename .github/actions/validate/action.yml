@@ -1,0 +1,79 @@
+name: TrAcción — Validación integral
+description: Batería oficial compartida por PR y distribución; Node antes de Electron.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Dependencias desde lockfile
+      shell: pwsh
+      run: npm ci --include=dev --no-audit --no-fund
+    - name: TypeScript de pruebas, Electron y E2E
+      id: types
+      shell: pwsh
+      run: npm run typecheck:tests
+    - name: ESLint sin advertencias
+      id: lint
+      shell: pwsh
+      run: npm run lint
+    - name: Vitest completo, SQLite, multiusuario y cobertura
+      id: vitest
+      shell: pwsh
+      run: npm run test:coverage
+    - name: TypeScript de aplicación/Electron y build de producción
+      id: build
+      shell: pwsh
+      run: npm run build
+    - name: Instalar Chromium de Playwright
+      shell: pwsh
+      run: npx playwright install chromium
+    - name: Interfaz web
+      id: web
+      shell: pwsh
+      run: npm run test:e2e
+    # better-sqlite3 pasa de ABI Node a ABI Electron. Nunca ejecutar Vitest después.
+    - name: Preparar ABI Electron
+      shell: pwsh
+      run: npm run electron:rebuild
+    - name: Todos los tests Electron, incluido Ticket y dos usuarios
+      id: electron
+      shell: pwsh
+      run: npm run test:e2e:electron
+    - name: Informe final
+      if: always()
+      shell: pwsh
+      env:
+        TYPES_RESULT: ${{ steps.types.outcome }}
+        LINT_RESULT: ${{ steps.lint.outcome }}
+        VITEST_RESULT: ${{ steps.vitest.outcome }}
+        BUILD_RESULT: ${{ steps.build.outcome }}
+        WEB_RESULT: ${{ steps.web.outcome }}
+        ELECTRON_RESULT: ${{ steps.electron.outcome }}
+      run: |
+        $sha = git rev-parse HEAD
+        "## TrAcción — Validación integral`nCommit: $sha`n" >> $env:GITHUB_STEP_SUMMARY
+        "| Comprobación | Resultado |`n|---|---|" >> $env:GITHUB_STEP_SUMMARY
+        "| Tipos tests/E2E | $env:TYPES_RESULT |" >> $env:GITHUB_STEP_SUMMARY
+        "| ESLint | $env:LINT_RESULT |" >> $env:GITHUB_STEP_SUMMARY
+        "| Vitest/SQLite/multiusuario/cobertura | $env:VITEST_RESULT |" >> $env:GITHUB_STEP_SUMMARY
+        "| Tipos app/Electron + build | $env:BUILD_RESULT |" >> $env:GITHUB_STEP_SUMMARY
+        "| Web | $env:WEB_RESULT |" >> $env:GITHUB_STEP_SUMMARY
+        "| Electron | $env:ELECTRON_RESULT |" >> $env:GITHUB_STEP_SUMMARY
+    - name: Conservar resultados y trazas
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: calidad-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          coverage
+          audit-results
+          playwright-report-web
+          playwright-report-electron
+          test-results
+        if-no-files-found: warn
+        retention-days: 14
