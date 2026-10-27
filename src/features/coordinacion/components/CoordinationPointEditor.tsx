@@ -2,7 +2,7 @@ import { ArrowRight, Plus, Trash2 } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { ActionButton } from '../../../components/ui/ActionButton';
-import { Field, Input, Select, Textarea } from '../../../components/ui/Field';
+import { Field, Input, Select } from '../../../components/ui/Field';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { Notice } from '../../../components/ui/Notice';
 import { navigateInApp } from '../../../services/appNavigationBus';
