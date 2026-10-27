@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
@@ -7,6 +8,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Plus,
+  X,
   Check,
   Euro,
   FileSpreadsheet,
@@ -158,6 +161,9 @@ export interface TicketRestauranteWorkflowProps {
   orderedTickets?: number;
   initialOrderedTickets?: number;
   orderMovementsCount?: number;
+  historicalOrderAmount?: number;
+  orderRows?: Array<{ empleado: string; nombreApellidos: string; tickets: number; amount: number }>;
+  orderMovementRows?: Array<{ id: string; empleado?: string; nombreApellidos?: string; tickets: number; amount?: number; reason: string; date: string }>;
   onOpenCalendars: () => void;
   onOpenPrice: () => void;
   onOpenRules: () => void;
@@ -193,6 +199,9 @@ export function TicketRestauranteWorkflow({
   orderedTickets,
   initialOrderedTickets,
   orderMovementsCount = 0,
+  historicalOrderAmount,
+  orderRows = [],
+  orderMovementRows = [],
   onOpenCalendars,
   onOpenPrice,
   onOpenRules,
@@ -208,10 +217,12 @@ export function TicketRestauranteWorkflow({
   onOpenAnnualBalance,
   onReviewChange,
 }: TicketRestauranteWorkflowProps) {
+  const [showOrderDetail, setShowOrderDetail] = useState(false);
   const baseReady = activeCalendars > 0 && activePeople > 0 && effectiveTicketPrice > 0;
   const monthlyInputsReviewed = absencesReviewed && manutencionesReviewed;
   const adjustmentsReviewed = manualDebtsReviewed;
   const readyForOrder = baseReady && monthlyInputsReviewed && adjustmentsReviewed;
+  const actualOrderedAmount = historicalOrderAmount;
   const monthLabel = `${MONTH_OPTIONS[month - 1] ?? month} ${year}`;
   const orderRegistered = typeof orderedTickets === 'number';
 
@@ -313,17 +324,26 @@ export function TicketRestauranteWorkflow({
               ['Movimientos',orderRegistered?formatInteger((orderedTickets??0)-(initialOrderedTickets??0)):'—',orderRegistered?orderMovementsCount+' movimientos':'sin registrar'],
               ['Total solicitado',orderRegistered?formatInteger(orderedTickets??0):'—','tickets'],
               ['Diferencia vs cálculo',orderRegistered?formatInteger((orderedTickets??0)-calculation.totals.ticketsFinales):'—','tickets'],
-              [orderRegistered?'Importe calculado*':'Importe previsto',formatMoney(calculation.totals.importe)+' €',''],
+              [orderRegistered?'Importe pedido':'Importe previsto',formatMoney(orderRegistered?(actualOrderedAmount??calculation.totals.importe):calculation.totals.importe)+' €',''],
             ].map(([label,value,detail])=><div key={label} className="min-w-0 bg-metro-surface/70 px-3 py-3"><p className="text-[11px] text-metro-muted">{label}</p><strong className="mt-1 block truncate text-lg text-metro-text">{value}</strong><span className="text-[10px] text-metro-muted">{detail}</span></div>)}
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:w-52 xl:grid-cols-1">
-            <button type="button" onClick={onOpenMonthlyCalculation} className="flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-extrabold text-white hover:bg-metro-dark"><Eye size={16}/> Ver pedido mensual</button>
-            <button type="button" onClick={onOpenMonthlyCalculation} className="flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"><Calculator size={16}/> Revisar cálculo</button>
+            <button type="button" onClick={() => setShowOrderDetail(true)} className="flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-extrabold text-white hover:bg-metro-dark"><Eye size={16}/> Ver pedido mensual</button>
+<button type="button" onClick={onOpenMonthlyCalculation} className="flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"><Calculator size={16}/> Revisar cálculo</button><button type="button" onClick={onOpenMonthlyCalculation} className="flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"><Plus size={16}/> Registrar movimiento</button>
           </div>
         </div>
-        {orderRegistered && <p className="mt-1 text-[10px] text-metro-muted">* Importe del cálculo actual; no representa necesariamente el importe histórico efectivamente solicitado.</p>}
+
       </section>
 
+      {showOrderDetail && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4" role="presentation" onMouseDown={event => { if(event.target===event.currentTarget) setShowOrderDetail(false); }}>
+        <section role="dialog" aria-modal="true" aria-label="Detalle del pedido mensual" className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel shadow-2xl">
+          <div className="flex items-center justify-between border-b border-metro-border p-4"><div><h2 className="text-lg font-extrabold text-metro-text">Pedido mensual — {monthLabel}</h2><p className="text-xs text-metro-muted">{orderRegistered?'Datos del pedido registrado y sus movimientos posteriores':'Pedido no registrado: muestra únicamente la previsión actual'}</p></div><button type="button" onClick={() => setShowOrderDetail(false)} aria-label="Cerrar pedido" className="rounded-lg p-2 text-metro-text hover:bg-metro-surface"><X size={20}/></button></div>
+          <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-4">{[['Cálculo actual',calculation.totals.ticketsFinales],['Pedido inicial',initialOrderedTickets],['Movimientos',orderRegistered?(orderedTickets??0)-(initialOrderedTickets??0):undefined],['Total solicitado',orderedTickets]].map(([label,value])=><div key={label} className="rounded-xl bg-metro-surface p-3"><div className="text-xs text-metro-muted">{label}</div><div className="text-xl font-extrabold text-metro-text">{typeof value==='number'?formatInteger(value):'—'}</div></div>)}</div>
+          <div className="min-h-0 overflow-auto px-4 pb-4">
+            {orderRegistered?<><h3 className="mb-2 text-sm font-bold text-metro-text">Detalle del pedido inicial</h3><table className="w-full text-left text-xs text-metro-text"><thead className="sticky top-0 bg-metro-surface"><tr><th className="p-2">Nº empleado</th><th className="p-2">Nombre y apellidos</th><th className="p-2 text-right">Tickets</th><th className="p-2 text-right">Importe</th></tr></thead><tbody>{orderRows.map((row,index)=><tr key={row.empleado+'-'+index} className="odd:bg-metro-surface/50"><td className="p-2">{row.empleado}</td><td className="p-2">{row.nombreApellidos}</td><td className="p-2 text-right">{formatInteger(row.tickets)}</td><td className="p-2 text-right">{formatMoney(row.amount)} €</td></tr>)}</tbody></table>{orderMovementRows.length>0&&<><h3 className="mb-2 mt-4 text-sm font-bold text-metro-text">Movimientos posteriores</h3>{orderMovementRows.map(item=><div key={item.id} className="flex flex-wrap justify-between gap-2 border-b border-metro-border p-2 text-xs text-metro-text"><span>{item.date} · {item.nombreApellidos||item.empleado||'General'} · {item.reason}</span><strong>{item.tickets>0?'+':''}{item.tickets} tickets</strong></div>)}</>}</>:<p className="rounded-lg border border-amber-500/30 p-3 text-sm text-amber-300">Todavía no existe un pedido realizado de este mes. Accede al cálculo para revisar la previsión y registrar el pedido cuando corresponda.</p>}
+          </div><div className="flex justify-end gap-2 border-t border-metro-border p-3"><button type="button" onClick={() => setShowOrderDetail(false)} className="rounded-lg border border-metro-border px-3 py-2 text-xs text-metro-text">Cerrar</button><button type="button" onClick={() => {setShowOrderDetail(false);onOpenMonthlyCalculation();}} className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white">Abrir cómputo mensual</button></div>
+        </section>
+      </div>}
       <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-extrabold text-metro-text">Proceso mensual</h3><p className="text-[11px] text-metro-muted">Seguimiento de {monthLabel} · marca las revisiones para avanzar</p></div><span className="rounded-lg bg-metro-surface px-2 py-1 text-[11px] font-bold text-metro-secondary">{orderRegistered?'Pedido registrado':readyForOrder?'Listo para revisar pedido':'Preparación en curso'}</span></div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
