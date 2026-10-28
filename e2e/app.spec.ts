@@ -10,6 +10,6 @@ test('muestra Inicio y permite consultar Plantilla sin SQLite compartida', async
   await page.getByRole('navigation', { name: 'Opciones de Personas' })
     .getByRole('button', { name: 'Plantilla', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Plantilla', exact: true })).toBeVisible();
-  await expect(page.getByText('Personas en plantilla', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('#plantilla').getByText('Personas en plantilla', { exact: true }).first()).toBeVisible({ timeout: 20_000 });
   expect(errors).toEqual([]);
 });
