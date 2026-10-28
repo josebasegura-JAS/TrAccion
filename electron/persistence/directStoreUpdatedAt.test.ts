@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { applyMigrations } from './schemaMigrations';
 import {
   DIRECT_STORE_UPDATED_AT_TABLES,
@@ -28,11 +28,31 @@ import {
 describe('directStoreUpdatedAt', () => {
   let tempDir: string;
   let db: InstanceType<typeof Database>;
+  let schemaDir: string;
+  let schemaPath: string;
+
+  // Construir el esquema completo una sola vez. Cada test recibe una copia
+  // independiente y vacía para conservar el aislamiento entre casos.
+  beforeAll(() => {
+    schemaDir = mkdtempSync(path.join(tmpdir(), 'traccion-direct-store-schema-'));
+    schemaPath = path.join(schemaDir, 'schema.sqlite');
+    const schemaDb = new Database(schemaPath);
+    try {
+      applyMigrations(schemaDb);
+    } finally {
+      schemaDb.close();
+    }
+  });
+
+  afterAll(() => {
+    if (schemaDir) rmSync(schemaDir, { recursive: true, force: true });
+  });
 
   beforeEach(() => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'traccion-direct-store-test-'));
-    db = new Database(path.join(tempDir, 'test.sqlite'));
-    applyMigrations(db);
+    const testPath = path.join(tempDir, 'test.sqlite');
+    copyFileSync(schemaPath, testPath);
+    db = new Database(testPath);
   });
 
   afterEach(() => {
