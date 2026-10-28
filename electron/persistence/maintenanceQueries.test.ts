@@ -102,7 +102,8 @@ describe('maintenanceQueries — funciones SQL puras', () => {
       const bigPayload = JSON.stringify({ records: Array(200).fill('x'.repeat(500)) });
 
       db.exec('BEGIN');
-      for (let i = 0; i < 1500; i += 1) {
+      // Mantiene ~20 MB de datos para comprobar VACUUM sin escribir ~150 MB.
+      for (let i = 0; i < 200; i += 1) {
         insert.run(new Date(Date.now() - i * 1000).toISOString(), bigPayload);
       }
       db.exec('COMMIT');
@@ -134,9 +135,11 @@ describe('maintenanceQueries — funciones SQL puras', () => {
       db.exec('CREATE TABLE tabla_pequena (id INTEGER PRIMARY KEY, data TEXT)');
 
       const insertBig = db.prepare('INSERT INTO tabla_grande (data) VALUES (?)');
-      for (let i = 0; i < 500; i += 1) {
-        insertBig.run('x'.repeat(300));
-      }
+      db.transaction(() => {
+        for (let i = 0; i < 500; i += 1) {
+          insertBig.run('x'.repeat(300));
+        }
+      })();
       db.prepare('INSERT INTO tabla_pequena (data) VALUES (?)').run('y');
 
       const breakdown = computeHeaviestTables(db);
