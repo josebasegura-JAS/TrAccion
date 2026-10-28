@@ -44,6 +44,9 @@ type TableDraft = {
   includeContribution: boolean;
 };
 
+type ManualSortColumn = 'empleado' | 'nombreApellidos' | 'tickets' | 'cotizacion';
+type ManualSortDirection = 'asc' | 'desc';
+
 export function TicketRestauranteManualPeoplePanel({
   config,
   employees,
@@ -69,6 +72,8 @@ export function TicketRestauranteManualPeoplePanel({
   const [suggestionField, setSuggestionField] = useState<'empleado' | 'nombre' | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [tableDrafts, setTableDrafts] = useState<Record<string, TableDraft>>({});
+  const [sortColumn, setSortColumn] = useState<ManualSortColumn>('empleado');
+  const [sortDirection, setSortDirection] = useState<ManualSortDirection>('asc');
   const { confirm, dialogNode } = useAppDialog();
   const key = monthKey(year, month);
   const monthLabel = `${MONTH_LABELS[month - 1] ?? month} ${year}`;
@@ -85,6 +90,39 @@ export function TicketRestauranteManualPeoplePanel({
       }),
     [allManualPeople, key],
   );
+
+  const sortedPeople = useMemo(() => [...people].sort((a, b) => {
+    const draftA = tableDrafts[a.id];
+    const draftB = tableDrafts[b.id];
+    let comparison = 0;
+    switch (sortColumn) {
+      case 'empleado':
+        comparison = a.empleado.localeCompare(b.empleado, 'es', { numeric: true, sensitivity: 'base' });
+        break;
+      case 'nombreApellidos':
+        comparison = a.nombreApellidos.localeCompare(b.nombreApellidos, 'es', { sensitivity: 'base' });
+        break;
+      case 'tickets':
+        comparison = (Number(draftA?.tickets ?? a.monthlyTickets[key] ?? 0) || 0)
+          - (Number(draftB?.tickets ?? b.monthlyTickets[key] ?? 0) || 0);
+        break;
+      case 'cotizacion':
+        comparison = Number(draftA?.includeContribution ?? a.includeContribution)
+          - Number(draftB?.includeContribution ?? b.includeContribution);
+        break;
+    }
+    return (sortDirection === 'asc' ? comparison : -comparison)
+      || a.empleado.localeCompare(b.empleado, 'es', { numeric: true, sensitivity: 'base' });
+  }), [people, tableDrafts, key, sortColumn, sortDirection]);
+
+  const toggleSort = (column: ManualSortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection((current) => current === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
 
   useEffect(() => {
     const nextDrafts: Record<string, TableDraft> = {};
@@ -425,15 +463,24 @@ export function TicketRestauranteManualPeoplePanel({
           <table className="w-full text-xs">
             <thead className="bg-metro-surface text-metro-muted">
               <tr>
-                <th className="px-2 py-1.5 text-left">Nº empleado</th>
-                <th className="px-2 py-1.5 text-left">Persona</th>
-                <th className="w-36 px-2 py-1.5 text-right">Tickets {monthLabel}</th>
-                <th className="w-36 px-2 py-1.5 text-center">Cotización</th>
+                {([
+                  ['empleado', 'Nº empleado', 'text-left', ''],
+                  ['nombreApellidos', 'Persona', 'text-left', ''],
+                  ['tickets', `Tickets ${monthLabel}`, 'text-right', 'w-36'],
+                  ['cotizacion', 'Cotización', 'text-center', 'w-36'],
+                ] as const).map(([column, label, alignment, width]) => (
+                  <th key={column} className={`${width} px-2 py-1.5 ${alignment}`} aria-sort={sortColumn === column ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <button type="button" onClick={() => toggleSort(column)} className={`inline-flex items-center gap-1 rounded px-0.5 hover:text-metro-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-metro-red ${column === 'tickets' ? 'ml-auto' : ''}`} title={`Ordenar por ${label}`}>
+                      {label}
+                      {sortColumn === column ? (sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : <span aria-hidden="true" className="text-metro-muted/50">↕</span>}
+                    </button>
+                  </th>
+                ))}
                 <th className="w-24 px-2 py-1.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {people.map((person) => {
+              {sortedPeople.map((person, index) => {
                 const draft = tableDrafts[person.id] ?? {
                   tickets: String(person.monthlyTickets[key] ?? 0),
                   includeContribution: person.includeContribution,
@@ -441,11 +488,7 @@ export function TicketRestauranteManualPeoplePanel({
                 return (
                   <tr
                     key={person.id}
-                    className={
-                      draft.includeContribution
-                        ? 'border-t border-metro-border bg-emerald-500/[0.055]'
-                        : 'border-t border-metro-border bg-violet-500/[0.055]'
-                    }
+                    className={`border-t border-metro-border ${index % 2 === 0 ? 'bg-metro-panel' : 'bg-metro-surface/70'} hover:bg-metro-surface`}
                   >
                     <td className="px-2 py-1.5 font-semibold text-metro-text">{person.empleado}</td>
                     <td className="px-2 py-1.5 text-metro-text">{person.nombreApellidos}</td>
