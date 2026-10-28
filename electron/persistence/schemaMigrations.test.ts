@@ -1,7 +1,4 @@
 import Database from 'better-sqlite3';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applyMigrations,
@@ -25,17 +22,16 @@ import {
  * applyMigrations las aplica todas en orden sin reventar al repetirse".
  */
 describe('schemaMigrations', () => {
-  let tempDir: string;
   let db: InstanceType<typeof Database>;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(path.join(tmpdir(), 'traccion-schema-test-'));
-    db = new Database(path.join(tempDir, 'test.sqlite'));
+    // Es SQLite real, aislado por caso; no se prueba aquí persistencia en disco.
+    // Evita crear/borrar 9 directorios y el coste de I/O en cada migración.
+    db = new Database(':memory:');
   });
 
   afterEach(() => {
     db?.close();
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('aplica todas las migraciones sin errores sobre una base nueva', () => {
