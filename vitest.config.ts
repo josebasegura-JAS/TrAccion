@@ -10,6 +10,15 @@ export default defineConfig({
     environmentMatchGlobs: [
       ['electron/**/*.test.ts', 'node'],
       ['scripts/**/*.test.mjs', 'node'],
+      // Fase 3: pruebas de dominio puro, sin DOM ni almacenamiento del navegador.
+      // Lista explícita para no alterar tests de stores ni componentes React.
+      ['src/features/ticket-restaurante/domain/ticketRestaurante.test.ts', 'node'],
+      ['src/features/teletrabajo/domain/semaforo.test.ts', 'node'],
+      ['src/features/tareas/domain/tareas.test.ts', 'node'],
+      ['src/features/loteria/domain/loteria.test.ts', 'node'],
+      ['src/features/actas/domain/acta.test.ts', 'node'],
+      ['src/features/sorteos/domain/sorteos.test.ts', 'node'],
+      ['src/features/ayuda-escolar/domain/ayudaEscolar.test.ts', 'node'],
     ],
     coverage: {
       provider: 'v8',
