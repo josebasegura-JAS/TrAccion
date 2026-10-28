@@ -138,13 +138,13 @@ export function TicketRestaurantePage({
   const initialOrderPeriod = addTicketYearMonth(currentTicketYear(), currentTicketMonth(), 1);
   const initialContributionPeriod = addTicketYearMonth(currentTicketYear(), currentTicketMonth(), -1);
   const [year, setYear] = useState(currentTicketYear());
-  const [absenceYear, setAbsenceYear] = useState(initialOrderPeriod.year);
+  const [absenceYear, setAbsenceYear] = useState(currentTicketYear());
   // El trabajo ordinario se prepara siempre sobre el mes siguiente.
   // La única excepción es Cotización, que se trabaja a mes vencido y por
   // defecto muestra el mes anterior al actual.
   const [calculationYear, setCalculationYear] = useState(initialOrderPeriod.year);
   const [calculationMonth, setCalculationMonth] = useState(initialOrderPeriod.month);
-  const [absenceMonth, setAbsenceMonth] = useState(initialOrderPeriod.month);
+  const [absenceMonth, setAbsenceMonth] = useState(currentTicketMonth());
   const [manutencionYear, setManutencionYear] = useState(initialOrderPeriod.year);
   const [manutencionMonth, setManutencionMonth] = useState(initialOrderPeriod.month);
   const [contributionYear, setContributionYear] = useState(initialContributionPeriod.year);
@@ -1359,6 +1359,9 @@ export function TicketRestaurantePage({
           manualDebtsReviewed={workflowReview.manualDebtsReviewed}
           month={calculationMonth}
           onImportAbsences={() => {
+            const previous = addTicketYearMonth(calculationYear, calculationMonth, -1);
+            setAbsenceYear(previous.year);
+            setAbsenceMonth(previous.month);
             setActiveSubview('ausencias');
             fileInputRef.current?.click();
           }}
@@ -1372,11 +1375,18 @@ export function TicketRestaurantePage({
           }}
           onMonthChange={(nextMonth) => {
             setCalculationMonth(nextMonth);
-            setAbsenceMonth(nextMonth);
+            const previous = addTicketYearMonth(calculationYear, nextMonth, -1);
+            setAbsenceYear(previous.year);
+            setAbsenceMonth(previous.month);
             setManutencionImputationMonth(nextMonth);
             setManutencionMonth(nextMonth);
           }}
-          onOpenAbsences={() => setActiveSubview('ausencias')}
+          onOpenAbsences={() => {
+            const previous = addTicketYearMonth(calculationYear, calculationMonth, -1);
+            setAbsenceYear(previous.year);
+            setAbsenceMonth(previous.month);
+            setActiveSubview('ausencias');
+          }}
           onOpenCalendars={() => setActiveSubview('calendarios')}
           onOpenContribution={() => setActiveSubview('computoCotizacion')}
           onOpenAnnualBalance={() => setActiveSubview('balanceAnual')}
@@ -1389,7 +1399,9 @@ export function TicketRestaurantePage({
           onReviewChange={(kind, checked) => void handleWorkflowReviewChange(kind, checked)}
           onYearChange={(nextYear) => {
             setCalculationYear(nextYear);
-            setAbsenceYear(nextYear);
+            const previous = addTicketYearMonth(nextYear, calculationMonth, -1);
+            setAbsenceYear(previous.year);
+            setAbsenceMonth(previous.month);
             setManutencionImputationYear(nextYear);
             setManutencionYear(nextYear);
           }}
@@ -1578,6 +1590,8 @@ export function TicketRestaurantePage({
         />
       ) : activeSubview === 'ausencias' ? (
         <AbsencesTable
+          orderMonth={calculationMonth}
+          orderYear={calculationYear}
           absences={visibleAbsences}
           exportPayload={{
             title: 'Ausencias Ticket Restaurante',
