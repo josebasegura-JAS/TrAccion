@@ -36,6 +36,14 @@ export default defineConfig({
       ['src/shared/sessions/session.test.ts', 'node'],
       ['src/features/licencias-sin-sueldo/domain/licenciaSinSueldo.test.ts', 'node'],
       ['src/features/coordinacion/domain/coordinacion.coverage.test.ts', 'node'],
+      // Pruebas de dominio/regresión auditadas: solo operaciones sobre datos, fechas y mocks.
+      // Mantener los tests de stores, React y localStorage en jsdom.
+      ['src/features/ticket-restaurante/domain/ticketCalculation.regression.test.ts', 'node'],
+      ['src/features/ticket-restaurante/domain/importManutenciones.regression.test.ts', 'node'],
+      ['src/features/ticket-restaurante/domain/importManutencionesPdf.regression.test.ts', 'node'],
+      ['src/features/configuracion/domain/taskStates.test.ts', 'node'],
+      ['src/features/configuracion/domain/taskPhases.test.ts', 'node'],
+      ['src/features/loteria/domain/importLotteryPeople.test.ts', 'node'],
     ],
     coverage: {
       provider: 'v8',
