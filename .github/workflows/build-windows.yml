@@ -140,6 +140,8 @@ jobs:
           $existing = git ls-remote --tags origin "refs/tags/$tag"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($existing) { throw "La versión $version ya está registrada." }
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a $tag $sha -m "TrAcción versión distribuida $version"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git push origin "refs/tags/$tag"
