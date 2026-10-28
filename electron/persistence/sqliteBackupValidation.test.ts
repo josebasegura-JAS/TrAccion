@@ -1,13 +1,38 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 import { applyMigrations, CURRENT_SCHEMA_VERSION } from './schemaMigrations.js';
 import { validateSqliteBackupForRestore } from './sqliteBackupValidation.js';
 
 const tempDirectories: string[] = [];
+
+let templateDirectory: string;
+let templateDatabasePath: string;
+
+beforeAll(() => {
+  templateDirectory = mkdtempSync(path.join(tmpdir(), 'traccion-backup-template-'));
+  templateDatabasePath = path.join(templateDirectory, 'schema.sqlite');
+  const db = new Database(templateDatabasePath);
+  try {
+    applyMigrations(db);
+  } finally {
+    db.close();
+  }
+});
+
+afterAll(() => {
+  if (templateDirectory) rmSync(templateDirectory, { recursive: true, force: true });
+});
+
+function createLegacyDatabase(): string {
+  const databasePath = tempDatabasePath();
+  copyFileSync(templateDatabasePath, databasePath);
+  return databasePath;
+}
+
 
 function tempDatabasePath(fileName = 'backup.sqlite'): string {
   const directory = mkdtempSync(path.join(tmpdir(), 'traccion-backup-validation-'));
@@ -16,10 +41,7 @@ function tempDatabasePath(fileName = 'backup.sqlite'): string {
 }
 
 function createValidTraccionDatabase(): { databasePath: string; databaseUuid: string } {
-  const databasePath = tempDatabasePath();
-  const db = new Database(databasePath);
-  applyMigrations(db);
-  db.close();
+  const databasePath = createLegacyDatabase();
   const identity = inspectAndEnsureDatabaseIdentity(databasePath, { allowLegacyBootstrap: true }).identity;
   return { databasePath, databaseUuid: identity.databaseUuid };
 }
@@ -84,10 +106,7 @@ describe('validateSqliteBackupForRestore', () => {
   });
 
   it('admite una base legacy reconocible sin modificarla', () => {
-    const databasePath = tempDatabasePath();
-    const db = new Database(databasePath);
-    applyMigrations(db);
-    db.close();
+    const databasePath = createLegacyDatabase();
 
     const result = validateSqliteBackupForRestore(databasePath);
 

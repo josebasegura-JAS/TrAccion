@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { applyMigrations } from './schemaMigrations.js';
@@ -11,6 +11,31 @@ import {
 } from './databaseIdentity.js';
 
 const tempDirectories: string[] = [];
+
+let templateDirectory: string;
+let templateDatabasePath: string;
+
+beforeAll(() => {
+  templateDirectory = mkdtempSync(path.join(tmpdir(), 'traccion-identity-template-'));
+  templateDatabasePath = path.join(templateDirectory, 'schema.sqlite');
+  const db = new Database(templateDatabasePath);
+  try {
+    applyMigrations(db);
+  } finally {
+    db.close();
+  }
+});
+
+afterAll(() => {
+  if (templateDirectory) rmSync(templateDirectory, { recursive: true, force: true });
+});
+
+function createLegacyDatabase(): string {
+  const databasePath = tempDatabasePath();
+  copyFileSync(templateDatabasePath, databasePath);
+  return databasePath;
+}
+
 
 function tempDatabasePath(): string {
   const directory = mkdtempSync(path.join(tmpdir(), 'traccion-identity-'));
@@ -44,10 +69,7 @@ describe('database identity', () => {
   });
 
   it('asigna identidad a una base legacy válida', () => {
-    const databasePath = tempDatabasePath();
-    const db = new Database(databasePath);
-    applyMigrations(db);
-    db.close();
+    const databasePath = createLegacyDatabase();
 
     const result = inspectAndEnsureDatabaseIdentity(databasePath, { allowLegacyBootstrap: true });
 
@@ -58,10 +80,7 @@ describe('database identity', () => {
   });
 
   it('rechaza un UUID distinto al vinculado al equipo', () => {
-    const databasePath = tempDatabasePath();
-    const db = new Database(databasePath);
-    applyMigrations(db);
-    db.close();
+    const databasePath = createLegacyDatabase();
 
     const first = inspectAndEnsureDatabaseIdentity(databasePath, { allowLegacyBootstrap: true });
 
