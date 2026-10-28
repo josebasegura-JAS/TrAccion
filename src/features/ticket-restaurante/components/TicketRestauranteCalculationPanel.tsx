@@ -547,7 +547,7 @@ export function CalculationPanel({
         onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
         onSortChange={setSort}
-        rows={calculation.rows}
+        rows={mode === 'monthly' ? calculation.rows.filter((row) => !row.manualEntry) : calculation.rows}
         sort={preferences.sort}
       />
       {exclusionRow && onUpdateConfig ? (
