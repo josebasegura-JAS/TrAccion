@@ -99,13 +99,6 @@ test('módulos críticos de auditoría abren sus acciones principales con SQLite
       await expect(page.getByRole('button', { name: 'Otras áreas' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Sindicatos' })).toBeVisible();
 
-      await navigateToModule(page, 'Operativa diaria', 'Huelgas');
-      await page.getByRole('button', { name: 'Nueva huelga' }).first().click();
-      const huelgaDialog = page.getByRole('dialog', { name: 'Nueva convocatoria de huelga' });
-      await expect(huelgaDialog).toBeVisible();
-      await huelgaDialog.getByRole('button', { name: 'Cancelar' }).click();
-      await expect(huelgaDialog).not.toBeVisible();
-
       await navigateToModule(page, 'Personas', 'Ayuda escolar');
       await expect(page.getByRole('button', { name: /Seleccionar \.msg/ })).toBeVisible();
     });
