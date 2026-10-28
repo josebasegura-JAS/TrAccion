@@ -68,6 +68,8 @@ export type TicketAbsenceDisplayRow = TicketRestaurantAbsence & {
 
 export function AbsencesTable({
   absences,
+  orderMonth,
+  orderYear,
   exportPayload,
   importMessage,
   month,
@@ -82,6 +84,8 @@ export function AbsencesTable({
   year,
 }: {
   absences: TicketAbsenceDisplayRow[];
+  orderMonth: number;
+  orderYear: number;
   exportPayload: ExportTablePayload<TicketAbsenceDisplayRow>;
   importMessage: string;
   month: number;
@@ -241,7 +245,7 @@ export function AbsencesTable({
     <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h3 className="text-base font-bold text-metro-text">Ausencias</h3>
+          <h3 className="text-base font-bold text-metro-text">Ausencias · {new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1))}</h3>
           <p className="text-xs text-metro-muted">
             Importa, revisa y filtra ausencias por mes. Días ticket mes ya descuenta calendario,
             fines de semana y días sin ticket.
@@ -265,7 +269,7 @@ export function AbsencesTable({
 
       <div className="mb-2 flex flex-col gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs font-semibold text-metro-muted">
-          Ausencias del mes seleccionado: <span className="text-metro-red">{absences.length}</span>
+          Pedido de {new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(new Date(orderYear, orderMonth - 1, 1))} · Ausencias del mes seleccionado: <span className="text-metro-red">{absences.length}</span>
         </div>
         <MonthNavigator
           ariaLabel="Selector mes ausencias"
