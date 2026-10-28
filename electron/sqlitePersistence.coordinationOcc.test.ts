@@ -1,7 +1,7 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 
 const testContext = vi.hoisted(() => ({ userDataPath: '' }));
@@ -65,9 +65,22 @@ function writePreferences(userData: string, sharedDirectory: string): void {
   );
 }
 
-function createSharedDatabase(databasePath: string): void {
-  const db = openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 });
+let templateRoot: string;
+let templateDbPath: string;
+
+beforeAll(() => {
+  templateRoot = mkdtempSync(path.join(tmpdir(), 'traccion-coordination-occ-schema-'));
+  templateDbPath = path.join(templateRoot, 'seed.sqlite');
+  const db = openSqliteDatabase(templateDbPath, { busyTimeoutMs: 5_000 });
   db.close();
+});
+
+afterAll(() => {
+  if (templateRoot) rmSync(templateRoot, { recursive: true, force: true });
+});
+
+function createSharedDatabase(databasePath: string): void {
+  copyFileSync(templateDbPath, databasePath);
 }
 
 describe('Coordinación granular — OCC real sobre persisted_records', () => {
