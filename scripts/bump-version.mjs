@@ -20,7 +20,11 @@ if (Number.isNaN(previousBuildNumber)) {
   throw new Error(`El contenido de ${buildCounterPath} no es un número válido.`);
 }
 
-const nextBuildNumber = previousBuildNumber + 1;
+const requestedBuildNumber = process.env.TRACCION_BUILD_NUMBER;
+const nextBuildNumber = requestedBuildNumber === undefined ? previousBuildNumber + 1 : Number(requestedBuildNumber);
+if (!Number.isSafeInteger(nextBuildNumber) || nextBuildNumber <= previousBuildNumber) {
+  throw new Error(`Número de build no válido: ${requestedBuildNumber}. Debe superar ${previousBuildNumber}.`);
+}
 writeFileSync(buildCounterPath, `${nextBuildNumber}\n`);
 
 const raw = readFileSync(packageJsonPath, 'utf8');
