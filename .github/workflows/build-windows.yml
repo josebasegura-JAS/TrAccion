@@ -90,10 +90,10 @@ jobs:
           if (($old | ConvertTo-Json -Depth 40 -Compress) -ne ($new | ConvertTo-Json -Depth 40 -Compress)) {
             throw 'package.json contiene cambios distintos a version.'
           }
-          $oldLock = git show "${parent}:package-lock.json" | ConvertFrom-Json -Depth 100
-          $newLock = Get-Content package-lock.json -Raw | ConvertFrom-Json -Depth 100
+          $oldLock = git show "${parent}:package-lock.json" | ConvertFrom-Json -AsHashtable -Depth 100
+          $newLock = Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable -Depth 100
           $oldLock.version = $newLock.version
-          $oldLock.packages.''.version = $newLock.packages.''.version
+          $oldLock['packages']['']['version'] = $newLock['packages']['']['version']
           if (($oldLock | ConvertTo-Json -Depth 100 -Compress) -ne ($newLock | ConvertTo-Json -Depth 100 -Compress)) {
             throw 'package-lock.json contiene cambios distintos a version.'
           }
