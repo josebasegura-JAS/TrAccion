@@ -14,13 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Validación integral
+  checks:
+    name: Comprobación / ${{ matrix.lane }}
     runs-on: windows-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [calidad, vitest, web, electron]
     env:
       CI: 'true'
       NODE_ENV: development
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/validate
+        with:
+          lane: ${{ matrix.lane }}
+
+  validation:
+    name: Validación integral
+    if: ${{ always() }}
+    needs: [checks]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exigir éxito de todas las comprobaciones
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+        run: |
+          echo "Resultado de las cuatro comprobaciones: $CHECKS_RESULT"
+          test "$CHECKS_RESULT" = "success"
