@@ -203,7 +203,7 @@ export function ManutencionesPanel({
             Modelo
           </ActionButton>
           <ActionButton iconOnly={false} onClick={onImport} size="sm" variant="import">
-            Importar desde Excel
+            Importar Excel / PDF
           </ActionButton>
         </div>
       </div>
@@ -385,7 +385,8 @@ export function ManutencionesPanel({
                       <th className="px-2 py-2">Nombre</th>
                       <th className="px-2 py-2">Fecha gasto</th>
                       <th className="px-2 py-2">Origen</th>
-                      <th className="px-2 py-2">Resultado</th>
+                      <th className="px-2 py-2">Afecta a ticket</th>
+                      <th className="px-2 py-2">Resultado / motivo</th>
                     </tr>
                   </CompactTableHead>
                   <CompactTableBody>
@@ -451,6 +452,9 @@ export function ManutencionesPanel({
                               <option value="Repartido entre">Repartido entre</option>
                               <option value="Manual">Manual</option>
                             </select>
+                          </td>
+                          <td className="px-2 py-2 align-top">
+                            <span className={isValid ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>{isValid ? "Sí · resta 1" : "No · no resta"}</span>
                           </td>
                           <td className="px-2 py-2 align-top">
                             <div

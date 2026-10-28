@@ -1017,7 +1017,7 @@ export function TicketRestaurantePage({
       setManutencionPreviewRows(validatedRows);
       setManutencionImportMessage(
         validatedRows.length > 0
-          ? `Detectadas ${validatedRows.length} manutenciones con derecho a ticket.`
+          ? `Leídas ${validatedRows.length} manutenciones. Revisa cuáles descuentan ticket y el motivo antes de guardar.`
           : 'No se han detectado manutenciones de personas con derecho a ticket.',
       );
     } catch (error) {
@@ -1312,7 +1312,7 @@ export function TicketRestaurantePage({
         type="file"
       />
       <input
-        accept=".xlsx,.csv,.tsv"
+        accept=".xlsx,.csv,.tsv,.pdf"
         className="hidden"
         onChange={(event) => void handleManutencionesImportFile(event.target.files?.[0] ?? null)}
         ref={manutencionesFileInputRef}

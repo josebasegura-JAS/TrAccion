@@ -58,6 +58,10 @@ export async function importTicketManutencionesFromFile(
   ticketPeople: readonly TicketPerson[],
 ): Promise<TicketManutencionPreviewRow[]> {
   const buffer = await file.arrayBuffer();
+  if (file.name.toLowerCase().endsWith('.pdf')) {
+    const { importTicketManutencionesPdf } = await import('./importManutencionesPdf');
+    return importTicketManutencionesPdf(buffer, ticketPeople);
+  }
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
   const rows =
     extension === 'csv' || extension === 'tsv' || extension === 'txt'
@@ -355,16 +359,14 @@ function pushPreviewRow(
   employeeIndex: number,
 ): void {
   const ticketPerson = peopleByEmployee.get(employee.empleado);
-  if (!ticketPerson) return;
-
   rows.push({
-    id: `manutencion-preview-${rowIndex + 1}-${ticketPerson.empleado}-${employeeIndex}`,
-    empleado: ticketPerson.empleado,
-    nombreApellidos: ticketPerson.nombreApellidos || employee.nombreApellidos,
+    id: `manutencion-preview-${rowIndex + 1}-${employee.empleado}-${employeeIndex}`,
+    empleado: ticketPerson?.empleado ?? employee.empleado,
+    nombreApellidos: ticketPerson?.nombreApellidos || employee.nombreApellidos,
     fechaGasto,
     origen,
-    importar: true,
-    afectaTicket: true,
+    importar: Boolean(ticketPerson),
+    afectaTicket: Boolean(ticketPerson),
     errors: [],
   });
 }
