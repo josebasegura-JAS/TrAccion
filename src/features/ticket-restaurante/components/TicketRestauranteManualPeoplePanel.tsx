@@ -94,6 +94,10 @@ export function TicketRestauranteManualPeoplePanel({
   const sortedPeople = useMemo(() => [...people].sort((a, b) => {
     const draftA = tableDrafts[a.id];
     const draftB = tableDrafts[b.id];
+    // La cotización tiene prioridad fija sobre cualquier columna o dirección.
+    const contributionA = draftA?.includeContribution ?? a.includeContribution;
+    const contributionB = draftB?.includeContribution ?? b.includeContribution;
+    if (contributionA !== contributionB) return contributionA ? -1 : 1;
     let comparison = 0;
     switch (sortColumn) {
       case 'empleado':
