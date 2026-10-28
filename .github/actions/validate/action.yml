@@ -30,10 +30,21 @@ runs:
       if: ${{ inputs.lane == 'calidad' }}
       shell: pwsh
       run: npm run build
-    - name: Vitest completo, SQLite, multiusuario y cobertura
+    - name: Vitest completo, SQLite, multiusuario y cobertura (medido)
       if: ${{ inputs.lane == 'vitest' }}
       shell: pwsh
-      run: npm run test:coverage
+      run: |
+        $timer = [System.Diagnostics.Stopwatch]::StartNew()
+        npm run test:coverage
+        $testExitCode = $LASTEXITCODE
+        $timer.Stop()
+        New-Item -ItemType Directory -Force -Path audit-results | Out-Null
+        $duration = [math]::Round($timer.Elapsed.TotalSeconds, 2).ToString([System.Globalization.CultureInfo]::InvariantCulture)
+        Set-Content -Path audit-results/vitest-elapsed-seconds.txt -Value $duration
+        node scripts/report-vitest-timing.mjs
+        $reportExitCode = $LASTEXITCODE
+        if ($testExitCode -ne 0) { exit $testExitCode }
+        if ($reportExitCode -ne 0) { exit $reportExitCode }
     - name: Instalar Chromium de Playwright
       if: ${{ inputs.lane == 'web' }}
       shell: pwsh
