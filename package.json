@@ -29,7 +29,7 @@
     "test:ui": "npm run test:e2e:electron:ci",
     "test:critical": "npm run test && npm run test:ui",
     "test:all": "npm run validate",
-    "test:coverage": "vitest run --fileParallelism --maxWorkers=2 --minWorkers=2 --coverage --reporter=default --reporter=json --outputFile=audit-results/vitest.json",
+    "test:coverage": "vitest run --fileParallelism --maxWorkers=3 --minWorkers=3 --coverage --reporter=default --reporter=json --outputFile=audit-results/vitest.json",
     "validate:node": "npm run typecheck:tests && npm run lint && npm run test:coverage && npm run build",
     "validate": "npm run validate:node && npm run test:e2e && npm run electron:rebuild && npm run test:e2e:electron"
   },
