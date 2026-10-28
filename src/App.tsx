@@ -29,7 +29,6 @@ import {
 const DashboardCards = lazy(() => import('./components/DashboardCards').then((m) => ({ default: m.DashboardCards })));
 const AjustesPage = lazy(() => import('./components/AjustesPage').then((m) => ({ default: m.AjustesPage })));
 const ActasPage = lazy(() => import('./features/actas/components/ActasPage').then((m) => ({ default: m.ActasPage })));
-const HuelgasPage = lazy(() => import('./features/huelgas/components/HuelgasPage').then((m) => ({ default: m.HuelgasPage })));
 const ComitePage = lazy(() => import('./features/comite/components/ComitePage').then((m) => ({ default: m.ComitePage })));
 const CriteriosRrllPage = lazy(() => import('./features/criterios-rrll/components/CriteriosRrllPage').then((m) => ({ default: m.CriteriosRrllPage })));
 const EspecialesPage = lazy(() => import('./features/especiales/components/EspecialesPage').then((m) => ({ default: m.EspecialesPage })));
@@ -80,7 +79,6 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   coordinacion: 'Cargando Coordinación...',
   comite: 'Cargando Comité de Empresa...',
   actas: 'Cargando Actas...',
-  huelgas: 'Cargando Huelgas...',
   paritaria: 'Cargando Comisión Paritaria...',
   'criterios-rrll': 'Cargando Criterios...',
   teletrabajo: 'Cargando Teletrabajo...',
@@ -335,7 +333,6 @@ export function App() {
                     {activeView === 'coordinacion' && <CoordinacionPage initialMeetingId={navigationTarget?.view === 'coordinacion' ? navigationTarget.recordId : null} initialPointId={navigationTarget?.view === 'coordinacion' ? navigationTarget.pointId : undefined} navigationNonce={navigationTarget?.view === 'coordinacion' ? navigationTarget.nonce : undefined} />}
                     {activeView === 'comite' && <ComitePage initialOrgan={navigationTarget ? resolveCommitteeOrganForNavigation(navigationTarget.view) : null} initialSessionId={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.recordId : null} navigationNonce={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.nonce : undefined} />}
                     {activeView === 'actas' && <ActasPage />}
-                    {activeView === 'huelgas' && <HuelgasPage />}
                     {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
                     {activeView === 'teletrabajo' && <TeletrabajoPage initialSolicitudId={navigationTarget?.view === 'teletrabajo' ? navigationTarget.recordId : null} navigationNonce={navigationTarget?.view === 'teletrabajo' ? navigationTarget.nonce : undefined} />}
                     {activeView === 'ticket-restaurante' && <TicketRestaurantePage initialAbsenceId={navigationTarget?.view === 'ticket-restaurante' ? navigationTarget.recordId : null} navigationNonce={navigationTarget?.view === 'ticket-restaurante' ? navigationTarget.nonce : undefined} />}

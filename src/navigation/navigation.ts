@@ -2,7 +2,6 @@ import {
   CalendarDays,
   BriefcaseBusiness,
   FileText,
-  Megaphone,
   Landmark,
   Clover,
   ClipboardList,
@@ -52,6 +51,7 @@ export type CommitteeOrgan = 'comite' | 'paritaria';
  * órgano abrir, pero nunca debe crear una segunda ruta/pantalla de aplicación.
  */
 export function resolveActiveViewForNavigation(view: AppView): AppView {
+  if (view === 'huelgas') return 'dashboard';
   return view === 'paritaria' ? 'comite' : view;
 }
 
@@ -88,7 +88,6 @@ export const navigationGroups: NavigationGroup[] = [
       { label: 'Coordinación', icon: Handshake, view: 'coordinacion' },
       { label: 'Comité / Paritaria', icon: CalendarDays, view: 'comite' },
       { label: 'Actas', icon: FileText, view: 'actas' },
-      { label: 'Huelgas', icon: Megaphone, view: 'huelgas' },
     ],
   },
   {

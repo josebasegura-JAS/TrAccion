@@ -46,7 +46,6 @@ test('permite navegar por los módulos principales desde el menú lateral', asyn
       ['Operativa diaria', 'Tareas'],
       ['Operativa diaria', 'Coordinación'],
       ['Operativa diaria', 'Comité / Paritaria'],
-      ['Operativa diaria', 'Huelgas'],
       ['Operativa diaria', 'Actas'],
       ['Personas', 'Plantilla'],
       ['Personas', 'Ayuda escolar'],
@@ -60,6 +59,9 @@ test('permite navegar por los módulos principales desde el menú lateral', asyn
       ['Herramientas', 'Lotería'],
       ['Herramientas', 'Especiales'],
     ] as const;
+
+    await page.getByRole('button', { name: 'Operativa diaria' }).click();
+    await expect(page.getByRole('navigation', { name: 'Opciones de Operativa diaria' }).getByRole('button', { name: 'Huelgas' })).toHaveCount(0);
 
     for (const [groupLabel, moduleLabel] of modules) {
       await navigateToModule(page, groupLabel, moduleLabel);
@@ -107,7 +109,6 @@ test('las ayudas de todos los módulos abren como diálogo y no desbordan horizo
       ['Operativa diaria', 'Tareas'],
       ['Operativa diaria', 'Coordinación'],
       ['Operativa diaria', 'Comité / Paritaria'],
-      ['Operativa diaria', 'Huelgas'],
       ['Operativa diaria', 'Actas'],
       ['Personas', 'Plantilla'],
       ['Personas', 'Ayuda escolar'],
