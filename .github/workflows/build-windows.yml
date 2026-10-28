@@ -46,41 +46,49 @@ jobs:
       - name: Instalar dependencias para la distribución
         shell: pwsh
         run: npm ci --include=dev --no-audit --no-fund
-      - name: Crear el commit final ANTES de compilar
+      - name: Incrementar versión sin commits en main
         shell: pwsh
         run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $parts = $pkg.version.Split('.')
+          $line = "$($parts[0]).$($parts[1])"
+          $max = [int](Get-Content .build-version -Raw).Trim()
+          git fetch origin "refs/tags/traccion-build/*:refs/tags/traccion-build/*" --no-tags
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($tag in @(git tag --list "traccion-build/$line.*")) {
+            if ($tag -match '^traccion-build/\d+\.\d+\.(\d+)$') {
+              $n = [int]$Matches[1]
+              if ($n -gt $max) { $max = $n }
+            }
+          }
+          $env:TRACCION_BUILD_NUMBER = [string]($max + 1)
           npm run version:bump
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add .build-version package.json package-lock.json
-          git commit -m 'ci: bump build counter'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git rev-parse HEAD
-      # Solo cambia el contador y las versiones de los manifiestos.
-      # La validación de PR se exige mediante las reglas de protección de main.
+          "Versión de distribución: $line.$env:TRACCION_BUILD_NUMBER" >> $env:GITHUB_STEP_SUMMARY
       - name: Verificar cambios exclusivos de versión
         shell: pwsh
         run: |
-          $changed = @(git diff-tree --no-commit-id --name-only -r HEAD)
+          $changed = @(git diff --name-only HEAD)
           $allowed = @('.build-version', 'package.json', 'package-lock.json')
           if (@($changed | Where-Object { $_ -notin $allowed }).Count -gt 0) {
-            throw 'El commit de distribución incluye modificaciones ajenas a la versión.'
+            throw 'La distribución contiene modificaciones ajenas a la versión.'
           }
-          $parent = git rev-parse HEAD^
-          $old = git show "${parent}:package.json" | ConvertFrom-Json
+          $old = git show "HEAD:package.json" | ConvertFrom-Json
           $new = Get-Content package.json -Raw | ConvertFrom-Json
           $old.version = $new.version
           if (($old | ConvertTo-Json -Depth 40 -Compress) -ne ($new | ConvertTo-Json -Depth 40 -Compress)) {
             throw 'package.json contiene cambios distintos a version.'
           }
-          $oldLock = git show "${parent}:package-lock.json" | ConvertFrom-Json -AsHashtable -Depth 100
+          $oldLock = git show "HEAD:package-lock.json" | ConvertFrom-Json -AsHashtable -Depth 100
           $newLock = Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable -Depth 100
           $oldLock.version = $newLock.version
           $oldLock['packages']['']['version'] = $newLock['packages']['']['version']
           if (($oldLock | ConvertTo-Json -Depth 100 -Compress) -ne ($newLock | ConvertTo-Json -Depth 100 -Compress)) {
             throw 'package-lock.json contiene cambios distintos a version.'
           }
+          $baseCounter = [int](git show "HEAD:.build-version").Trim()
+          $newCounter = [int](Get-Content .build-version -Raw).Trim()
+          if ($newCounter -le $baseCounter) { throw 'El contador no ha aumentado.' }
       - name: Compilar código de producción para Windows
         shell: pwsh
         run: npm run build
@@ -119,16 +127,25 @@ jobs:
             npm run update-manifest:write
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-      - name: Registrar SHA validado y publicar contador sin rebase
+      - name: Registrar origen y reservar versión con etiqueta Git
         shell: pwsh
         run: |
-          # Ningún archivo rastreado puede cambiar tras la validación.
-          git diff --exit-code HEAD
+          $sha = git rev-parse HEAD
+          $version = node -p "require('./package.json').version"
+          $tag = "traccion-build/$version"
+          $mainRef = git ls-remote origin refs/heads/main
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git rev-parse HEAD | Set-Content release/validated-commit.txt
-          # Si main avanzó, el push falla: nunca empaquetar un árbol y anunciar otro.
-          git push origin HEAD:refs/heads/main
-          exit $LASTEXITCODE
+          $remoteSha = ($mainRef -split '\s+')[0]
+          if ($remoteSha -ne $sha) { throw 'main avanzó durante la distribución: no se publicará una compilación desactualizada.' }
+          $existing = git ls-remote --tags origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($existing) { throw "La versión $version ya está registrada." }
+          git tag -a $tag $sha -m "TrAcción versión distribuida $version"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git push origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$sha" | Set-Content release/validated-commit.txt
+          "Versión registrada: $tag" >> $env:GITHUB_STEP_SUMMARY
       - name: Upload paquete validado
         uses: actions/upload-artifact@v4
         with:
