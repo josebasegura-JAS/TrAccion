@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// La cola se prueba realmente; el journal de Electron se prueba por separado.
+vi.mock('./sqliteIncidentJournal.js', () => ({
+  beginSqliteWrite: vi.fn(() => 'sqlite-ipc-test-write'),
+  finishSqliteWrite: vi.fn(),
+}));
 import {
   enqueueSqliteIpc,
   getSqliteIpcQueueDiagnostics,
