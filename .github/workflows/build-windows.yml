@@ -13,7 +13,6 @@ on:
 
 permissions:
   contents: write
-  actions: read
 
 # Compartido por EXE, Lite y ZIP. Nunca cancelar una distribución en curso.
 concurrency:
@@ -44,21 +43,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: Exigir validación integral correcta del SHA exacto de main
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $sha = git rev-parse HEAD
-          $repo = $env:GITHUB_REPOSITORY
-          $uri = "https://api.github.com/repos/$repo/actions/workflows/tests-completos.yml/runs?head_sha=$sha&event=push&per_page=30"
-          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
-          $runs = Invoke-RestMethod -Uri $uri -Headers $headers
-          $valid = @($runs.workflow_runs | Where-Object { $_.head_sha -eq $sha -and $_.event -eq 'push' -and $_.status -eq 'completed' -and $_.conclusion -eq 'success' })
-          if ($valid.Count -eq 0) {
-            throw "No hay validación integral correcta de main para $sha. Espera al workflow TrAcción — Validación integral (push) y vuelve a ejecutar el generador."
-          }
-          "Validación heredada del commit: $sha" >> $env:GITHUB_STEP_SUMMARY
       - name: Instalar dependencias para la distribución
         shell: pwsh
         run: npm ci --include=dev --no-audit --no-fund
@@ -74,7 +58,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git rev-parse HEAD
       # Solo cambia el contador y las versiones de los manifiestos.
-      # El código fuente ya pasó la validación integral en main.
+      # La validación de PR se exige mediante las reglas de protección de main.
       - name: Verificar cambios exclusivos de versión
         shell: pwsh
         run: |
