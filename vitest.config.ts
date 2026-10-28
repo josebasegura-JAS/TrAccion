@@ -5,6 +5,12 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    // Los tests de Electron/SQLite y scripts no necesitan un DOM de navegador.
+    // El resto conserva jsdom para evitar cambios en las pruebas de interfaz.
+    environmentMatchGlobs: [
+      ['electron/**/*.test.ts', 'node'],
+      ['scripts/**/*.test.mjs', 'node'],
+    ],
     coverage: {
       provider: 'v8',
       all: true,
