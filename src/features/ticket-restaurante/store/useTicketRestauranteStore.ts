@@ -378,6 +378,13 @@ function readTicketRestauranteSnapshot(): TicketRestauranteSnapshot {
   };
 }
 
+const hasTicketRestauranteSharedRepository = (): boolean =>
+  hasTicketRestauranteCalendarsSqliteRepository() ||
+  hasTicketRestaurantePeopleSqliteRepository() ||
+  hasTicketRestauranteAbsencesSqliteRepository() ||
+  hasTicketRestauranteConfigSqliteRepository() ||
+  hasTicketRestauranteManutencionesSqliteRepository();
+
 export const useTicketRestauranteStore = create<TicketRestauranteState>((set, get) => ({
   calendars: [],
   absences: [],
@@ -385,7 +392,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   config: DEFAULT_TICKET_RESTAURANT_CONFIG,
   manutenciones: [],
   load: () => {
-    set(readTicketRestauranteSnapshot());
+    if (!hasTicketRestauranteSharedRepository()) set(readTicketRestauranteSnapshot());
     void loadTicketRestauranteStateFromSqliteOrStorage()
       .then((nextSnapshot) => set(nextSnapshot))
       .catch((error) => {
@@ -394,9 +401,11 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
       });
   },
   reloadFromStorage: async () => {
-    const syncSnapshot = readTicketRestauranteSnapshot();
-    if (!areTicketSnapshotsEquivalent(get(), syncSnapshot)) {
-      set(syncSnapshot);
+    if (!hasTicketRestauranteSharedRepository()) {
+      const syncSnapshot = readTicketRestauranteSnapshot();
+      if (!areTicketSnapshotsEquivalent(get(), syncSnapshot)) {
+        set(syncSnapshot);
+      }
     }
     try {
       const nextSnapshot = await loadTicketRestauranteStateFromSqliteOrStorage();
