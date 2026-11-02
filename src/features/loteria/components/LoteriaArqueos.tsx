@@ -15,19 +15,21 @@ export function LoteriaArqueos({ campaign, onSave, blocked = false }: {
   const [amount, setAmount] = useState('');
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
+  const [recordedBy, setRecordedBy] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expected = cashExpected(campaign);
   const countedValue = parseCashAmount(counted, true);
   const validCount = countedValue !== null;
   const difference = validCount && countedValue !== null ? roundCents(countedValue - expected) : null;
   const changes = cashChangesSinceLastClose(campaign);
-  const savesAllowed = !saving && !blocked;
+  const validOperator = recordedBy.trim().length > 0 && recordedBy.trim().length <= 120;
+  const savesAllowed = !saving && !blocked && validOperator;
 
   async function closeCash() {
     if (!validCount || !savesAllowed) return;
     setSaving(true);
     try {
-      const snapshot = cashSnapshot(campaign, countedValue!, new Date().toISOString(), uniqueId());
+      const snapshot = cashSnapshot(campaign, countedValue!, new Date().toISOString(), uniqueId(), recordedBy.trim());
       const next = { ...campaign, cashArqueos: [...(campaign.cashArqueos ?? []), snapshot] };
       const ok = await onSave(next, 'Arqueo guardado.');
       if (ok) {
@@ -43,7 +45,7 @@ export function LoteriaArqueos({ campaign, onSave, blocked = false }: {
       setNotice('Indica un concepto y un importe distinto de cero (negativo para retirar efectivo).');
       return;
     }
-    const movement: LotteryCashMovement = { id: uniqueId(), at: new Date().toISOString(), amount: value!, reason: reason.trim() };
+    const movement: LotteryCashMovement = { id: uniqueId(), at: new Date().toISOString(), amount: value!, reason: reason.trim(), recordedBy: recordedBy.trim() };
     setSaving(true);
     try {
       const ok = await onSave({ ...campaign, cashMovements: [...(campaign.cashMovements ?? []), movement] }, 'Movimiento de caja guardado.');
@@ -57,6 +59,7 @@ export function LoteriaArqueos({ campaign, onSave, blocked = false }: {
       <h3 className="text-sm font-bold text-metro-text">Arqueo de caja fuerte</h3>
       <p className="text-xs text-metro-secondary">El primer cierre toma todos los cobros en efectivo registrados como referencia. Los siguientes parten del último efectivo contado, más los cambios de cobros y los movimientos de caja. Guarda los pagos antes de contar.</p>
       {blocked && <p role="alert" className="text-xs text-amber-300">Guarda los cambios pendientes de Lotería antes de registrar un arqueo o un movimiento de caja.</p>}
+      <label className="block space-y-1 text-xs text-metro-muted">Registrado por (obligatorio, nombre de quien realiza la operación)<input className={inputClass} value={recordedBy} maxLength={120} onChange={(event) => setRecordedBy(event.target.value)} placeholder="Nombre de la persona responsable" /></label>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg bg-metro-surface p-3"><p className="text-xs text-metro-muted">Efectivo esperado</p><strong>{money(expected)}</strong></div>
         <label className="space-y-1 text-xs text-metro-muted">Efectivo contado (€)<input className={inputClass} inputMode="decimal" type="text" value={counted} onChange={(event) => setCounted(event.target.value)} placeholder="0,00" /></label>
@@ -75,7 +78,7 @@ export function LoteriaArqueos({ campaign, onSave, blocked = false }: {
         <button type="button" className="rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text disabled:opacity-40" disabled={saving || blocked} onClick={() => void addMovement()}>Registrar movimiento</button>
       </div>
       <ul className="space-y-1 text-xs text-metro-secondary">
-        {(campaign.cashMovements ?? []).slice(-8).reverse().map((entry) => <li key={entry.id}>{new Date(entry.at).toLocaleString('es-ES')} · {entry.reason}: {money(entry.amount)}</li>)}
+        {(campaign.cashMovements ?? []).slice(-8).reverse().map((entry) => <li key={entry.id}>{new Date(entry.at).toLocaleString('es-ES')} · {entry.reason}: {money(entry.amount)} · {entry.recordedBy || 'Sin identificar (histórico)'}</li>)}
       </ul>
     </section>
 
@@ -90,7 +93,7 @@ export function LoteriaArqueos({ campaign, onSave, blocked = false }: {
       {(campaign.cashArqueos ?? []).length === 0 && <p className="text-xs text-metro-muted">Todavía no hay cierres. Realiza el primer arqueo cuando la caja esté cuadrada.</p>}
       {[...(campaign.cashArqueos ?? [])].reverse().map((entry) => <div key={entry.id} className="rounded-lg border border-metro-border p-2">
         <button type="button" className="w-full text-left text-xs text-metro-text" onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}>
-          {new Date(entry.at).toLocaleString('es-ES')} · Esperado {money(entry.expected)} · Contado {money(entry.counted)} · <strong className={entry.difference === 0 ? 'text-emerald-400' : 'text-red-300'}>Diferencia {money(entry.difference)}</strong>
+          {new Date(entry.at).toLocaleString('es-ES')} · {entry.recordedBy || 'Sin identificar (histórico)'} · Esperado {money(entry.expected)} · Contado {money(entry.counted)} · <strong className={entry.difference === 0 ? 'text-emerald-400' : 'text-red-300'}>Diferencia {money(entry.difference)}</strong>
         </button>
         {expandedId === entry.id && <div className="mt-2 max-h-48 overflow-auto border-t border-metro-border pt-2 text-xs text-metro-muted space-y-1">
           <p>Pagos en efectivo al cierre: {money(entry.cashPaid)} · Movimientos acumulados: {money(entry.movementNet)}</p>

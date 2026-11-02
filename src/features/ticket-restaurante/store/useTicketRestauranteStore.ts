@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
+import { emitPersistenceFeedback } from '../../../services/persistenceFeedback';
 import {
   buildTicketCalendar,
   normalizeTicketRestaurantConfig,
@@ -290,6 +291,25 @@ async function loadTicketAbsencesPreferringSqlite(): Promise<TicketRestaurantAbs
   return absences;
 }
 
+/** Solo la ausencia real del registro permite usar la configuración inicial. */
+export function parsePersistedTicketConfig(raw: string): TicketRestaurantConfig {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('La configuración de Ticket Restaurante en SQLite contiene JSON ilegible. No se han aplicado valores predeterminados.');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('La configuración de Ticket Restaurante en SQLite tiene una estructura inválida. No se han aplicado valores predeterminados.');
+  }
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.importeTicket !== 'number' || !Number.isFinite(record.importeTicket) || record.importeTicket < 0
+    || typeof record.pedidoMensual !== 'number' || !Number.isFinite(record.pedidoMensual) || record.pedidoMensual < 0) {
+    throw new Error('La configuración de Ticket Restaurante en SQLite carece de los campos económicos básicos válidos. No se han aplicado valores predeterminados.');
+  }
+  return normalizeTicketRestaurantConfig(parsed as TicketRestaurantConfig);
+}
+
 async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfig> {
   if (!hasTicketRestauranteConfigSqliteRepository()) {
     return import.meta.env.MODE === 'test' ? readConfig() : DEFAULT_TICKET_RESTAURANT_CONFIG;
@@ -309,27 +329,14 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
     const seededRecord = await loadTicketRestauranteConfigRecordFromSqlite();
     if (seededRecord) {
       configSqliteUpdatedAt = seededRecord.updatedAt;
-      try {
-        const seededParsed = JSON.parse(seededRecord.value) as TicketRestaurantConfig;
-        return normalizeTicketRestaurantConfig(seededParsed);
-      } catch {
-        return DEFAULT_TICKET_RESTAURANT_CONFIG;
-      }
+      return parsePersistedTicketConfig(seededRecord.value);
     }
 
-    return DEFAULT_TICKET_RESTAURANT_CONFIG;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(sqliteRecord.value);
-  } catch {
-    parsed = null;
+    throw new Error('No se ha podido inicializar la configuración de Ticket Restaurante en SQLite. Se conserva el estado previo.');
   }
 
   configSqliteUpdatedAt = sqliteRecord.updatedAt;
-  if (!parsed || typeof parsed !== 'object') return DEFAULT_TICKET_RESTAURANT_CONFIG;
-  return normalizeTicketRestaurantConfig(parsed as TicketRestaurantConfig);
+  return parsePersistedTicketConfig(sqliteRecord.value);
 }
 
 async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutencion[]> {
@@ -381,9 +388,10 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     set(readTicketRestauranteSnapshot());
     void loadTicketRestauranteStateFromSqliteOrStorage()
       .then((nextSnapshot) => set(nextSnapshot))
-      .catch((error) =>
-        console.warn('Ticket Restaurante: no se ha podido cargar desde SQLite.', error),
-      );
+      .catch((error) => {
+        console.warn('Ticket Restaurante: no se ha podido cargar desde SQLite.', error);
+        emitPersistenceFeedback({ kind: 'error', key: CONFIG_STORAGE_KEY, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : 'Error al cargar Ticket Restaurante desde SQLite.' });
+      });
   },
   reloadFromStorage: async () => {
     const syncSnapshot = readTicketRestauranteSnapshot();
