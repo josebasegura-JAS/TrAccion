@@ -24,7 +24,7 @@ export function cashMovementsNet(campaign: LotteryCampaign): number {
 }
 
 export function cashExpected(campaign: LotteryCampaign): number {
-  const previous = campaign.cashArqueos?.at(-1);
+  const previous = campaign.cashArqueos?.[campaign.cashArqueos.length - 1];
   const currentPaid = lotteryCashOnHand(campaign);
   const movementNet = cashMovementsNet(campaign);
   return roundCents(previous
@@ -53,7 +53,7 @@ export function cashSnapshot(campaign: LotteryCampaign, counted: number, at: str
 }
 
 export function cashChangesSinceLastClose(campaign: LotteryCampaign): string[] {
-  const previous = campaign.cashArqueos?.at(-1);
+  const previous = campaign.cashArqueos?.[campaign.cashArqueos.length - 1];
   if (!previous) return ['Primer arqueo: se comparará el efectivo con todos los pagos en efectivo registrados.'];
   const previousById = new Map(previous.payments.map((payment) => [payment.id, payment]));
   const changes: string[] = [];
