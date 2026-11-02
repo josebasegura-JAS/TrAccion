@@ -11,7 +11,7 @@ type StepProps = {
   onClick: () => void;
 };
 
-function cx(...classes: Array<string | false | null | undefined>) {
+export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
 }
 
