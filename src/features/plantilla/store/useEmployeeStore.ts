@@ -85,9 +85,12 @@ function readEmployees(): Employee[] {
 async function readEmployeesShared(): Promise<Employee[]> {
   if (hasEmployeeSqliteRepository()) {
     const sqliteEmployees = await loadEmployeesFromSqlite(parseEmployeesSnapshot);
-    if (sqliteEmployees) {
+    if (sqliteEmployees !== null) {
       return sqliteEmployees;
     }
+    // El repositorio existe pero SQLite no está activo: no tratarlo como lista vacía.
+    // Tampoco recurrir a localStorage en los tests, para ejercitar el fallo real.
+    throw new Error('No se puede acceder a la plantilla compartida en SQLite. Se conservan los datos previamente cargados; comprueba la conexión.');
   }
 
   if (import.meta.env.MODE === 'test') return readEmployees();
