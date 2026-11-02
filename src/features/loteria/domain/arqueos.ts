@@ -75,3 +75,13 @@ export function cashChangesSinceLastClose(campaign: LotteryCampaign): string[] {
   }
   return changes;
 }
+
+/** Convierte entradas de caja a céntimos exactos; rechaza fracciones inferiores a un céntimo. */
+export function parseCashAmount(input: string, allowZero: boolean): number | null {
+  const normalized = input.trim().replace(',', '.');
+  if (!/^-?\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+  const cents = Math.round(Number(normalized) * 100);
+  if (!Number.isSafeInteger(cents)) return null;
+  if (allowZero ? cents < 0 : cents === 0) return null;
+  return cents / 100;
+}

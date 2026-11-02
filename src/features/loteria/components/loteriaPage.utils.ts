@@ -35,7 +35,7 @@ export const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
       'La portada muestra el avance de la campaña y destaca una única “Siguiente acción recomendada”. Empieza siempre por ese bloque si no conoces el proceso.',
       'Septiembre · Encargo: confirma los dos números, los décimos encargados, el precio y los datos del lotero; prepara o genera el correo del encargo.',
       'Octubre · Participantes: da de alta personas de Plantilla o externas, indica cuántos décimos solicita cada una y prepara el aviso por CCO.',
-      'Seguimiento · Cobros: revisa las cantidades solicitadas y registra los pagos por Bizum o efectivo con fecha y observaciones.',
+      'Seguimiento · Cobros: revisa las cantidades solicitadas y registra los pagos por efectivo, Bizum o transferencia con fecha y observaciones.',
       'Cierre · Cuadre: comprueba sobrantes, pendientes de cobro, caja y Bizum. La app no permite cerrar si existen cobros pendientes o se han solicitado más décimos de los encargados.',
       'Si necesitas entrar directamente en otra fase, puedes hacerlo desde la barra de progreso. Guardar y exportar a Excel siguen disponibles en la cabecera.',
     ],
@@ -55,7 +55,7 @@ export const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'En el alta pueden seleccionarse personas de Plantilla o crearse participantes externos/jubilados con sus datos de contacto u observaciones.',
       'En Seguimiento no se añaden participantes nuevos: se trabaja sobre los ya dados de alta, aunque sí pueden ajustarse sus cantidades.',
-      'Al marcar un pago se registra su forma —Bizum o efectivo— y puede anotarse información adicional.',
+      'Al marcar un pago se registra su forma —efectivo, Bizum o transferencia— y puede anotarse información adicional.',
       'La exportación Excel incluye el detalle de participantes, cantidades, importes y pagos, además de una hoja de resumen de la campaña.',
     ],
   },
@@ -393,7 +393,7 @@ export async function buildCampaignWorkbook(campaign: LotteryCampaign): Promise<
       request.contactoObservaciones, request.decimosNumero1, request.decimosNumero2,
       lotteryRequestTotalCount(request), lotteryRequestAmount(campaign, request), request.pagado ? 'Sí' : 'No',
       date,
-      request.pagado ? (request.formaPago === 'bizum' ? 'Bizum' : 'Efectivo') : '', request.observacionesPago,
+      request.pagado ? (request.formaPago === 'bizum' ? 'Bizum' : request.formaPago === 'transferencia' ? 'Transferencia' : 'Efectivo') : '', request.observacionesPago,
     ];
     values.forEach((value, columnIndex) => {
       const cell = sheet.getCell(rowNumber, columnIndex + 1);
