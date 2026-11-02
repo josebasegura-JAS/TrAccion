@@ -432,10 +432,6 @@ async function loadActasStateFromSqliteOrStorage(
   return buildActasStateWithSqliteTypes(readActas(), includeHistorical);
 }
 
-function logActaPersistenceError(action: string, error: unknown): void {
-  console.error(`[${action}] No se ha podido guardar el acta compartida.`, error);
-}
-
 export const useActasStore = create<ActasStateStore>((set, get) => ({
   actas: [],
   actaTypes: [],
