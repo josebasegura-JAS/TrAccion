@@ -302,6 +302,11 @@ export function parsePersistedTicketConfig(raw: string): TicketRestaurantConfig 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('La configuración de Ticket Restaurante en SQLite tiene una estructura inválida. No se han aplicado valores predeterminados.');
   }
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.importeTicket !== 'number' || !Number.isFinite(record.importeTicket) || record.importeTicket < 0
+    || typeof record.pedidoMensual !== 'number' || !Number.isFinite(record.pedidoMensual) || record.pedidoMensual < 0) {
+    throw new Error('La configuración de Ticket Restaurante en SQLite carece de los campos económicos básicos válidos. No se han aplicado valores predeterminados.');
+  }
   return normalizeTicketRestaurantConfig(parsed as TicketRestaurantConfig);
 }
 
