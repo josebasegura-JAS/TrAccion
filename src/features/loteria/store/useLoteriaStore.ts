@@ -204,18 +204,30 @@ async function loadCampaignFromSqlite(): Promise<{
     };
   }
 
-  let rawCampaign: unknown = null;
-  try { rawCampaign = JSON.parse(campaignRecord.value); } catch { rawCampaign = null; }
+  let rawCampaign: unknown;
+  try {
+    rawCampaign = JSON.parse(campaignRecord.value);
+  } catch {
+    throw new Error('Lotería: los datos de la campaña en SQLite son ilegibles. No se han sustituido por valores iniciales.');
+  }
+  if (!rawCampaign || typeof rawCampaign !== 'object' || Array.isArray(rawCampaign)) {
+    throw new Error('Lotería: el registro de campaña de SQLite tiene un formato inválido.');
+  }
   const currentYearRequests = snapshot.requests.filter((record) => record.campaignYear === currentYear);
-  const requests = currentYearRequests.flatMap((record) => {
+  const requests: LotteryRequest[] = [];
+  for (const record of currentYearRequests) {
+    let parsed: LotteryRequest | null;
     try {
-      const parsed = normalizeRequest(JSON.parse(record.value));
-      return parsed ? [parsed] : [];
+      parsed = normalizeRequest(JSON.parse(record.value));
     } catch {
-      return [];
+      throw new Error(`Lotería: la solicitud ${record.id} no se puede leer. No se ha cargado una lista incompleta.`);
     }
-  });
-  const campaign = normalizeCampaign({ ...(rawCampaign as object), requests }, currentYear);
+    if (!parsed || parsed.id !== record.id) {
+      throw new Error(`Lotería: la solicitud ${record.id} es inválida o su identificador no coincide. No se ha cargado una lista incompleta.`);
+    }
+    requests.push(parsed);
+  }
+  const campaign = normalizeCampaign({ ...rawCampaign, requests }, currentYear);
   return {
     campaign,
     campaignUpdatedAt: campaignRecord.updatedAt,
@@ -243,7 +255,9 @@ export const useLoteriaStore = create<LotteryState>((set, get) => ({
         set(loaded);
         writeLocalArchiveCache(loaded.campaign);
       }
-    }).catch(() => undefined);
+    }).catch((error) => {
+      emitPersistenceFeedback({ kind: 'error', key: LOTTERY_STORAGE_KEY, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : 'No se ha podido cargar Lotería desde SQLite.' });
+    });
   },
   reloadFromStorage: () => {
     void loadCampaignFromSqlite().then((loaded) => {
@@ -253,7 +267,10 @@ export const useLoteriaStore = create<LotteryState>((set, get) => ({
       } else {
         set({ campaign: readCampaign(), campaignUpdatedAt: null, requestUpdatedAt: {} });
       }
-    }).catch(() => set({ campaign: readCampaign(), campaignUpdatedAt: null, requestUpdatedAt: {} }));
+    }).catch((error) => {
+      // Mantener el estado anterior y sus tokens OCC; nunca sustituirlo por caché tras un fallo.
+      emitPersistenceFeedback({ kind: 'error', key: LOTTERY_STORAGE_KEY, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : 'No se ha podido actualizar Lotería desde SQLite.' });
+    });
   },
   saveCampaign: async (campaign) => {
     const saveSnapshot = window.traccion?.saveLoteriaSnapshotIfUnchanged;
