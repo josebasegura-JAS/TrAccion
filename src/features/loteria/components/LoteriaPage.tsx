@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -38,6 +38,8 @@ import {
 import { useLoteriaStore } from '../store/useLoteriaStore';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { reconcileLotteryDraft } from '../domain/loteriaDraftSync';
+import { exportSavedLotteryCampaign, isLotteryExcelPending } from '../domain/loteriaExcelPending';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
 import {
   inputClass,
@@ -81,13 +83,20 @@ export function LoteriaPage() {
   const [externalEmail, setExternalEmail] = useState('');
   const [externalContact, setExternalContact] = useState('');
   const [message, setMessage] = useState('');
+  const [excelPending, setExcelPending] = useState(false);
+  const [excelSyncing, setExcelSyncing] = useState(false);
+  const previousSavedCampaign = useRef(campaign);
 
   useEffect(() => {
     load();
     loadEmployees();
     loadConfiguracion();
   }, [load, loadEmployees, loadConfiguracion]);
-  useEffect(() => { setDraft(campaign); }, [campaign]);
+  useEffect(() => {
+    setDraft((current) => reconcileLotteryDraft(current, previousSavedCampaign.current, campaign));
+    previousSavedCampaign.current = campaign;
+  }, [campaign]);
+  useEffect(() => { setExcelPending(isLotteryExcelPending(window.localStorage, campaign.year)); }, [campaign.year]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(campaign), [campaign, draft]);
   const recoveryKey = buildRecoverableDraftKey('loteria', String(draft.year));
@@ -216,6 +225,25 @@ export function LoteriaPage() {
     });
   }, [draft.requests, paymentFilter, savedPayments, search]);
 
+  const syncExcel = async (saved: LotteryCampaign): Promise<boolean> => {
+    setExcelSyncing(true);
+    try {
+      const result = await exportSavedLotteryCampaign(saved.year, window.localStorage, async () => {
+        if (!window.traccion?.saveLoteriaCampaignExcel) {
+          return { ok: false, message: 'El Excel automático solo está disponible en la aplicación de escritorio.' };
+        }
+        const workbook = await buildCampaignWorkbook(saved);
+        return window.traccion.saveLoteriaCampaignExcel({
+          year: saved.year, directoryTemplate: rutaExportacionLoteria,
+          fileName: workbook.fileName, buffer: workbook.buffer,
+        });
+      });
+      setExcelPending(isLotteryExcelPending(window.localStorage, saved.year));
+      setMessage(result.ok ? 'Excel de campaña actualizado.' : `No se ha podido actualizar el Excel: ${result.message}. Puedes reintentar sin volver a guardar en SQLite.`);
+      return result.ok;
+    } finally { setExcelSyncing(false); }
+  };
+
   const persist = async (next = draft, success = 'Cambios guardados.') => {
     const result = await saveCampaign(next);
     if (!result.ok) {
@@ -224,24 +252,8 @@ export function LoteriaPage() {
     }
 
     clearRecoveryDraft();
-
-    if (!window.traccion?.saveLoteriaCampaignExcel) {
-      setMessage(`${success} El Excel automático solo está disponible en la aplicación de escritorio.`);
-      return;
-    }
-
-    try {
-      const workbook = await buildCampaignWorkbook(next);
-      const excelResult = await window.traccion.saveLoteriaCampaignExcel({
-        year: next.year,
-        directoryTemplate: rutaExportacionLoteria,
-        fileName: workbook.fileName,
-        buffer: workbook.buffer,
-      });
-      setMessage(excelResult.ok ? `${success} Excel de campaña actualizado.` : `${success} ${excelResult.message}`);
-    } catch (error) {
-      setMessage(`${success} No se ha podido actualizar el Excel de campaña: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    const ok = await syncExcel(next);
+    if (ok) setMessage(`${success} Excel de campaña actualizado.`);
   };
 
   const saveCashRecords = async (next: LotteryCampaign, success: string): Promise<boolean> => {
@@ -254,20 +266,8 @@ export function LoteriaPage() {
       setMessage(result.ok ? success : result.message);
       if (result.ok) {
         clearRecoveryDraft();
-        try {
-          if (window.traccion?.saveLoteriaCampaignExcel) {
-            const workbook = await buildCampaignWorkbook(next);
-            const excelResult = await window.traccion.saveLoteriaCampaignExcel({
-              year: next.year,
-              directoryTemplate: rutaExportacionLoteria,
-              fileName: workbook.fileName,
-              buffer: workbook.buffer,
-            });
-            if (!excelResult.ok) setMessage(`${success} No se ha actualizado el Excel: ${excelResult.message}`);
-          }
-        } catch (error) {
-          setMessage(`${success} No se ha actualizado el Excel: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        const ok = await syncExcel(next);
+        if (ok) setMessage(`${success} Excel de campaña actualizado.`);
       }
       return result.ok;
     } catch (error) {
@@ -511,6 +511,7 @@ export function LoteriaPage() {
             <span className="inline-flex h-10 items-center rounded-xl border border-metro-red/40 bg-metro-red/10 px-3 text-xs font-extrabold text-red-200">Lotería {draft.year}</span>
             <ActionButton icon={Save} iconOnly={false} onClick={() => void persist()} variant="save">Guardar todo</ActionButton>
             <ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} variant="excel">Exportar Excel</ActionButton>
+            {excelPending && <ActionButton icon={Download} iconOnly={false} onClick={() => void syncExcel(campaign)} disabled={dirty || excelSyncing} variant="secondary">{excelSyncing ? 'Actualizando Excel…' : 'Reintentar Excel pendiente'}</ActionButton>}
           </>
         }
       />
@@ -762,6 +763,7 @@ export function LoteriaPage() {
         </SectionShell>
       ) : null}
 
+      {excelPending && <p role="alert" className="px-3 text-xs text-amber-300">Excel automático pendiente de actualizar. Los datos ya están guardados en SQLite. Reintenta desde la cabecera cuando no tengas cambios sin guardar.</p>}
       <FloatingSaveAction
         buttonLabel="Guardar Lotería"
         onSave={() => persist(draft, 'Cambios de Lotería guardados.')}
