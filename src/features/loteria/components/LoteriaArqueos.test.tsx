@@ -5,7 +5,7 @@ import { LoteriaArqueos } from './LoteriaArqueos';
 
 describe('arqueos de Lotería: UI crítica', () => {
   it('no permite guardar un arqueo sin responsable o con borrador pendiente', () => {
-    const onSave = vi.fn(async (_next: LotteryCampaign, _message: string) => true);
+    const onSave = vi.fn(async (_next: LotteryCampaign, _message: string) => { void _next; void _message; return true; });
     const { rerender } = render(<LoteriaArqueos campaign={createDefaultLotteryCampaign(2026)} onSave={onSave} />);
     fireEvent.change(screen.getByPlaceholderText('Nombre de la persona responsable'), { target: { value: 'Operador' } });
     fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '0,00' } });
@@ -17,7 +17,7 @@ describe('arqueos de Lotería: UI crítica', () => {
   });
 
   it('solo confirma el cierre si el guardado SQLite se acepta', async () => {
-    const onSave = vi.fn(async (_next: LotteryCampaign, _message: string) => false);
+    const onSave = vi.fn(async (_next: LotteryCampaign, _message: string) => { void _next; void _message; return false; });
     render(<LoteriaArqueos campaign={createDefaultLotteryCampaign(2026)} onSave={onSave} />);
     fireEvent.change(screen.getByPlaceholderText('Nombre de la persona responsable'), { target: { value: 'Técnico RRLL' } });
     fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '0,00' } });
