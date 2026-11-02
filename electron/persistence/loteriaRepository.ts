@@ -40,6 +40,45 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function moneyAmount(value: unknown, nonNegative = false): value is number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isSafeInteger(Math.round(value * 100))) return false;
+  if (nonNegative && value < 0) return false;
+  return Math.abs(value * 100 - Math.round(value * 100)) < 0.0000001;
+}
+
+function validCashActor(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 120;
+}
+
+function validCashDate(value: unknown): value is string {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) && /^\\d{4}-\\d{2}-\\d{2}T/.test(value);
+}
+
+function validNewCashMovement(value: unknown): boolean {
+  return isRecord(value) && typeof value.id === 'string' && value.id.trim().length > 0
+    && validCashDate(value.at) && moneyAmount(value.amount) && value.amount !== 0
+    && typeof value.reason === 'string' && value.reason.trim().length > 0
+    && validCashActor(value.recordedBy);
+}
+
+function validNewCashClose(value: unknown): boolean {
+  if (!isRecord(value) || !validCashDate(value.at) || !validCashActor(value.recordedBy)
+    || !moneyAmount(value.expected) || !moneyAmount(value.counted, true)
+    || !moneyAmount(value.difference) || !moneyAmount(value.cashPaid, true)
+    || !moneyAmount(value.movementNet)
+    || Math.abs(Math.round((value.counted - value.expected) * 100) - Math.round(value.difference * 100)) > 0
+    || !Array.isArray(value.payments) || !Array.isArray(value.movements)) return false;
+  return value.payments.every((payment: unknown) =>
+    isRecord(payment) && typeof payment.id === 'string' && payment.id.length > 0
+      && typeof payment.nombre === 'string' && moneyAmount(payment.amount, true)
+      && ['efectivo', 'bizum', 'transferencia'].includes(String(payment.formaPago))
+      && (payment.fechaPago === null || typeof payment.fechaPago === 'string'))
+    && value.movements.every((movement: unknown) =>
+      isRecord(movement) && typeof movement.id === 'string' && movement.id.length > 0
+      && validCashDate(movement.at) && moneyAmount(movement.amount) && movement.amount !== 0
+      && typeof movement.reason === 'string' && movement.reason.trim().length > 0);
+}
+
 /** Evita que una escritura completa de campaña reescriba cierres o movimientos ya registrados. */
 export function validateCashHistoryAppendOnly(existingRaw: string | null, nextRaw: string): boolean {
   try {
@@ -55,7 +94,9 @@ export function validateCashHistoryAppendOnly(existingRaw: string | null, nextRa
         const item = newEntries[index];
         if (!isRecord(item) || typeof item.id !== 'string' || !item.id || seen.has(item.id)) return false;
         seen.add(item.id);
-        if (index < oldEntries.length && JSON.stringify(oldEntries[index]) !== JSON.stringify(item)) return false;
+        if (index < oldEntries.length) {
+          if (JSON.stringify(oldEntries[index]) !== JSON.stringify(item)) return false;
+        } else if (key === 'cashArqueos' ? !validNewCashClose(item) : !validNewCashMovement(item)) return false;
       }
     }
     return true;

@@ -5,6 +5,7 @@ export interface LotteryCashMovement {
   at: string;
   amount: number; // Negativo: salida; positivo: entrada no vinculada a un cobro.
   reason: string;
+  recordedBy?: string; // Registros anteriores a la auditoría no incluyen autor.
 }
 
 export interface LotteryCashSnapshot {
@@ -15,6 +16,7 @@ export interface LotteryCashSnapshot {
   difference: number;
   cashPaid: number;
   movementNet: number;
+  recordedBy?: string; // Registros históricos sin autor permanecen legibles.
   payments: { id: string; nombre: string; amount: number; formaPago: string; fechaPago: string | null }[];
   movements: LotteryCashMovement[];
 }
@@ -36,10 +38,10 @@ export function roundCents(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-export function cashSnapshot(campaign: LotteryCampaign, counted: number, at: string, id: string): LotteryCashSnapshot {
+export function cashSnapshot(campaign: LotteryCampaign, counted: number, at: string, id: string, recordedBy?: string): LotteryCashSnapshot {
   const expected = cashExpected(campaign);
   return {
-    id, at, expected, counted: roundCents(counted),
+    id, at, expected, counted: roundCents(counted), recordedBy,
     difference: roundCents(counted - expected),
     cashPaid: lotteryCashOnHand(campaign),
     movementNet: cashMovementsNet(campaign),
