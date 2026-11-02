@@ -113,12 +113,24 @@ async function commitPresupuestosState(
     if (sqliteResult && !sqliteResult.ok) {
       return { ok: false, message: sqliteResult.message };
     }
+    if (sqliteResult?.ok) {
+      // SQLite es la fuente de verdad. Un fallo posterior de caché no revierte el commit.
+      set({ ...patch, sqliteUpdatedAt: sqliteResult.currentUpdatedAt });
+      try {
+        await persist(nextState);
+      } catch (cacheError) {
+        console.warn('Presupuestos guardados en SQLite, pero no se ha actualizado la caché secundaria.', cacheError);
+        return {
+          ok: true,
+          message: 'Presupuestos guardados en SQLite. No se ha podido actualizar la caché local; los datos compartidos están confirmados.',
+        };
+      }
+      return { ok: true, message: sqliteResult.message ?? 'Presupuestos guardados correctamente.' };
+    }
+    // Compatibilidad sin repositorio SQLite: el guardado local sigue siendo obligatorio.
     await persist(nextState);
-    set({ ...patch, sqliteUpdatedAt: sqliteResult?.currentUpdatedAt ?? expectedSqliteUpdatedAt });
-    return {
-      ok: true,
-      message: sqliteResult?.message ?? 'Presupuestos guardados correctamente.',
-    };
+    set({ ...patch, sqliteUpdatedAt: expectedSqliteUpdatedAt });
+    return { ok: true, message: 'Presupuestos guardados correctamente.' };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'No se han podido guardar los presupuestos.';

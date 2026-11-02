@@ -6,6 +6,7 @@ import { importJobPositionTranslationsFromFile } from '../domain/importJobPositi
 import { normalizeJobPosition, type JobPositionTranslation } from '../domain/jobPositionTranslation';
 import type { Employee, EmployeeDraft, EmployeeField } from '../domain/employee';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
+import { emitPersistenceFeedback } from '../../../services/persistenceFeedback';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   hasEmployeeSqliteBatchRepository,
@@ -84,14 +85,16 @@ function readEmployees(): Employee[] {
 async function readEmployeesShared(): Promise<Employee[]> {
   if (hasEmployeeSqliteRepository()) {
     const sqliteEmployees = await loadEmployeesFromSqlite(parseEmployeesSnapshot);
-    if (sqliteEmployees) {
+    if (sqliteEmployees !== null) {
       return sqliteEmployees;
     }
+    // El repositorio existe pero SQLite no está activo: no tratarlo como lista vacía.
+    // Tampoco recurrir a localStorage en los tests, para ejercitar el fallo real.
+    throw new Error('No se puede acceder a la plantilla compartida en SQLite. Se conservan los datos previamente cargados; comprueba la conexión.');
   }
 
   if (import.meta.env.MODE === 'test') return readEmployees();
-  console.error('Repositorio SQLite de plantilla no disponible; no se usa fallback local.');
-  return [];
+  throw new Error('No se puede acceder a la plantilla compartida en SQLite. Se conservan los datos previamente cargados; comprueba la conexión.');
 }
 
 function parseEmployeesSnapshot(storageValue: string | null): Employee[] {
@@ -504,7 +507,10 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         isLoading: false,
         lastLoadedAt: Date.now(),
       });
-    })().catch(() => set({ isLoading: false }));
+    })().catch((error) => {
+      set({ isLoading: false });
+      emitPersistenceFeedback({ kind: 'error', key: STORAGE_KEY, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : 'No se ha podido cargar la plantilla compartida.' });
+    });
   },
   reloadFromStorage: async () => {
     try {
