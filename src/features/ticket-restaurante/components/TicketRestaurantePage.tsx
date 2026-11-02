@@ -82,6 +82,7 @@ import {
   toPersonDraft,
   withTicketWorkflowReview,
 } from './ticketRestaurantePageHelpers';
+import { selectVisibleTicketPeople, selectTicketManutencionesByMonth } from './ticketRestauranteViewSelectors';
 import {
   ABSENCE_MODEL_HEADERS,
   MANUTENCIONES_MODEL_HEADERS,
@@ -209,33 +210,12 @@ export function TicketRestaurantePage({
   );
   const visiblePeople = useMemo(
     () =>
-      [...people]
-        .filter((person) => !person.deletedAt)
-        .sort((first, second) =>
-          first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
-            numeric: true,
-            sensitivity: 'base',
-          }),
-        ),
+      selectVisibleTicketPeople(people),
     [people],
   );
   const visibleManutenciones = useMemo(
     () =>
-      [...manutenciones]
-        .filter(
-          (row) =>
-            !row.deletedAt &&
-            row.imputacionYear === manutencionYear &&
-            row.imputacionMonth === manutencionMonth,
-        )
-        .sort((first, second) =>
-          first.fechaGasto === second.fechaGasto
-            ? first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
-                numeric: true,
-                sensitivity: 'base',
-              })
-            : second.fechaGasto.localeCompare(first.fechaGasto),
-        ),
+      selectTicketManutencionesByMonth(manutenciones, manutencionYear, manutencionMonth),
     [manutencionMonth, manutencionYear, manutenciones],
   );
 
