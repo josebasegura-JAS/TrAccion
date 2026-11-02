@@ -269,7 +269,7 @@ export function LoteriaTrackingTable({
     },
     {
       id: 'paymentDate', header: 'Fecha pago', width: 108, sortable: true,
-      accessor: (request) => savedPayments.get(request.id)?.fechaPago ?? request.fechaPago,
+      accessor: (request) => savedPayments.has(request.id) ? savedPayments.get(request.id)!.fechaPago : request.fechaPago,
       render: (request) => dateText(request.fechaPago),
     },
     {
