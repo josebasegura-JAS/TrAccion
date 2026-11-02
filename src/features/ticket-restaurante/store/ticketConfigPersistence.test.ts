@@ -10,5 +10,7 @@ describe('lectura segura de configuración Ticket Restaurante', () => {
     expect(() => parsePersistedTicketConfig('{rota')).toThrow('JSON ilegible');
     expect(() => parsePersistedTicketConfig('null')).toThrow('estructura inválida');
     expect(() => parsePersistedTicketConfig('[]')).toThrow('estructura inválida');
+    expect(() => parsePersistedTicketConfig('{}')).toThrow('campos económicos básicos');
+    expect(() => parsePersistedTicketConfig('{"importeTicket":-2,"pedidoMensual":0}')).toThrow('campos económicos básicos');
   });
 });
