@@ -257,7 +257,8 @@ async function loadTicketCalendarsPreferringSqlite(): Promise<TicketCalendar[]> 
   }
 
   const sqliteRecords = await loadTicketRestauranteCalendarRecordsFromSqlite();
-  if (!sqliteRecords || sqliteRecords.length === 0) return [];
+  if (sqliteRecords === null) throw new Error('No se pueden cargar calendarios desde SQLite compartida; se mantiene el último estado válido.');
+  if (sqliteRecords.length === 0) return [];
   const calendars = parseTicketCalendarRecords(sqliteRecords);
   updateCalendarSqliteUpdatedAtMap(calendars);
   return calendars;
@@ -271,7 +272,8 @@ async function loadTicketPeoplePreferringSqlite(): Promise<TicketPerson[]> {
   }
 
   const sqliteRecords = await loadTicketRestaurantePersonRecordsFromSqlite();
-  if (!sqliteRecords || sqliteRecords.length === 0) return [];
+  if (sqliteRecords === null) throw new Error('No se pueden cargar personas de Ticket Restaurante desde SQLite compartida; se mantiene el último estado válido.');
+  if (sqliteRecords.length === 0) return [];
   const people = parseTicketPersonRecords(sqliteRecords);
   updatePersonSqliteUpdatedAtMap(people);
   return people;
@@ -285,7 +287,8 @@ async function loadTicketAbsencesPreferringSqlite(): Promise<TicketRestaurantAbs
   }
 
   const sqliteRecords = await loadTicketRestauranteAbsenceRecordsFromSqlite();
-  if (!sqliteRecords || sqliteRecords.length === 0) return [];
+  if (sqliteRecords === null) throw new Error('No se pueden cargar ausencias desde SQLite compartida; se mantiene el último estado válido.');
+  if (sqliteRecords.length === 0) return [];
   const absences = parseTicketAbsenceRecords(sqliteRecords);
   updateAbsenceSqliteUpdatedAtMap(absences);
   return absences;
@@ -347,7 +350,8 @@ async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutenc
   }
 
   const sqliteRecords = await loadTicketRestauranteManutencionRecordsFromSqlite();
-  if (!sqliteRecords || sqliteRecords.length === 0) return [];
+  if (sqliteRecords === null) throw new Error('No se pueden cargar manutenciones desde SQLite compartida; se mantiene el último estado válido.');
+  if (sqliteRecords.length === 0) return [];
   const manutenciones = parseTicketManutencionRecords(sqliteRecords);
   updateManutencionSqliteUpdatedAtMap(manutenciones);
   return manutenciones;
@@ -378,6 +382,13 @@ function readTicketRestauranteSnapshot(): TicketRestauranteSnapshot {
   };
 }
 
+const hasTicketRestauranteSharedRepository = (): boolean =>
+  hasTicketRestauranteCalendarsSqliteRepository() ||
+  hasTicketRestaurantePeopleSqliteRepository() ||
+  hasTicketRestauranteAbsencesSqliteRepository() ||
+  hasTicketRestauranteConfigSqliteRepository() ||
+  hasTicketRestauranteManutencionesSqliteRepository();
+
 export const useTicketRestauranteStore = create<TicketRestauranteState>((set, get) => ({
   calendars: [],
   absences: [],
@@ -385,7 +396,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   config: DEFAULT_TICKET_RESTAURANT_CONFIG,
   manutenciones: [],
   load: () => {
-    set(readTicketRestauranteSnapshot());
+    if (!hasTicketRestauranteSharedRepository()) set(readTicketRestauranteSnapshot());
     void loadTicketRestauranteStateFromSqliteOrStorage()
       .then((nextSnapshot) => set(nextSnapshot))
       .catch((error) => {
@@ -394,9 +405,11 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
       });
   },
   reloadFromStorage: async () => {
-    const syncSnapshot = readTicketRestauranteSnapshot();
-    if (!areTicketSnapshotsEquivalent(get(), syncSnapshot)) {
-      set(syncSnapshot);
+    if (!hasTicketRestauranteSharedRepository()) {
+      const syncSnapshot = readTicketRestauranteSnapshot();
+      if (!areTicketSnapshotsEquivalent(get(), syncSnapshot)) {
+        set(syncSnapshot);
+      }
     }
     try {
       const nextSnapshot = await loadTicketRestauranteStateFromSqliteOrStorage();

@@ -38,7 +38,7 @@ import {
 import { useLoteriaStore } from '../store/useLoteriaStore';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
-import { reconcileLotteryDraft } from '../domain/loteriaDraftSync';
+import { hasLotteryRemoteConflict, reconcileLotteryDraft } from '../domain/loteriaDraftSync';
 import { exportSavedLotteryCampaign, isLotteryExcelPending } from '../domain/loteriaExcelPending';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
 import {
@@ -84,6 +84,7 @@ export function LoteriaPage() {
   const [externalContact, setExternalContact] = useState('');
   const [message, setMessage] = useState('');
   const [excelPending, setExcelPending] = useState(false);
+  const [remoteConflict, setRemoteConflict] = useState(false);
   const [excelSyncing, setExcelSyncing] = useState(false);
   const previousSavedCampaign = useRef(campaign);
 
@@ -93,12 +94,21 @@ export function LoteriaPage() {
     loadConfiguracion();
   }, [load, loadEmployees, loadConfiguracion]);
   useEffect(() => {
-    setDraft((current) => reconcileLotteryDraft(current, previousSavedCampaign.current, campaign));
+    const previousSaved = previousSavedCampaign.current;
+    if (hasLotteryRemoteConflict(draft, previousSaved, campaign)) {
+      setRemoteConflict(true);
+    }
+    // Capturar el valor previo antes de actualizar la referencia. El updater
+    // de React puede ejecutarse después de terminar este efecto.
+    setDraft((current) => reconcileLotteryDraft(current, previousSaved, campaign));
     previousSavedCampaign.current = campaign;
+    // Se examina el borrador al llegar una nueva revisión compartida.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaign]);
   useEffect(() => { setExcelPending(isLotteryExcelPending(window.localStorage, campaign.year)); }, [campaign.year]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(campaign), [campaign, draft]);
+  useEffect(() => { if (!dirty) setRemoteConflict(false); }, [dirty]);
   const recoveryKey = buildRecoverableDraftKey('loteria', String(draft.year));
   const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
     currentValue: draft,
@@ -245,6 +255,10 @@ export function LoteriaPage() {
   };
 
   const persist = async (next = draft, success = 'Cambios guardados.') => {
+    if (remoteConflict) {
+      setMessage('Otro usuario ha actualizado la campaña. Conserva una copia de tus cambios antes de descartar el borrador y cargar la versión compartida.');
+      return;
+    }
     const result = await saveCampaign(next);
     if (!result.ok) {
       setMessage(result.message);
@@ -509,7 +523,7 @@ export function LoteriaPage() {
         actions={
           <>
             <span className="inline-flex h-10 items-center rounded-xl border border-metro-red/40 bg-metro-red/10 px-3 text-xs font-extrabold text-red-200">Lotería {draft.year}</span>
-            <ActionButton icon={Save} iconOnly={false} onClick={() => void persist()} variant="save">Guardar todo</ActionButton>
+            <ActionButton icon={Save} iconOnly={false} onClick={() => void persist()} disabled={remoteConflict} variant="save">Guardar todo</ActionButton>
             <ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} variant="excel">Exportar Excel</ActionButton>
             {excelPending && <ActionButton icon={Download} iconOnly={false} onClick={() => void syncExcel(campaign)} disabled={dirty || excelSyncing} variant="secondary">{excelSyncing ? 'Actualizando Excel…' : 'Reintentar Excel pendiente'}</ActionButton>}
           </>
@@ -763,12 +777,18 @@ export function LoteriaPage() {
         </SectionShell>
       ) : null}
 
+      {remoteConflict && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/50 p-3 text-sm text-amber-200">
+          <span>La campaña compartida ha cambiado mientras editabas. Tu borrador sigue intacto, pero no se permite guardarlo sobre la nueva versión. Copia los cambios que necesites antes de descartarlo.</span>
+          <ActionButton variant="secondary" onClick={() => { setDraft(campaign); clearRecoveryDraft(); setRemoteConflict(false); }}>Descartar borrador y cargar cambios compartidos</ActionButton>
+        </div>
+      )}
       {excelPending && <p role="alert" className="px-3 text-xs text-amber-300">Excel automático pendiente de actualizar. Los datos ya están guardados en SQLite. Reintenta desde la cabecera cuando no tengas cambios sin guardar.</p>}
       <FloatingSaveAction
         buttonLabel="Guardar Lotería"
         onSave={() => persist(draft, 'Cambios de Lotería guardados.')}
         suppressWhenPageHeaderHasActions={false}
-        visible={dirty}
+        visible={dirty && !remoteConflict}
       />
 
       {activeSection === 'cierre' ? (

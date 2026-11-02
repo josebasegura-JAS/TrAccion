@@ -254,7 +254,7 @@ async function persistConfiguracionConfirmed(configuracion: ConfiguracionState):
 
 async function commitConfiguracion(
   set: (partial: ConfiguracionState) => void,
-  configuracion: ConfiguracionState,
+  configuracion: ConfiguracionState | (() => ConfiguracionState),
   options: { applyOnSuccess?: boolean; revertOnError?: boolean } = {},
 ): Promise<{ ok: boolean; message: string }> {
   const applyOnSuccess = options.applyOnSuccess ?? true;
@@ -274,8 +274,9 @@ async function commitConfiguracion(
         return;
       }
 
-      await persistConfiguracionConfirmed(configuracion);
-      if (applyOnSuccess) set(configuracion);
+      const nextConfiguracion = typeof configuracion === 'function' ? configuracion() : configuracion;
+      await persistConfiguracionConfirmed(nextConfiguracion);
+      if (applyOnSuccess) set(nextConfiguracion);
       result = { ok: true, message: 'Configuración guardada.' };
     } catch (error) {
       console.warn('Configuración no guardada en SQLite.', error);
@@ -361,23 +362,23 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     }
     applyIfChanged(readConfiguracion());
   },
-  setRutaPlantillaTeletrabajo: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaTeletrabajo: normalizeTemplatePath(ruta) }),
-  setRutaPlantillaLicenciaSinSueldo: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta) }),
-  setRutaPlantillaDenegacionLicenciaSinSueldo: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaDenegacionLicenciaSinSueldo: normalizeTemplatePath(ruta) }),
-  setRutaPlantillaExcedencia: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaExcedencia: normalizeTemplatePath(ruta) }),
-  setRutaPlantillaProrrogaExcedencia: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(ruta) }),
-  setRutaPlantillaVinculograma: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaVinculograma: normalizeTemplatePath(ruta) }),
-  setRutaExportacionTareas: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionTareas: ruta.trim() }),
-  setRutaExportacionLoteria: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionLoteria: ruta.trim() }),
-  setRutaExportacionLicencias: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionLicencias: ruta.trim() }),
-  setRutaExportacionVinculograma: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionVinculograma: ruta.trim() }),
-  setRutaExportacionCoordinacion: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionCoordinacion: ruta.trim() }),
-  setRutaExportacionActividadesExternas: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionActividadesExternas: ruta.trim() }),
-  setRutaExportacionCriteriosRrll: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionCriteriosRrll: ruta.trim() }),
-  setRutaExportacionTicketRestaurante: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionTicketRestaurante: ruta.trim() }),
-  setRutaResumenComites: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaResumenComites: ruta.trim() }),
-  setRutaResumenParitaria: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaResumenParitaria: ruta.trim() }),
-  setRutaAyudaEscolar: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaAyudaEscolar: ruta.trim() }),
+  setRutaPlantillaTeletrabajo: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaPlantillaTeletrabajo: normalizeTemplatePath(ruta) })),
+  setRutaPlantillaLicenciaSinSueldo: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta) })),
+  setRutaPlantillaDenegacionLicenciaSinSueldo: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaPlantillaDenegacionLicenciaSinSueldo: normalizeTemplatePath(ruta) })),
+  setRutaPlantillaExcedencia: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaPlantillaExcedencia: normalizeTemplatePath(ruta) })),
+  setRutaPlantillaProrrogaExcedencia: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(ruta) })),
+  setRutaPlantillaVinculograma: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaPlantillaVinculograma: normalizeTemplatePath(ruta) })),
+  setRutaExportacionTareas: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaExportacionTareas: ruta.trim() })),
+  setRutaExportacionLoteria: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaExportacionLoteria: ruta.trim() })),
+  setRutaExportacionLicencias: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaExportacionLicencias: ruta.trim() })),
+  setRutaExportacionVinculograma: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaExportacionVinculograma: ruta.trim() })),
+  setRutaExportacionCoordinacion: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaExportacionCoordinacion: ruta.trim() })),
+  setRutaExportacionActividadesExternas: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaExportacionActividadesExternas: ruta.trim() })),
+  setRutaExportacionCriteriosRrll: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaExportacionCriteriosRrll: ruta.trim() })),
+  setRutaExportacionTicketRestaurante: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaExportacionTicketRestaurante: ruta.trim() })),
+  setRutaResumenComites: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaResumenComites: ruta.trim() })),
+  setRutaResumenParitaria: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaResumenParitaria: ruta.trim() })),
+  setRutaAyudaEscolar: async (ruta) => commitConfiguracion(set, () => ({ ...selectConfiguracionState(get()), rutaAyudaEscolar: ruta.trim() })),
   saveRutasCompartidas: async (rutas) => commitConfiguracion(set, {
     ...selectConfiguracionState(get()),
     rutaPlantillaTeletrabajo: normalizeTemplatePath(rutas.rutaPlantillaTeletrabajo),
