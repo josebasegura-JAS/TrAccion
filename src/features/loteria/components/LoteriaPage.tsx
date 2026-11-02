@@ -94,12 +94,15 @@ export function LoteriaPage() {
     loadConfiguracion();
   }, [load, loadEmployees, loadConfiguracion]);
   useEffect(() => {
-    if (hasLotteryRemoteConflict(draft, previousSavedCampaign.current, campaign)) {
+    const previousSaved = previousSavedCampaign.current;
+    if (hasLotteryRemoteConflict(draft, previousSaved, campaign)) {
       setRemoteConflict(true);
     }
-    setDraft((current) => reconcileLotteryDraft(current, previousSavedCampaign.current, campaign));
+    // Capturar el valor previo antes de actualizar la referencia. El updater
+    // de React puede ejecutarse después de terminar este efecto.
+    setDraft((current) => reconcileLotteryDraft(current, previousSaved, campaign));
     previousSavedCampaign.current = campaign;
-    // La comprobación usa el borrador existente al llegar la revisión compartida.
+    // Se examina el borrador al llegar una nueva revisión compartida.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaign]);
   useEffect(() => { setExcelPending(isLotteryExcelPending(window.localStorage, campaign.year)); }, [campaign.year]);
