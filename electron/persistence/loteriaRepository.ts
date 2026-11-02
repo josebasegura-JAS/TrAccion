@@ -40,6 +40,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** Evita que una escritura completa de campaña reescriba cierres o movimientos ya registrados. */
+export function validateCashHistoryAppendOnly(existingRaw: string | null, nextRaw: string): boolean {
+  try {
+    const oldData = existingRaw === null ? {} : JSON.parse(existingRaw) as Record<string, unknown>;
+    const newData = JSON.parse(nextRaw) as Record<string, unknown>;
+    if (!isRecord(oldData) || !isRecord(newData)) return false;
+    for (const key of ['cashArqueos', 'cashMovements'] as const) {
+      const oldEntries: unknown[] = oldData[key] == null ? [] : Array.isArray(oldData[key]) ? oldData[key] as unknown[] : [null];
+      const newEntries: unknown[] = newData[key] == null ? [] : Array.isArray(newData[key]) ? newData[key] as unknown[] : [null];
+      if (oldEntries.length > newEntries.length) return false;
+      const seen = new Set<string>();
+      for (let index = 0; index < newEntries.length; index += 1) {
+        const item = newEntries[index];
+        if (!isRecord(item) || typeof item.id !== 'string' || !item.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        if (index < oldEntries.length && JSON.stringify(oldEntries[index]) !== JSON.stringify(item)) return false;
+      }
+    }
+    return true;
+  } catch { return false; }
+}
+
 function extractArchive(raw: string): Array<{ year: number; campaign: LegacyCampaign }> {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -108,10 +130,14 @@ export function createLoteriaRepository(deps: Dependencies) {
         const result = db.transaction((): LotterySaveResult => {
           migrateLegacyIfNeeded(db);
           const campaignId = String(payload.year);
-          const campaignRow = db.prepare('SELECT updated_at FROM loteria_campaign_records WHERE id = ?').get(campaignId) as { updated_at?: string } | undefined;
+          const campaignRow = db.prepare('SELECT updated_at, value_json FROM loteria_campaign_records WHERE id = ?').get(campaignId) as { updated_at?: string; value_json?: string } | undefined;
           const currentCampaignUpdatedAt = campaignRow?.updated_at ?? null;
           if (currentCampaignUpdatedAt !== payload.expectedCampaignUpdatedAt) {
             return { ok: false, status, campaignUpdatedAt: currentCampaignUpdatedAt, requestUpdatedAt: {}, message: 'La campaña de Lotería ha sido modificada por otro usuario. Recarga antes de guardar.' };
+          }
+
+          if (!validateCashHistoryAppendOnly(campaignRow?.value_json ?? null, payload.campaignValue)) {
+            return { ok: false, status, campaignUpdatedAt: currentCampaignUpdatedAt, requestUpdatedAt: {}, message: 'El histórico de arqueos o movimientos contiene cambios en registros cerrados. Recarga antes de guardar.' };
           }
 
           const existingRows = db.prepare('SELECT id, updated_at FROM loteria_request_records WHERE campaign_year = ? AND deleted_at IS NULL').all(payload.year) as Array<{ id: string; updated_at: string }>;
