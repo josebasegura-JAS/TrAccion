@@ -20,7 +20,7 @@ describe('Presupuestos: SQLite confirmado frente a errores de caché', () => {
       loadPresupuestosRecords: vi.fn(async () => ({ status: { ready: true, phase: 'active' }, scenarios: [], manualItems: [], ticketGroups: [], actuals: [] })),
       savePresupuestosSnapshotIfUnchanged: saver,
     } });
-    vi.spyOn(persistence, 'writeJsonStorageAsync').mockResolvedValue({ ok: false, message: 'Caché inaccesible' });
+    vi.spyOn(persistence, 'writeJsonStorageAsync').mockResolvedValue({ ok: false, message: 'Caché inaccesible', updatedAt: null });
     const result = await usePresupuestosStore.getState().upsertScenario({
       name: 'Escenario seguro', year: 2026, ticketAmount: 14.57, notes: '',
     });
