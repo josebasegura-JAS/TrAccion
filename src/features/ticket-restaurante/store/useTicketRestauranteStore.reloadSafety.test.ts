@@ -23,4 +23,17 @@ describe('Ticket Restaurante: la recarga compartida no sustituye el store por ca
     await reload;
     expect(useTicketRestauranteStore.getState().calendars).toHaveLength(1);
   });
+  it('no confunde una desconexión SQLite con calendarios vacíos', async () => {
+    const calendar = { id: 'previo', nombre: 'Conservado', activo: true, diasSinTicket: [], ticketIsoWeekdays: [1, 2, 3, 4, 5], createdAt: '', updatedAt: '', deletedAt: null } as TicketCalendar;
+    useTicketRestauranteStore.setState({ calendars: [calendar] });
+    Object.defineProperty(window, 'traccion', { configurable: true, value: {
+      loadTicketRestauranteCalendarRecords: vi.fn(async () => ({
+        status: { ready: false, phase: 'reconnecting' }, records: [],
+      })),
+      saveTicketRestauranteCalendarRecordIfUnchanged: vi.fn(),
+    } });
+    await expect(useTicketRestauranteStore.getState().reloadFromStorage()).rejects.toThrow('calendarios');
+    expect(useTicketRestauranteStore.getState().calendars).toEqual([calendar]);
+  });
+
 });
