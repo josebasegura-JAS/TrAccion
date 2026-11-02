@@ -25,6 +25,7 @@ import {
   lotteryAvailableCount,
   lotteryAvailableCountByNumber,
   lotteryBizumTotal,
+  lotteryTransferTotal,
   lotteryCashOnHand,
   lotteryOrderedCount,
   lotteryPaidTotal,
@@ -59,6 +60,7 @@ import {
 } from './loteriaPage.utils';
 import { MetricCard, StepCard, SectionShell, SaveState, SummaryPill } from './loteriaPage.helpers';
 import { LoteriaParticipantsTable, LoteriaTrackingTable } from './LoteriaRequestsTables';
+import { LoteriaArqueos } from './LoteriaArqueos';
 
 export function LoteriaPage() {
   const campaign = useLoteriaStore((state) => state.campaign);
@@ -110,6 +112,7 @@ export function LoteriaPage() {
   const paid = lotteryPaidTotal(draft);
   const cash = lotteryCashOnHand(draft);
   const bizum = lotteryBizumTotal(draft);
+  const transferencias = lotteryTransferTotal(draft);
   const pendingAmount = lotteryPendingPaymentAmount(draft);
 
   const septemberDone = draft.workflow.loteroAvisado && draft.workflow.encargoConfirmado;
@@ -198,6 +201,7 @@ export function LoteriaPage() {
   const filteredRequests = useMemo(() => {
     const needle = normalizeSearch(search);
     return draft.requests.filter((request) => {
+      if (request.decimosNumero1 <= 0 && request.decimosNumero2 <= 0) return false;
       const haystack = normalizeSearch(`${request.nombre} ${request.empleado ?? ''} ${request.email} ${request.contactoObservaciones}`);
       const matchesSearch = !needle || haystack.includes(needle);
       const matchesPayment = paymentFilter === 'todos' || (paymentFilter === 'pagados' ? request.pagado : !request.pagado);
@@ -230,6 +234,18 @@ export function LoteriaPage() {
       setMessage(excelResult.ok ? `${success} Excel de campaña actualizado.` : `${success} ${excelResult.message}`);
     } catch (error) {
       setMessage(`${success} No se ha podido actualizar el Excel de campaña: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const saveCashRecords = async (next: LotteryCampaign, success: string): Promise<boolean> => {
+    try {
+      const result = await saveCampaign(next);
+      setMessage(result.ok ? success : result.message);
+      if (result.ok) clearRecoveryDraft();
+      return result.ok;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Error al guardar el arqueo.');
+      return false;
     }
   };
 
@@ -502,7 +518,8 @@ export function LoteriaPage() {
             <MetricCard icon={UserRound} label="Participantes" value={String(draft.requests.length)} detail={`${requestedTotal} décimos solicitados`} />
             <MetricCard icon={Ticket} label="Disponibles" value={String(availableTotal)} detail={`${orderedTotal} encargados`} />
             <MetricCard icon={CircleDollarSign} label="Pendiente de cobro" value={money(pendingAmount)} detail={pendingAmount > 0 ? 'Requiere seguimiento' : 'Cobros al día'} />
-            <MetricCard icon={Euro} label="Cobrado" value={money(paid)} detail={`${money(cash)} efectivo · ${money(bizum)} Bizum`} />
+            <MetricCard icon={Euro} label="Cobrado" value={money(paid)} detail={`${money(cash)} efectivo · ${money(bizum)} Bizum · ${money(transferencias)} transferencias`} />
+            <div className="flex justify-start"><ActionButton icon={CircleDollarSign} iconOnly={false} onClick={() => setActiveSection('arqueos')} variant="secondary">Arqueos de caja fuerte · {(draft.cashArqueos ?? []).length} cierres</ActionButton></div>
             {recoveryDialogNode}
       {unsavedDialogNode}
     </section>
@@ -510,7 +527,7 @@ export function LoteriaPage() {
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-2xl border border-metro-border bg-metro-panel px-3.5 py-2.5 shadow-sm">
           <ActionButton icon={ArrowLeft} iconOnly={false} onClick={() => setActiveSection(null)} size="sm" variant="secondary">Volver al flujograma</ActionButton>
-          <span className="text-xs font-semibold text-metro-muted">Campaña {draft.year} · {activeSection === 'septiembre' ? 'Septiembre' : activeSection === 'octubre' ? 'Octubre' : activeSection === 'seguimiento' ? 'Seguimiento' : 'Cierre'}</span>
+          <span className="text-xs font-semibold text-metro-muted">Campaña {draft.year} · {activeSection === 'septiembre' ? 'Septiembre' : activeSection === 'octubre' ? 'Octubre' : activeSection === 'seguimiento' ? 'Seguimiento' : activeSection === 'arqueos' ? 'Arqueos' : 'Cierre'}</span>
         </div>
       )}
 
@@ -691,8 +708,10 @@ export function LoteriaPage() {
               <SummaryPill label="Total cobrado" value={money(paid)} />
               <SummaryPill label="Caja" value={money(cash)} />
               <SummaryPill label="Bizum" value={money(bizum)} />
+              <SummaryPill label="Transferencias" value={money(transferencias)} />
             </div>
 
+            <div className="flex flex-wrap items-center gap-2"><ActionButton icon={CircleDollarSign} iconOnly={false} onClick={() => setActiveSection('arqueos')} size="sm" variant="secondary">Arqueos de caja fuerte</ActionButton></div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-56 flex-1 max-w-md"><Search className="absolute left-2.5 top-2 text-metro-muted" size={14} /><input className={`${inputClass} pl-8`} placeholder="Buscar persona o nº empleado" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
               <select className={`${inputClass} w-auto min-w-32`} value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value as typeof paymentFilter)}><option value="todos">Todos</option><option value="pagados">Pagados</option><option value="pendientes">Pendientes</option></select>
@@ -706,6 +725,12 @@ export function LoteriaPage() {
               onTogglePaid={togglePaid}
             />
           </div>
+        </SectionShell>
+      ) : null}
+
+      {activeSection === 'arqueos' ? (
+        <SectionShell title="Arqueos · Caja fuerte" subtitle="Cierres diarios de efectivo, salidas y entradas justificadas e histórico de diferencias.">
+          <LoteriaArqueos campaign={draft} onSave={saveCashRecords} />
         </SectionShell>
       ) : null}
 
@@ -727,6 +752,7 @@ export function LoteriaPage() {
               <MetricCard icon={Euro} label="Total cobrado" value={money(paid)} detail={`${draft.requests.filter((request) => request.pagado).length} pagos registrados`} />
               <MetricCard icon={CircleDollarSign} label="Dinero en caja" value={money(cash)} detail="Cobros en efectivo" />
               <MetricCard icon={Euro} label="Cobros por Bizum" value={money(bizum)} detail="No suma a caja física" />
+              <MetricCard icon={Euro} label="Transferencias" value={money(transferencias)} detail="No suma a caja física" />
               <MetricCard icon={Ticket} label="Pendiente de cobro" value={money(pendingAmount)} detail={`${draft.requests.filter((request) => !request.pagado).length} personas pendientes`} />
             </div>
             <div className="grid gap-3 xl:grid-cols-[0.85fr_1.15fr]">

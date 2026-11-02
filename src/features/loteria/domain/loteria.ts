@@ -1,4 +1,5 @@
-export type LotteryPaymentMethod = 'efectivo' | 'bizum';
+import type { LotteryCashMovement, LotteryCashSnapshot } from './arqueos';
+export type LotteryPaymentMethod = 'efectivo' | 'bizum' | 'transferencia';
 
 export interface LotteryContact {
   nombre: string;
@@ -46,6 +47,8 @@ export interface LotteryCampaign {
   participantesEmailBody: string;
   workflow: LotteryWorkflow;
   requests: LotteryRequest[];
+  cashMovements?: LotteryCashMovement[];
+  cashArqueos?: LotteryCashSnapshot[];
 }
 
 export const createDefaultLotteryCampaign = (year = new Date().getFullYear()): LotteryCampaign => ({
@@ -88,6 +91,8 @@ export const createDefaultLotteryCampaign = (year = new Date().getFullYear()): L
     campanaCerrada: false,
   },
   requests: [],
+  cashMovements: [],
+  cashArqueos: [],
 });
 
 export function lotteryRequestTotalCount(request: LotteryRequest): number {
@@ -145,4 +150,8 @@ export function lotteryPendingPaymentAmount(campaign: LotteryCampaign): number {
     (total, request) => total + (!request.pagado ? lotteryRequestAmount(campaign, request) : 0),
     0,
   );
+}
+
+export function lotteryTransferTotal(campaign: LotteryCampaign): number {
+  return campaign.requests.reduce((total, request) => total + (request.pagado && request.formaPago === 'transferencia' ? lotteryRequestAmount(campaign, request) : 0), 0);
 }

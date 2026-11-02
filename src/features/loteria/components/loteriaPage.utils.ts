@@ -61,7 +61,7 @@ export const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
   },
 ];
 
-export type WorkspaceSection = 'septiembre' | 'octubre' | 'seguimiento' | 'cierre';
+export type WorkspaceSection = 'septiembre' | 'octubre' | 'seguimiento' | 'cierre' | 'arqueos';
 
 export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');

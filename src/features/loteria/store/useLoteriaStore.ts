@@ -1,3 +1,4 @@
+import type { LotteryCashMovement, LotteryCashSnapshot } from '../domain/arqueos';
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
@@ -62,7 +63,7 @@ function normalizeRequest(value: unknown): LotteryRequest | null {
     decimosNumero2: Math.max(0, toSafeNumber(candidate.decimosNumero2, 0)),
     pagado: Boolean(candidate.pagado),
     fechaPago: typeof candidate.fechaPago === 'string' ? candidate.fechaPago : null,
-    formaPago: candidate.formaPago === 'bizum' ? 'bizum' : 'efectivo',
+    formaPago: candidate.formaPago === 'bizum' || candidate.formaPago === 'transferencia' ? candidate.formaPago : 'efectivo',
     observacionesPago,
     createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : now,
     updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : now,
@@ -125,6 +126,8 @@ function normalizeCampaign(value: unknown, fallbackYear = new Date().getFullYear
         : Boolean(storedWorkflow.excelImportado || requests.length > 0),
     },
     requests,
+    cashMovements: Array.isArray(candidate.cashMovements) ? (candidate.cashMovements as LotteryCashMovement[]).filter((m) => typeof m.id === 'string' && typeof m.amount === 'number' && Number.isFinite(m.amount) && typeof m.reason === 'string' && typeof m.at === 'string') : [],
+    cashArqueos: Array.isArray(candidate.cashArqueos) ? (candidate.cashArqueos as LotteryCashSnapshot[]).filter((a) => typeof a.id === 'string' && typeof a.counted === 'number' && typeof a.expected === 'number' && typeof a.cashPaid === 'number' && typeof a.movementNet === 'number' && Array.isArray(a.payments) && Array.isArray(a.movements)) : [],
   };
 }
 
