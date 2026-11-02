@@ -14,7 +14,7 @@ describe('Ticket Restaurante: la recarga compartida no sustituye el store por ca
     let release!: (value: unknown) => void;
     const pending = new Promise<unknown>((resolve) => { release = resolve; });
     Object.defineProperty(window, 'traccion', { configurable: true, value: {
-      loadTicketRestauranteCalendarsRecords: vi.fn(() => pending),
+      loadTicketRestauranteCalendarRecords: vi.fn(() => pending),
       saveTicketRestauranteCalendarRecordIfUnchanged: vi.fn(),
     } });
     const reload = useTicketRestauranteStore.getState().reloadFromStorage();
