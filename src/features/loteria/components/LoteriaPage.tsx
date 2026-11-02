@@ -245,10 +245,30 @@ export function LoteriaPage() {
   };
 
   const saveCashRecords = async (next: LotteryCampaign, success: string): Promise<boolean> => {
+    if (dirty) {
+      setMessage('Guarda primero los cambios pendientes de Lotería antes de registrar movimientos o arqueos.');
+      return false;
+    }
     try {
       const result = await saveCampaign(next);
       setMessage(result.ok ? success : result.message);
-      if (result.ok) clearRecoveryDraft();
+      if (result.ok) {
+        clearRecoveryDraft();
+        try {
+          if (window.traccion?.saveLoteriaCampaignExcel) {
+            const workbook = await buildCampaignWorkbook(next);
+            const excelResult = await window.traccion.saveLoteriaCampaignExcel({
+              year: next.year,
+              directoryTemplate: rutaExportacionLoteria,
+              fileName: workbook.fileName,
+              buffer: workbook.buffer,
+            });
+            if (!excelResult.ok) setMessage(`${success} No se ha actualizado el Excel: ${excelResult.message}`);
+          }
+        } catch (error) {
+          setMessage(`${success} No se ha actualizado el Excel: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       return result.ok;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Error al guardar el arqueo.');
@@ -738,7 +758,7 @@ export function LoteriaPage() {
 
       {activeSection === 'arqueos' ? (
         <SectionShell title="Arqueos · Caja fuerte" subtitle="Cierres diarios de efectivo, salidas y entradas justificadas e histórico de diferencias.">
-          <LoteriaArqueos campaign={draft} onSave={saveCashRecords} />
+          <LoteriaArqueos campaign={campaign} onSave={saveCashRecords} blocked={dirty} />
         </SectionShell>
       ) : null}
 

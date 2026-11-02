@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultLotteryCampaign } from './loteria';
-import { cashChangesSinceLastClose, cashExpected, cashSnapshot } from './arqueos';
+import { cashChangesSinceLastClose, cashExpected, cashSnapshot, parseCashAmount } from './arqueos';
 
 describe('arqueos de lotería', () => {
+  it('rechaza fracciones de céntimo, ceros y entradas inválidas', () => {
+    expect(parseCashAmount('0,001', false)).toBeNull();
+    expect(parseCashAmount('0', false)).toBeNull();
+    expect(parseCashAmount('-0,01', false)).toBe(-0.01);
+    expect(parseCashAmount('10,25', false)).toBe(10.25);
+    expect(parseCashAmount('0,00', true)).toBe(0);
+    expect(parseCashAmount('-1', true)).toBeNull();
+  });
   const campaign = () => {
     const c = createDefaultLotteryCampaign(2026);
     c.requests.push({
