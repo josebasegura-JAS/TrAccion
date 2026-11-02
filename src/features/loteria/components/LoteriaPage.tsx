@@ -198,16 +198,23 @@ export function LoteriaPage() {
       .slice(0, 8);
   }, [employees, participantSearch]);
 
+  // Mantener cada fila en la sección de pago del último guardado mientras se editan sus datos.
+  // Al guardar, campaign se actualiza y se aplica la nueva ordenación y los filtros.
+  const savedPayments = useMemo(
+    () => new Map(campaign.requests.map((request) => [request.id, request])),
+    [campaign.requests],
+  );
   const filteredRequests = useMemo(() => {
     const needle = normalizeSearch(search);
     return draft.requests.filter((request) => {
       if (request.decimosNumero1 <= 0 && request.decimosNumero2 <= 0) return false;
       const haystack = normalizeSearch(`${request.nombre} ${request.empleado ?? ''} ${request.email} ${request.contactoObservaciones}`);
       const matchesSearch = !needle || haystack.includes(needle);
-      const matchesPayment = paymentFilter === 'todos' || (paymentFilter === 'pagados' ? request.pagado : !request.pagado);
+      const savedPaid = savedPayments.get(request.id)?.pagado ?? request.pagado;
+      const matchesPayment = paymentFilter === 'todos' || (paymentFilter === 'pagados' ? savedPaid : !savedPaid);
       return matchesSearch && matchesPayment;
     });
-  }, [draft.requests, paymentFilter, search]);
+  }, [draft.requests, paymentFilter, savedPayments, search]);
 
   const persist = async (next = draft, success = 'Cambios guardados.') => {
     const result = await saveCampaign(next);
@@ -721,6 +728,7 @@ export function LoteriaPage() {
             <LoteriaTrackingTable
               campaign={draft}
               requests={filteredRequests}
+              savedPayments={savedPayments}
               onUpdate={updateRequest}
               onTogglePaid={togglePaid}
             />

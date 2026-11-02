@@ -184,11 +184,13 @@ export function LoteriaParticipantsTable({
 export function LoteriaTrackingTable({
   campaign,
   requests,
+  savedPayments,
   onUpdate,
   onTogglePaid,
 }: {
   campaign: LotteryCampaign;
   requests: LotteryRequest[];
+  savedPayments: ReadonlyMap<string, LotteryRequest>;
   onUpdate: (requestId: string, patch: Partial<LotteryRequest>) => void;
   onTogglePaid: (request: LotteryRequest) => void;
 }) {
@@ -254,7 +256,7 @@ export function LoteriaTrackingTable({
     },
     {
       id: 'paid', header: 'Pagado', width: 84, sortable: true,
-      accessor: (request) => request.pagado ? 1 : 0,
+      accessor: (request) => (savedPayments.get(request.id)?.pagado ?? request.pagado) ? 1 : 0,
       render: (request) => (
         <div className="flex justify-center">
           <button aria-label={request.pagado ? 'Marcar como pendiente' : 'Marcar como pagado'}
@@ -267,12 +269,12 @@ export function LoteriaTrackingTable({
     },
     {
       id: 'paymentDate', header: 'Fecha pago', width: 108, sortable: true,
-      accessor: (request) => request.fechaPago,
+      accessor: (request) => savedPayments.has(request.id) ? savedPayments.get(request.id)!.fechaPago : request.fechaPago,
       render: (request) => dateText(request.fechaPago),
     },
     {
       id: 'paymentMethod', header: 'Forma pago', width: 115, sortable: true,
-      accessor: (request) => request.formaPago,
+      accessor: (request) => savedPayments.get(request.id)?.formaPago ?? request.formaPago,
       render: (request) => (
         <select className={inputClass} disabled={!request.pagado} value={request.formaPago}
           onChange={(event) => onUpdate(request.id, { formaPago: event.target.value as LotteryPaymentMethod })}>
@@ -288,7 +290,7 @@ export function LoteriaTrackingTable({
           onChange={(event) => onUpdate(request.id, { observacionesPago: event.target.value })} />
       ),
     },
-  ], [availableNumero1, availableNumero2, campaign, onTogglePaid, onUpdate]);
+  ], [availableNumero1, availableNumero2, campaign, onTogglePaid, onUpdate, savedPayments]);
 
   return (
     <DataTable
