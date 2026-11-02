@@ -4,7 +4,7 @@ import { useConfiguracionStore } from './useConfiguracionStore';
 describe('Configuración: cambios de rutas encolados sin perder campos independientes', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'traccion', { configurable: true, value: undefined });
-    useConfiguracionStore.setState({ rutaExportacionLoteria: '', rutaExportacionTickets: '', rutaExportacionTicketRestaurante: '' });
+    useConfiguracionStore.setState({ rutaExportacionLoteria: '', rutaExportacionTicketRestaurante: '' });
   });
 
   it('conserva dos rutas diferentes aunque se guarden sin esperar entre sí', async () => {
