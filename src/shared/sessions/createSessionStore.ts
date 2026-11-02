@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { reportModuleReadFailure } from '../persistence/reportModuleReadFailure';
 import { readStorageItem } from '../../services/persistence';
 import {
   deleteSharedArrayRecord,
@@ -140,6 +141,7 @@ async function readSessionsFromNativeOrBlob(config: SessionModuleConfig): Promis
       }
       return sessions;
     }
+    throw new Error('SQLite no está disponible para leer las sesiones del módulo.');
   }
 
   return readSessions(config);
@@ -549,7 +551,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             hasLoadedHistoricalSessions: false,
           }),
         )
-        .catch((error) => logSessionPersistenceError('loadSessions', error));
+        .catch((error) => reportModuleReadFailure(config.storageKey, config.moduleId, error));
     },
     loadHistoricalSessions: () => {
       void readSessionsFromNativeOrBlob(config)
@@ -559,7 +561,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             hasLoadedHistoricalSessions: true,
           }),
         )
-        .catch((error) => logSessionPersistenceError('loadHistoricalSessions', error));
+        .catch((error) => reportModuleReadFailure(config.storageKey, config.moduleId, error));
     },
     reloadFromStorage: () => {
       void readSessionsFromNativeOrBlob(config)
@@ -577,7 +579,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             set({ sessions: nextSessions });
           }
         })
-        .catch((error) => logSessionPersistenceError('reloadSessionsFromStorage', error));
+        .catch((error) => reportModuleReadFailure(config.storageKey, config.moduleId, error));
     },
     create: (draft) => {
       const session = buildSessionFromDraft(config, draft);

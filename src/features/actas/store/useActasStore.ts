@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { reportModuleReadFailure } from '../../../shared/persistence/reportModuleReadFailure';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   deleteSharedArrayRecord,
@@ -384,7 +385,7 @@ async function loadActaTypesPreferringSqlite(actas: Acta[]): Promise<ActaTypeDef
 
   const sqliteRecords = await loadActaTypeRecordsFromSqlite();
   if (sqliteRecords === null) {
-    return createDefaultActaTypes();
+    throw new Error('Los tipos de Actas no se han podido leer desde SQLite.');
   }
 
   if (sqliteRecords.length === 0) {
@@ -425,13 +426,10 @@ async function loadActasStateFromSqliteOrStorage(
     if (sqliteActas !== null) {
       return buildActasStateWithSqliteTypes(sqliteActas, includeHistorical);
     }
+    throw new Error('El repositorio SQLite de Actas está temporalmente inaccesible.');
   }
 
   return buildActasStateWithSqliteTypes(readActas(), includeHistorical);
-}
-
-function logActaPersistenceError(action: string, error: unknown): void {
-  console.error(`[${action}] No se ha podido guardar el acta compartida.`, error);
 }
 
 export const useActasStore = create<ActasStateStore>((set, get) => ({
@@ -439,23 +437,23 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
   actaTypes: [],
   hasLoadedHistoricalActas: false,
   load: () => {
-    set(loadActasState(false));
+    if (!hasActaSqliteRepository()) set(loadActasState(false));
     void loadActasStateFromSqliteOrStorage(false)
       .then((nextState) => set(nextState))
-      .catch((error) => logActaPersistenceError('loadActas', error));
+      .catch((error) => reportModuleReadFailure(STORAGE_KEY, 'Actas', error));
   },
   loadHistoricalActas: () => {
-    set(loadActasState(true));
+    if (!hasActaSqliteRepository()) set(loadActasState(true));
     void loadActasStateFromSqliteOrStorage(true)
       .then((nextState) => set(nextState))
-      .catch((error) => logActaPersistenceError('loadHistoricalActas', error));
+      .catch((error) => reportModuleReadFailure(STORAGE_KEY, 'Actas histórico', error));
   },
   reloadFromStorage: () => {
     const includeHistorical = get().hasLoadedHistoricalActas;
-    set(loadActasState(includeHistorical));
+    if (!hasActaSqliteRepository()) set(loadActasState(includeHistorical));
     void loadActasStateFromSqliteOrStorage(includeHistorical)
       .then((nextState) => set(nextState))
-      .catch((error) => logActaPersistenceError('reloadActasFromStorage', error));
+      .catch((error) => reportModuleReadFailure(STORAGE_KEY, 'Actas', error));
   },
   createWithConcurrencyCheck: async (draft) => {
     try {
