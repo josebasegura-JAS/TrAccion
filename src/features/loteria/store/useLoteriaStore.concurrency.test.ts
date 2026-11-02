@@ -10,7 +10,7 @@ describe('Lotería: conflictos de escritura concurrente', () => {
     useLoteriaStore.setState({ campaign: createDefaultLotteryCampaign(2026), campaignUpdatedAt: 'v1', requestUpdatedAt: {} });
   });
   it('rechaza un arqueo obsoleto sin sobrescribir el cierre de otro operador', async () => {
-    const save = vi.fn(async (_payload: { expectedCampaignUpdatedAt: string | null; expectedRequestUpdatedAt: Record<string, string | null> }) => ({ ok: false, status, campaignUpdatedAt: 'v2', requestUpdatedAt: {}, message: 'La campaña ha sido modificada por otro usuario.' }));
+    const save = vi.fn(async (_payload: { expectedCampaignUpdatedAt: string | null; expectedRequestUpdatedAt: Record<string, string | null> }) => { void _payload; return { ok: false, status, campaignUpdatedAt: 'v2', requestUpdatedAt: {}, message: 'La campaña ha sido modificada por otro usuario.' }; });
     Object.defineProperty(window, 'traccion', { configurable: true, value: { saveLoteriaSnapshotIfUnchanged: save } });
     const before = useLoteriaStore.getState().campaign;
     const withClose = { ...before, cashArqueos: [{ id: 'a1', at: new Date().toISOString(), expected: 0, counted: 0, difference: 0, cashPaid: 0, movementNet: 0, recordedBy: 'Operador', payments: [], movements: [] }] };
@@ -21,7 +21,7 @@ describe('Lotería: conflictos de escritura concurrente', () => {
     expect(useLoteriaStore.getState().campaignUpdatedAt).toBe('v1');
   });
   it('rechaza cambios simultáneos de cobros con token obsoleto', async () => {
-    const save = vi.fn(async (_payload: { expectedCampaignUpdatedAt: string | null; expectedRequestUpdatedAt: Record<string, string | null> }) => ({ ok: false, status, campaignUpdatedAt: 'v2', requestUpdatedAt: { r1: 'v2' }, message: 'Otro usuario modificó los pagos.' }));
+    const save = vi.fn(async (_payload: { expectedCampaignUpdatedAt: string | null; expectedRequestUpdatedAt: Record<string, string | null> }) => { void _payload; return { ok: false, status, campaignUpdatedAt: 'v2', requestUpdatedAt: { r1: 'v2' }, message: 'Otro usuario modificó los pagos.' }; });
     Object.defineProperty(window, 'traccion', { configurable: true, value: { saveLoteriaSnapshotIfUnchanged: save } });
     useLoteriaStore.setState({ requestUpdatedAt: { r1: 'v1' } });
     const result = await useLoteriaStore.getState().saveCampaign({ ...createDefaultLotteryCampaign(2026), requests: [{
