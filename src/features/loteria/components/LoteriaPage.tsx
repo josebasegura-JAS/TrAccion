@@ -63,6 +63,7 @@ import {
 import { MetricCard, StepCard, SectionShell, SaveState, SummaryPill } from './loteriaPage.helpers';
 import { LoteriaParticipantsTable, LoteriaTrackingTable } from './LoteriaRequestsTables';
 import { LoteriaArqueos } from './LoteriaArqueos';
+import { LoteriaHistoricalPanel } from './LoteriaHistoricalPanel';
 
 export function LoteriaPage() {
   const campaign = useLoteriaStore((state) => state.campaign);
@@ -776,6 +777,8 @@ export function LoteriaPage() {
           <LoteriaArqueos campaign={campaign} onSave={saveCashRecords} blocked={dirty} />
         </SectionShell>
       ) : null}
+
+      {activeSection === null && <LoteriaHistoricalPanel />}
 
       {remoteConflict && (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/50 p-3 text-sm text-amber-200">
