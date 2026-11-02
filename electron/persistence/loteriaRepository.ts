@@ -51,7 +51,7 @@ function validCashActor(value: unknown): value is string {
 }
 
 function validCashDate(value: unknown): value is string {
-  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) && /^\\d{4}-\\d{2}-\\d{2}T/.test(value);
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) && /^\d{4}-\d{2}-\d{2}T/.test(value);
 }
 
 function validNewCashMovement(value: unknown): boolean {
