@@ -11,9 +11,7 @@ type StepProps = {
   onClick: () => void;
 };
 
-export function cx(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(' ');
-}
+import { cx } from './presupuestosClassNames';
 
 export function WorkflowStep({ number, title, detail, active, done, onClick }: StepProps) {
   return (

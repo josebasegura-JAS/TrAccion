@@ -3,7 +3,8 @@ import { ChevronDown, ChevronRight, Copy, FileSpreadsheet, Plus, RotateCcw, Tras
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Input, Select } from '../../../components/ui/Field';
-import { cx, Field, Metric, Panel, WorkflowStep } from './PresupuestosPagePrimitives';
+import { Field, Metric, Panel, WorkflowStep } from './PresupuestosPagePrimitives';
+import { cx } from './presupuestosClassNames';
 import { Notice } from '../../../components/ui/Notice';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
