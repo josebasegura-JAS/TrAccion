@@ -276,7 +276,7 @@ export function LoteriaTrackingTable({
       render: (request) => (
         <select className={inputClass} disabled={!request.pagado} value={request.formaPago}
           onChange={(event) => onUpdate(request.id, { formaPago: event.target.value as LotteryPaymentMethod })}>
-          <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option>
+          <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option><option value="transferencia">Transferencia</option>
         </select>
       ),
     },
