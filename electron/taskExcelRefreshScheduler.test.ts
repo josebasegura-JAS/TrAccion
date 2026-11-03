@@ -24,10 +24,12 @@ describe('taskExcelRefreshScheduler', () => {
     const pending = new Promise<void>((resolve) => { finish = resolve; });
     let running = 0;
     let maxConcurrent = 0;
+    let invocation = 0;
     const work = vi.fn(async () => {
+      invocation += 1;
       running += 1;
       maxConcurrent = Math.max(maxConcurrent, running);
-      if (work.mock.calls.length === 1) await pending;
+      if (invocation === 1) await pending;
       running -= 1;
     });
     const refresh = createDebouncedSerialRefresh(work, vi.fn(), 1500);
