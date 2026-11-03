@@ -52,4 +52,25 @@ describe('sqliteConnection — openSqliteDatabase', () => {
     expect(readCurrentSchemaVersion(reopened!)).toBe(CURRENT_SCHEMA_VERSION);
     reopened!.close();
   });
+
+  it('reabre tras una transacción abortada sin guardar parcialmente ni duplicar al continuar', () => {
+    const db = openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 });
+    db.exec('CREATE TABLE IF NOT EXISTS regression_network_write (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    const simulatedFailure = Object.assign(new Error('disk I/O error'), { code: 'SQLITE_IOERR_WRITE' });
+    expect(() => db.transaction(() => {
+      db.prepare('INSERT INTO regression_network_write (id, value) VALUES (?, ?)').run('pedido-1', 'pendiente');
+      throw simulatedFailure;
+    })()).toThrow('disk I/O error');
+    expect((db.prepare('SELECT COUNT(*) AS total FROM regression_network_write').get() as { total: number }).total).toBe(0);
+    db.close();
+
+    // El usuario comprueba primero el resultado de la operación incierta.
+    const reopened = openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 });
+    expect((reopened.prepare('SELECT COUNT(*) AS total FROM regression_network_write').get() as { total: number }).total).toBe(0);
+    reopened.prepare('INSERT INTO regression_network_write (id, value) VALUES (?, ?)').run('pedido-1', 'confirmado');
+    expect((reopened.prepare('SELECT COUNT(*) AS total FROM regression_network_write').get() as { total: number }).total).toBe(1);
+    expect(reopened.pragma('journal_mode', { simple: true })).toBe('delete');
+    reopened.close();
+  });
+
 });
