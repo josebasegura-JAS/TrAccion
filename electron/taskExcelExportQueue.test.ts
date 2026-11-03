@@ -53,6 +53,7 @@ describe('createSerialTaskExcelQueue', () => {
 
   it('una exportación detenida no retiene la cola de operaciones SQLite', async () => {
     const fileGate = deferred();
+    const snapshotReady = deferred();
     const databaseCalls: string[] = [];
     let sqliteTail: Promise<void> = Promise.resolve();
     const enqueueSqlite = (name: string): Promise<void> => {
@@ -64,11 +65,10 @@ describe('createSerialTaskExcelQueue', () => {
 
     const exportPromise = queue.enqueue(async () => {
       await enqueueSqlite('snapshot');
+      snapshotReady.resolve();
       await fileGate.promise; // ExcelJS o escritura lenta en carpeta SMB.
     });
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await snapshotReady.promise;
     expect(databaseCalls).toContain('snapshot');
 
     // El guardado no espera a que termine la escritura del archivo Excel.
