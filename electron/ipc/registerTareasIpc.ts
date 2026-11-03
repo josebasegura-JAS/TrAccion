@@ -187,13 +187,20 @@ function isAtomicTaskBatchPayload(
 export function registerTareasIpc(): void {
   ipcMain.handle('tasks:load-records', (_event, payload: unknown) => {
     const candidate = payload && typeof payload === 'object'
-      ? payload as { mode?: unknown; id?: unknown }
+      ? payload as { mode?: unknown; id?: unknown; ids?: unknown }
       : null;
     const filter: SqliteTaskRecordsFilter = {};
     if (candidate && (candidate.mode === 'all' || candidate.mode === 'active' || candidate.mode === 'historical')) {
       filter.mode = candidate.mode;
     }
-    if (candidate && typeof candidate.id === 'string' && candidate.id.trim().length > 0 && candidate.id.length <= 256) {
+    if (candidate && candidate.ids !== undefined) {
+      if (!Array.isArray(candidate.ids) || candidate.ids.length > 300 ||
+        candidate.ids.some((id: unknown) => typeof id !== 'string' || !id.trim() || id.length > 256) ||
+        candidate.id !== undefined) {
+        throw new Error('Lista de identificadores de tareas inválida.');
+      }
+      filter.ids = [...new Set(candidate.ids as string[])];
+    } else if (candidate && typeof candidate.id === 'string' && candidate.id.trim().length > 0 && candidate.id.length <= 256) {
       filter.id = candidate.id;
     }
     return enqueueSqliteIpc('tasks:load-records', () => loadTaskRecordsSnapshot(filter));
