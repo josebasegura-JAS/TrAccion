@@ -22,6 +22,8 @@ export interface SqliteTaskRecordsFilter {
   mode?: 'all' | 'active' | 'historical';
   /** Consulta puntual por PK: evita descargar todo el histórico para editar una tarea. */
   id?: string;
+  /** Lectura agrupada de puntos vinculados a sesiones (máximo 300 IDs por IPC). */
+  ids?: string[];
 }
 
 export interface ConditionalSqliteTaskRecord {
@@ -64,6 +66,14 @@ function mapTaskRecordRow(row: TaskRecordRow): SqliteTaskRecord {
 }
 
 function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecord[] {
+  if (filter.ids !== undefined) {
+    if (filter.ids.length === 0) return [];
+    // Los identificadores son valores parametrizados, nunca SQL interpolado.
+    const placeholders = filter.ids.map(() => '?').join(', ');
+    return db.prepare(
+      `SELECT id, value_json, created_at, updated_at, deleted_at FROM task_records WHERE deleted_at IS NULL AND id IN (${placeholders})`,
+    ).all(...filter.ids).filter(isTaskRecordRow).map(mapTaskRecordRow);
+  }
   if (filter.id !== undefined) {
     const row: unknown = db.prepare(
       'SELECT id, value_json, created_at, updated_at, deleted_at FROM task_records WHERE id = ?',
