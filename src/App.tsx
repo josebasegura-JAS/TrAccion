@@ -130,6 +130,7 @@ function ConnectionRecoveryBanner() {
   const [restartError, setRestartError] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [copyError, setCopyError] = useState('');
+  const [copied, setCopied] = useState(false);
   useEffect(() => subscribeConnectionDiagnostics(() => setDiagnostics(getConnectionDiagnostics())), []);
   const staleConnectionMs = diagnostics.lastFailureAt ? Date.now() - new Date(diagnostics.lastFailureAt).getTime() : 0;
   const offerRestart = connectivity.phase === 'reconnecting' && (diagnostics.consecutiveFailures >= 5 || staleConnectionMs >= 30_000);
@@ -223,8 +224,15 @@ function ConnectionRecoveryBanner() {
             <button type="button" className="mt-2 rounded-lg border border-amber-300/30 px-3 py-1.5 font-semibold"
               onClick={() => {
                 setCopyError('');
-                void navigator.clipboard.writeText(report).catch(() => setCopyError('No se pudo copiar. Selecciona el texto del diagnóstico para enviarlo a soporte.'));
-              }}>Copiar diagnóstico</button>
+                setCopied(false);
+                if (!navigator.clipboard?.writeText) {
+                  setCopyError('La copia automática no está disponible. Solicita ayuda a soporte.');
+                  return;
+                }
+                void navigator.clipboard.writeText(report)
+                  .then(() => setCopied(true))
+                  .catch(() => setCopyError('No se pudo copiar el diagnóstico. Solicita ayuda a soporte.'));
+              }}>{copied ? 'Diagnóstico copiado' : 'Copiar diagnóstico'}</button>
             {copyError && <p className="mt-2" role="alert">{copyError}</p>}
           </div>
         </div>
