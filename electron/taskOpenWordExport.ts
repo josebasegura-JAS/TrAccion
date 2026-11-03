@@ -597,8 +597,11 @@ function taskFileDate(date = new Date()): string {
 
 export async function exportOpenTasksWord(
   records: TaskWordRecord[],
+  directoryOverride?: string | null,
 ): Promise<TaskWordExportResult> {
-  const directoryPath = await getOpenTasksWordDirectory();
+  const directoryPath = directoryOverride === undefined
+    ? await getOpenTasksWordDirectory()
+    : directoryOverride;
   if (!directoryPath) {
     return {
       ok: true,
