@@ -42,3 +42,20 @@ export function isSqliteBusyOrLockedError(error: unknown): boolean {
     error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return message.includes('database is locked') || message.includes('database table is locked');
 }
+
+
+/**
+ * Los errores de E/S de SQLite no son contención: reintentar la misma
+ * sentencia (especialmente una escritura) puede duplicar sus efectos.
+ * Reconocer el código extendido SQLITE_IOERR_* y el mensaje de better-sqlite3.
+ */
+export function isSqliteIoError(error: unknown): boolean {
+  const code = error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '').toUpperCase()
+    : '';
+  if (code === 'SQLITE_IOERR' || code.startsWith('SQLITE_IOERR_')) {
+    return true;
+  }
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('disk i/o error') || message.includes('disk io error');
+}
