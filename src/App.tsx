@@ -14,6 +14,7 @@ import { getConnectionDiagnostics, subscribeConnectionDiagnostics, requestDataba
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
 import { useDatabaseConnectivityState } from './services/databaseConnectivityState';
+import { buildConnectionReport, connectionProblemExplanation } from './services/connectionRecoveryHelp';
 import { hasDirtyEditors } from './services/dirtyEditors';
 import { recordPerformanceMetric } from './services/performanceMetrics';
 import { useAppDialog } from './hooks/useAppDialog';
@@ -95,6 +96,10 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
 
 function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
   const [feedback, setFeedback] = useState<PersistenceFeedback | null>(null);
+  const connectivity = useDatabaseConnectivityState();
+  useEffect(() => {
+    if (connectivity.phase === 'recovered') setFeedback(null);
+  }, [connectivity.phase]);
   useEffect(() => subscribeToPersistenceFeedback((nextFeedback) => {
     if (nextFeedback.kind === 'error') setFeedback(nextFeedback);
     else if (nextFeedback.kind === 'saved') {
@@ -105,11 +110,13 @@ function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }
       });
     }
   }), []);
-  if (!feedback) return null;
+  // Durante la recuperación, un error de lectura previo no debe aparecer
+  // erróneamente como un nuevo fallo de guardado.
+  if (!feedback || connectivity.phase === 'reconnecting' || connectivity.phase === 'syncing') return null;
   const isLockIssue = isTemporarySqliteLockMessage(feedback.message || '');
   return (
     <section className="persistence-error-banner" role="alert" aria-live="assertive"><AlertTriangle size={20} aria-hidden="true" />
-      <div><strong>Error de guardado</strong><p>{feedback.message || 'No se han podido guardar los últimos cambios. Revisa la conexión o la persistencia antes de continuar editando.'}</p>
+      <div><strong>{/load|list|get|lectura|cargar|consultar/i.test(`${feedback.key ?? ''} ${feedback.message}`) ? 'Error al consultar datos' : 'Error de guardado'}</strong><p>{feedback.message || 'No se han podido guardar los últimos cambios. Revisa la conexión o la persistencia antes de continuar editando.'}</p>
         {isLockIssue && <button className="persistence-error-banner__action" onClick={onGoToAjustes} type="button">Ver bloqueo en Ajustes</button>}
       </div>
     </section>
@@ -121,6 +128,9 @@ function ConnectionRecoveryBanner() {
   const [diagnostics, setDiagnostics] = useState(getConnectionDiagnostics);
   const [restarting, setRestarting] = useState(false);
   const [restartError, setRestartError] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
+  const [copyError, setCopyError] = useState('');
+  const [copied, setCopied] = useState(false);
   useEffect(() => subscribeConnectionDiagnostics(() => setDiagnostics(getConnectionDiagnostics())), []);
   const staleConnectionMs = diagnostics.lastFailureAt ? Date.now() - new Date(diagnostics.lastFailureAt).getTime() : 0;
   const offerRestart = connectivity.phase === 'reconnecting' && (diagnostics.consecutiveFailures >= 5 || staleConnectionMs >= 30_000);
@@ -128,56 +138,105 @@ function ConnectionRecoveryBanner() {
 
   const recovered = connectivity.phase === 'recovered';
   const syncing = connectivity.phase === 'syncing';
+  const waiting = !recovered && !syncing;
+  const title = recovered
+    ? 'Conexión recuperada: datos actualizados'
+    : syncing
+      ? 'La base responde: actualizando información'
+      : 'Conexión con los datos interrumpida';
+  const summary = recovered
+    ? 'Puedes continuar trabajando. TrAcción ha comprobado la base compartida y actualizado los datos.'
+    : syncing
+      ? 'La base de datos vuelve a responder. La edición seguirá bloqueada hasta terminar la actualización.'
+      : 'TrAcción ha bloqueado temporalmente los cambios para proteger la información. Está comprobando la base automáticamente.';
+  const report = buildConnectionReport({
+    phase: connectivity.phase,
+    attempt: connectivity.attempt,
+    checking: diagnostics.checking,
+    consecutiveFailures: diagnostics.consecutiveFailures,
+    lastFailureAt: diagnostics.lastFailureAt,
+    lastSuccessAt: diagnostics.lastSuccessAt,
+    lastCheckDurationMs: diagnostics.lastCheckDurationMs,
+    lastError: diagnostics.lastError,
+  });
+
   return (
     <section
-      className={`mb-2 flex items-center gap-3 rounded-xl border px-3.5 py-2.5 shadow-sm ${
-        recovered
-          ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
-          : 'border-amber-400/25 bg-amber-400/10 text-amber-50'
+      className={`mb-2 rounded-xl border px-3.5 py-3 shadow-sm ${
+        recovered ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100' : 'border-amber-400/25 bg-amber-400/10 text-amber-50'
       }`}
-      role="status"
-      aria-live="polite"
+      role="status" aria-live="polite"
     >
-      <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${recovered ? 'bg-emerald-400/15' : 'bg-amber-400/15'}`}>
-        {recovered ? (
-          <CheckCircle2 size={19} aria-hidden="true" />
-        ) : syncing ? (
-          <RefreshCw className="animate-spin" size={19} aria-hidden="true" />
-        ) : (
-          <WifiOff className="animate-pulse" size={19} aria-hidden="true" />
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${recovered ? 'bg-emerald-400/15' : 'bg-amber-400/15'}`}>
+          {recovered ? <CheckCircle2 size={19} aria-hidden="true" /> : syncing ? <RefreshCw className="animate-spin" size={19} aria-hidden="true" /> : <WifiOff size={19} aria-hidden="true" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <strong className="block text-sm">{title}</strong>
+          <p className="mt-0.5 text-xs opacity-90">{summary}</p>
+          {waiting && <p className="mt-1 text-xs opacity-80">
+            {diagnostics.checking ? 'Comprobando ahora…' : `Reintentos automáticos: ${Math.max(connectivity.attempt, diagnostics.consecutiveFailures)}`}
+          </p>}
+        </div>
+        {waiting && <button type="button" onClick={requestDatabaseReconnectCheck} disabled={diagnostics.checking}
+          className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-1.5 text-xs font-semibold hover:bg-amber-300/15 disabled:opacity-50">
+          {diagnostics.checking ? 'Comprobando…' : 'Comprobar ahora'}
+        </button>}
+        {offerRestart && (
+          <button type="button" disabled={restarting || !window.traccion?.requestSafeRestart}
+            className="shrink-0 rounded-lg border border-amber-300/25 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            onClick={() => {
+              if (!window.traccion?.requestSafeRestart) return;
+              setRestarting(true);
+              setRestartError('');
+              void window.traccion.requestSafeRestart().then((result) => {
+                if (!result.ok) setRestartError(result.message ?? 'No se pudo reiniciar TrAcción.');
+              }).catch((error: unknown) => setRestartError(error instanceof Error ? error.message : 'Error al solicitar el reinicio.'))
+                .finally(() => setRestarting(false));
+            }}>
+            {restarting ? 'Preparando reinicio…' : 'Reiniciar de forma segura'}
+          </button>
         )}
-      </span>
-      <div className="min-w-0 flex-1">
-        <strong className="block text-sm">
-          {recovered ? 'Conexión restablecida' : syncing ? 'Sincronizando datos compartidos' : 'Reconectando con la base compartida'}
-        </strong>
-        <p className="mt-0.5 truncate text-xs opacity-80">{connectivity.message}</p>
+        {!recovered && (
+          <button type="button" aria-expanded={showDetails} onClick={() => setShowDetails((current) => !current)}
+            className="shrink-0 rounded-lg border border-amber-300/25 px-3 py-1.5 text-xs font-semibold">
+            {showDetails ? 'Ocultar ayuda' : 'Qué hacer y diagnóstico'}
+          </button>
+        )}
       </div>
-      {offerRestart && (
-        <button type="button" disabled={restarting || !window.traccion?.requestSafeRestart}
-          className="shrink-0 rounded-lg border border-amber-300/25 px-3 py-1.5 text-xs font-semibold text-amber-50 disabled:opacity-50"
-          onClick={() => {
-            if (!window.traccion?.requestSafeRestart) return;
-            setRestarting(true);
-            setRestartError('');
-            void window.traccion.requestSafeRestart().then((result) => {
-              if (!result.ok) setRestartError(result.message ?? 'No se pudo reiniciar TrAcción.');
-            }).catch((error: unknown) => setRestartError(error instanceof Error ? error.message : 'Error al solicitar el reinicio.'))
-              .finally(() => setRestarting(false));
-          }}>
-          {restarting ? 'Preparando reinicio…' : 'Reiniciar TrAcción'}
-        </button>
+      {restartError && <p className="mt-2 text-xs" role="alert">{restartError}</p>}
+      {showDetails && !recovered && (
+        <div className="mt-3 border-t border-amber-300/20 pt-3 text-xs">
+          <p className="font-semibold">¿Qué está ocurriendo?</p>
+          <p className="mt-1 opacity-90">{connectionProblemExplanation(diagnostics.lastError)}</p>
+          <p className="mt-3 font-semibold">Qué puedes hacer</p>
+          <ol className="mt-1 list-decimal space-y-1 pl-5 opacity-90">
+            <li>Comprueba que el equipo está conectado por cable o Wi-Fi y que puedes abrir la carpeta de red de TrAcción.</li>
+            <li>Pulsa «Comprobar ahora». TrAcción seguirá comprobando automáticamente aunque no pulses.</li>
+            <li>Si no se recupera, usa «Reiniciar de forma segura» cuando aparezca. Revisa antes cualquier formulario sin guardar.</li>
+            <li>Si persiste, copia el diagnóstico y envíalo a soporte. No repitas un guardado fallido sin comprobar si se realizó.</li>
+          </ol>
+          <div className="mt-3 rounded-lg border border-amber-300/20 bg-black/10 p-3">
+            <p className="font-semibold">Datos para soporte</p>
+            <p className="mt-1 opacity-80">Fallos consecutivos: {diagnostics.consecutiveFailures} · Última comprobación: {diagnostics.lastCheckDurationMs ?? '—'} ms</p>
+            <p className="mt-1 break-words opacity-80">Último error: {diagnostics.lastError ?? 'Todavía no registrado'}</p>
+            <p className="mt-1 opacity-80">El informe puede contener rutas de red. Compártelo solo con soporte autorizado.</p>
+            <button type="button" className="mt-2 rounded-lg border border-amber-300/30 px-3 py-1.5 font-semibold"
+              onClick={() => {
+                setCopyError('');
+                setCopied(false);
+                if (!navigator.clipboard?.writeText) {
+                  setCopyError('La copia automática no está disponible. Solicita ayuda a soporte.');
+                  return;
+                }
+                void navigator.clipboard.writeText(report)
+                  .then(() => setCopied(true))
+                  .catch(() => setCopyError('No se pudo copiar el diagnóstico. Solicita ayuda a soporte.'));
+              }}>{copied ? 'Diagnóstico copiado' : 'Copiar diagnóstico'}</button>
+            {copyError && <p className="mt-2" role="alert">{copyError}</p>}
+          </div>
+        </div>
       )}
-      {restartError && <span className="text-xs text-amber-100" role="alert">{restartError}</span>}
-      {!recovered && !syncing ? (
-        <button
-          className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-300/15"
-          onClick={requestDatabaseReconnectCheck}
-          type="button"
-        >
-          Reintentar ahora
-        </button>
-      ) : null}
     </section>
   );
 }
