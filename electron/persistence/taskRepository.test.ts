@@ -133,6 +133,38 @@ describe('createTaskRepository', () => {
     expect(db.all).not.toHaveBeenCalled();
   });
 
+  it('la lectura de puntos vinculados consulta únicamente los IDs solicitados', async () => {
+    const rows = [
+      { id: 'task-a', value_json: '{"id":"task-a"}', created_at: '2026-11-03',
+        updated_at: '2026-11-03', deleted_at: null },
+      { id: 'task-b', value_json: '{"id":"task-b"}', created_at: '2026-11-03',
+        updated_at: '2026-11-03', deleted_at: null },
+    ];
+    const db = buildDb({ all: rows });
+    const deps = buildDeps({
+      requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
+    });
+    const { loadTaskRecordsSnapshot } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
+    const snapshot = await loadTaskRecordsSnapshot({ ids: ['task-a', 'task-b'] });
+
+    expect(snapshot.records.map((record) => record.id)).toEqual(['task-a', 'task-b']);
+    expect(db.prepare).toHaveBeenCalledWith(
+      'SELECT id, value_json, created_at, updated_at, deleted_at FROM task_records WHERE deleted_at IS NULL AND id IN (?, ?)',
+    );
+    expect(db.all).toHaveBeenCalledWith('task-a', 'task-b');
+    expect(db.get).toHaveBeenCalledTimes(1); // Sólo comprobación de migración.
+  });
+
+  it('la lista vacía de IDs no descarga el histórico', async () => {
+    const db = buildDb();
+    const deps = buildDeps({
+      requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
+    });
+    const { loadTaskRecordsSnapshot } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
+    await loadTaskRecordsSnapshot({ ids: [] });
+    expect(db.all).not.toHaveBeenCalled();
+  });
+
   it('la lectura puntual de tarea inexistente devuelve vacío y no lee el histórico', async () => {
     const db = buildDb();
     const deps = buildDeps({
