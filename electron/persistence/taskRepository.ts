@@ -20,6 +20,8 @@ export interface SqliteTaskRecordsSnapshot {
 
 export interface SqliteTaskRecordsFilter {
   mode?: 'all' | 'active' | 'historical';
+  /** Consulta puntual por PK: evita descargar todo el histórico para editar una tarea. */
+  id?: string;
 }
 
 export interface ConditionalSqliteTaskRecord {
@@ -62,6 +64,12 @@ function mapTaskRecordRow(row: TaskRecordRow): SqliteTaskRecord {
 }
 
 function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecord[] {
+  if (filter.id !== undefined) {
+    const row: unknown = db.prepare(
+      'SELECT id, value_json, created_at, updated_at, deleted_at FROM task_records WHERE id = ?',
+    ).get(filter.id);
+    return isTaskRecordRow(row) ? [mapTaskRecordRow(row)] : [];
+  }
   const mode = filter.mode ?? 'all';
   const whereClause =
     mode === 'active'

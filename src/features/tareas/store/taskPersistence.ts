@@ -68,14 +68,14 @@ export function persistTasks(tasks: Task[]): void {
   writeStorageItem(TASKS_STORAGE_KEY, JSON.stringify(tasks.map(normalizeTask)));
 }
 
-export async function readTasksForStore(mode: TaskSqliteLoadMode = 'active'): Promise<Task[]> {
+export async function readTasksForStore(mode: TaskSqliteLoadMode = 'active', id?: string): Promise<Task[]> {
   if (!hasTaskSqliteRepository()) {
     if (import.meta.env.MODE === 'test') return readTasks();
     throw new Error('Repositorio SQLite de tareas no disponible.');
   }
 
   try {
-    const sqliteTasks = await loadTasksFromSqlite(parseTasksSnapshot, mode);
+    const sqliteTasks = await loadTasksFromSqlite(parseTasksSnapshot, mode, id);
     if (sqliteTasks === null) {
       throw new Error('SQLite de tareas no está disponible en este momento.');
     }

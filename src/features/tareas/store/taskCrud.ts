@@ -76,7 +76,7 @@ export async function upsertCoordinationTrackingWithConcurrencyCheck(
 ): Promise<TaskUpdateResult> {
   try {
     if (hasTaskSqliteRepository()) {
-      const latestTasks = await readTasksForStore('all');
+      const latestTasks = await readTasksForStore('all', mutation.taskId);
       const latestTask = latestTasks.find((task) => task.id === mutation.taskId);
       if (!latestTask || latestTask.deletedAt) {
         return { ok: false, message: 'La tarea vinculada ya no existe o está eliminada.' };
@@ -259,7 +259,7 @@ export async function updateTaskWithConcurrencyCheck(
 ): Promise<TaskUpdateResult> {
   try {
     if (hasTaskSqliteRepository()) {
-      const latestTasks = await readTasksForStore('all');
+      const latestTasks = await readTasksForStore('all', id);
       const latestTask = latestTasks.find((task) => task.id === id);
       if (!latestTask) return { ok: false, message: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.' };
       if (latestTask.updatedAt !== expectedUpdatedAt) {
@@ -302,7 +302,7 @@ export async function removeTaskWithConcurrencyCheck(
 ): Promise<TaskUpdateResult> {
   try {
     if (hasTaskSqliteRepository()) {
-      const latestTasks = await readTasksForStore('all');
+      const latestTasks = await readTasksForStore('all', id);
       const latestTask = latestTasks.find((task) => task.id === id);
       if (!latestTask) return { ok: false, message: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.' };
       if (latestTask.updatedAt !== expectedUpdatedAt) {

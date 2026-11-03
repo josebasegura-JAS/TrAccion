@@ -151,10 +151,16 @@ function isAtomicTaskBatchPayload(
 
 export function registerTareasIpc(): void {
   ipcMain.handle('tasks:load-records', (_event, payload: unknown) => {
-    const filter: SqliteTaskRecordsFilter =
-      payload && typeof payload === 'object' && 'mode' in payload
-        ? { mode: (payload as { mode?: SqliteTaskRecordsFilter['mode'] }).mode }
-        : {};
+    const candidate = payload && typeof payload === 'object'
+      ? payload as { mode?: unknown; id?: unknown }
+      : null;
+    const filter: SqliteTaskRecordsFilter = {};
+    if (candidate && (candidate.mode === 'all' || candidate.mode === 'active' || candidate.mode === 'historical')) {
+      filter.mode = candidate.mode;
+    }
+    if (candidate && typeof candidate.id === 'string' && candidate.id.trim().length > 0 && candidate.id.length <= 256) {
+      filter.id = candidate.id;
+    }
     return enqueueSqliteIpc('tasks:load-records', () => loadTaskRecordsSnapshot(filter));
   });
 

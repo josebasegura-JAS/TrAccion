@@ -14,7 +14,7 @@ const readyStatus = {
 const notReadyStatus = { ...readyStatus, ready: false, phase: 'locked' as const };
 
 function buildDb(overrides: { get?: unknown; all?: unknown[]; runChanges?: number } = {}) {
-  const get = vi.fn(() => overrides.get ?? { count: 0 });
+  const get = vi.fn((): unknown => overrides.get ?? { count: 0 });
   const all = vi.fn(() => overrides.all ?? []);
   const run = vi.fn(() => ({ changes: overrides.runChanges ?? 1 }));
   const prepare = vi.fn((sql: string) => { void sql; return { get, all, run }; });
@@ -113,6 +113,38 @@ describe('createTaskRepository', () => {
 
     const sqlCalls = db.prepare.mock.calls.map((call) => call[0] as string);
     expect(sqlCalls.some((sql) => sql.includes("estado') <> 'cerrada'"))).toBe(true);
+  });
+
+  it('la lectura puntual de tareas utiliza la clave primaria y no ejecuta un SELECT masivo', async () => {
+    const row = { id: 'task-42', value_json: '{"id":"task-42"}', created_at: '2026-11-03',
+      updated_at: '2026-11-03', deleted_at: null };
+    const db = buildDb({ get: row });
+    const deps = buildDeps({
+      requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
+    });
+    const { loadTaskRecordsSnapshot } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
+    const snapshot = await loadTaskRecordsSnapshot({ mode: 'all', id: 'task-42' });
+
+    expect(snapshot.records).toEqual([{ id: 'task-42', value: row.value_json,
+      createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: null }]);
+    const sql = db.prepare.mock.calls.map((call) => call[0] as string);
+    expect(sql).toContain('SELECT id, value_json, created_at, updated_at, deleted_at FROM task_records WHERE id = ?');
+    expect(db.get).toHaveBeenCalledWith('task-42');
+    expect(db.all).not.toHaveBeenCalled();
+  });
+
+  it('la lectura puntual de tarea inexistente devuelve vacío y no lee el histórico', async () => {
+    const db = buildDb();
+    const deps = buildDeps({
+      requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
+    });
+    const { loadTaskRecordsSnapshot } = createTaskRepository(deps as Parameters<typeof createTaskRepository>[0]);
+    await loadTaskRecordsSnapshot();
+    db.get.mockReturnValue(undefined);
+    db.all.mockClear();
+    const result = await loadTaskRecordsSnapshot({ id: 'inexistente' });
+    expect(result.records).toEqual([]);
+    expect(db.all).not.toHaveBeenCalled();
   });
 
   it('resetMigrationState existe y es invocable (usado al cerrar/cambiar de base)', () => {

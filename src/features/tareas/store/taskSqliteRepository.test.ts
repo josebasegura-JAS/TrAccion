@@ -85,6 +85,21 @@ describe('taskSqliteRepository', () => {
     await expect(loadTasksFromSqlite(parseTasks)).resolves.toEqual([storedTask]);
   });
 
+  it('la consulta de una tarea concreta envía el id a SQLite y devuelve solo ese registro', async () => {
+    const record = task({ id: 'task-42' });
+    const loader = vi.fn(async () => ({
+      status: { ready: true, phase: 'active' },
+      records: [{ id: record.id, value: JSON.stringify(record), updatedAt: timestamp }],
+    }));
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: { loadTaskRecords: loader },
+    });
+    await expect(loadTasksFromSqlite(parseTasks, 'all', 'task-42')).resolves.toEqual([record]);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledWith({ mode: 'all', id: 'task-42' });
+  });
+
   it('guarda tarea con expectedUpdatedAt y devuelve el resultado normalizado', async () => {
     const saver = vi.fn(async () => ({ ok: true, message: 'Tarea guardada.', currentUpdatedAt: timestamp }));
     Object.defineProperty(window, 'traccion', {
