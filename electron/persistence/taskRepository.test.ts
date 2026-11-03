@@ -14,7 +14,7 @@ const readyStatus = {
 const notReadyStatus = { ...readyStatus, ready: false, phase: 'locked' as const };
 
 function buildDb(overrides: { get?: unknown; all?: unknown[]; runChanges?: number } = {}) {
-  const get = vi.fn(() => overrides.get ?? { count: 0 });
+  const get = vi.fn((): unknown => overrides.get ?? { count: 0 });
   const all = vi.fn(() => overrides.all ?? []);
   const run = vi.fn(() => ({ changes: overrides.runChanges ?? 1 }));
   const prepare = vi.fn((sql: string) => { void sql; return { get, all, run }; });
