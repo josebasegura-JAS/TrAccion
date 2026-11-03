@@ -96,7 +96,8 @@ describe('taskSqliteRepository', () => {
       value: { loadTaskRecords: loader },
     });
     await expect(loadTasksFromSqlite(parseTasks, 'all', 'task-42')).resolves.toEqual([record]);
-    expect(loader).toHaveBeenCalledExactlyOnceWith({ mode: 'all', id: 'task-42' });
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledWith({ mode: 'all', id: 'task-42' });
   });
 
   it('guarda tarea con expectedUpdatedAt y devuelve el resultado normalizado', async () => {
