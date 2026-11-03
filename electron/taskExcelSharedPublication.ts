@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -143,4 +143,19 @@ export async function publishTaskExcel(
     await afterPublish();
     return { published: true, stale: false };
   });
+}
+
+/**
+ * Firma estable del contenido realmente exportable, independiente del orden
+ * SQL. Evita apoyarse en relojes de los equipos o en updated_at de un único
+ * registro, que podrían no capturar cierres o bajas.
+ */
+export function taskExcelSnapshotSignature(records: readonly { value: string }[]): string {
+  const hash = createHash('sha256');
+  for (const value of records.map((record) => record.value).sort()) {
+    hash.update(String(Buffer.byteLength(value)));
+    hash.update(':');
+    hash.update(value);
+  }
+  return hash.digest('hex');
 }
