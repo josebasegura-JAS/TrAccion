@@ -22,10 +22,13 @@ describe('consulta selectiva de puntos históricos de Comité y Paritaria', () =
   });
 
   it('divide lotes grandes sin descargar el histórico completo', async () => {
-    const loader = vi.fn(async (_filter?: { ids?: string[] }) => ({
-      status: { ready: true, phase: 'active' },
-      records: [],
-    }));
+    const loader = vi.fn(async (_filter?: { ids?: string[] }) => {
+      void _filter;
+      return {
+        status: { ready: true, phase: 'active' },
+        records: [],
+      };
+    });
     Object.defineProperty(window, 'traccion', {
       configurable: true, value: { loadTaskRecords: loader },
     });
