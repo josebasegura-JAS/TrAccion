@@ -40,7 +40,6 @@ const RECOVERY_OPERATIONS = new Set([
 const EXPLICIT_READ_ONLY_OPERATIONS = new Set([
   'database:run-integrity-audit',
   'database:get-integrity-audit-summary',
-  'tasks:refresh-open-word',
 ]);
 
 const sqliteIpcContext = new AsyncLocalStorage<SqliteIpcOperationContext>();
