@@ -21,6 +21,7 @@ import {
 import { exportOpenTasksWord, type TaskWordExportResult } from '../taskOpenWordExport.js';
 import { createDebouncedSerialRefresh } from '../taskExcelRefreshScheduler.js';
 import { createSerialTaskExcelQueue } from '../taskExcelExportQueue.js';
+import { taskExcelSnapshotSignature } from '../taskExcelSharedPublication.js';
 
 const allowedTaskDocumentExtensions = new Set([
   '.doc',
@@ -114,9 +115,21 @@ function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
       };
     }
 
-    // No hay operaciones SQLite en esta fase: el bloqueo de la cola IPC ya
-    // ha terminado, incluso si la ruta SMB tarda en guardar el archivo.
-    return exportOpenTasksWord(snapshot.records, directoryPath);
+    // El Excel se prepara fuera de la cola SQLite. Justo antes de publicarlo,
+    // comprobar que no se ha quedado atrás respecto al contenido compartido.
+    const originalSignature = taskExcelSnapshotSignature(snapshot.records);
+    const isSnapshotCurrent = async (): Promise<boolean> => {
+      const latest = await enqueueSqliteIpc('tasks:load-records', () =>
+        loadTaskRecordsSnapshot({ mode: 'active' }),
+      );
+      if (!latest.status.ready || latest.status.phase !== 'active') {
+        throw new Error('SQLite no disponible para verificar la versión del Excel.');
+      }
+      return taskExcelSnapshotSignature(latest.records) === originalSignature;
+    };
+    const result = await exportOpenTasksWord(snapshot.records, directoryPath, isSnapshotCurrent);
+    if (result.stale) scheduleOpenTasksWordRefresh();
+    return result;
   });
 }
 
