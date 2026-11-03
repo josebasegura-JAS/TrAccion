@@ -67,13 +67,9 @@ export async function withSharedTaskExcelLock<T>(
     try {
       await mkdir(lockPath);
       acquired = true;
-      try {
-        await writeFile(ownerPath, token, { flag: 'wx' });
-      } catch (error) {
-        // Si falla la identificación tras crear el directorio, se conserva
-        // el bloqueo para recuperación segura; nadie debe publicar a ciegas.
-        throw error;
-      }
+      // Si falla la identificación tras crear el directorio, se conserva
+      // el bloqueo para recuperación segura; nadie debe publicar a ciegas.
+      await writeFile(ownerPath, token, { flag: 'wx' });
     } catch (error) {
       if (acquired || (error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
       await recoverAbandonedLock();
