@@ -1,5 +1,7 @@
 import ExcelJS from 'exceljs';
-import { copyFile, mkdir, readdir, unlink } from 'node:fs/promises';
+import { mkdir, readdir, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { publishTaskExcel } from './taskExcelSharedPublication.js';
 import path from 'node:path';
 import { getOpenTasksWordDirectory } from './taskOpenWordPreferences.js';
 
@@ -13,6 +15,7 @@ export interface TaskWordExportResult {
   path: string | null;
   count: number;
   message: string;
+  stale?: boolean;
 }
 
 interface TaskTrackingEntry {
@@ -598,6 +601,7 @@ function taskFileDate(date = new Date()): string {
 export async function exportOpenTasksWord(
   records: TaskWordRecord[],
   directoryOverride?: string | null,
+  isSnapshotCurrent?: () => Promise<boolean>,
 ): Promise<TaskWordExportResult> {
   const directoryPath = directoryOverride === undefined
     ? await getOpenTasksWordDirectory()
@@ -622,7 +626,7 @@ export async function exportOpenTasksWord(
   const finalPath = path.join(directoryPath, datedFileName);
   const tempPath = path.join(
     directoryPath,
-    `.Tareas_abiertas.${process.pid}.${Date.now()}.tmp.xlsx`,
+    `.Tareas_abiertas.${randomUUID()}.tmp.xlsx`,
   );
   const legacyWordPath = path.join(directoryPath, 'Tareas abiertas.doc');
   const legacyExcelPath = path.join(directoryPath, 'Tareas abiertas.xlsx');
@@ -644,25 +648,39 @@ export async function exportOpenTasksWord(
     addTrackingWorksheet(workbook, tasks, generatedAt);
 
     await workbook.xlsx.writeFile(tempPath);
-    await copyFile(tempPath, finalPath);
-    await unlink(tempPath).catch(() => undefined);
-
-    // Solo se conserva un Excel espejo de tareas. Si cambia el día, el fichero
-    // adopta la nueva fecha y se elimina cualquier espejo anterior.
-    const existingFiles = await readdir(directoryPath);
-    const obsoleteExcelFiles = existingFiles.filter((name) =>
-      name !== datedFileName &&
-      name.startsWith('Tareas_abiertas_') &&
-      name.toLowerCase().endsWith('.xlsx'),
+    // La publicación se coordina entre equipos sobre SMB. La verificación
+    // ocurre después de obtener el bloqueo, justo antes del rename atómico.
+    const publication = await publishTaskExcel(
+      directoryPath,
+      tempPath,
+      finalPath,
+      isSnapshotCurrent ?? (async () => true),
+      async () => {
+        // Eliminar espejos anteriores bajo el mismo bloqueo compartido.
+        const existingFiles = await readdir(directoryPath);
+        const obsoleteExcelFiles = existingFiles.filter((name) =>
+          name !== datedFileName &&
+          name.startsWith('Tareas_abiertas_') &&
+          name.toLowerCase().endsWith('.xlsx'),
+        );
+        for (const obsoleteFile of obsoleteExcelFiles) {
+          await unlink(path.join(directoryPath, obsoleteFile)).catch(() => undefined);
+        }
+        await unlink(legacyExcelPath).catch(() => undefined);
+        await unlink(legacyWordPath).catch(() => undefined);
+      },
     );
-    for (const obsoleteFile of obsoleteExcelFiles) {
-      await unlink(path.join(directoryPath, obsoleteFile)).catch(() => undefined);
+    await unlink(tempPath).catch(() => undefined);
+    if (publication.stale) {
+      return {
+        ok: true,
+        skipped: true,
+        stale: true,
+        path: finalPath,
+        count: tasks.length,
+        message: 'Los datos cambiaron durante la exportación; el Excel anterior se conserva y se regenerará.',
+      };
     }
-
-    // Se retiran también los nombres usados por desarrollos anteriores para evitar
-    // que existan dos fuentes aparentemente válidas.
-    await unlink(legacyExcelPath).catch(() => undefined);
-    await unlink(legacyWordPath).catch(() => undefined);
 
     const trackingCount = tasks.reduce((total, task) => total + task.seguimiento.length, 0);
 
