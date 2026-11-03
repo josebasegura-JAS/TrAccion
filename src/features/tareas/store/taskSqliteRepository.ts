@@ -65,13 +65,17 @@ export type TaskSqliteLoadMode = 'all' | 'active' | 'historical';
 export async function loadTasksFromSqlite(
   parseTasks: (storageValue: string | null) => Task[],
   mode: TaskSqliteLoadMode = 'all',
+  id?: string,
 ): Promise<Task[] | null> {
   const loader = window.traccion?.loadTaskRecords;
   if (!loader) {
     return null;
   }
 
-  const snapshot = await withTemporarySqliteRetry(() => loader({ mode }));
+  const startedAt = performance.now();
+  const snapshot = await withTemporarySqliteRetry(() => loader({ mode, id }));
+  const durationMs = Math.round(performance.now() - startedAt);
+  if (durationMs >= 250) console.info(`[tareas-perf] lectura ${id ? 'registro' : mode}: ${durationMs} ms`);
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
     return null;
   }
@@ -94,7 +98,10 @@ export async function saveTaskToSqlite(
   const value = JSON.stringify(task);
 
   try {
+    const startedAt = performance.now();
     const result = await saveSharedRecord(() => withTemporarySqliteRetry(() => saver({ id: task.id, value, expectedUpdatedAt })));
+    const durationMs = Math.round(performance.now() - startedAt);
+    if (durationMs >= 250) console.info(`[tareas-perf] guardar registro: ${durationMs} ms`);
 
     clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, result.message);
 
