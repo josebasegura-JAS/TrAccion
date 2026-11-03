@@ -670,6 +670,7 @@ export async function exportOpenTasksWord(
         await unlink(legacyWordPath).catch(() => undefined);
       },
     );
+    await unlink(tempPath).catch(() => undefined);
     if (publication.stale) {
       return {
         ok: true,
