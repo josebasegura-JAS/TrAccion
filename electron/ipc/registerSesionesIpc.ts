@@ -113,12 +113,24 @@ export function registerSesionesIpc(): void {
       closeSessionWorkflowAtomically(payload as Parameters<typeof closeSessionWorkflowAtomically>[0]),
     );
   });
-  ipcMain.handle('comite:load-records', () =>
-    enqueueSqliteIpc('comite:load-records', () => loadComiteSessionRecordsSnapshot()),
-  );
-  ipcMain.handle('paritaria:load-records', () =>
-    enqueueSqliteIpc('paritaria:load-records', () => loadParitariaSessionRecordsSnapshot()),
-  );
+  // La edición necesita únicamente una sesión; los listados mantienen
+  // el comportamiento actual cuando no se proporciona identificador.
+  const parseSessionId = (payload: unknown): string | undefined => {
+    if (!payload || typeof payload !== 'object' || !('id' in payload)) return undefined;
+    const id = (payload as { id: unknown }).id;
+    if (typeof id !== 'string' || id.trim().length === 0 || id.length > 256) {
+      throw new Error('Identificador de sesión inválido.');
+    }
+    return id;
+  };
+  ipcMain.handle('comite:load-records', (_event, payload: unknown) => {
+    const id = parseSessionId(payload);
+    return enqueueSqliteIpc('comite:load-records', () => loadComiteSessionRecordsSnapshot(id));
+  });
+  ipcMain.handle('paritaria:load-records', (_event, payload: unknown) => {
+    const id = parseSessionId(payload);
+    return enqueueSqliteIpc('paritaria:load-records', () => loadParitariaSessionRecordsSnapshot(id));
+  });
   ipcMain.handle('actas:load-records', () =>
     enqueueSqliteIpc('actas:load-records', () => loadActaRecordsSnapshot()),
   );
