@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDebouncedSerialRefresh } from './taskExcelRefreshScheduler';
+import { createDebouncedSerialRefresh } from './taskExcelRefreshScheduler.js';
 
 describe('taskExcelRefreshScheduler', () => {
   beforeEach(() => vi.useFakeTimers());
