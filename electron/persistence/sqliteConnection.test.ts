@@ -69,7 +69,7 @@ describe('sqliteConnection — openSqliteDatabase', () => {
     expect((reopened.prepare('SELECT COUNT(*) AS total FROM regression_network_write').get() as { total: number }).total).toBe(0);
     reopened.prepare('INSERT INTO regression_network_write (id, value) VALUES (?, ?)').run('pedido-1', 'confirmado');
     expect((reopened.prepare('SELECT COUNT(*) AS total FROM regression_network_write').get() as { total: number }).total).toBe(1);
-    expect(reopened.pragma('journal_mode', { simple: true })).toBe('delete');
+    expect(reopened.pragma('journal_mode')).toEqual([{ journal_mode: 'delete' }]);
     reopened.close();
   });
 
