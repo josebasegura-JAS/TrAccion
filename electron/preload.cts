@@ -150,13 +150,13 @@ contextBridge.exposeInMainWorld('traccion', {
     tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
     acta?: { id: string; value: string; sourceSessionId: string } | null;
   }) => ipcRenderer.invoke('sessions:close-workflow-atomically', payload),
-  loadComiteSessionRecords: () => ipcRenderer.invoke('comite:load-records'),
+  loadComiteSessionRecords: (filter?: { id?: string }) => ipcRenderer.invoke('comite:load-records', filter),
   saveComiteSessionRecordIfUnchanged: (record: {
     id: string;
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('comite:save-record-if-unchanged', record),
-  loadParitariaSessionRecords: () => ipcRenderer.invoke('paritaria:load-records'),
+  loadParitariaSessionRecords: (filter?: { id?: string }) => ipcRenderer.invoke('paritaria:load-records', filter),
   saveParitariaSessionRecordIfUnchanged: (record: {
     id: string;
     value: string;
