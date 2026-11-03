@@ -166,6 +166,32 @@ function filterSessionsForState(
       );
 }
 
+type SessionMutationPatch = { upsert?: ManagedSession; removedId?: string };
+type SessionMutationRecords = { records: ManagedSession[]; patch?: SessionMutationPatch };
+
+/** Combina solo el registro confirmado en SQLite con el estado visible.
+ * No confunde una consulta puntual con la colección completa.
+ */
+export function applySessionMutationPatch(
+  visibleSessions: ManagedSession[],
+  result: SessionMutationRecords,
+): ManagedSession[] {
+  if (!result.patch) return result.records;
+  const { upsert, removedId } = result.patch;
+  const withoutTarget = visibleSessions.filter((session) =>
+    session.id !== (upsert?.id ?? removedId),
+  );
+  if (!upsert) return withoutTarget;
+  // Una nueva sesión se añade sin descartar otras que hayan llegado por sync.
+  const index = visibleSessions.findIndex((session) => session.id === upsert.id);
+  if (index < 0) return [...withoutTarget, upsert];
+  return [
+    ...visibleSessions.slice(0, index),
+    upsert,
+    ...visibleSessions.slice(index + 1),
+  ];
+}
+
 function getVisibleSessionIds(sessions: ManagedSession[]): Set<string> {
   return new Set(sessions.map((session) => session.id));
 }
@@ -198,13 +224,13 @@ async function updateSessionRecord(
   expectedUpdatedAt: string | null,
   transform: (latestSession: ManagedSession) => ManagedSession,
   messages: { missingMessage: string; conflictMessage: string },
-): Promise<{ records: ManagedSession[]; updatedRecord: ManagedSession; previousRecord: ManagedSession }> {
+): Promise<{ records: ManagedSession[]; updatedRecord: ManagedSession; previousRecord: ManagedSession; patch?: SessionMutationPatch }> {
   const moduleId = config.moduleId as SessionSqliteModuleId;
 
   if (hasSessionSqliteRepository(moduleId)) {
-    const records = await loadAllSessionRecordsFromSqlite(moduleId);
+    const records = await loadAllSessionRecordsFromSqlite(moduleId, sessionId);
     if (records !== null) {
-      const currentRecord = records.find((record) => record.id === sessionId);
+      const currentRecord = records[0];
       if (!currentRecord) {
         throw new Error(messages.missingMessage);
       }
@@ -230,17 +256,12 @@ async function updateSessionRecord(
         throw new Error(saveResult.message);
       }
 
-      const allSessions: ManagedSession[] = [];
-      for (const record of records) {
-        const parsed =
-          record.id === sessionId
-            ? updatedSession
-            : parseManagedSession(record.value, config.newSessionDefaultTitle);
-        if (parsed) {
-          allSessions.push(parsed);
-        }
-      }
-      return { records: allSessions, updatedRecord: updatedSession, previousRecord: latestSession };
+      return {
+        records: [updatedSession],
+        patch: { upsert: updatedSession },
+        updatedRecord: updatedSession,
+        previousRecord: latestSession,
+      };
     }
   }
 
@@ -267,7 +288,7 @@ async function updateSessionRecord(
 async function createSessionRecord(
   config: SessionModuleConfig,
   session: ManagedSession,
-): Promise<{ records: ManagedSession[]; newRecord: ManagedSession }> {
+): Promise<{ records: ManagedSession[]; newRecord: ManagedSession; patch?: SessionMutationPatch }> {
   const moduleId = config.moduleId as SessionSqliteModuleId;
 
   if (hasSessionSqliteRepository(moduleId)) {
@@ -282,15 +303,7 @@ async function createSessionRecord(
       throw new Error(saveResult.message);
     }
 
-    const records = await loadAllSessionRecordsFromSqlite(moduleId);
-    const allSessions: ManagedSession[] = [];
-    for (const record of records ?? []) {
-      const parsed = parseManagedSession(record.value, config.newSessionDefaultTitle);
-      if (parsed) {
-        allSessions.push(parsed);
-      }
-    }
-    return { records: allSessions, newRecord: session };
+    return { records: [session], newRecord: session, patch: { upsert: session } };
   }
 
   return saveNewSharedArrayRecord<ManagedSession>({
@@ -365,13 +378,13 @@ async function removeSessionRecord(
   config: SessionModuleConfig,
   sessionId: string,
   expectedUpdatedAt: string | null,
-): Promise<{ records: ManagedSession[] }> {
+): Promise<{ records: ManagedSession[]; patch?: SessionMutationPatch }> {
   const moduleId = config.moduleId as SessionSqliteModuleId;
 
   if (hasSessionSqliteRepository(moduleId)) {
-    const records = await loadAllSessionRecordsFromSqlite(moduleId);
+    const records = await loadAllSessionRecordsFromSqlite(moduleId, sessionId);
     if (records !== null) {
-      const currentRecord = records.find((record) => record.id === sessionId);
+      const currentRecord = records[0];
       if (!currentRecord) {
         throw new Error('La sesión ya no existe en la base compartida. Recarga antes de continuar.');
       }
@@ -390,17 +403,7 @@ async function removeSessionRecord(
         throw new Error(deleteResult.message);
       }
 
-      const remainingSessions: ManagedSession[] = [];
-      for (const record of records) {
-        if (record.id === sessionId) {
-          continue;
-        }
-        const parsed = parseManagedSession(record.value, config.newSessionDefaultTitle);
-        if (parsed) {
-          remainingSessions.push(parsed);
-        }
-      }
-      return { records: remainingSessions };
+      return { records: [], patch: { removedId: sessionId } };
     }
   }
 
@@ -588,7 +591,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .then((result) =>
           set((state) => ({
             sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -605,7 +608,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -656,7 +659,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .then((result) =>
           set((state) => ({
             sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               new Set([...getVisibleSessionIds(state.sessions), ...importedSessionIds]),
             ),
@@ -704,7 +707,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-            result.records,
+            applySessionMutationPatch(state.sessions, result),
             state.hasLoadedHistoricalSessions,
             new Set([...getVisibleSessionIds(state.sessions), ...importedSessionIds]),
           ),
@@ -724,7 +727,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .then((result) =>
           set((state) => ({
             sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -738,7 +741,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -766,7 +769,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .then((result) =>
           set((state) => ({
             sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -807,7 +810,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -835,7 +838,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .then((result) =>
           set((state) => ({
             sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -860,7 +863,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -888,7 +891,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .then((result) =>
           set((state) => ({
             sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -913,7 +916,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -941,7 +944,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .then((result) =>
           set((state) => ({
             sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -966,7 +969,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -1011,7 +1014,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .then((result) =>
           set((state) => ({
             sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -1054,7 +1057,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-              result.records,
+              applySessionMutationPatch(state.sessions, result),
               state.hasLoadedHistoricalSessions,
               getVisibleSessionIds(state.sessions),
             ),
@@ -1084,7 +1087,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
         set((state) => ({
           sessions: filterSessionsForState(
-            result.records,
+            applySessionMutationPatch(state.sessions, result),
             state.hasLoadedHistoricalSessions,
             getVisibleSessionIds(state.sessions),
           ),

@@ -1,5 +1,5 @@
 import type { Database } from 'better-sqlite3';
-import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords } from './jsonRecordRepository.js';
+import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecordById, readActiveJsonRecords } from './jsonRecordRepository.js';
 import type { ConditionalSqliteTaskSaveResult, DatabaseStatus } from '../sqlitePersistence.js';
 
 /**
@@ -69,11 +69,11 @@ export interface SesionesRepositoryDeps {
 }
 
 export interface SesionesRepositoryApi {
-  loadComiteSessionRecordsSnapshot: () => Promise<SqliteComiteSessionRecordsSnapshot>;
+  loadComiteSessionRecordsSnapshot: (id?: string) => Promise<SqliteComiteSessionRecordsSnapshot>;
   saveComiteSessionRecordIfUnchanged: (
     record: ConditionalSqliteComiteSessionRecord,
   ) => Promise<ConditionalSqliteTaskSaveResult>;
-  loadParitariaSessionRecordsSnapshot: () => Promise<SqliteParitariaSessionRecordsSnapshot>;
+  loadParitariaSessionRecordsSnapshot: (id?: string) => Promise<SqliteParitariaSessionRecordsSnapshot>;
   saveParitariaSessionRecordIfUnchanged: (
     record: ConditionalSqliteParitariaSessionRecord,
   ) => Promise<ConditionalSqliteTaskSaveResult>;
@@ -112,7 +112,11 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
   let paritariaSessionsMigrationDone = false;
   let actasMigrationDone = false;
 
-  function readComiteSessionRecords(db: Database): SqliteComiteSessionRecord[] {
+  function readComiteSessionRecords(db: Database, id?: string): SqliteComiteSessionRecord[] {
+    if (id !== undefined) {
+      const record = readActiveJsonRecordById(db, 'comite_session_records', id);
+      return record ? [record] : [];
+    }
     return readActiveJsonRecords(db, 'comite_session_records');
   }
 
@@ -124,7 +128,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
     });
   }
 
-  async function loadComiteSessionRecordsSnapshot(): Promise<SqliteComiteSessionRecordsSnapshot> {
+  async function loadComiteSessionRecordsSnapshot(id?: string): Promise<SqliteComiteSessionRecordsSnapshot> {
     return safeDatabaseOperation(
       () => {
         const currentStatus = getSqliteStatus();
@@ -134,13 +138,17 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
 
         const db = requireDatabase();
         db.transaction(() => maybeMigrateComiteSessionsFromPersistedRecord(db))();
-        return { status: currentStatus, records: readComiteSessionRecords(db) };
+        return { status: currentStatus, records: readComiteSessionRecords(db, id) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
     );
   }
 
-  function readParitariaSessionRecords(db: Database): SqliteParitariaSessionRecord[] {
+  function readParitariaSessionRecords(db: Database, id?: string): SqliteParitariaSessionRecord[] {
+    if (id !== undefined) {
+      const record = readActiveJsonRecordById(db, 'paritaria_session_records', id);
+      return record ? [record] : [];
+    }
     return readActiveJsonRecords(db, 'paritaria_session_records');
   }
 
@@ -152,7 +160,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
     });
   }
 
-  async function loadParitariaSessionRecordsSnapshot(): Promise<SqliteParitariaSessionRecordsSnapshot> {
+  async function loadParitariaSessionRecordsSnapshot(id?: string): Promise<SqliteParitariaSessionRecordsSnapshot> {
     return safeDatabaseOperation(
       () => {
         const currentStatus = getSqliteStatus();
@@ -162,7 +170,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
 
         const db = requireDatabase();
         db.transaction(() => maybeMigrateParitariaSessionsFromPersistedRecord(db))();
-        return { status: currentStatus, records: readParitariaSessionRecords(db) };
+        return { status: currentStatus, records: readParitariaSessionRecords(db, id) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
     );

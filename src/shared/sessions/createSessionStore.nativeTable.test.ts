@@ -79,7 +79,7 @@ describe.each([
     Object.defineProperty(window, 'traccion', { configurable: true, value: undefined });
   });
 
-  it('createWithConcurrencyCheck guarda en la tabla nativa y recarga la lista completa', async () => {
+  it('createWithConcurrencyCheck guarda en la tabla nativa sin recargar todas las sesiones', async () => {
     const loader = vi.fn(async () => recordsSnapshot([]));
     const saver = vi.fn(async () => ({
       ok: true,
@@ -97,7 +97,8 @@ describe.each([
 
     expect(result.ok).toBe(true);
     expect(saver).toHaveBeenCalledTimes(1);
-    expect(loader.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(loader).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().sessions.some((item) => item.id === result.sessionId)).toBe(true);
   });
 
   it('updateWithConcurrencyCheck rechaza el guardado cuando otro usuario modificó la sesión entre tanto', async () => {

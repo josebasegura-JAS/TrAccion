@@ -114,6 +114,22 @@ export function readActiveJsonRecords(db: Database, tableName: string): SqliteJs
     .map(mapJsonRecordRow);
 }
 
+/**
+ * Búsqueda puntual para módulos con tabla propia. No consulta el histórico
+ * ni transfiere todos los registros a través de SMB.
+ */
+export function readActiveJsonRecordById(
+  db: Database,
+  tableName: string,
+  id: string,
+): SqliteJsonRecord | null {
+  assertSafeSqlIdentifier(tableName);
+  const row: unknown = db
+    .prepare(`SELECT id, value_json, created_at, updated_at, deleted_at FROM ${tableName} WHERE id = ? AND deleted_at IS NULL`)
+    .get(id);
+  return isJsonRecordRow(row) ? mapJsonRecordRow(row) : null;
+}
+
 export function maybeMigrateJsonArrayRecordsFromPersistedRecord(
   db: Database,
   options: JsonArrayMigrationOptions,

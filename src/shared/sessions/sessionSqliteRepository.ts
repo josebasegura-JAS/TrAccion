@@ -66,7 +66,7 @@ export interface SessionSqliteSaveResult {
 export type SessionSqliteModuleId = 'comite' | 'paritaria';
 
 interface SessionSqliteBindings {
-  load: () => Promise<{ status: TraccionDatabaseStatus; records: SessionSqliteRecord[] }>;
+  load: (filter?: { id?: string }) => Promise<{ status: TraccionDatabaseStatus; records: SessionSqliteRecord[] }>;
   save: (record: {
     id: string;
     value: string;
@@ -106,13 +106,14 @@ export function hasSessionSqliteRepository(moduleId: SessionSqliteModuleId): boo
  */
 export async function loadAllSessionRecordsFromSqlite(
   moduleId: SessionSqliteModuleId,
+  id?: string,
 ): Promise<SessionSqliteRecord[] | null> {
   const bindings = resolveBindings(moduleId);
   if (!bindings) {
     return null;
   }
 
-  const snapshot = await withTemporarySqliteRetry(() => bindings.load());
+  const snapshot = await withTemporarySqliteRetry(() => bindings.load(id === undefined ? undefined : { id }));
   publishDatabaseStatus(snapshot.status);
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
     return null;
