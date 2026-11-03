@@ -19,6 +19,7 @@ import {
   setOpenTasksWordDirectory,
 } from '../taskOpenWordPreferences.js';
 import { exportOpenTasksWord, type TaskWordExportResult } from '../taskOpenWordExport.js';
+import { createDebouncedSerialRefresh } from '../taskExcelRefreshScheduler.js';
 
 const allowedTaskDocumentExtensions = new Set([
   '.doc',
@@ -37,7 +38,6 @@ const allowedTaskDocumentExtensions = new Set([
   '.pptx',
 ]);
 
-let openTasksWordTimer: ReturnType<typeof setTimeout> | null = null;
 let lastOpenTasksExcelFailureMessage: string | null = null;
 
 function assertAllowedTaskDocumentPath(filePath: string): void {
@@ -84,6 +84,11 @@ async function openTaskDocumentPath(filePath: unknown): Promise<{ ok: boolean; m
 }
 
 async function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
+  const directoryPath = await getOpenTasksWordDirectory();
+  if (!directoryPath) {
+    return { ok: true, skipped: true, path: null, count: 0,
+      message: 'No hay carpeta configurada para el Excel de tareas abiertas.' };
+  }
   const snapshot = await loadTaskRecordsSnapshot({ mode: 'active' });
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
     return {
@@ -93,7 +98,7 @@ async function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
       message: snapshot.status.message ?? 'SQLite no está activa; no se ha actualizado el Excel.',
     };
   }
-  return exportOpenTasksWord(snapshot.records);
+  return exportOpenTasksWord(snapshot.records, directoryPath);
 }
 
 function showOpenTasksExcelFailure(message: string): void {
@@ -106,29 +111,27 @@ function showOpenTasksExcelFailure(message: string): void {
   }
 }
 
-function scheduleOpenTasksWordRefresh(): void {
-  if (openTasksWordTimer) {
-    clearTimeout(openTasksWordTimer);
-  }
+const automaticExcelRefresh = createDebouncedSerialRefresh(
+  async () => {
+    const result = await enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord);
+    if (!result.ok) {
+      console.warn(`[tareas-excel] ${result.message}`);
+      showOpenTasksExcelFailure(result.message);
+      return;
+    }
+    lastOpenTasksExcelFailureMessage = null;
+  },
+  (error: unknown) => {
+    const detail = error instanceof Error ? error.message : String(error);
+    const message = `No se ha podido actualizar el Excel de tareas abiertas: ${detail}`;
+    console.warn(message, error);
+    showOpenTasksExcelFailure(message);
+  },
+  1500,
+);
 
-  openTasksWordTimer = setTimeout(() => {
-    openTasksWordTimer = null;
-    void enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord)
-      .then((result) => {
-        if (!result.ok) {
-          console.warn(`[tareas-excel] ${result.message}`);
-          void showOpenTasksExcelFailure(result.message);
-          return;
-        }
-        lastOpenTasksExcelFailureMessage = null;
-      })
-      .catch((error: unknown) => {
-        const detail = error instanceof Error ? error.message : String(error);
-        const message = `No se ha podido actualizar el Excel de tareas abiertas: ${detail}`;
-        console.warn(message, error);
-        void showOpenTasksExcelFailure(message);
-      });
-  }, 1500);
+function scheduleOpenTasksWordRefresh(): void {
+  automaticExcelRefresh.schedule();
 }
 
 function isAtomicTaskBatchPayload(
