@@ -76,7 +76,7 @@ interface TraccionConditionalEmployeeSaveResult { ok: boolean; status: TraccionD
 interface TraccionConditionalEmployeeBatchSaveResult { ok: boolean; status: TraccionDatabaseStatus; currentValue: string | null; message: string; saved: number; }
 interface TraccionTaskRecordsSnapshot { status: TraccionDatabaseStatus; records: TraccionTaskRecord[]; }
 type TraccionTaskRecordsMode = 'all' | 'active' | 'historical';
-interface TraccionTaskRecordsFilter { mode?: TraccionTaskRecordsMode; }
+interface TraccionTaskRecordsFilter { mode?: TraccionTaskRecordsMode; id?: string; }
 interface TraccionConditionalTaskRecord { id: string; value: string; expectedUpdatedAt: string | null; }
 interface TraccionSorteosRecord { id: string; value: string; createdAt: string; updatedAt: string; deletedAt: string | null; }
 interface TraccionSorteosRecordsSnapshot { status: TraccionDatabaseStatus; draws: TraccionSorteosRecord[]; exclusions: TraccionSorteosRecord[]; drawsUpdatedAt: string | null; exclusionsUpdatedAt: string | null; }
