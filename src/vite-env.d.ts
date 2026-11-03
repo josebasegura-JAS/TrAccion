@@ -222,9 +222,9 @@ interface TraccionApi {
   closeCoordinationWorkflowAtomically?: (payload: { meeting: { key: string; value: string; expectedUpdatedAt: string }; index: { key: string; value: string; expectedUpdatedAt: string }; tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> }) => Promise<{ ok: boolean; message: string; meetingUpdatedAt?: string; indexUpdatedAt?: string }>;
   importSessionHistoryAtomically?: (payload: { module: 'comite' | 'paritaria'; tasks: Array<{ externalKey: string; id: string; value: string }>; sessions: Array<{ externalKey: string; id: string; value: string; taskExternalKeys: string[] }>; }) => Promise<{ ok: boolean; message: string; importedSessionCount: number; createdTaskCount: number }>;
   closeSessionWorkflowAtomically?: (payload: { module: 'comite' | 'paritaria'; session: { id: string; value: string; expectedUpdatedAt: string | null }; tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>; acta?: { id: string; value: string; sourceSessionId: string } | null; }) => Promise<{ ok: boolean; message: string }>;
-  loadComiteSessionRecords?: () => Promise<TraccionComiteSessionRecordsSnapshot>;
+  loadComiteSessionRecords?: (filter?: { id?: string }) => Promise<TraccionComiteSessionRecordsSnapshot>;
   saveComiteSessionRecordIfUnchanged?: (record: TraccionConditionalComiteSessionRecord) => Promise<TraccionConditionalTaskSaveResult>;
-  loadParitariaSessionRecords?: () => Promise<TraccionParitariaSessionRecordsSnapshot>;
+  loadParitariaSessionRecords?: (filter?: { id?: string }) => Promise<TraccionParitariaSessionRecordsSnapshot>;
   saveParitariaSessionRecordIfUnchanged?: (record: TraccionConditionalParitariaSessionRecord) => Promise<TraccionConditionalTaskSaveResult>;
   loadActaRecords?: () => Promise<TraccionActaRecordsSnapshot>;
   saveActaRecordIfUnchanged?: (record: TraccionConditionalActaRecord) => Promise<TraccionConditionalTaskSaveResult>;
