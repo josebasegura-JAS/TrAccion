@@ -75,7 +75,11 @@ export function registerCoreDatabaseIpc(): void {
     }
   });
   ipcMain.handle('database:status', () => getSqliteStatus());
-  ipcMain.handle('database:health-check', () => checkSqliteHealth());
+  // Serializar con lecturas y escrituras: no reabrir un handle mientras
+  // una operación SQLite anterior continúa ejecutándose tras un timeout IPC.
+  ipcMain.handle('database:health-check', () =>
+    enqueueSqliteIpc('database:health-check', () => checkSqliteHealth()),
+  );
   ipcMain.handle('database:select-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
