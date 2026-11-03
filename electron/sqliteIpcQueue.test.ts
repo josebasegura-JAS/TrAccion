@@ -114,7 +114,8 @@ describe('enqueueSqliteIpc', () => {
     expect(isSqliteIpcReadOnlyOperation('database:get-persisted-records-token')).toBe(true);
     expect(isSqliteIpcReadOnlyOperation('tasks:load-records')).toBe(true);
     expect(isSqliteIpcReadOnlyOperation('configuracion:load')).toBe(true);
-    expect(isSqliteIpcReadOnlyOperation('tasks:refresh-open-word')).toBe(true);
+    // El refresco Excel ya no entra en la cola SQLite; solo su snapshot usa tasks:load-records.
+    expect(isSqliteIpcReadOnlyOperation('tasks:refresh-open-word')).toBe(false);
 
     expect(isSqliteIpcReadOnlyOperation('tasks:save-record-if-unchanged')).toBe(false);
     expect(isSqliteIpcReadOnlyOperation('database:migrate-local-storage')).toBe(false);

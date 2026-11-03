@@ -20,6 +20,7 @@ import {
 } from '../taskOpenWordPreferences.js';
 import { exportOpenTasksWord, type TaskWordExportResult } from '../taskOpenWordExport.js';
 import { createDebouncedSerialRefresh } from '../taskExcelRefreshScheduler.js';
+import { createSerialTaskExcelQueue } from '../taskExcelExportQueue.js';
 
 const allowedTaskDocumentExtensions = new Set([
   '.doc',
@@ -83,22 +84,40 @@ async function openTaskDocumentPath(filePath: unknown): Promise<{ ok: boolean; m
   return { ok: true, message: 'Documento abierto.' };
 }
 
-async function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
-  const directoryPath = await getOpenTasksWordDirectory();
-  if (!directoryPath) {
-    return { ok: true, skipped: true, path: null, count: 0,
-      message: 'No hay carpeta configurada para el Excel de tareas abiertas.' };
-  }
-  const snapshot = await loadTaskRecordsSnapshot({ mode: 'active' });
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-    return {
-      ok: false,
-      path: null,
-      count: 0,
-      message: snapshot.status.message ?? 'SQLite no está activa; no se ha actualizado el Excel.',
-    };
-  }
-  return exportOpenTasksWord(snapshot.records, directoryPath);
+// Las exportaciones manuales y automáticas comparten cola propia, sin
+// retener la cola global SQLite durante la generación/transferencia del Excel.
+const excelExportQueue = createSerialTaskExcelQueue();
+
+function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
+  return excelExportQueue.enqueue(async () => {
+    // La ruta y el snapshot se leen juntos en la cola SQLite; al completar
+    // esta fase, otras operaciones pueden guardar aunque el Excel tarde.
+    const prepared = await enqueueSqliteIpc('tasks:load-records', async () => {
+      const directoryPath = await getOpenTasksWordDirectory();
+      if (!directoryPath) return null;
+      const snapshot = await loadTaskRecordsSnapshot({ mode: 'active' });
+      return { directoryPath, snapshot };
+    });
+
+    if (!prepared) {
+      return { ok: true, skipped: true, path: null, count: 0,
+        message: 'No hay carpeta configurada para el Excel de tareas abiertas.' };
+    }
+
+    const { directoryPath, snapshot } = prepared;
+    if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+      return {
+        ok: false,
+        path: null,
+        count: 0,
+        message: snapshot.status.message ?? 'SQLite no está activa; no se ha actualizado el Excel.',
+      };
+    }
+
+    // No hay operaciones SQLite en esta fase: el bloqueo de la cola IPC ya
+    // ha terminado, incluso si la ruta SMB tarda en guardar el archivo.
+    return exportOpenTasksWord(snapshot.records, directoryPath);
+  });
 }
 
 function showOpenTasksExcelFailure(message: string): void {
@@ -113,7 +132,7 @@ function showOpenTasksExcelFailure(message: string): void {
 
 const automaticExcelRefresh = createDebouncedSerialRefresh(
   async () => {
-    const result = await enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord);
+    const result = await refreshOpenTasksWord();
     if (!result.ok) {
       console.warn(`[tareas-excel] ${result.message}`);
       showOpenTasksExcelFailure(result.message);
@@ -231,7 +250,7 @@ export function registerTareasIpc(): void {
     }
 
     const directoryPath = await setOpenTasksWordDirectory(result.filePaths[0]);
-    const exportResult = await enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord);
+    const exportResult = await refreshOpenTasksWord();
     return {
       ok: exportResult.ok,
       path: directoryPath,
@@ -244,9 +263,7 @@ export function registerTareasIpc(): void {
     return { ok: true, path: null, message: 'Carpeta del Excel de tareas eliminada.' };
   });
 
-  ipcMain.handle('tasks:refresh-open-word', () =>
-    enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord),
-  );
+  ipcMain.handle('tasks:refresh-open-word', () => refreshOpenTasksWord());
 
   ipcMain.handle('tasks:select-document', (event) => selectTaskDocumentPaths(event));
   ipcMain.handle('tasks:open-document', (_event, filePath: unknown) =>
