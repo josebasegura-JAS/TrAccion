@@ -259,4 +259,73 @@ describe('enqueueSqliteIpc', () => {
     await vi.runAllTimersAsync();
     await expect(after).resolves.toBe('sigue');
   });
+
+  it('después de un SQLITE_IOERR en una lectura, la recuperación espera su finalización y no repite la lectura fallida', async () => {
+    const order: string[] = [];
+    const read = vi.fn(async () => {
+      order.push('lectura-falla');
+      throw Object.assign(new Error('disk I/O error'), { code: 'SQLITE_IOERR_READ' });
+    });
+    const failedRead = enqueueSqliteIpc('loteria:load-records', read);
+    const failure = failedRead.catch((error: unknown) => error);
+    const healthCheck = enqueueSqliteIpc('database:health-check', async () => {
+      order.push('health-check');
+      return 'base-verificada';
+    });
+    await vi.runAllTimersAsync();
+    expect((await failure as Error).message).toContain('disk I/O error');
+    await expect(healthCheck).resolves.toBe('base-verificada');
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['lectura-falla', 'health-check']);
+  });
+
+  it('no reabre SQLite mientras una escritura agotada por timeout sigue sin terminar', async () => {
+    let finishWrite!: () => void;
+    const hangingWrite = new Promise<void>((resolve) => { finishWrite = resolve; });
+    const order: string[] = [];
+    const save = vi.fn(async () => {
+      order.push('guardar-inicio');
+      await hangingWrite;
+      order.push('guardar-fin');
+    });
+    const observedWrite = enqueueSqliteIpc('loteria:save-records', save);
+    const writeResult = observedWrite.catch((error: unknown) => error);
+    const recovery = enqueueSqliteIpc('database:health-check', async () => {
+      order.push('recuperar-handle');
+      return true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await writeResult).toBeInstanceOf(Error);
+    expect(order).toEqual(['guardar-inicio']);
+    expect(getSqliteIpcQueueDiagnostics().timedOut).toBe(true);
+    finishWrite();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(recovery).resolves.toBe(true);
+    expect(order).toEqual(['guardar-inicio', 'guardar-fin', 'recuperar-handle']);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('un health-check que falla permite ejecutar otro posterior, sin repetir un guardado previo', async () => {
+    const order: string[] = [];
+    const failed = enqueueSqliteIpc('tasks:save-record-if-unchanged', async () => {
+      order.push('guardar');
+      throw Object.assign(new Error('disk I/O error'), { code: 'SQLITE_IOERR_WRITE' });
+    });
+    const previousFailure = failed.catch((error: unknown) => error);
+    const firstHealth = enqueueSqliteIpc('database:health-check', async () => {
+      order.push('recuperacion-fallida');
+      throw new Error('SMB inaccesible');
+    }).catch((error: unknown) => error);
+    const secondHealth = enqueueSqliteIpc('database:health-check', async () => {
+      order.push('recuperacion-correcta');
+      return { ok: true };
+    });
+    await vi.runAllTimersAsync();
+    expect(await previousFailure).toBeInstanceOf(Error);
+    expect(await firstHealth).toBeInstanceOf(Error);
+    await expect(secondHealth).resolves.toEqual({ ok: true });
+    expect(order).toEqual(['guardar', 'recuperacion-fallida', 'recuperacion-correcta']);
+  });
+
 });
