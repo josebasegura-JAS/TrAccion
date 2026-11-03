@@ -115,6 +115,49 @@ describe('createSesionesRepository', () => {
     });
   });
 
+  describe.each([
+    ['Comité', 'comite_session_records', 'loadComiteSessionRecordsSnapshot'],
+    ['Paritaria', 'paritaria_session_records', 'loadParitariaSessionRecordsSnapshot'],
+  ] as const)('%s: lectura puntual de sesión', (_label, tableName, method) => {
+    it('obtiene solo la sesión solicitada mediante WHERE id = ?', async () => {
+      const db = buildDb({
+        get: {
+          id: 'sesion-42',
+          value_json: '{"id":"sesion-42"}',
+          created_at: '2026-11-03',
+          updated_at: '2026-11-03',
+          deleted_at: null,
+        },
+      });
+      const deps = buildDeps({
+        requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSesionesRepository>[0]['requireDatabase']>),
+      });
+      const repo = createSesionesRepository(deps as Parameters<typeof createSesionesRepository>[0]);
+
+      const snapshot = await repo[method]('sesion-42');
+      expect(snapshot.records.map((record) => record.id)).toEqual(['sesion-42']);
+      expect(db.prepare).toHaveBeenCalledWith(
+        `SELECT id, value_json, created_at, updated_at, deleted_at FROM ${tableName} WHERE id = ? AND deleted_at IS NULL`,
+      );
+      expect(db.get).toHaveBeenCalledWith('sesion-42');
+      expect(db.all).not.toHaveBeenCalled();
+    });
+
+    it('sin identificador mantiene la carga completa para listados e históricos', async () => {
+      const db = buildDb();
+      const deps = buildDeps({
+        requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createSesionesRepository>[0]['requireDatabase']>),
+      });
+      const repo = createSesionesRepository(deps as Parameters<typeof createSesionesRepository>[0]);
+
+      await repo[method]();
+      expect(db.prepare).toHaveBeenCalledWith(
+        `SELECT id, value_json, created_at, updated_at, deleted_at FROM ${tableName} WHERE deleted_at IS NULL ORDER BY created_at, id`,
+      );
+      expect(db.all).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('resetMigrationState existe, es invocable, y resetea los 3 flags a la vez', () => {
     const deps = buildDeps();
     const { resetMigrationState } = createSesionesRepository(deps as Parameters<typeof createSesionesRepository>[0]);
