@@ -4,6 +4,7 @@ import {
   isSqliteBusyOrLockedError,
   isSqliteCorruptionError,
   isSqliteLockContentionError,
+  isSqliteIoError,
 } from './sqliteOperationGuard';
 
 describe('sqliteOperationGuard — isSqliteCorruptionError', () => {
@@ -85,5 +86,21 @@ describe('sqliteOperationGuard — SQLITE_BUSY_RETRY_DELAYS_MS', () => {
     for (let i = 1; i < SQLITE_BUSY_RETRY_DELAYS_MS.length; i += 1) {
       expect(SQLITE_BUSY_RETRY_DELAYS_MS[i]).toBeGreaterThan(SQLITE_BUSY_RETRY_DELAYS_MS[i - 1]);
     }
+  });
+});
+
+
+describe('sqliteOperationGuard — isSqliteIoError', () => {
+  it('reconoce errores de E/S de SQLite y códigos extendidos', () => {
+    expect(isSqliteIoError(Object.assign(new Error('disk I/O error'), { code: 'SQLITE_IOERR' }))).toBe(true);
+    expect(isSqliteIoError(Object.assign(new Error('fallo en lectura'), { code: 'SQLITE_IOERR_READ' }))).toBe(true);
+    expect(isSqliteIoError(new Error('SqliteError: disk I/O error'))).toBe(true);
+    expect(isSqliteIoError('disk io error')).toBe(true);
+  });
+
+  it('no confunde contención, corrupción ni otros errores de disco', () => {
+    expect(isSqliteIoError(Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' }))).toBe(false);
+    expect(isSqliteIoError(new Error('database disk image is malformed'))).toBe(false);
+    expect(isSqliteIoError(undefined)).toBe(false);
   });
 });

@@ -94,6 +94,7 @@ import {
   isSqliteBusyOrLockedError,
   isSqliteCorruptionError,
   isSqliteLockContentionError,
+  isSqliteIoError,
 } from './persistence/sqliteOperationGuard.js';
 import {
   isCountRow,
@@ -313,6 +314,9 @@ let ownerId = createVolatileOwnerId();
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
+// Solo un health-check posterior a la finalización de la operación IPC fallida
+// puede cerrar y reabrir la conexión. Nunca repetir la sentencia que falló.
+let sqliteIoRecoveryRequired = false;
 
 export type { DatabaseConnectivityIssuePayload, DatabaseLockInfo } from './persistence/sqliteLockLifecycle.js';
 
@@ -462,6 +466,37 @@ function closeDatabase(): void {
   resetRepositoryMigrationState();
 }
 
+function suspendDatabaseAfterIoError(error: unknown): void {
+  if (sqliteIoRecoveryRequired) return;
+  sqliteIoRecoveryRequired = true;
+  const previous = getSqliteStatus();
+  status = {
+    ...previous,
+    ready: false,
+    phase: 'fallback',
+    message: `Se ha interrumpido el acceso a SQLite (${error instanceof Error ? error.message : String(error)}). Se bloquea la edición hasta reabrir y verificar la base compartida. No repitas operaciones de guardado cuyo resultado sea incierto.`,
+  };
+  console.error('[sqlite] Error de E/S: conexión suspendida hasta recuperación verificada.', error);
+}
+
+async function recoverDatabaseAfterIoError(): Promise<void> {
+  if (!sqliteIoRecoveryRequired) return;
+  const previous = getSqliteStatus();
+  // Este método se llama únicamente desde database:health-check serializado
+  // por sqliteIpcQueue. Si el cierre falla, NO abrimos otra conexión.
+  closeDatabase();
+  const recovered = await activateDatabase(path.dirname(previous.path), false, null);
+  if (recovered.databaseUuid !== previous.databaseUuid ||
+      recovered.applicationId !== previous.applicationId ||
+      recovered.environment !== previous.environment ||
+      recovered.schemaVersion !== previous.schemaVersion) {
+    closeDatabase();
+    throw new Error('La identidad o el esquema de SQLite ha cambiado. No se reactivará la edición.');
+  }
+  sqliteIoRecoveryRequired = false;
+}
+
+
 async function closeDatabaseAndReleaseLock(): Promise<void> {
   closeDatabase();
 }
@@ -565,12 +600,19 @@ async function safeDatabaseOperation<T>(
   operation: () => T,
   fallback: (status: DatabaseStatus, message: string) => T,
 ): Promise<T> {
+  if (sqliteIoRecoveryRequired) {
+    throw new Error('SQLite suspendida tras un error de E/S. Espera la recuperación verificada de la base compartida.');
+  }
   const currentStatus = getSqliteStatus();
 
   for (let attempt = 0; attempt <= SQLITE_BUSY_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
       return await withDatabaseOperationLock(currentStatus.path, async () => operation());
     } catch (error) {
+      if (isSqliteIoError(error)) {
+        suspendDatabaseAfterIoError(error);
+        throw error;
+      }
       if (isSqliteCorruptionError(error)) {
         const nextStatus = markDatabaseAsCorrupted(error);
         return fallback(nextStatus, nextStatus.message ?? 'Base de datos SQLite dañada.');
@@ -603,8 +645,28 @@ async function safeDatabaseMigrationOperation<T>(
 }
 
 export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
-  const currentStatus = getSqliteStatus();
   const checkedAt = new Date().toISOString();
+  const queue = getSqliteIpcQueueDiagnostics();
+  // El health-check debe ejecutarse en la cola IPC: una escritura que agotó
+  // el timeout sigue activa y no puede coexistir con el cierre/reapertura.
+  if (queue.timedOut) {
+    return {
+      ok: false,
+      status: getSqliteStatus(),
+      checkedAt,
+      message: `Operación SQLite indeterminada todavía en ejecución: ${queue.runningOperation ?? 'desconocida'}.`,
+    };
+  }
+  if (sqliteIoRecoveryRequired) {
+    try {
+      await recoverDatabaseAfterIoError();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      status = { ...getSqliteStatus(), ready: false, phase: 'fallback', message: `Recuperación SQLite pendiente: ${message}` };
+      return { ok: false, status: getSqliteStatus(), checkedAt, message: status.message ?? message };
+    }
+  }
+  const currentStatus = getSqliteStatus();
 
   if (!currentStatus.ready || currentStatus.phase !== 'active' || currentStatus.isDefaultPath) {
     return {
@@ -622,16 +684,6 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   // Un timeout IPC no cancela la operación SQLite subyacente. Una consulta
   // SELECT 1 desde este canal podría dar un falso positivo de recuperación
   // mientras una escritura anterior sigue bloqueada o con resultado incierto.
-  const queue = getSqliteIpcQueueDiagnostics();
-  if (queue.timedOut) {
-    return {
-      ok: false,
-      status: currentStatus,
-      checkedAt,
-      message: `Hay una operación SQLite cuyo resultado sigue indeterminado: ${queue.runningOperation ?? 'desconocida'} (${queue.runningMs ?? 0} ms). No se desbloqueará la edición hasta que termine.`,
-    };
-  }
-
   try {
     const databaseStats = await stat(currentStatus.path);
     if (!databaseStats.isFile()) {
@@ -662,6 +714,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       message: 'Conexión con la base compartida verificada.',
     };
   } catch (error) {
+    if (isSqliteIoError(error)) suspendDatabaseAfterIoError(error);
     const message =
       error instanceof Error
         ? `No se puede verificar la base SQLite compartida: ${error.message}`
