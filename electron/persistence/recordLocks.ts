@@ -95,12 +95,12 @@ function deleteExpiredRecordLocks(db: Database, now: string): void {
   db.prepare('DELETE FROM editing_locks WHERE expires_at <= ?').run(now);
 }
 
-function readRecordLockRow(db: Database, moduleName: string, recordId: string): EditingLockRow | null {
+function readRecordLockRow(db: Database, moduleName: string, recordId: string, asOf?: string): EditingLockRow | null {
   const row = db
     .prepare(
-      'SELECT module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at FROM editing_locks WHERE module = ? AND record_id = ?',
+      'SELECT module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at FROM editing_locks WHERE module = ? AND record_id = ? AND (? IS NULL OR expires_at > ?)',
     )
-    .get(moduleName, recordId);
+    .get(moduleName, recordId, asOf ?? null, asOf ?? null);
   return isEditingLockRow(row) ? row : null;
 }
 
@@ -109,6 +109,7 @@ function readConflictingEditingLock(
   moduleName: string,
   recordId: string,
   ownerId: string,
+  asOf?: string,
 ): EditingLockRow | null {
   const normalizedRecordId = recordId.trim();
 
@@ -118,10 +119,11 @@ function readConflictingEditingLock(
         `SELECT module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at
          FROM editing_locks
          WHERE module = ? AND owner_id <> ?
+           AND (? IS NULL OR expires_at > ?)
          ORDER BY record_id = ? DESC, expires_at DESC
          LIMIT 1`,
       )
-      .get(moduleName, ownerId, MODULE_LOCK_RECORD_ID);
+      .get(moduleName, ownerId, asOf ?? null, asOf ?? null, MODULE_LOCK_RECORD_ID);
     return isEditingLockRow(row) ? row : null;
   }
 
@@ -132,10 +134,11 @@ function readConflictingEditingLock(
        WHERE module = ?
          AND owner_id <> ?
          AND record_id IN (?, ?)
+         AND (? IS NULL OR expires_at > ?)
        ORDER BY record_id = ? DESC, expires_at DESC
        LIMIT 1`,
     )
-    .get(moduleName, ownerId, normalizedRecordId, MODULE_LOCK_RECORD_ID, MODULE_LOCK_RECORD_ID);
+    .get(moduleName, ownerId, normalizedRecordId, MODULE_LOCK_RECORD_ID, asOf ?? null, asOf ?? null, MODULE_LOCK_RECORD_ID);
   return isEditingLockRow(row) ? row : null;
 }
 
@@ -286,10 +289,12 @@ export function getRecordLockInTransaction(
   owner: OwnerContext,
   now: string,
 ): RecordLockResult {
-  deleteExpiredRecordLocks(db, now);
   const moduleName = payload.module.trim();
   const recordId = payload.recordId.trim();
-  const conflictingLock = readConflictingEditingLock(db, moduleName, recordId, owner.ownerId);
+  // Consulta estrictamente de solo lectura: los locks caducados no deben
+  // provocar un DELETE (y con ello un lock de escritura) solo por consultar.
+  // La limpieza física permanece a cargo de acquire/heartbeat.
+  const conflictingLock = readConflictingEditingLock(db, moduleName, recordId, owner.ownerId, now);
 
   if (conflictingLock) {
     return {
@@ -303,7 +308,7 @@ export function getRecordLockInTransaction(
     };
   }
 
-  const existingLock = readRecordLockRow(db, moduleName, recordId);
+  const existingLock = readRecordLockRow(db, moduleName, recordId, now);
 
   return existingLock
     ? {

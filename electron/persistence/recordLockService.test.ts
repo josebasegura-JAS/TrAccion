@@ -111,24 +111,21 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
     expect(result.message).toContain('Base ocupada temporalmente');
   });
 
-  it('usa la ruta de base de datos actual como clave del lock de operación', async () => {
+  it('consulta el bloqueo sin adquirir el lock exclusivo SMB', async () => {
     const dependencies = buildDependencies();
     const service = createRecordLockService(dependencies as Parameters<typeof createRecordLockService>[0]);
-    vi.spyOn(recordLocksModule, 'getRecordLockInTransaction').mockReturnValue({
+    const spy = vi.spyOn(recordLocksModule, 'getRecordLockInTransaction').mockReturnValue({
       ok: true,
       status: 'idle',
       lock: null,
       message: 'ok',
     });
 
-    await service.getRecordLock({ module: 'teletrabajo', recordId: 'sol-1' });
+    const result = await service.getRecordLock({ module: 'teletrabajo', recordId: 'sol-1' });
 
-    expect(dependencies.withDatabaseOperationLock).toHaveBeenCalledWith(
-      '/tmp/traccion.sqlite',
-      expect.any(Function),
-      750,
-    );
-
-    vi.restoreAllMocks();
+    expect(result.status).toBe('idle');
+    expect(dependencies.withDatabaseOperationLock).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith(fakeDb, { module: 'teletrabajo', recordId: 'sol-1' }, expect.objectContaining({ ownerId: 'owner-1' }), expect.any(String));
+    spy.mockRestore();
   });
 });
