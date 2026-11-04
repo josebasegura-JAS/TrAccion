@@ -5,6 +5,8 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainInvokeEvent, OpenDialogOptions } from 'electron';
 import path from 'node:path';
+import { mkdir } from 'node:fs/promises';
+import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import {
   getSqliteStatus,
@@ -21,7 +23,14 @@ import {
 import { exportOpenTasksWord, type TaskWordExportResult } from '../taskOpenWordExport.js';
 import { createDebouncedSerialRefresh } from '../taskExcelRefreshScheduler.js';
 import { createSerialTaskExcelQueue } from '../taskExcelExportQueue.js';
-import { taskExcelSnapshotSignature } from '../taskExcelSharedPublication.js';
+import {
+  TASK_EXCEL_GENERATION_LOCK_DIRECTORY,
+  TaskExcelLockBusyError,
+  hasPublishedTaskExcelSignature,
+  markPublishedTaskExcelSignature,
+  taskExcelSnapshotSignature,
+  withSharedTaskExcelLock,
+} from '../taskExcelSharedPublication.js';
 
 const allowedTaskDocumentExtensions = new Set([
   '.doc',
@@ -89,47 +98,87 @@ async function openTaskDocumentPath(filePath: unknown): Promise<{ ok: boolean; m
 // retener la cola global SQLite durante la generación/transferencia del Excel.
 const excelExportQueue = createSerialTaskExcelQueue();
 
-function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
-  return excelExportQueue.enqueue(async () => {
-    // La ruta y el snapshot se leen juntos en la cola SQLite; al completar
-    // esta fase, otras operaciones pueden guardar aunque el Excel tarde.
-    const prepared = await enqueueSqliteIpc('tasks:load-records', async () => {
-      const directoryPath = await getOpenTasksWordDirectory();
-      if (!directoryPath) return null;
-      const snapshot = await loadTaskRecordsSnapshot({ mode: 'active' });
-      return { directoryPath, snapshot };
-    });
+function taskExcelDatedFileName(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `Tareas_abiertas_${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}.xlsx`;
+}
 
-    if (!prepared) {
+function refreshOpenTasksWord(automatic = false): Promise<TaskWordExportResult> {
+  return excelExportQueue.enqueue(async () => {
+    const startedAt = Date.now();
+    const directoryPath = await getOpenTasksWordDirectory();
+    if (!directoryPath) {
       return { ok: true, skipped: true, path: null, count: 0,
         message: 'No hay carpeta configurada para el Excel de tareas abiertas.' };
     }
+    await mkdir(directoryPath, { recursive: true });
+    // Reservar la GENERACIÓN antes de leer las tareas. Solo un equipo prepara
+    // el Excel a la vez. El lock existente de publicación sigue protegiendo
+    // el rename atómico frente a clientes de versiones anteriores.
+    try {
+      return await withSharedTaskExcelLock(directoryPath, async () => {
+        const readStartedAt = Date.now();
+        const snapshot = await enqueueSqliteIpc('tasks:load-records', () =>
+          loadTaskRecordsSnapshot({ mode: 'active' }),
+        );
+        recordMultiuserMetric('excel', 'snapshot-read', Date.now() - readStartedAt, !snapshot.status.ready);
+        if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+          return {
+            ok: false, path: null, count: 0,
+            message: snapshot.status.message ?? 'SQLite no está activa; no se ha actualizado el Excel.',
+          };
+        }
 
-    const { directoryPath, snapshot } = prepared;
-    if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-      return {
-        ok: false,
-        path: null,
-        count: 0,
-        message: snapshot.status.message ?? 'SQLite no está activa; no se ha actualizado el Excel.',
-      };
-    }
+        const originalSignature = taskExcelSnapshotSignature(snapshot.records);
+        if (automatic && await hasPublishedTaskExcelSignature(
+          directoryPath, originalSignature, taskExcelDatedFileName(),
+        )) {
+          recordMultiuserMetric('excel', 'unchanged-skipped', Date.now() - startedAt);
+          return {
+            ok: true, skipped: true,
+            path: path.join(directoryPath, taskExcelDatedFileName()),
+            count: snapshot.records.length,
+            message: 'Excel compartido ya actualizado por otro equipo; no se regenera.',
+          };
+        }
 
-    // El Excel se prepara fuera de la cola SQLite. Justo antes de publicarlo,
-    // comprobar que no se ha quedado atrás respecto al contenido compartido.
-    const originalSignature = taskExcelSnapshotSignature(snapshot.records);
-    const isSnapshotCurrent = async (): Promise<boolean> => {
-      const latest = await enqueueSqliteIpc('tasks:load-records', () =>
-        loadTaskRecordsSnapshot({ mode: 'active' }),
-      );
-      if (!latest.status.ready || latest.status.phase !== 'active') {
-        throw new Error('SQLite no disponible para verificar la versión del Excel.');
+        const isSnapshotCurrent = async (): Promise<boolean> => {
+          const latest = await enqueueSqliteIpc('tasks:load-records', () =>
+            loadTaskRecordsSnapshot({ mode: 'active' }),
+          );
+          if (!latest.status.ready || latest.status.phase !== 'active') {
+            throw new Error('SQLite no disponible para verificar la versión del Excel.');
+          }
+          return taskExcelSnapshotSignature(latest.records) === originalSignature;
+        };
+
+        const generationStartedAt = Date.now();
+        const result = await exportOpenTasksWord(snapshot.records, directoryPath, isSnapshotCurrent);
+        recordMultiuserMetric('excel', 'generate-and-publish', Date.now() - generationStartedAt, !result.ok);
+        if (result.ok && !result.skipped && result.path) {
+          // El Excel ya está publicado: si falla el marcador, solo provoca
+          // una regeneración posterior, nunca una falsa confirmación.
+          await markPublishedTaskExcelSignature(directoryPath, originalSignature, path.basename(result.path))
+            .catch((error: unknown) => console.warn('[tareas-excel] Marcador de versión no actualizado.', error));
+        }
+        if (result.stale) scheduleOpenTasksWordRefresh();
+        return result;
+      }, { lockDirectoryName: TASK_EXCEL_GENERATION_LOCK_DIRECTORY, waitMs: automatic ? 0 : 12_000 });
+    } catch (error) {
+      if (automatic && error instanceof TaskExcelLockBusyError) {
+        recordMultiuserMetric('excel', 'generation-owned-by-peer', Date.now() - startedAt);
+        // El otro equipo puede publicar un snapshot anterior a este guardado.
+        // Reintentar más adelante; el marcador evita duplicar trabajo.
+        const retry = setTimeout(() => scheduleOpenTasksWordRefresh(), 30_000);
+        retry.unref?.();
+        return { ok: true, skipped: true, path: null, count: 0,
+          message: 'Otro equipo está generando el Excel; comprobación aplazada.' };
       }
-      return taskExcelSnapshotSignature(latest.records) === originalSignature;
-    };
-    const result = await exportOpenTasksWord(snapshot.records, directoryPath, isSnapshotCurrent);
-    if (result.stale) scheduleOpenTasksWordRefresh();
-    return result;
+      recordMultiuserMetric('excel', 'generation-failed', Date.now() - startedAt, true);
+      throw error;
+    } finally {
+      recordMultiuserMetric('excel', automatic ? 'automatic-total' : 'manual-total', Date.now() - startedAt);
+    }
   });
 }
 
@@ -145,7 +194,7 @@ function showOpenTasksExcelFailure(message: string): void {
 
 const automaticExcelRefresh = createDebouncedSerialRefresh(
   async () => {
-    const result = await refreshOpenTasksWord();
+    const result = await refreshOpenTasksWord(true);
     if (!result.ok) {
       console.warn(`[tareas-excel] ${result.message}`);
       showOpenTasksExcelFailure(result.message);
@@ -159,7 +208,8 @@ const automaticExcelRefresh = createDebouncedSerialRefresh(
     console.warn(message, error);
     showOpenTasksExcelFailure(message);
   },
-  1500,
+  45_000,
+  2 * 60_000,
 );
 
 function scheduleOpenTasksWordRefresh(): void {
