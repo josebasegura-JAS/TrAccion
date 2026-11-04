@@ -17,7 +17,9 @@ import type { Database } from 'better-sqlite3';
  * registro en sí.
  */
 
-export const RECORD_LOCK_TTL_MS = 30 * 1000;
+// El editor renueva cada 20s; 75s permiten tolerar dos renovaciones fallidas
+// y variaciones de latencia SMB sin perder el lock por una sola demora.
+export const RECORD_LOCK_TTL_MS = 75 * 1000;
 export const MODULE_LOCK_RECORD_ID = '__module__';
 
 export interface OwnerContext {
@@ -224,27 +226,35 @@ export function heartbeatRecordLockInTransaction(
   type HeartbeatTxResult = { conflictingLock: EditingLockRow } | { acquiredLock: EditingLockRow | null };
 
   const txResult = db.transaction((): HeartbeatTxResult => {
-    deleteExpiredRecordLocks(db, nowIso);
     const existingLock = readRecordLockRow(db, moduleName, recordId);
-    if (existingLock && existingLock.owner_id !== owner.ownerId) {
+    // Las renovaciones habituales no hacen una limpieza global de expirados.
+    // La limpieza se hace solo al re-adquirir un lock desaparecido/caducado;
+    // así una tarea abierta no provoca DELETE de toda la tabla cada 20s.
+    if (existingLock && existingLock.owner_id !== owner.ownerId && existingLock.expires_at > nowIso) {
       return { conflictingLock: existingLock };
     }
-    if (existingLock) {
-      db.prepare(
-        `UPDATE editing_locks
-         SET owner_name = ?, machine_name = ?, expires_at = ?
-         WHERE module = ? AND record_id = ? AND owner_id = ?`,
-      ).run(owner.ownerName, owner.hostname, expiresAt, moduleName, recordId, owner.ownerId);
-    } else {
-      const conflicting = readConflictingEditingLock(db, moduleName, recordId, owner.ownerId);
-      if (conflicting) {
-        return { conflictingLock: conflicting };
-      }
+
+    const ownLockIsActive = existingLock?.owner_id === owner.ownerId && existingLock.expires_at > nowIso;
+    if (!ownLockIsActive) {
+      // Lease caducada: comprobar también los bloqueos de módulo activos,
+      // nunca resucitar una reserva mientras otro usuario tiene el módulo.
+      const conflicting = readConflictingEditingLock(db, moduleName, recordId, owner.ownerId, nowIso);
+      if (conflicting) return { conflictingLock: conflicting };
+      // Quitar únicamente la reserva caducada del mismo registro antes de
+      // insertar. No barrer todas las reservas de la base.
+      db.prepare('DELETE FROM editing_locks WHERE module = ? AND record_id = ? AND expires_at <= ?')
+        .run(moduleName, recordId, nowIso);
       db.prepare(
         `INSERT INTO editing_locks
          (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       ).run(moduleName, recordId, owner.ownerId, owner.ownerName, owner.hostname, nowIso, expiresAt);
+    } else {
+      db.prepare(
+        `UPDATE editing_locks
+         SET owner_name = ?, machine_name = ?, expires_at = ?
+         WHERE module = ? AND record_id = ? AND owner_id = ?`,
+      ).run(owner.ownerName, owner.hostname, expiresAt, moduleName, recordId, owner.ownerId);
     }
     return { acquiredLock: readRecordLockRow(db, moduleName, recordId) };
   })();
