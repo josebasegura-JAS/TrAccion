@@ -84,9 +84,48 @@ jobs:
             return 1
           }
 
+          snapshot_dir="$(mktemp -d)"
+          trap 'rm -rf "$snapshot_dir"' EXIT
+          # Materializar el listado antes de borrar para evitar que la
+          # paginación cambie mientras se eliminan ejecuciones.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" \
+            --jq '.workflows[] | [.id, .path, .state] | @tsv' > "$snapshot_dir/workflows.tsv"
+
           total=0
           removed=0
-          while IFS=$'\t' read -r workflow_id workflow_path workflow_state; do
+          while IFS=
+            [[ -n "$workflow_id" ]] || continue
+            [[ "$workflow_path" == .github/workflows/* ]] || continue
+            if is_protected "$workflow_path"; then
+              echo "Conservado: $workflow_path ($workflow_id)"
+              continue
+            fi
+            # Si existe un fichero activo que no está en la lista original,
+            # tampoco se borra su historial. Solo limpiar antiguos retirados.
+            if [[ -f "$workflow_path" ]]; then
+              echo "Conservado (fichero presente): $workflow_path"
+              continue
+            fi
+
+            echo "::group::Retirado: $workflow_path ($workflow_id)"
+            total=$((total + 1))
+            # Deshabilitar los workflow retirados que aún figuren activos.
+            if [[ "$workflow_state" == "active" ]]; then
+              gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable"
+            fi
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/runs?per_page=100" \
+              --jq '.workflow_runs[] | select(.status == "completed") | .id' > "$snapshot_dir/runs.txt"
+            while IFS= read -r run_id; do
+              [[ -n "$run_id" ]] || continue
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
+              removed=$((removed + 1))
+              echo "Eliminada ejecución $run_id"
+            done < "$snapshot_dir/runs.txt"
+            echo "::endgroup::"
+          done < "$snapshot_dir/workflows.tsv"
+          echo "Workflows retirados revisados: $total" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ejecuciones históricas eliminadas: $removed" >> "$GITHUB_STEP_SUMMARY"
+\t' read -r workflow_id workflow_path workflow_state; do
             [[ -n "$workflow_id" ]] || continue
             [[ "$workflow_path" == .github/workflows/* ]] || continue
             if is_protected "$workflow_path"; then
