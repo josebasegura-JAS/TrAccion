@@ -88,6 +88,11 @@ let unsubscribeSharedEditingActivity: (() => void) | null = null;
 let unsubscribePersistenceFeedback: (() => void) | null = null;
 let persistenceWriteInProgress = false;
 let postponePollingUntil = 0;
+// Conservar las recargas que no se pudieron aplicar aunque el token de
+// SQLite no vuelva a cambiar: una lectura válida no garantiza que el store
+// se haya actualizado correctamente.
+const pendingReloadStoreIds = new Set<string>();
+let pendingReloadAllStores = false;
 
 function postponePolling(ms = 1_500): void {
   postponePollingUntil = Math.max(postponePollingUntil, Date.now() + ms);
@@ -120,8 +125,18 @@ function ensureSyncableStoresRegistered(): Promise<unknown> {
   return syncableStoreRegistrationsPromise;
 }
 
-async function reloadIntegratedStores(storeIds?: string[]): Promise<void> {
-  await reloadRegisteredSyncableStores(storeIds, { silentPersistenceFeedback: true });
+export async function reloadIntegratedStores(storeIds?: string[]): Promise<void> {
+  const reloadAll = pendingReloadAllStores || storeIds === undefined;
+  const selectedIds = reloadAll ? undefined : [...new Set([...pendingReloadStoreIds, ...storeIds])];
+  if (reloadAll) {
+    pendingReloadAllStores = true;
+  } else {
+    selectedIds?.forEach((id) => pendingReloadStoreIds.add(id));
+  }
+  // Si una recarga falla, conservar los IDs pendientes y no avanzar tokens.
+  await reloadRegisteredSyncableStores(selectedIds, { silentPersistenceFeedback: true });
+  pendingReloadAllStores = false;
+  pendingReloadStoreIds.clear();
 }
 
 function canPollStatus(status: TraccionDatabaseStatus): boolean {
@@ -238,11 +253,14 @@ async function pollOnce(): Promise<void> {
       return;
     }
 
-    const changedDirectStoreIds = collectChangedDirectStores(tokenSnapshot);
+    const changedDirectStoreIds = [...new Set([
+      ...collectChangedDirectStores(tokenSnapshot),
+      ...pendingReloadStoreIds,
+    ])];
     const hasPersistedRecordsChanged = persistedRecordsChanged(tokenSnapshot);
     const hasOnlyRefreshTokenChanged = refreshTokenChangedWithoutKnownStoreChange(tokenSnapshot);
 
-    if (!hasPersistedRecordsChanged && changedDirectStoreIds.length === 0) {
+    if (!hasPersistedRecordsChanged && changedDirectStoreIds.length === 0 && !pendingReloadAllStores) {
       updateSeenTokens(tokenSnapshot);
       setState({
         status: 'synced',
@@ -253,9 +271,9 @@ async function pollOnce(): Promise<void> {
       return;
     }
 
-    if (changedDirectStoreIds.length > 0 && !hasPersistedRecordsChanged) {
-      updateSeenTokens(tokenSnapshot);
+    if (changedDirectStoreIds.length > 0 && !hasPersistedRecordsChanged && !pendingReloadAllStores) {
       await reloadIntegratedStores(changedDirectStoreIds);
+      updateSeenTokens(tokenSnapshot);
       const appliedAt = new Date().toISOString();
       setState({
         status: 'applied',
@@ -280,8 +298,10 @@ async function pollOnce(): Promise<void> {
 
     const changedLegacyStoreIds = collectChangedLegacyStores(snapshot);
     applyPersistedRecordsSnapshotToLocalStorage(snapshot);
+    await reloadIntegratedStores(pendingReloadAllStores || changedLegacyStoreIds === null
+      ? undefined
+      : [...new Set([...changedDirectStoreIds, ...changedLegacyStoreIds])]);
     updateSeenTokens(snapshot);
-    await reloadIntegratedStores(changedLegacyStoreIds ?? undefined);
     const appliedAt = new Date().toISOString();
     setState({
       status: 'applied',
@@ -319,12 +339,12 @@ export async function forceExternalDataRefreshAfterRecovery(): Promise<void> {
   }
 
   applyPersistedRecordsSnapshotToLocalStorage(snapshot);
-  updateSeenTokens(snapshot);
 
   // Todos los stores se fuerzan a releer su fuente SQLite. Algunos módulos
   // mantienen una copia efímera de representación en sessionStorage, pero nunca se usa
   // como fuente autoritativa para recuperar una caída.
   await reloadIntegratedStores();
+  updateSeenTokens(snapshot);
 
   const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
   if (!canPollStatus(tokenSnapshot.status)) {
