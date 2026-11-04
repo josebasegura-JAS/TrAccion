@@ -24,26 +24,16 @@ export async function withSharedSummaryWordLock<T>(
   const token = randomUUID();
   const started = Date.now();
 
-  async function recoverStaleLock(): Promise<void> {
-    let info: Awaited<ReturnType<typeof stat>>;
-    try {
-      info = await stat(lockPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+  // No borrar/renombrar automáticamente el bloqueo por su mtime. Un
+  // propietario vivo puede renovar el heartbeat entre stat y rename y
+  // acabar publicando simultáneamente con el nuevo titular.
+  async function checkExistingLock(): Promise<void> {
+    const info = await stat(lockPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
       throw error;
-    }
-    if (Date.now() - info.mtimeMs < (options.staleMs ?? STALE_MS)) return;
-    const oldPath = `${lockPath}.abandoned-${randomUUID()}`;
-    try {
-      const latest = await stat(lockPath);
-      if (latest.mtimeMs !== info.mtimeMs || Date.now() - latest.mtimeMs < (options.staleMs ?? STALE_MS)) return;
-      await rename(lockPath, oldPath);
-      // Si un proceso antiguo recobra red, comprobará que ha perdido su
-      // archivo de propiedad antes de poder publicar.
-      await rm(oldPath, { recursive: true, force: true }).catch(() => undefined);
-    } catch (error) {
-      if (['ENOENT', 'EEXIST', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) return;
-      throw error;
+    });
+    if (info && Date.now() - info.mtimeMs >= (options.staleMs ?? STALE_MS)) {
+      throw new Error('Bloqueo antiguo del resumen Word compartido. No se ha modificado el documento. Comprueba primero que ningún equipo esté actualizando el Word antes de retirar manualmente el bloqueo.');
     }
   }
 
@@ -53,7 +43,7 @@ export async function withSharedSummaryWordLock<T>(
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      await recoverStaleLock();
+      await checkExistingLock();
       if (Date.now() - started >= (options.waitMs ?? WAIT_MS)) {
         throw new Error(`Otro equipo está actualizando el resumen de ${kind === 'comite' ? 'Comité' : 'Paritaria'}. No se ha modificado el Word.`);
       }
