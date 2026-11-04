@@ -1,4 +1,4 @@
-export type PerformanceMetricCategory = 'arranque' | 'navegacion' | 'ajustes' | 'cierre';
+export type PerformanceMetricCategory = 'arranque' | 'navegacion' | 'ajustes' | 'cierre' | 'sesiones';
 
 export interface PerformanceMetric {
   id: string;
