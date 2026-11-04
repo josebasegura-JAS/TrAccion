@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      limpiar_historial_antiguo:
+        description: 'Borrar ejecuciones antiguas; conservar los tres builds y la validación'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -15,6 +21,7 @@ concurrency:
 
 jobs:
   checks:
+    if: ${{ !inputs.limpiar_historial_antiguo }}
     name: Comprobación / ${{ matrix.lane }}
     runs-on: windows-latest
     timeout-minutes: 30
@@ -33,7 +40,7 @@ jobs:
 
   validation:
     name: Validación integral
-    if: ${{ always() }}
+    if: ${{ always() && !inputs.limpiar_historial_antiguo }}
     needs: [checks]
     runs-on: ubuntu-latest
     steps:
@@ -43,3 +50,58 @@ jobs:
         run: |
           echo "Resultado de las cuatro comprobaciones: $CHECKS_RESULT"
           test "$CHECKS_RESULT" = "success"
+
+  cleanup_retired:
+    name: Eliminar historial de workflows retirados
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.limpiar_historial_antiguo }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Eliminar ejecuciones de workflows que ya no existen en main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Guardar listado completo antes de modificar las ejecuciones.
+          snapshot_dir="$(mktemp -d)"
+          trap 'rm -rf "$snapshot_dir"' EXIT
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" --jq '.workflows[] | [.id, .path, .state] | join("|")' > "$snapshot_dir/workflows.txt"
+          total=0
+          removed=0
+          while IFS='|' read -r workflow_id workflow_path workflow_state; do
+            [[ -n "$workflow_id" ]] || continue
+            [[ "$workflow_path" == .github/workflows/* ]] || continue
+            case "$workflow_path" in
+              .github/workflows/build-windows.yml|.github/workflows/build-windows-lite.yml|.github/workflows/build-windows-zip.yml|.github/workflows/tests-completos.yml)
+                echo "Conservado: $workflow_path"
+                continue
+                ;;
+            esac
+            # No tocar workflows nuevos que aún tengan fichero activo.
+            if [[ -f "$workflow_path" ]]; then
+              echo "Conservado (fichero presente): $workflow_path"
+              continue
+            fi
+            total=$((total + 1))
+            echo "::group::Retirado: $workflow_path ($workflow_id)"
+            # El inventario de IDs se materializa antes de borrar para
+            # evitar perder páginas al cambiar la paginación de GitHub.
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/runs?per_page=100" --jq '.workflow_runs[] | select(.status == "completed") | .id' > "$snapshot_dir/runs.txt"
+            while IFS= read -r run_id; do
+              [[ -n "$run_id" ]] || continue
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
+              removed=$((removed + 1))
+              echo "Eliminada ejecución $run_id"
+            done < "$snapshot_dir/runs.txt"
+            if [[ "$workflow_state" == "active" ]]; then
+              gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable" || echo "Aviso: no se pudo deshabilitar $workflow_id"
+            fi
+            echo '::endgroup::'
+          done < "$snapshot_dir/workflows.txt"
+          echo "Workflows retirados revisados: $total" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ejecuciones históricas eliminadas: $removed" >> "$GITHUB_STEP_SUMMARY"
