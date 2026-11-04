@@ -145,20 +145,7 @@ jobs:
             $lines = @(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")
             if ($LASTEXITCODE -ne 0) { throw "No se pudo consultar el tag remoto $tag." }
             if ($lines.Count -eq 0) { return $null }
-            $peeled = @($lines | Where-Object { $_ -match '\^\{\}
-      - name: Upload paquete validado
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ inputs.artifact-name || 'Traccion-windows-portable' }}
-          path: |
-            release/Traccion *.piz
-            release/version.json
-            release/TrAccion * Windows.zip
-            release/validated-commit.txt
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
- })
+            $peeled = @($lines | Where-Object { $_.EndsWith('^{}') })
             $selected = if ($peeled.Count -gt 0) { $peeled[0] } else { $lines[0] }
             return (($selected -split '\s+')[0]).Trim()
           }
