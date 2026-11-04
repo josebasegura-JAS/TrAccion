@@ -103,7 +103,7 @@ describe('publicación de resúmenes Word por SMB', () => {
     // Limpieza deliberadamente omitida si el token cambió.
   });
 
-  it('recupera un lock abandonado sin borrar un bloqueo activo', async () => {
+  it('no elimina ni reutiliza un lock antiguo mientras no se confirme su abandono', async () => {
     const directory = await tempDirectory();
     const lock = path.join(directory, '.traccion-paritaria-summary.lockdir');
     await mkdir(lock);
@@ -111,9 +111,10 @@ describe('publicación de resúmenes Word por SMB', () => {
     const old = new Date(Date.now() - 20 * 60_000);
     await utimes(lock, old, old);
     let executed = false;
-    await withSharedSummaryWordLock(directory, 'paritaria', async () => { executed = true; }, { waitMs: 2_000 });
-    expect(executed).toBe(true);
-    await expect(stat(lock)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(withSharedSummaryWordLock(directory, 'paritaria', async () => { executed = true; }, { waitMs: 2_000 }))
+      .rejects.toThrow('Bloqueo antiguo');
+    expect(executed).toBe(false);
+    expect(await readFile(path.join(lock, 'owner'), 'utf8')).toBe('PROCESO-CERRADO');
   });
 
   it('recupera un documento movido durante una publicación interrumpida', async () => {

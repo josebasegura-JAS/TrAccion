@@ -14,9 +14,11 @@
   un error sin truncar el archivo anterior. No hay fallback a `copyFile`.
 - La eliminación de espejos anteriores se realiza con el mismo bloqueo.
 - El bloqueo se actualiza con heartbeat cada 5 s. Se considera candidato a
-  recuperación automática solo si su mtime supera los 10 minutos; se confirma
-  de nuevo y se renombra antes de eliminarlo. Se evita publicar ante
-  pérdida de propiedad o heartbeat. Espera normal máxima: 12 segundos.
+  bloqueo antiguo cuando su mtime supera los 10 minutos: **rechaza la
+  publicación** y solicita comprobación manual antes de eliminarlo.
+  No lo recupera automáticamente, porque otro equipo podría seguir activo.
+  Se evita publicar ante pérdida de propiedad o heartbeat. Espera normal
+  máxima para lock activo: 12 segundos.
 
 ## Límites relevantes
 - El sistema de archivos debe soportar `mkdir` exclusivo y `rename`
@@ -27,7 +29,7 @@
   comprobación podría dejar un Excel desactualizado **temporalmente**, hasta
   que se procese la siguiente actualización automática. La base de datos
   sigue siendo la única fuente de verdad.
-- La recuperación de un lock abandonado depende de relojes/mtime SMB fiables.
+- Si aparece un lock antiguo tras un corte de red, verificar que todos los equipos han terminado la exportación antes de retirarlo manualmente. La antigüedad no es una prueba de abandono.
   No intervenir manualmente en los directorios `.lockdir` mientras haya
   ordenadores usando la aplicación.
 - Si la hoja Excel está abierta y bloqueada por Office, puede fallar la
