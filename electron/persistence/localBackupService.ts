@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
+import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
 import { getDailyLocalBackupWeekdayName } from './maintenanceQueries.js';
 import {
   isLocalBackupFileName,
@@ -191,6 +192,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       // El lock es global entre ordenadores. Si otro equipo ya respaldó
       // exactamente esta revisión de la base, no se duplica la copia.
       if (!force && await isSharedSnapshotCurrent(currentStatus.path, sharedMarkerPath)) {
+        recordMultiuserMetric('backup', 'periodic:covered-by-peer', Date.now() - startedAt);
+        recordMultiuserMetric('backup', 'periodic:lock-wait', acquiredAfterMs);
         console.info(`[backup-perf] Copia cubierta por otro equipo: esperaLock=${acquiredAfterMs} ms.`);
         return true;
       }
@@ -281,6 +284,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           console.warn('No se ha podido publicar la coordinación de copias SQLite; el siguiente equipo hará su propia copia.', error);
         }
       }
+      recordMultiuserMetric('backup', 'periodic:total', Date.now() - startedAt, !coreSqliteBackupOk);
+      recordMultiuserMetric('backup', 'periodic:lock-wait', acquiredAfterMs);
       console.info(`[backup-perf] copiaViva=${Date.now() - startedAt} ms, esperaLock=${acquiredAfterMs} ms, éxito=${coreSqliteBackupOk}.`);
       return coreSqliteBackupOk;
     } finally {
