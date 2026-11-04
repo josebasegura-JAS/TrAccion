@@ -125,7 +125,7 @@ function ensureSyncableStoresRegistered(): Promise<unknown> {
   return syncableStoreRegistrationsPromise;
 }
 
-async function reloadIntegratedStores(storeIds?: string[]): Promise<void> {
+export async function reloadIntegratedStores(storeIds?: string[]): Promise<void> {
   const reloadAll = pendingReloadAllStores || storeIds === undefined;
   const selectedIds = reloadAll ? undefined : [...new Set([...pendingReloadStoreIds, ...storeIds])];
   if (reloadAll) {
