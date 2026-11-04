@@ -21,6 +21,7 @@ import { type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import { buildImportedManagedSession, type ManagedSessionStateStore } from './createSessionStore';
 import { loadSessionLinkedTasks, missingSessionTaskIds } from './sessionLinkedTaskLoader';
+import { dueLinkedTaskIds, nextLinkedTaskRetry, nextLinkedTaskRetryAt, type LinkedTaskRetry } from './sessionLinkedTaskRetry';
 import { measureSessionOperation } from './sessionPerformance';
 import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
 import { HistoricSessionCard, SessionCard, SessionPanel } from './SessionManagementPageCards';
@@ -110,36 +111,68 @@ export function SessionManagementPage({
   // se están consultando; no contaminan el store global ni obligan a
   // cargar todas las tareas cerradas de la empresa.
   const [linkedTasks, setLinkedTasks] = useState<Map<string, Task>>(new Map());
-  const requestedLinkedTaskIds = useRef<Set<string>>(new Set());
+  const [retryTick, setRetryTick] = useState(0);
+  const inFlightLinkedTaskIds = useRef<Set<string>>(new Set());
+  const linkedTaskRetries = useRef<Map<string, LinkedTaskRetry>>(new Map());
   const tasksById = useMemo(() => {
     const map = new Map(linkedTasks);
     tasks.forEach((task) => map.set(task.id, task));
     return map;
   }, [linkedTasks, tasks]);
 
-  useEffect(() => {
+  const missingReferencedIds = useMemo(() => {
     const showHistory = sessionSearch.trim().length >= 2 || openPanel === 'history';
     const relevantSessions = showHistory
       ? sessions
       : sessions.filter((session) => session.status === 'open');
-    const missing = missingSessionTaskIds(relevantSessions, new Set(tasksById.keys()))
-      .filter((id) => !requestedLinkedTaskIds.current.has(id));
-    if (missing.length === 0 || !window.traccion?.loadTaskRecords) return;
-    missing.forEach((id) => requestedLinkedTaskIds.current.add(id));
-    void measureSessionOperation(config.moduleId, 'puntos vinculados', () => loadSessionLinkedTasks(missing))
+    return missingSessionTaskIds(relevantSessions, new Set(tasksById.keys()));
+  }, [openPanel, sessionSearch, sessions, tasksById]);
+
+  useEffect(() => {
+    // La cuenta atrás solo afecta a referencias aún ausentes. No hacemos
+    // polling del histórico completo ni reintentamos con cada render.
+    const nextAt = nextLinkedTaskRetryAt(
+      missingReferencedIds, inFlightLinkedTaskIds.current, linkedTaskRetries.current, Date.now(),
+    );
+    if (nextAt === null) return;
+    const timer = window.setTimeout(() => setRetryTick((current) => current + 1),
+      Math.max(1, nextAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [missingReferencedIds, retryTick]);
+
+  useEffect(() => {
+    if (!window.traccion?.loadTaskRecords) return;
+    const due = dueLinkedTaskIds(
+      missingReferencedIds, inFlightLinkedTaskIds.current, linkedTaskRetries.current, Date.now(),
+    );
+    if (due.length === 0) return;
+    due.forEach((id) => inFlightLinkedTaskIds.current.add(id));
+    void measureSessionOperation(config.moduleId, 'puntos vinculados', () => loadSessionLinkedTasks(due))
       .then((loaded) => {
-        setLinkedTasks((previous) => {
-          const next = new Map(previous);
-          loaded.forEach((task) => next.set(task.id, task));
-          return next;
-        });
+        const loadedIds = new Set(loaded.map((task) => task.id));
+        for (const id of due) {
+          if (loadedIds.has(id)) linkedTaskRetries.current.delete(id);
+          else linkedTaskRetries.current.set(id, nextLinkedTaskRetry(linkedTaskRetries.current.get(id), Date.now()));
+        }
+        if (loaded.length > 0) {
+          setLinkedTasks((previous) => {
+            const next = new Map(previous);
+            loaded.forEach((task) => next.set(task.id, task));
+            return next;
+          });
+        }
       })
       .catch((error: unknown) => {
-        // No marcar el resultado como vacío ni descartar los puntos ya cargados.
-        missing.forEach((id) => requestedLinkedTaskIds.current.delete(id));
+        for (const id of due) {
+          linkedTaskRetries.current.set(id, nextLinkedTaskRetry(linkedTaskRetries.current.get(id), Date.now()));
+        }
         console.warn('[sesiones] No se han podido recuperar los puntos vinculados.', error);
+      })
+      .finally(() => {
+        due.forEach((id) => inFlightLinkedTaskIds.current.delete(id));
+        setRetryTick((current) => current + 1);
       });
-  }, [config.moduleId, openPanel, sessionSearch, sessions, tasksById]);
+  }, [config.moduleId, missingReferencedIds, retryTick]);
   const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
   const rutaResumenParitaria = useConfiguracionStore((state) => state.rutaResumenParitaria);
 
