@@ -135,6 +135,28 @@ export function createRecordLockService(
     });
   }
 
+  function readLockWithoutExclusiveSmbLease(payload: RecordLockPayload): Promise<RecordLockResult> {
+    if (!validateRecordLockPayload(payload)) {
+      return Promise.resolve(recordLockError('Identificador de bloqueo inválido.'));
+    }
+    const startedAt = Date.now();
+    let result: RecordLockResult;
+    try {
+      // getRecordLockInTransaction utiliza únicamente SELECT. La lectura no
+      // necesita adquirir .lockdir; SQLite coordina sus lecturas con los
+      // escritores. El bloqueo exclusivo sigue vigente para adquirir,
+      // renovar y liberar reservas.
+      const db = ensureRecordLockDatabase();
+      result = db
+        ? getRecordLockInTransaction(db, payload, currentOwnerContext(), new Date().toISOString())
+        : recordLockError('SQLite no está disponible para consultar bloqueos.');
+    } catch (error) {
+      result = recordLockError(error instanceof Error ? error.message : 'No se ha podido consultar el bloqueo del registro.');
+    }
+    recordMultiuserMetric('record-lock', 'consulta de bloqueo de registro', Date.now() - startedAt, !result.ok);
+    return Promise.resolve(result);
+  }
+
   return {
     acquireRecordLock: (payload) =>
       runGuarded(
@@ -157,13 +179,6 @@ export function createRecordLockService(
         'No se ha podido liberar el bloqueo del registro.',
         (db) => releaseRecordLockInTransaction(db, payload, currentOwnerContext()),
       ),
-    getRecordLock: (payload) =>
-      runGuarded(
-        payload,
-        'SQLite no está disponible para consultar bloqueos.',
-        'No se ha podido consultar el bloqueo del registro.',
-        (db) =>
-          getRecordLockInTransaction(db, payload, currentOwnerContext(), new Date().toISOString()),
-      ),
+    getRecordLock: (payload) => readLockWithoutExclusiveSmbLease(payload),
   };
 }
