@@ -6,6 +6,7 @@ export function reportModuleReadFailure(key: string, moduleName: string, error: 
   console.error(`[${moduleName}] No se ha podido leer el repositorio compartido.`, error);
   emitPersistenceFeedback({
     kind: 'error',
+    operation: 'read',
     key,
     updatedAt: new Date().toISOString(),
     message: `${moduleName}: no se ha podido actualizar desde SQLite. Se conserva la última información cargada. ${detail}`,

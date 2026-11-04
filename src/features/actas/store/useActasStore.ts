@@ -48,7 +48,7 @@ interface ActasStateStore {
   hasLoadedHistoricalActas: boolean;
   load: () => void;
   loadHistoricalActas: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   createWithConcurrencyCheck: (
     draft: ActaDraft,
   ) => Promise<{ ok: boolean; message: string; recordId?: string }>;
@@ -448,12 +448,15 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       .then((nextState) => set(nextState))
       .catch((error) => reportModuleReadFailure(STORAGE_KEY, 'Actas histórico', error));
   },
-  reloadFromStorage: () => {
+  reloadFromStorage: async () => {
     const includeHistorical = get().hasLoadedHistoricalActas;
     if (!hasActaSqliteRepository()) set(loadActasState(includeHistorical));
-    void loadActasStateFromSqliteOrStorage(includeHistorical)
-      .then((nextState) => set(nextState))
-      .catch((error) => reportModuleReadFailure(STORAGE_KEY, 'Actas', error));
+    // El sincronizador debe poder esperar la lectura y detectar un fallo:
+    // antes se lanzaba en segundo plano, se absorbía el error y se marcaba
+    // el token SQLite como sincronizado aunque Actas siguiera desactualizada.
+    // Se conserva el último estado válido ante una excepción.
+    const nextState = await loadActasStateFromSqliteOrStorage(includeHistorical);
+    set(nextState);
   },
   createWithConcurrencyCheck: async (draft) => {
     try {
