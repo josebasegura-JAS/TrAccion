@@ -16,6 +16,7 @@ type IndicatorState = {
   kind: 'saving' | 'saved' | 'error';
   message: string;
   slow: boolean;
+  readError?: boolean;
 };
 
 function feedbackOperationKey(feedback: PersistenceFeedback): string {
@@ -96,7 +97,12 @@ export function GlobalBusyIndicator() {
       clearSlowTimeout();
 
       if (feedback.kind === 'error') {
-        setState({ kind: 'error', message: feedback.message || 'No se han podido guardar los cambios.', slow: false });
+        setState({
+          kind: 'error',
+          message: feedback.message || (feedback.operation === 'read' ? 'No se han podido actualizar los datos.' : 'No se han podido guardar los cambios.'),
+          slow: false,
+          readError: feedback.operation === 'read',
+        });
         completionTimeoutRef.current = window.setTimeout(() => setState(null), ERROR_VISIBLE_MS);
         return;
       }
@@ -132,7 +138,7 @@ export function GlobalBusyIndicator() {
       ? 'No cierres la ventana hasta que termine.'
       : 'Guardando los cambios.'
     : state.kind === 'error'
-      ? 'El cambio no se ha guardado.'
+      ? state.readError ? 'Se conserva la última información cargada.' : 'El cambio no se ha guardado.'
       : null;
   const isError = state.kind === 'error';
 
