@@ -23,9 +23,39 @@ describe('Actas: fallo SQLite no equivale a lista vacía', () => {
       loadActaRecords: loader,
       saveActaRecordIfUnchanged: vi.fn(),
     } });
-    useActasStore.getState().reloadFromStorage();
-    await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(useActasStore.getState().reloadFromStorage())
+      .rejects.toThrow('temporalmente inaccesible');
+    expect(loader).toHaveBeenCalledOnce();
     expect(useActasStore.getState().actas).toEqual([previous]);
   });
+
+  it('propaga un rechazo IPC y permite reintentar la lectura sin perder datos previos', async () => {
+    const previous = {
+      ...EMPTY_ACTA_DRAFT,
+      id: 'acta-previa',
+      titulo: 'Acta anterior',
+      updatedAt: '2026-11-02T09:00:00.000Z',
+    } as Acta;
+    const newActa = { ...previous, titulo: 'Acta actualizada', updatedAt: '2026-11-04T10:00:00.000Z' };
+    useActasStore.setState({ actas: [previous] });
+    const loader = vi.fn()
+      .mockRejectedValueOnce(new Error('SMB temporalmente inaccesible'))
+      .mockResolvedValueOnce({
+        status: { ready: true, phase: 'active' },
+        records: [{ id: newActa.id, value: JSON.stringify(newActa), updatedAt: newActa.updatedAt }],
+      });
+    Object.defineProperty(window, 'traccion', { configurable: true, value: {
+      loadActaRecords: loader,
+      saveActaRecordIfUnchanged: vi.fn(),
+    } });
+
+    await expect(useActasStore.getState().reloadFromStorage())
+      .rejects.toThrow('SMB temporalmente inaccesible');
+    expect(useActasStore.getState().actas).toEqual([previous]);
+
+    await expect(useActasStore.getState().reloadFromStorage()).resolves.toBeUndefined();
+    expect(loader).toHaveBeenCalledTimes(2);
+    expect(useActasStore.getState().actas).toEqual([newActa]);
+  });
+
 });
