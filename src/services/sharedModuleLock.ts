@@ -2,7 +2,8 @@ import { markSharedEditingActive, markSharedEditingInactive } from './sharedEdit
 
 export const SHARED_MODULE_LOCK_RECORD_ID = '__module__';
 
-const MODULE_LOCK_HEARTBEAT_MS = 10 * 1000;
+// Los locks de módulo usan el mismo TTL de 75s que los locks de registro.
+const MODULE_LOCK_HEARTBEAT_MS = 20 * 1000;
 
 export interface SharedModuleLockTarget {
   module: string;
