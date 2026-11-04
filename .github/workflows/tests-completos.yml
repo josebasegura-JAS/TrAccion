@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       limpiar_historial_antiguo:
-        description: 'Eliminar ejecuciones de workflows retirados (conservar EXE, Lite, ZIP y validación)'
+        description: 'Borrar ejecuciones antiguas; conservar los tres builds y la validación'
         required: false
         type: boolean
         default: false
@@ -52,7 +52,7 @@ jobs:
           test "$CHECKS_RESULT" = "success"
 
   cleanup_retired:
-    name: Limpiar historial de workflows retirados
+    name: Eliminar historial de workflows retirados
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.limpiar_historial_antiguo }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -61,103 +61,47 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Eliminar únicamente las ejecuciones de workflows sin fichero actual
+      - name: Eliminar ejecuciones de workflows que ya no existen en main
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # La API histórica de Actions conserva workflows cuyos .yml ya no
-          # existen. Nunca tocar los tres distribuidores ni la validación.
-          readonly -a protected_paths=(
-            ".github/workflows/build-windows.yml"
-            ".github/workflows/build-windows-lite.yml"
-            ".github/workflows/build-windows-zip.yml"
-            ".github/workflows/tests-completos.yml"
-          )
-
-          is_protected() {
-            local entry
-            for entry in "${protected_paths[@]}"; do
-              if [[ "$1" == "$entry" ]]; then return 0; fi
-            done
-            return 1
-          }
-
+          # Guardar listado completo antes de modificar las ejecuciones.
           snapshot_dir="$(mktemp -d)"
           trap 'rm -rf "$snapshot_dir"' EXIT
-          # Materializar el listado antes de borrar para evitar que la
-          # paginación cambie mientras se eliminan ejecuciones.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" \
-            --jq '.workflows[] | [.id, .path, .state] | @tsv' > "$snapshot_dir/workflows.tsv"
-
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" --jq '.workflows[] | [.id, .path, .state] | join("|")' > "$snapshot_dir/workflows.txt"
           total=0
           removed=0
-          while IFS=
+          while IFS='|' read -r workflow_id workflow_path workflow_state; do
             [[ -n "$workflow_id" ]] || continue
             [[ "$workflow_path" == .github/workflows/* ]] || continue
-            if is_protected "$workflow_path"; then
-              echo "Conservado: $workflow_path ($workflow_id)"
-              continue
-            fi
-            # Si existe un fichero activo que no está en la lista original,
-            # tampoco se borra su historial. Solo limpiar antiguos retirados.
+            case "$workflow_path" in
+              .github/workflows/build-windows.yml|.github/workflows/build-windows-lite.yml|.github/workflows/build-windows-zip.yml|.github/workflows/tests-completos.yml)
+                echo "Conservado: $workflow_path"
+                continue
+                ;;
+            esac
+            # No tocar workflows nuevos que aún tengan fichero activo.
             if [[ -f "$workflow_path" ]]; then
               echo "Conservado (fichero presente): $workflow_path"
               continue
             fi
-
-            echo "::group::Retirado: $workflow_path ($workflow_id)"
             total=$((total + 1))
-            # Deshabilitar los workflow retirados que aún figuren activos.
-            if [[ "$workflow_state" == "active" ]]; then
-              gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable"
-            fi
-            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/runs?per_page=100" \
-              --jq '.workflow_runs[] | select(.status == "completed") | .id' > "$snapshot_dir/runs.txt"
+            echo "::group::Retirado: $workflow_path ($workflow_id)"
+            # El inventario de IDs se materializa antes de borrar para
+            # evitar perder páginas al cambiar la paginación de GitHub.
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/runs?per_page=100" --jq '.workflow_runs[] | select(.status == "completed") | .id' > "$snapshot_dir/runs.txt"
             while IFS= read -r run_id; do
               [[ -n "$run_id" ]] || continue
               gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
               removed=$((removed + 1))
               echo "Eliminada ejecución $run_id"
             done < "$snapshot_dir/runs.txt"
-            echo "::endgroup::"
-          done < "$snapshot_dir/workflows.tsv"
-          echo "Workflows retirados revisados: $total" >> "$GITHUB_STEP_SUMMARY"
-          echo "Ejecuciones históricas eliminadas: $removed" >> "$GITHUB_STEP_SUMMARY"
-\t' read -r workflow_id workflow_path workflow_state; do
-            [[ -n "$workflow_id" ]] || continue
-            [[ "$workflow_path" == .github/workflows/* ]] || continue
-            if is_protected "$workflow_path"; then
-              echo "Conservado: $workflow_path ($workflow_id)"
-              continue
-            fi
-            # Si existe un fichero activo que no está en la lista original,
-            # tampoco se borra su historial. Solo limpiar antiguos retirados.
-            if [[ -f "$workflow_path" ]]; then
-              echo "Conservado (fichero presente): $workflow_path"
-              continue
-            fi
-
-            echo "::group::Retirado: $workflow_path ($workflow_id)"
-            total=$((total + 1))
-            # Deshabilitar los workflow retirados que aún figuren activos.
             if [[ "$workflow_state" == "active" ]]; then
-              gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable"
+              gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/disable" || echo "Aviso: no se pudo deshabilitar $workflow_id"
             fi
-            while IFS= read -r run_id; do
-              [[ -n "$run_id" ]] || continue
-              gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
-              removed=$((removed + 1))
-              echo "Eliminada ejecución $run_id"
-            done < <(
-              gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_id/runs?per_page=100" \
-                --jq '.workflow_runs[] | select(.status == "completed") | .id'
-            )
-            echo "::endgroup::"
-          done < <(
-            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" \
-              --jq '.workflows[] | [.id, .path, .state] | @tsv'
-          )
+            echo '::endgroup::'
+          done < "$snapshot_dir/workflows.txt"
           echo "Workflows retirados revisados: $total" >> "$GITHUB_STEP_SUMMARY"
           echo "Ejecuciones históricas eliminadas: $removed" >> "$GITHUB_STEP_SUMMARY"
