@@ -1,4 +1,5 @@
-import { open, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
+import { publishSummaryWord, recoverInterruptedSummaryWord, withSharedSummaryWordLock } from './summaryWordSharedPublication.js';
 import path from 'node:path';
 import JSZip from 'jszip';
 
@@ -17,8 +18,6 @@ export interface ParitariaSummaryUpdateResult {
 }
 
 const SUMMARY_FILE_PATTERN = /^Resumen TEMÁTICA Comisión paritaria \((?!~\$).+\)\.docx$/i;
-const LOCK_FILE_NAME = '.traccion-paritaria-summary.lock';
-const LOCK_STALE_MS = 10 * 60 * 1000;
 
 function escapeXml(value: string): string {
   return value
@@ -235,46 +234,19 @@ function formatUpdatedFileDate(date: Date): string {
   return `${date.getDate()} ${MONTHS_ES[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-async function acquireLock(folderPath: string): Promise<() => Promise<void>> {
-  const lockPath = path.join(folderPath, LOCK_FILE_NAME);
-  try {
-    const handle = await open(lockPath, 'wx');
-    await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), 'utf8');
-    await handle.close();
-  } catch {
-    try {
-      const info = await stat(lockPath);
-      if (Date.now() - info.mtimeMs > LOCK_STALE_MS) {
-        await unlink(lockPath);
-        return acquireLock(folderPath);
-      }
-    } catch {
-      try {
-        const handle = await open(lockPath, 'wx');
-        await handle.close();
-      } catch {
-        throw new Error('Otro usuario está actualizando el resumen de Paritaria. Inténtalo de nuevo en unos segundos.');
-      }
-      return async () => { await unlink(lockPath).catch(() => undefined); };
-    }
-    throw new Error('Otro usuario está actualizando el resumen de Paritaria. Inténtalo de nuevo en unos segundos.');
-  }
-  return async () => { await unlink(lockPath).catch(() => undefined); };
-}
-
 export async function updateParitariaSummaryWord(payload: ParitariaSummaryUpdatePayload): Promise<ParitariaSummaryUpdateResult> {
   const folderPath = payload.folderPath.trim();
   if (!folderPath) {
     return { ok: false, message: 'No hay carpeta configurada para el resumen histórico de Paritaria. Configúrala en Ajustes.' };
   }
 
-  let releaseLock: (() => Promise<void>) | null = null;
   try {
     const folderInfo = await stat(folderPath);
     if (!folderInfo.isDirectory()) throw new Error('La ruta configurada para el resumen de Paritaria no es una carpeta.');
 
-    releaseLock = await acquireLock(folderPath);
-    const entries = await readdir(folderPath, { withFileTypes: true });
+    return await withSharedSummaryWordLock(folderPath, 'paritaria', async (assertOwned) => {
+      await recoverInterruptedSummaryWord(folderPath, (name) => SUMMARY_FILE_PATTERN.test(name), assertOwned);
+      const entries = await readdir(folderPath, { withFileTypes: true });
     const candidates = entries
       .filter((entry) => entry.isFile() && !entry.name.startsWith('~$') && SUMMARY_FILE_PATTERN.test(entry.name))
       .map((entry) => entry.name);
@@ -302,40 +274,16 @@ export async function updateParitariaSummaryWord(payload: ParitariaSummaryUpdate
     const outputBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
     const targetName = `Resumen TEMÁTICA Comisión paritaria (${formatUpdatedFileDate(new Date())}).docx`;
     const targetPath = path.join(folderPath, targetName);
-    const tempPath = path.join(folderPath, `.${targetName}.${process.pid}.${Date.now()}.tmp`);
 
-    if (targetPath !== sourcePath) {
-      try {
-        await stat(targetPath);
-        throw new Error(`Ya existe ${targetName}. No se ha sustituido automáticamente para evitar sobrescribir otra actualización.`);
-      } catch (error) {
-        if (error instanceof Error && !('code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT')) throw error;
-      }
-    }
 
-    await writeFile(tempPath, outputBuffer);
-    const backupPath = `${sourcePath}.traccion-backup`;
-    try {
-      await unlink(backupPath).catch(() => undefined);
-      await rename(sourcePath, backupPath);
-      try {
-        await rename(tempPath, targetPath);
-        await unlink(backupPath);
-      } catch (error) {
-        await rename(backupPath, sourcePath).catch(() => undefined);
-        throw error;
-      }
-    } finally {
-      await unlink(tempPath).catch(() => undefined);
-    }
+    await publishSummaryWord(folderPath, sourcePath, targetPath, outputBuffer, assertOwned);
 
-    return { ok: true, filePath: targetPath, message: `Resumen histórico actualizado: ${targetName}` };
+      return { ok: true, filePath: targetPath, message: `Resumen histórico actualizado: ${targetName}` };
+    });
   } catch (error) {
     return {
       ok: false,
       message: error instanceof Error ? error.message : 'No se ha podido actualizar el resumen histórico de Paritaria.',
     };
-  } finally {
-    if (releaseLock) await releaseLock();
   }
 }
