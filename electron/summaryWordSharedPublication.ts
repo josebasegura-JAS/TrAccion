@@ -140,8 +140,6 @@ export async function publishSummaryWord(
   const token = randomUUID();
   const tempPath = path.join(directory, `.${path.basename(targetPath)}.${token}.tmp`);
   const backupPath = `${sourcePath}${BACKUP_SUFFIX}${token}`;
-  let sourceMoved = false;
-  let published = false;
   try {
     // Nunca sobrescribir otro documento con nombre de destino diferente.
     if (targetPath !== sourcePath) {
@@ -159,11 +157,9 @@ export async function publishSummaryWord(
     }
     await assertOwned();
     await rename(sourcePath, backupPath);
-    sourceMoved = true;
     try {
       await assertOwned();
       await rename(tempPath, targetPath);
-      published = true;
     } catch (error) {
       // Si no hemos publicado, el Word anterior debe recuperar su nombre.
       await rename(backupPath, sourcePath).catch(() => undefined);
@@ -173,10 +169,7 @@ export async function publishSummaryWord(
     await unlink(backupPath).catch(() => undefined);
   } finally {
     await unlink(tempPath).catch(() => undefined);
-    // Si no se pudo restaurar el Word, se conserva el backup único para
-    // recuperación en la siguiente ejecución; nunca se borra a ciegas.
-    if (!published && sourceMoved) {
-      // No hay acciones destructivas adicionales.
-    }
+    // Nunca se borran aquí los backups: si el rollback falla, la copia
+    // única permanece disponible para la siguiente recuperación.
   }
 }
