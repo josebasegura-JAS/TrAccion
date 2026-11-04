@@ -38,29 +38,17 @@ export async function withSharedTaskExcelLock<T>(
   const start = now();
   let acquired = false;
 
-  async function recoverAbandonedLock(): Promise<void> {
-    let metadata: Awaited<ReturnType<typeof stat>>;
-    try {
-      metadata = await stat(lockPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+  // Recuperar automáticamente un lock por mtime es inseguro: el equipo
+  // propietario puede seguir activo y renovar el lease entre stat y rename.
+  // Ante caducidad preferimos rechazar la publicación y conservar los datos.
+  async function checkExistingLock(): Promise<void> {
+    const info = await stat(lockPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
       throw error;
+    });
+    if (info && now() - info.mtimeMs >= (options.staleMs ?? STALE_MS)) {
+      throw new Error('Bloqueo antiguo del Excel compartido: puede haber un equipo desconectado. No se ha reemplazado el archivo. Verifica que ningún equipo esté exportando antes de retirar manualmente el bloqueo.');
     }
-    if (now() - metadata.mtimeMs < (options.staleMs ?? STALE_MS)) return;
-    // Renombrar primero evita borrar inadvertidamente un bloqueo nuevo
-    // si dos equipos intentan recuperar el mismo directorio.
-    const abandonedPath = `${lockPath}.abandoned-${randomUUID()}`;
-    try {
-      // Confirmación inmediata; si otro proceso ha actualizado el heartbeat,
-      // se considera activo y no se recupera.
-      const latest = await stat(lockPath);
-      if (now() - latest.mtimeMs < (options.staleMs ?? STALE_MS)) return;
-      await rename(lockPath, abandonedPath);
-    } catch (error) {
-      if (['ENOENT', 'EEXIST', 'EPERM', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) return;
-      throw error;
-    }
-    await rm(abandonedPath, { recursive: true, force: true }).catch(() => undefined);
   }
 
   while (!acquired) {
@@ -72,7 +60,7 @@ export async function withSharedTaskExcelLock<T>(
       await writeFile(ownerPath, token, { flag: 'wx' });
     } catch (error) {
       if (acquired || (error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      await recoverAbandonedLock();
+      await checkExistingLock();
       if (now() - start >= (options.waitMs ?? WAIT_MS)) {
         throw new Error('El Excel de tareas está siendo actualizado por otro equipo. No se ha reemplazado el archivo anterior.');
       }
