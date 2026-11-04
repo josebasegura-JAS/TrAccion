@@ -499,9 +499,17 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   const createManualLocalBackup = async (): Promise<void> => {
-    await flushPendingLocalBackup();
-    // Copia manual explícita: nunca suprimirla por el marcador de otro equipo.
-    await writeLocalBackupArtifacts('manual-backup', true);
+    // La solicitud manual hace una sola copia forzada, incluso si un equipo
+    // distinto ya publicó un snapshot de la misma revisión.
+    if (localBackupTimer) {
+      clearTimeout(localBackupTimer);
+      localBackupTimer = null;
+    }
+    await localBackupQueue;
+    const revision = backupRevision;
+    const ok = await writeLocalBackupArtifacts('manual-backup', true);
+    if (ok) backedUpRevision = Math.max(backedUpRevision, revision);
+    else schedulePendingBackup();
   };
 
   const listLocalBackups = async (): Promise<LocalBackupEntry[]> => {
