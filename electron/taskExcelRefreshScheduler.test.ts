@@ -60,4 +60,27 @@ describe('taskExcelRefreshScheduler', () => {
     await vi.advanceTimersByTimeAsync(1500);
     expect(work).toHaveBeenCalledTimes(2);
   });
+  it('ejecuta como máximo a los dos minutos aunque sigan llegando guardados', async () => {
+    const work = vi.fn(async () => undefined);
+    const refresh = createDebouncedSerialRefresh(work, vi.fn(), 45_000, 120_000);
+    refresh.schedule();
+    for (let i = 0; i < 4; i += 1) {
+      await vi.advanceTimersByTimeAsync(30_000);
+      if (i < 3) refresh.schedule();
+    }
+    expect(work).toHaveBeenCalledTimes(1);
+  });
+
+  it('no ejecuta antes de 45 segundos desde el último cambio si no llega al límite', async () => {
+    const work = vi.fn(async () => undefined);
+    const refresh = createDebouncedSerialRefresh(work, vi.fn(), 45_000, 120_000);
+    refresh.schedule();
+    await vi.advanceTimersByTimeAsync(35_000);
+    refresh.schedule();
+    await vi.advanceTimersByTimeAsync(44_999);
+    expect(work).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(work).toHaveBeenCalledTimes(1);
+  });
+
 });
