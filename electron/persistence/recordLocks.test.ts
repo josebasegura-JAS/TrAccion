@@ -8,6 +8,7 @@ import {
   getRecordLockInTransaction,
   heartbeatRecordLockInTransaction,
   MODULE_LOCK_RECORD_ID,
+  RECORD_LOCK_TTL_MS,
   releaseRecordLockInTransaction,
   type OwnerContext,
 } from './recordLocks';
@@ -177,6 +178,67 @@ describe('recordLocks — funciones SQL puras sobre editing_locks', () => {
 
       expect(result.ok).toBe(false);
       expect(result.status).toBe('locked');
+    });
+  });
+
+  describe('heartbeat de baja contención', () => {
+    it('mantiene 75s de lease para soportar el intervalo de 20s y dos fallos de renovación', () => {
+      expect(RECORD_LOCK_TTL_MS).toBe(75_000);
+      const result = acquireRecordLockInTransaction(db, { module: 'tareas', recordId: 'tarea-1' }, ownerA);
+      const duration = Date.parse(result.lock!.expiresAt) - Date.now();
+      expect(duration).toBeGreaterThan(74_000);
+      expect(duration).toBeLessThanOrEqual(75_000);
+    });
+
+    it('renovar un lock propio activo no borra reservas caducadas de otros registros', () => {
+      const past = new Date(Date.now() - 60_000).toISOString();
+      acquireRecordLockInTransaction(db, { module: 'tareas', recordId: 'tarea-1' }, ownerA);
+      db.prepare(`INSERT INTO editing_locks
+        (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+        VALUES ('tareas', 'tarea-caducada', 'owner-b', 'Bea', 'PC-BEA', ?, ?)`)
+        .run(past, past);
+      const before = db.prepare('SELECT COUNT(*) AS total FROM editing_locks').get() as { total: number };
+      const result = heartbeatRecordLockInTransaction(db, { module: 'tareas', recordId: 'tarea-1' }, ownerA);
+      const after = db.prepare('SELECT COUNT(*) AS total FROM editing_locks').get() as { total: number };
+      expect(result.status).toBe('acquired');
+      expect(before.total).toBe(2);
+      expect(after.total).toBe(2);
+    });
+
+    it('un heartbeat no puede recuperar una reserva caducada si otro usuario tiene el módulo', () => {
+      const past = new Date(Date.now() - 60_000).toISOString();
+      db.prepare(`INSERT INTO editing_locks
+        (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+        VALUES ('comite', 'sesion-1', 'owner-a', 'Ana', 'PC-ANA', ?, ?)`)
+        .run(past, past);
+      const moduleLock = acquireRecordLockInTransaction(db, { module: 'comite', recordId: MODULE_LOCK_RECORD_ID }, ownerB);
+      expect(moduleLock.status).toBe('acquired');
+      const result = heartbeatRecordLockInTransaction(db, { module: 'comite', recordId: 'sesion-1' }, ownerA);
+      expect(result.status).toBe('locked');
+      expect(result.lock?.ownerId).toBe('owner-b');
+    });
+
+    it('un heartbeat puede recuperar el mismo registro cuando su lease caducó', () => {
+      const past = new Date(Date.now() - 60_000).toISOString();
+      db.prepare(`INSERT INTO editing_locks
+        (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+        VALUES ('tareas', 'tarea-1', 'owner-a', 'Ana', 'PC-ANA', ?, ?)`)
+        .run(past, past);
+      const result = heartbeatRecordLockInTransaction(db, { module: 'tareas', recordId: 'tarea-1' }, ownerA);
+      expect(result.status).toBe('acquired');
+      expect(Date.parse(result.lock!.expiresAt)).toBeGreaterThan(Date.now() + 60_000);
+    });
+
+    it('un heartbeat no puede recuperar el registro caducado si otro usuario lo adquirió', () => {
+      const past = new Date(Date.now() - 60_000).toISOString();
+      db.prepare(`INSERT INTO editing_locks
+        (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+        VALUES ('tareas', 'tarea-1', 'owner-a', 'Ana', 'PC-ANA', ?, ?)`)
+        .run(past, past);
+      expect(acquireRecordLockInTransaction(db, { module: 'tareas', recordId: 'tarea-1' }, ownerB).status).toBe('acquired');
+      const result = heartbeatRecordLockInTransaction(db, { module: 'tareas', recordId: 'tarea-1' }, ownerA);
+      expect(result.status).toBe('locked');
+      expect(result.lock?.ownerId).toBe('owner-b');
     });
   });
 

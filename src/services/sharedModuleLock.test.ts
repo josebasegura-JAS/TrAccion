@@ -72,7 +72,7 @@ describe('withSharedModuleLocks', () => {
       },
     );
 
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(20_000);
     continueOperation();
 
     await expect(operation).rejects.toThrow('network down');
@@ -105,7 +105,7 @@ describe('withSharedModuleLocks', () => {
       },
     );
 
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(20_000);
     continueOperation();
 
     await expect(operation).rejects.toThrow('ahora lo tiene Rosa@PC-RRLL');
