@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { measureSessionOperation } from './sessionPerformance';
 import { reportModuleReadFailure } from '../persistence/reportModuleReadFailure';
 import { readStorageItem } from '../../services/persistence';
 import {
@@ -547,7 +548,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     sessions: [],
     hasLoadedHistoricalSessions: false,
     load: () => {
-      void readSessionsFromNativeOrBlob(config)
+      void measureSessionOperation(config.moduleId, 'abrir', () => readSessionsFromNativeOrBlob(config))
         .then((sessions) =>
           set({
             sessions: filterSessionsForState(sessions, false),
@@ -557,7 +558,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .catch((error) => reportModuleReadFailure(config.storageKey, config.moduleId, error));
     },
     loadHistoricalSessions: () => {
-      void readSessionsFromNativeOrBlob(config)
+      void measureSessionOperation(config.moduleId, 'históricos', () => readSessionsFromNativeOrBlob(config))
         .then((sessions) =>
           set({
             sessions: filterSessionsForState(sessions, true),
@@ -567,7 +568,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         .catch((error) => reportModuleReadFailure(config.storageKey, config.moduleId, error));
     },
     reloadFromStorage: () => {
-      void readSessionsFromNativeOrBlob(config)
+      void measureSessionOperation(config.moduleId, 'sincronización', () => readSessionsFromNativeOrBlob(config))
         .then((sessions) => {
           const nextSessions = filterSessionsForState(
             sessions,
@@ -604,7 +605,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     createWithConcurrencyCheck: async (draft) => {
       try {
         const session = buildSessionFromDraft(config, draft);
-        const result = await createSessionRecord(config, session);
+        const result = await measureSessionOperation(config.moduleId, 'crear', () => createSessionRecord(config, session));
 
         set((state) => ({
           sessions: filterSessionsForState(
@@ -737,7 +738,9 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     },
     removeWithConcurrencyCheck: async (sessionId, expectedUpdatedAt) => {
       try {
-        const result = await removeSessionRecord(config, sessionId, expectedUpdatedAt);
+        const result = await measureSessionOperation(config.moduleId, 'eliminar', () =>
+          removeSessionRecord(config, sessionId, expectedUpdatedAt),
+        );
 
         set((state) => ({
           sessions: filterSessionsForState(
@@ -779,7 +782,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     },
     updateWithConcurrencyCheck: async (sessionId, draft, expectedUpdatedAt) => {
       try {
-        const result = await updateSessionRecord(
+        const result = await measureSessionOperation(config.moduleId, 'guardar', () => updateSessionRecord(
           config,
           sessionId,
           expectedUpdatedAt,
@@ -790,7 +793,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             conflictMessage:
               'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
           },
-        );
+        ));
 
         const changes = buildAuditChanges(
           result.previousRecord as unknown as Record<string, unknown>,
@@ -1072,7 +1075,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     },
     reopenSessionWithConcurrencyCheck: async (sessionId, expectedUpdatedAt) => {
       try {
-        const result = await updateSessionRecord(
+        const result = await measureSessionOperation(config.moduleId, 'reabrir', () => updateSessionRecord(
           config,
           sessionId,
           expectedUpdatedAt,
@@ -1083,7 +1086,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             conflictMessage:
               'La sesión ha sido modificada por otro usuario. Recarga antes de reabrirla.',
           },
-        );
+        ));
 
         set((state) => ({
           sessions: filterSessionsForState(
