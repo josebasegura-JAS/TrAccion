@@ -78,7 +78,9 @@ export function registerCoreDatabaseIpc(): void {
   // Serializar con lecturas y escrituras: no reabrir un handle mientras
   // una operación SQLite anterior continúa ejecutándose tras un timeout IPC.
   ipcMain.handle('database:health-check', () =>
-    enqueueSqliteIpc('database:health-check', () => checkSqliteHealth()),
+    // Los reintentos del renderer comparten la misma comprobación, incluso
+    // tras agotar su timeout de respuesta: no acumular trabajos en la cola.
+    enqueueSqliteIpc('database:health-check', () => checkSqliteHealth(), true),
   );
   ipcMain.handle('database:select-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
