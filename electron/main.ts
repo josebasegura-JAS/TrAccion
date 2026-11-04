@@ -1,5 +1,6 @@
 import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
 import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
+import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics.js';
 import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
@@ -116,6 +117,8 @@ async function requestRendererAppClose(mainWindow: BrowserWindow): Promise<void>
 // Reinicio voluntario: respeta la confirmación de formularios y el cierre SQLite existente.
 let restartRequestInProgress = false;
 ipcMain.handle('database:ipc-queue-diagnostics', () => getSqliteIpcQueueDiagnostics());
+// Resumen agregado sin contenidos ni identificadores personales.
+ipcMain.handle('performance:multiuser-report', () => getMultiuserPerformanceReport());
 ipcMain.handle('database:incident-report', () => getSqliteIncidentReport());
 ipcMain.handle('app:main-watchdog-report', () => {
   const file = path.join(app.getPath('userData'), 'electron-main-watchdog.jsonl');
@@ -320,6 +323,24 @@ if (!app.requestSingleInstanceLock()) {
     const startupStartedAt = Date.now();
     startupMark('Electron preparado');
     app.setAppUserModelId('com.metro.rrll.traccion');
+    // Diagnóstico ligero y LOCAL, no escribe ni consulta la carpeta SMB.
+    // Cada equipo genera su propio fichero para comparar dos usuarios.
+    let multiuserReportWriting = false;
+    const multiuserReportPath = path.join(app.getPath('userData'), 'last-multiuser-performance.json');
+    const persistMultiuserReport = async (): Promise<void> => {
+      if (multiuserReportWriting) return;
+      multiuserReportWriting = true;
+      try {
+        await writeFile(multiuserReportPath, JSON.stringify(getMultiuserPerformanceReport(), null, 2), 'utf8');
+      } catch (error) {
+        console.warn('[multiuser-perf] No se pudo guardar diagnóstico local.', error);
+      } finally {
+        multiuserReportWriting = false;
+      }
+    };
+    const multiuserReportTimer = setInterval(() => { void persistMultiuserReport(); }, 60_000);
+    multiuserReportTimer.unref?.();
+    app.on('will-quit', () => { clearInterval(multiuserReportTimer); void persistMultiuserReport(); });
     // El watchdog reside fuera del event loop principal; solo escribe diagnósticos locales.
     try {
       const watchdog = utilityProcess.fork(path.join(__dirname, 'mainWatchdogWorker.js'), [], {
