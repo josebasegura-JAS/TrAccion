@@ -25,6 +25,18 @@ const STARTUP_LOCK_WAIT_MS = 15 * 1000;
 const STARTUP_LOCK_RETRY_MS = 250;
 const DEFAULT_OPERATION_LOCK_WAIT_MS = 15 * 1000;
 const OPERATION_LOCK_RETRY_MS = 50;
+const OPERATION_LOCK_MAX_RETRY_MS = 180;
+
+/** Desincroniza los reintentos de varios equipos sobre el mismo SMB.
+ * Los primeros intentos siguen siendo rápidos; el intervalo se limita
+ * para no elevar sin control el tiempo de reacción.
+ */
+export function computeOperationLockRetryDelayMs(attempt: number, randomness = Math.random()): number {
+  const boundedAttempt = Math.max(0, Math.min(8, Math.trunc(attempt)));
+  const base = Math.min(OPERATION_LOCK_RETRY_MS + boundedAttempt * 15, 140);
+  const fraction = Number.isFinite(randomness) ? Math.max(0, Math.min(randomness, 0.999999)) : 0;
+  return Math.min(OPERATION_LOCK_MAX_RETRY_MS, base + Math.floor(fraction * 40));
+}
 
 export const DATABASE_HEARTBEAT_BLOCKED_MESSAGE =
   'La conexión con la carpeta compartida de SQLite puede estar interrumpida. Se bloquean nuevas escrituras hasta recuperar el heartbeat.';
@@ -318,6 +330,12 @@ export function createDatabaseLockManager(
     const startedAt = Date.now();
     let lastLock: DatabaseLockInfo | null = null;
     let lastReadError: unknown = null;
+    let retryAttempt = 0;
+    const retryAfterContention = async (): Promise<void> => {
+      const retryMs = computeOperationLockRetryDelayMs(retryAttempt);
+      retryAttempt += 1;
+      await new Promise<void>((resolve) => { setTimeout(resolve, retryMs); });
+    };
 
     while (Date.now() - startedAt <= waitMs) {
       let existingLock: DatabaseLockInfo | null;
@@ -331,9 +349,7 @@ export function createDatabaseLockManager(
         // Puede ser un owner.json a medio escribir o un problema SMB
         // transitorio. Nunca lo interpretamos como "lock libre".
         await removeCorruptStaleLock(lockPath);
-        await new Promise((resolve) => {
-          setTimeout(resolve, OPERATION_LOCK_RETRY_MS);
-        });
+        await retryAfterContention();
         continue;
       }
 
@@ -354,10 +370,10 @@ export function createDatabaseLockManager(
         }
       }
 
-      if (!existingLock) {
-        await removeCorruptStaleLock(lockPath);
-      }
-
+      // readLock devuelve null únicamente cuando el directorio del lock no
+      // existe. Si existe con owner.json ausente/corrupto, readLock lanza
+      // error y se comprueba/recupera arriba. No hacer stat SMB adicional
+      // en cada adquisición normal sin propietario.
       if (!existingLock || isLockStale(existingLock)) {
         const lock = createLockInfo();
         try {
@@ -373,9 +389,7 @@ export function createDatabaseLockManager(
         }
       }
 
-      await new Promise((resolve) => {
-        setTimeout(resolve, OPERATION_LOCK_RETRY_MS);
-      });
+      await retryAfterContention();
     }
 
     if (lastLock) {
