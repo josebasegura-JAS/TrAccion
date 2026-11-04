@@ -17,7 +17,8 @@ interface SharedRecordLockState {
   isReadOnly: boolean;
 }
 
-const HEARTBEAT_MS = 10 * 1000;
+// El lease SQLite dura 75s; renovamos cada 20s para tolerar cortes breves.
+const HEARTBEAT_MS = 20 * 1000;
 const RETRY_AFTER_TEMPORARY_LOCK_MS = 300;
 const MAX_CONSECUTIVE_TEMPORARY_HEARTBEAT_FAILURES = 2;
 const TEMPORARY_LOCK_NOTICE_DELAY_MS = 1_000;
