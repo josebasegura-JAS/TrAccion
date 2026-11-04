@@ -12,6 +12,9 @@ const RECONNECT_FAST_INTERVAL_MS = 2_000;
 const RECONNECT_SLOW_INTERVAL_MS = 5_000;
 const RECONNECT_FAST_ATTEMPTS = 5;
 const HEALTH_CHECK_TIMEOUT_MS = 6_000;
+// Un único timeout de respuesta NO demuestra una desconexión SMB. El IPC
+// puede estar esperando detrás de una operación válida en la cola SQLite.
+const TRANSIENT_TIMEOUTS_BEFORE_BLOCK = 2;
 const CONNECTIVITY_MESSAGE =
   'Se ha perdido la conexión con la base SQLite compartida. La edición permanece bloqueada mientras TrAcción intenta reconectar.';
 
@@ -43,6 +46,7 @@ export function subscribeConnectionDiagnostics(listener: () => void): () => void
 let timerId: number | null = null;
 let checkInProgress = false;
 let consecutiveFailures = 0;
+let consecutiveHealthCheckTimeouts = 0;
 let blockedByHealthMonitor = false;
 let monitorStarted = false;
 let browserOnlineHandler: (() => void) | null = null;
@@ -103,10 +107,19 @@ function blockEditing(message = CONNECTIVITY_MESSAGE): void {
   );
 }
 
-function markPotentialNetworkTransition(message: string): void {
-  consecutiveFailures = Math.max(1, consecutiveFailures);
-  blockEditing(message);
+function markPotentialNetworkTransition(message: string, confirmedOffline = false): void {
+  // Los eventos 'online' y 'connection.change' indican transición de red,
+  // NO que el recurso SQLite/SMB sea inaccesible. Verificar sin interrumpir
+  // la edición que aún está confirmada como disponible.
+  if (confirmedOffline) {
+    consecutiveFailures = Math.max(1, consecutiveFailures);
+    blockEditing(message);
+  }
   requestDatabaseReconnectCheck();
+}
+
+function isHealthCheckResponseTimeout(error: unknown): boolean {
+  return error instanceof Error && error.message === `La comprobación SQLite superó ${HEALTH_CHECK_TIMEOUT_MS / 1_000} s.`;
 }
 
 function getNetworkInformation(): NetworkInformationLike | null {
@@ -154,6 +167,7 @@ async function runHealthCheck(): Promise<void> {
   try {
     const result = await withTimeout(window.traccion.databaseHealthCheck(), HEALTH_CHECK_TIMEOUT_MS);
     publishDatabaseStatus(result.status);
+    consecutiveHealthCheckTimeouts = 0;
 
     if (!result.ok) {
       consecutiveFailures += 1;
@@ -173,8 +187,17 @@ async function runHealthCheck(): Promise<void> {
   } catch (error) {
     consecutiveFailures += 1;
     const message = error instanceof Error ? error.message : 'Error verificando SQLite.';
+    const timedOut = isHealthCheckResponseTimeout(error);
+    consecutiveHealthCheckTimeouts = timedOut ? consecutiveHealthCheckTimeouts + 1 : 0;
     updateDiagnostics({ lastFailureAt: new Date().toISOString(), lastError: message, consecutiveFailures });
-    blockEditing(`${CONNECTIVITY_MESSAGE} ${message}`);
+    if (timedOut && !blockedByHealthMonitor &&
+        consecutiveHealthCheckTimeouts < TRANSIENT_TIMEOUTS_BEFORE_BLOCK) {
+      // La primera espera lenta es solo una señal de latencia: no hay un
+      // fallo real demostrado. La siguiente comprobación decidirá.
+      console.warn('[sqlite-health] Comprobación lenta: se conserva la edición hasta confirmar una segunda espera.', message);
+    } else {
+      blockEditing(`${CONNECTIVITY_MESSAGE} ${message}`);
+    }
   } finally {
     updateDiagnostics({ checking: false, lastCheckDurationMs: Math.round(performance.now() - checkStartedAt) });
     checkInProgress = false;
@@ -202,6 +225,7 @@ export function startDatabaseHealthMonitor(): void {
   browserOfflineHandler = () => {
     markPotentialNetworkTransition(
       'Windows ha informado de una pérdida de red. Reconectando con la base compartida…',
+      true,
     );
   };
   window.addEventListener('online', browserOnlineHandler);
@@ -235,6 +259,7 @@ export function stopDatabaseHealthMonitor(): void {
   networkConnectionChangeHandler = null;
   checkInProgress = false;
   consecutiveFailures = 0;
+  consecutiveHealthCheckTimeouts = 0;
   blockedByHealthMonitor = false;
   publishDatabaseConnectivityBlock(false, undefined, 'health-monitor');
   publishDatabaseConnectivityState('connected');
