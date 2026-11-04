@@ -13,6 +13,8 @@ export interface PersistenceFeedback {
   key?: string;
   message: string;
   visibility?: PersistenceFeedbackVisibility;
+  /** Diferencia un error de lectura de un guardado fallido. */
+  operation?: 'read' | 'write';
 }
 
 const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
