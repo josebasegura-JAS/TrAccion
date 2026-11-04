@@ -406,6 +406,7 @@ const {
   getLockInfoPath,
   getLockPath,
   isDatabaseWriteBlockedByHeartbeat,
+  clearHeartbeatBlock,
   readLock,
   releaseLock,
   startDatabaseLockHeartbeat,
@@ -705,6 +706,18 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     }
     if (identity.applicationId !== currentStatus.applicationId || identity.environment !== currentStatus.environment) {
       throw new Error('Los metadatos de la base SQLite ya no coinciden con la base validada al iniciar.');
+    }
+
+    // Esta comprobación se ejecuta dentro de la cola IPC, después de
+    // comprobar fichero, SELECT, esquema e identidad. Nunca rehabilitar
+    // escrituras si sigue pendiente una E/S de heartbeat anterior.
+    if (!clearHeartbeatBlock()) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        checkedAt,
+        message: 'Recuperación pendiente: todavía hay una comprobación del bloqueo SQLite en curso.',
+      };
     }
 
     return {

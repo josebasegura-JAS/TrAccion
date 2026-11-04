@@ -23,6 +23,7 @@ export interface SqliteLockLifecycle {
   ): void;
   assertDatabaseWritesAllowed(): void;
   isDatabaseWriteBlockedByHeartbeat(): boolean;
+  clearHeartbeatBlock(): boolean;
   startDatabaseLockHeartbeat(
     lockPath: string,
     lock: DatabaseLockInfo,
@@ -51,6 +52,7 @@ export function createSqliteLockLifecycle(getOwnerId: () => string): SqliteLockL
     setConnectivityIssueNotifier: (notifier) => getManager().setConnectivityIssueNotifier(notifier),
     assertDatabaseWritesAllowed: () => getManager().assertDatabaseWritesAllowed(),
     isDatabaseWriteBlockedByHeartbeat: () => getManager().isDatabaseWriteBlockedByHeartbeat(),
+    clearHeartbeatBlock: () => getManager().clearHeartbeatBlock(),
     startDatabaseLockHeartbeat: (lockPath, lock) =>
       getManager().startDatabaseLockHeartbeat(lockPath, lock),
     releaseLock: (lockPath, lock) => getManager().releaseLock(lockPath, lock),
