@@ -115,13 +115,22 @@ export async function recoverInterruptedSummaryWord(
 ): Promise<void> {
   const names = await readdir(directory);
   if (names.some((name) => isSummaryName(name))) return;
-  const backups = names.filter((name) => {
+  const backupSourceName = (name: string): string | null => {
     const cut = name.lastIndexOf(BACKUP_SUFFIX);
-    return cut >= 0 && isSummaryName(name.slice(0, cut));
+    if (cut >= 0) return name.slice(0, cut);
+    // Las versiones anteriores utilizaban esta extensión fija.
+    return name.endsWith('.traccion-backup')
+      ? name.slice(0, -'.traccion-backup'.length)
+      : null;
+  };
+  const backups = names.filter((name) => {
+    const original = backupSourceName(name);
+    return original !== null && isSummaryName(original);
   });
   if (backups.length !== 1) return;
   const backupName = backups[0];
-  const originalName = backupName.slice(0, backupName.lastIndexOf(BACKUP_SUFFIX));
+  const originalName = backupSourceName(backupName);
+  if (!originalName) return;
   await assertOwned();
   await rename(path.join(directory, backupName), path.join(directory, originalName));
 }
