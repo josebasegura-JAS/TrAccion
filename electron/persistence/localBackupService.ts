@@ -121,7 +121,34 @@ export interface LocalBackupService {
   restoreLocalBackup: (fileName: string) => Promise<RestoreLocalBackupResult>;
 }
 
-const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
+// Los guardados ya son duraderos en SQLite: las copias completas se agrupan
+// por ventana temporal, no tras cada modificación de Tareas.
+const LOCAL_LIVE_BACKUP_INTERVAL_MS = 15 * 60 * 1000;
+const SHARED_BACKUP_MARKER_SUFFIX = '.backup-coordination.json';
+
+type SharedBackupMarker = {
+  databaseSize: number;
+  databaseMtimeMs: number;
+  databaseCtimeMs: number;
+};
+
+// Comparación de la huella del fichero EN EL MISMO servidor SMB: evita
+// depender de los relojes de los distintos ordenadores. No se omite una copia
+// si la marca falta, es ilegible o el fichero SQLite ha cambiado.
+async function isSharedSnapshotCurrent(databasePath: string, markerPath: string): Promise<boolean> {
+  try {
+    const [source, raw] = await Promise.all([stat(databasePath), readFile(markerPath, 'utf8')]);
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return false;
+    const marker = parsed as Partial<SharedBackupMarker>;
+    return marker.databaseSize === source.size
+      && marker.databaseMtimeMs === source.mtimeMs
+      && marker.databaseCtimeMs === source.ctimeMs;
+  } catch {
+    return false;
+  }
+}
+
 
 export function createLocalBackupService(dependencies: LocalBackupServiceDependencies): LocalBackupService {
   let localBackupQueue: Promise<void> = Promise.resolve();
@@ -133,13 +160,14 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   let backupRevision = 0;
   let backedUpRevision = 0;
 
-  const writeLocalBackupArtifacts = async (reason: string): Promise<boolean> => {
+  const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
     const currentDatabase = dependencies.getDatabase();
     const currentStatus = dependencies.getStatus();
     if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
       return false;
     }
 
+    const startedAt = Date.now();
     const backupDirectory = getLocalBackupDirectory();
     await mkdir(backupDirectory, { recursive: true });
 
@@ -154,10 +182,18 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       throw error;
     }
 
+    const acquiredAfterMs = Date.now() - startedAt;
     const backupLockPath = dependencies.getLockPath(currentStatus.path);
+    const sharedMarkerPath = `${currentStatus.path}${SHARED_BACKUP_MARKER_SUFFIX}`;
     const backupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(backupLockPath, backupLock);
 
     try {
+      // El lock es global entre ordenadores. Si otro equipo ya respaldó
+      // exactamente esta revisión de la base, no se duplica la copia.
+      if (!force && await isSharedSnapshotCurrent(currentStatus.path, sharedMarkerPath)) {
+        console.info(`[backup-perf] Copia cubierta por otro equipo: esperaLock=${acquiredAfterMs} ms.`);
+        return true;
+      }
       const now = new Date().toISOString();
       const backupTimestamp = backupTimestampForFileName();
       const records = dependencies.readAllPersistedRecords(currentDatabase);
@@ -230,6 +266,22 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         console.warn('No se ha podido crear la copia de respaldo secundaria.', error);
       }
 
+      if (coreSqliteBackupOk) {
+        // Solo se publica la marca tras existir copia SQLite local y compartida.
+        // El lock impide escrituras concurrentes entre la huella y la marca.
+        try {
+          const source = await stat(currentStatus.path);
+          const marker: SharedBackupMarker = {
+            databaseSize: source.size,
+            databaseMtimeMs: source.mtimeMs,
+            databaseCtimeMs: source.ctimeMs,
+          };
+          await writeFile(sharedMarkerPath, JSON.stringify(marker), 'utf8');
+        } catch (error) {
+          console.warn('No se ha podido publicar la coordinación de copias SQLite; el siguiente equipo hará su propia copia.', error);
+        }
+      }
+      console.info(`[backup-perf] copiaViva=${Date.now() - startedAt} ms, esperaLock=${acquiredAfterMs} ms, éxito=${coreSqliteBackupOk}.`);
       return coreSqliteBackupOk;
     } finally {
       clearInterval(backupLockHeartbeat);
@@ -239,50 +291,60 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
   };
 
-  const enqueueLocalBackup = (reason: string): void => {
-    backupRevision += 1;
-    pendingLocalBackupReason = pendingLocalBackupReason ? `${pendingLocalBackupReason}, ${reason}` : reason;
-
-    if (localBackupTimer) {
-      clearTimeout(localBackupTimer);
-    }
-
+  const schedulePendingBackup = (): void => {
+    if (localBackupTimer || backupRevision <= backedUpRevision) return;
     localBackupTimer = setTimeout(() => {
-      const reasonToWrite = pendingLocalBackupReason ?? reason;
-      const revisionToBackup = backupRevision;
-      pendingLocalBackupReason = null;
       localBackupTimer = null;
+      const reason = pendingLocalBackupReason ?? 'periodic:pending';
+      const revision = backupRevision;
+      pendingLocalBackupReason = null;
 
       localBackupQueue = localBackupQueue
         .then(async () => {
-          const ok = await writeLocalBackupArtifacts(reasonToWrite);
-          if (ok) backedUpRevision = Math.max(backedUpRevision, revisionToBackup);
+          const ok = await writeLocalBackupArtifacts(reason);
+          if (ok) {
+            backedUpRevision = Math.max(backedUpRevision, revision);
+          } else {
+            pendingLocalBackupReason = pendingLocalBackupReason ?? reason;
+          }
         })
         .catch((error: unknown) => {
+          pendingLocalBackupReason = pendingLocalBackupReason ?? reason;
           console.warn('No se ha podido actualizar la copia local de respaldo SQLite.', error);
           dependencies.enqueueErrorLogger?.(error);
+        })
+        .finally(() => {
+          // Reintento siempre acotado a una nueva ventana, nunca un ciclo
+          // rápido ante contención SMB. Si hubo nuevas escrituras durante
+          // la copia también se incluyen en la siguiente ventana.
+          schedulePendingBackup();
         });
-    }, LOCAL_LIVE_BACKUP_DEBOUNCE_MS);
+    }, LOCAL_LIVE_BACKUP_INTERVAL_MS);
+    localBackupTimer.unref?.();
+  };
+
+  const enqueueLocalBackup = (reason: string): void => {
+    backupRevision += 1;
+    pendingLocalBackupReason = pendingLocalBackupReason
+      ? pendingLocalBackupReason.includes(reason) ? pendingLocalBackupReason : `${pendingLocalBackupReason}, ${reason}`
+      : reason;
+    // No reiniciar el temporizador por cada cambio.
+    schedulePendingBackup();
   };
 
   const flushPendingLocalBackup = async (): Promise<void> => {
-    const reasonToWrite = pendingLocalBackupReason;
-
     if (localBackupTimer) {
       clearTimeout(localBackupTimer);
       localBackupTimer = null;
     }
-
+    const reason = pendingLocalBackupReason;
     pendingLocalBackupReason = null;
     await localBackupQueue;
-
-    if (reasonToWrite) {
-      const revisionToBackup = backupRevision;
-      const ok = await writeLocalBackupArtifacts(reasonToWrite);
-      if (ok) backedUpRevision = Math.max(backedUpRevision, revisionToBackup);
+    if (backupRevision > backedUpRevision) {
+      const revision = backupRevision;
+      const ok = await writeLocalBackupArtifacts(reason ?? 'flush:pending');
+      if (ok) backedUpRevision = Math.max(backedUpRevision, revision);
     }
-
-    await localBackupQueue;
   };
 
   const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
@@ -433,13 +495,21 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
 
     const metrics = await writeShutdownLocalBackupArtifacts();
-    backedUpRevision = backupRevision;
     return metrics;
   };
 
   const createManualLocalBackup = async (): Promise<void> => {
-    await flushPendingLocalBackup();
-    await writeLocalBackupArtifacts('manual-backup');
+    // La solicitud manual hace una sola copia forzada, incluso si un equipo
+    // distinto ya publicó un snapshot de la misma revisión.
+    if (localBackupTimer) {
+      clearTimeout(localBackupTimer);
+      localBackupTimer = null;
+    }
+    await localBackupQueue;
+    const revision = backupRevision;
+    const ok = await writeLocalBackupArtifacts('manual-backup', true);
+    if (ok) backedUpRevision = Math.max(backedUpRevision, revision);
+    else schedulePendingBackup();
   };
 
   const listLocalBackups = async (): Promise<LocalBackupEntry[]> => {
@@ -544,7 +614,14 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       }
 
       if (currentStatus.ready && currentStatus.phase === 'active') {
-        enqueueLocalBackup(`pre-restore:${safeFileName}`);
+        // Restaurar es destructivo: aquí no se difiere el respaldo al
+        // siguiente cuarto de hora. Si no puede confirmarse la copia
+        // preventiva, cancelar la restauración en lugar de arriesgar datos.
+        await flushPendingLocalBackup();
+        const protectedBeforeRestore = await writeLocalBackupArtifacts(`pre-restore:${safeFileName}`, true);
+        if (!protectedBeforeRestore) {
+          return { ok: false, status: currentStatus, message: 'No se ha podido completar la copia preventiva; restauración cancelada.' };
+        }
       }
 
       const nextStatus = await dependencies.migrateLocalStorageSnapshot({ records });
