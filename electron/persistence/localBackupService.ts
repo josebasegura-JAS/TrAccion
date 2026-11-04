@@ -291,49 +291,45 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
   };
 
-  const enqueueLocalBackup = (reason: string): void => {
-    backupRevision += 1;
-    // Acumular motivos sin crecimiento indefinido de cadenas durante el día.
-    pendingLocalBackupReason = pendingLocalBackupReason
-      ? pendingLocalBackupReason.includes(reason) ? pendingLocalBackupReason : `${pendingLocalBackupReason}, ${reason}`
-      : reason;
-
-    // Primera escritura abre una ventana de 15 minutos. No reiniciar el
-    // temporizador con cada guardado: en una mañana activa se harían copias
-    // periódicas igualmente, incluso sin abandonar Tareas.
-    if (localBackupTimer) return;
+  const schedulePendingBackup = (): void => {
+    if (localBackupTimer || backupRevision <= backedUpRevision) return;
     localBackupTimer = setTimeout(() => {
-      const reasonToWrite = pendingLocalBackupReason ?? reason;
-      const revisionToBackup = backupRevision;
-      pendingLocalBackupReason = null;
       localBackupTimer = null;
+      const reason = pendingLocalBackupReason ?? 'periodic:pending';
+      const revision = backupRevision;
+      pendingLocalBackupReason = null;
 
       localBackupQueue = localBackupQueue
         .then(async () => {
-          const ok = await writeLocalBackupArtifacts(reasonToWrite);
-          if (ok) backedUpRevision = Math.max(backedUpRevision, revisionToBackup);
-          // Si falló el bloqueo o la red, se conserva la revisión pendiente
-          // y se reintenta en la próxima ventana, sin entrar en un bucle rápido.
-          if (!ok && !localBackupTimer) {
-            pendingLocalBackupReason = pendingLocalBackupReason ?? reasonToWrite;
-            localBackupTimer = setTimeout(() => {
-              localBackupTimer = null;
-              const retryReason = pendingLocalBackupReason ?? reasonToWrite;
-              pendingLocalBackupReason = null;
-              localBackupQueue = localBackupQueue.then(async () => {
-                const retried = await writeLocalBackupArtifacts(retryReason);
-                if (retried) backedUpRevision = Math.max(backedUpRevision, backupRevision);
-              });
-            }, LOCAL_LIVE_BACKUP_INTERVAL_MS);
-            localBackupTimer.unref?.();
+          const ok = await writeLocalBackupArtifacts(reason);
+          if (ok) {
+            backedUpRevision = Math.max(backedUpRevision, revision);
+          } else {
+            pendingLocalBackupReason = pendingLocalBackupReason ?? reason;
           }
         })
         .catch((error: unknown) => {
+          pendingLocalBackupReason = pendingLocalBackupReason ?? reason;
           console.warn('No se ha podido actualizar la copia local de respaldo SQLite.', error);
           dependencies.enqueueErrorLogger?.(error);
+        })
+        .finally(() => {
+          // Reintento siempre acotado a una nueva ventana, nunca un ciclo
+          // rápido ante contención SMB. Si hubo nuevas escrituras durante
+          // la copia también se incluyen en la siguiente ventana.
+          schedulePendingBackup();
         });
     }, LOCAL_LIVE_BACKUP_INTERVAL_MS);
     localBackupTimer.unref?.();
+  };
+
+  const enqueueLocalBackup = (reason: string): void => {
+    backupRevision += 1;
+    pendingLocalBackupReason = pendingLocalBackupReason
+      ? pendingLocalBackupReason.includes(reason) ? pendingLocalBackupReason : `${pendingLocalBackupReason}, ${reason}`
+      : reason;
+    // No reiniciar el temporizador por cada cambio.
+    schedulePendingBackup();
   };
 
   const flushPendingLocalBackup = async (): Promise<void> => {
@@ -341,13 +337,13 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       clearTimeout(localBackupTimer);
       localBackupTimer = null;
     }
-    const reasonToWrite = pendingLocalBackupReason;
+    const reason = pendingLocalBackupReason;
     pendingLocalBackupReason = null;
     await localBackupQueue;
     if (backupRevision > backedUpRevision) {
-      const revisionToBackup = backupRevision;
-      const ok = await writeLocalBackupArtifacts(reasonToWrite ?? 'flush:pending');
-      if (ok) backedUpRevision = Math.max(backedUpRevision, revisionToBackup);
+      const revision = backupRevision;
+      const ok = await writeLocalBackupArtifacts(reason ?? 'flush:pending');
+      if (ok) backedUpRevision = Math.max(backedUpRevision, revision);
     }
   };
 
@@ -499,9 +495,6 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
 
     const metrics = await writeShutdownLocalBackupArtifacts();
-    // El cierre no debe marcar una revisión como respaldada si ni siquiera
-    // llegó a generar la instantánea local por problemas de lock o E/S.
-    if (metrics.localSqliteMs > 0) backedUpRevision = backupRevision;
     return metrics;
   };
 
@@ -613,7 +606,14 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       }
 
       if (currentStatus.ready && currentStatus.phase === 'active') {
-        enqueueLocalBackup(`pre-restore:${safeFileName}`);
+        // Restaurar es destructivo: aquí no se difiere el respaldo al
+        // siguiente cuarto de hora. Si no puede confirmarse la copia
+        // preventiva, cancelar la restauración en lugar de arriesgar datos.
+        await flushPendingLocalBackup();
+        const protectedBeforeRestore = await writeLocalBackupArtifacts(`pre-restore:${safeFileName}`, true);
+        if (!protectedBeforeRestore) {
+          return { ok: false, status: currentStatus, message: 'No se ha podido completar la copia preventiva; restauración cancelada.' };
+        }
       }
 
       const nextStatus = await dependencies.migrateLocalStorageSnapshot({ records });
