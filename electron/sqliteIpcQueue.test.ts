@@ -260,4 +260,72 @@ describe('enqueueSqliteIpc', () => {
     await vi.runAllTimersAsync();
     await expect(after).resolves.toBe('sigue');
   });
+  it('los health-checks simultáneos comparten una única entrada en cola', async () => {
+    const check = vi.fn(async () => 'healthy');
+    const first = enqueueSqliteIpc('database:health-check', check, true);
+    const second = enqueueSqliteIpc('database:health-check', check, true);
+    const third = enqueueSqliteIpc('database:health-check', check, true);
+
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    expect(getSqliteIpcQueueDiagnostics().queuedOperations).toBe(1);
+    await vi.runAllTimersAsync();
+    await expect(first).resolves.toBe('healthy');
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it('no vuelve a encolar health-checks tras timeout mientras el trabajo real siga pendiente', async () => {
+    let finish!: (value: string) => void;
+    const blocked = new Promise<string>((resolve) => { finish = resolve; });
+    const check = vi.fn(() => blocked);
+    const first = enqueueSqliteIpc('database:health-check', check, true);
+    const observed = first.then(() => 'ok', () => 'timeout');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(check).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(await observed).toBe('timeout');
+    expect(getSqliteIpcQueueDiagnostics().timedOut).toBe(true);
+
+    const second = enqueueSqliteIpc('database:health-check', check, true);
+    expect(second).toBe(first);
+    expect(getSqliteIpcQueueDiagnostics().queuedOperations).toBe(0);
+    await expect(second).rejects.toThrow('superó el límite');
+    expect(check).toHaveBeenCalledTimes(1);
+
+    finish('completed');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getSqliteIpcQueueDiagnostics().runningOperation).toBeNull();
+    const third = enqueueSqliteIpc('database:health-check', async () => 'recovered', true);
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(third).resolves.toBe('recovered');
+  });
+
+  it('una escritura atascada no es adelantada por health-checks agrupados', async () => {
+    let finish!: () => void;
+    const blocked = new Promise<void>((resolve) => { finish = resolve; });
+    const save = enqueueSqliteIpc('tasks:save-record-if-unchanged', () => blocked);
+    const saveObserved = save.then(() => 'ok', () => 'timeout');
+    await vi.advanceTimersByTimeAsync(0);
+
+    const check = vi.fn(async () => 'ok');
+    const first = enqueueSqliteIpc('database:health-check', check, true);
+    const second = enqueueSqliteIpc('database:health-check', check, true);
+    expect(second).toBe(first);
+    expect(getSqliteIpcQueueDiagnostics().queuedOperations).toBe(1);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await saveObserved).toBe('timeout');
+    expect(check).not.toHaveBeenCalled();
+
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await first).toBe('ok');
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it('health-check dispone de tiempo de recuperación sin ampliar los guardados ordinarios', () => {
+    expect(resolveSqliteIpcTimeoutMs('database:health-check')).toBe(25_000);
+    expect(resolveSqliteIpcTimeoutMs('tasks:save-record-if-unchanged')).toBe(12_000);
+  });
+
+
 });
