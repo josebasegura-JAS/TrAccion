@@ -166,11 +166,11 @@ describe('localBackupService - cierre sin backup redundante', () => {
     const service = createLocalBackupService(buildDependencies(databasePath, acquireLock));
     service.enqueueLocalBackup('save:test');
 
-    // Disparamos únicamente el debounce. El cierre se solicita inmediatamente
+    // Disparamos únicamente la ventana periódica. El cierre se solicita inmediatamente
     // después, mientras la copia viva sigue bloqueada en acquireLock(). En vez de
     // depender del orden interno de microtareas de Vitest, esperamos una señal
     // emitida por la propia dependencia cuando la copia ha empezado realmente.
-    vi.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(15 * 60 * 1000);
     const shutdownPromise = service.createShutdownLocalBackup();
     await acquireStarted;
     expect(acquireLock).toHaveBeenCalledTimes(1);
@@ -182,4 +182,49 @@ describe('localBackupService - cierre sin backup redundante', () => {
     expect(acquireLock).toHaveBeenCalledTimes(1);
     expect(() => readdirSync(path.join(testPaths.userData, 'sqlite-local-backup', 'shutdown'))).toThrow();
   });
+
+  it('no inicia copias durante los guardados sucesivos y agrupa en una ventana de 15 minutos', async () => {
+    vi.useFakeTimers();
+    const acquireLock = vi.fn(buildDependencies(databasePath).acquireLock);
+    const service = createLocalBackupService(buildDependencies(databasePath, acquireLock));
+
+    service.enqueueLocalBackup('save:task_records');
+    vi.advanceTimersByTime(5 * 60 * 1000);
+    service.enqueueLocalBackup('save:task_records');
+    vi.advanceTimersByTime(5 * 60 * 1000);
+    service.enqueueLocalBackup('save:task_records');
+    expect(acquireLock).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(5 * 60 * 1000);
+    // Esperar a que finalicen las tareas asíncronas disparadas por el timer.
+    await service.flushPendingLocalBackup();
+    expect(acquireLock).toHaveBeenCalledTimes(1);
+  });
+
+  it('dos equipos no duplican el backup si SQLite sigue en la misma revisión', async () => {
+    const firstAcquire = vi.fn(buildDependencies(databasePath).acquireLock);
+    const secondAcquire = vi.fn(buildDependencies(databasePath).acquireLock);
+    const first = createLocalBackupService(buildDependencies(databasePath, firstAcquire));
+    const second = createLocalBackupService(buildDependencies(databasePath, secondAcquire));
+
+    first.enqueueLocalBackup('save:task_records');
+    await first.flushPendingLocalBackup();
+    const backupDirectory = path.join(testPaths.userData, 'sqlite-local-backup');
+    const previousBackup = readdirSync(backupDirectory);
+
+    second.enqueueLocalBackup('save:task_records');
+    await second.flushPendingLocalBackup();
+
+    expect(firstAcquire).toHaveBeenCalledTimes(1);
+    // La segunda instancia toma el lock para verificar la huella y lo
+    // libera, pero no hace otra copia física si no hubo escrituras nuevas.
+    expect(secondAcquire).toHaveBeenCalledTimes(1);
+    expect(readdirSync(backupDirectory)).toEqual(previousBackup);
+
+    writeFileSync(databasePath, 'sqlite-test-data-updated');
+    second.enqueueLocalBackup('save:task_records');
+    await second.flushPendingLocalBackup();
+    expect(secondAcquire).toHaveBeenCalledTimes(2);
+  });
+
 });
