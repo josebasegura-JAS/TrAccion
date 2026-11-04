@@ -21,6 +21,7 @@ import { type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import { buildImportedManagedSession, type ManagedSessionStateStore } from './createSessionStore';
 import { loadSessionLinkedTasks, missingSessionTaskIds } from './sessionLinkedTaskLoader';
+import { measureSessionOperation } from './sessionPerformance';
 import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
 import { HistoricSessionCard, SessionCard, SessionPanel } from './SessionManagementPageCards';
 import { SessionImportPreviewModal } from './SessionImportPreviewModal';
@@ -125,7 +126,7 @@ export function SessionManagementPage({
       .filter((id) => !requestedLinkedTaskIds.current.has(id));
     if (missing.length === 0 || !window.traccion?.loadTaskRecords) return;
     missing.forEach((id) => requestedLinkedTaskIds.current.add(id));
-    void loadSessionLinkedTasks(missing)
+    void measureSessionOperation(config.moduleId, 'puntos vinculados', () => loadSessionLinkedTasks(missing))
       .then((loaded) => {
         setLinkedTasks((previous) => {
           const next = new Map(previous);
@@ -138,7 +139,7 @@ export function SessionManagementPage({
         missing.forEach((id) => requestedLinkedTaskIds.current.delete(id));
         console.warn('[sesiones] No se han podido recuperar los puntos vinculados.', error);
       });
-  }, [openPanel, sessionSearch, sessions, tasksById]);
+  }, [config.moduleId, openPanel, sessionSearch, sessions, tasksById]);
   const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
   const rutaResumenParitaria = useConfiguracionStore((state) => state.rutaResumenParitaria);
 
@@ -156,7 +157,10 @@ export function SessionManagementPage({
       return { ok: false, message: `No se han podido recuperar ${missingTaskIds.length} puntos del orden del día. Recarga Tareas antes de reintentar.` };
     }
     const points = session.items.map((taskId) => tasksById.get(taskId)!.titulo.trim());
-    return updater({ folderPath, code: session.code, date: session.date, points });
+    return measureSessionOperation(config.moduleId, 'resumen Word', () =>
+      updater({ folderPath, code: session.code, date: session.date, points }),
+      (result) => !result.ok,
+    );
   };
   const openSessions = useMemo(
     () => sortOpenSessions(sessions.filter((session) => session.status === 'open')),
@@ -591,7 +595,7 @@ export function SessionManagementPage({
             : null;
 
           guard.assertActive();
-          const result = await atomicClose({
+          const result = await measureSessionOperation(config.moduleId, 'cierre SQLite', () => atomicClose({
             module: config.moduleId === 'comite' ? 'comite' : 'paritaria',
             session: {
               id: closedSession.id,
@@ -610,7 +614,7 @@ export function SessionManagementPage({
                   sourceSessionId: closedSession.id,
                 }
               : null,
-          });
+          }), (response) => !response.ok);
 
           if (!result.ok) {
             throw new Error(result.message);
