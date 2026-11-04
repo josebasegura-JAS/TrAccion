@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createDatabaseLockManager } from './databaseLockManager.js';
+import { computeOperationLockRetryDelayMs, createDatabaseLockManager } from './databaseLockManager.js';
 
 describe('integridad de locks durante cambios de red (sin servidor SMB real)', () => {
   let directory: string;
@@ -13,6 +13,24 @@ describe('integridad de locks durante cambios de red (sin servidor SMB real)', (
     dbPath = path.join(directory, 'shared.sqlite');
   });
   afterEach(() => rmSync(directory, { recursive: true, force: true }));
+
+  it('reintenta con dispersión acotada y primeros intentos rápidos', () => {
+    expect(computeOperationLockRetryDelayMs(0, 0)).toBe(50);
+    expect(computeOperationLockRetryDelayMs(0, 0.99)).toBeLessThan(90);
+    expect(computeOperationLockRetryDelayMs(1, 0)).toBeGreaterThanOrEqual(50);
+    expect(computeOperationLockRetryDelayMs(9, 0.99)).toBeLessThanOrEqual(180);
+    expect(computeOperationLockRetryDelayMs(4, 0)).not.toBe(computeOperationLockRetryDelayMs(4, 0.9));
+  });
+
+  it('no elimina un lock con metadatos transitoriamente incompletos', async () => {
+    const owner = createDatabaseLockManager({ getOwnerId: () => 'equipo-b' });
+    const lockPath = owner.getLockPath(dbPath);
+    mkdirSync(lockPath);
+    writeFileSync(path.join(lockPath, 'owner.json'), '{"ownerId":', 'utf8');
+    await expect(owner.acquireLock(dbPath, 180)).rejects.toThrow();
+    expect(existsSync(lockPath)).toBe(true);
+    expect(existsSync(path.join(lockPath, 'owner.json'))).toBe(true);
+  });
 
   it('dos propietarios no adquieren simultáneamente un lock vivo', async () => {
     const first = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
