@@ -232,18 +232,83 @@ describe('databaseHealthMonitor', () => {
     monitor.startDatabaseHealthMonitor();
     fakeWindow.dispatch('online');
 
-    expect(mocks.stopExternalDataSyncPolling).toHaveBeenCalledTimes(1);
-    expect(mocks.publishDatabaseConnectivityBlock).toHaveBeenCalledWith(
+    // El evento online no prueba que SQLite haya perdido conexión.
+    expect(mocks.stopExternalDataSyncPolling).not.toHaveBeenCalled();
+    expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
       true,
-      'La red ha cambiado o acaba de recuperarse. Verificando de nuevo la base compartida…',
+      expect.any(String),
       'health-monitor',
     );
 
     await vi.advanceTimersByTimeAsync(0);
     expect(databaseHealthCheck).toHaveBeenCalledTimes(1);
-    expect(mocks.forceExternalDataRefreshAfterRecovery).toHaveBeenCalledTimes(1);
-    expect(mocks.startExternalDataSyncPolling).toHaveBeenCalledTimes(1);
+    // Solo se verifica la base; no se fuerza un refresco completo por un
+    // cambio de conectividad que nunca causó una desconexión confirmada.
+    expect(mocks.forceExternalDataRefreshAfterRecovery).not.toHaveBeenCalled();
+    expect(mocks.startExternalDataSyncPolling).not.toHaveBeenCalled();
 
+    monitor.stopDatabaseHealthMonitor();
+  });
+
+  it('el primer timeout lento no bloquea la edición; el segundo sí', async () => {
+    const databaseHealthCheck = vi.fn(() => new Promise<never>(() => undefined));
+    installFakeWindow(databaseHealthCheck);
+    const monitor = await import('./databaseHealthMonitor');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      monitor.startDatabaseHealthMonitor();
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+        true, expect.any(String), 'health-monitor',
+      );
+      expect(mocks.stopExternalDataSyncPolling).not.toHaveBeenCalled();
+
+      // Primera comprobación agotada, nueva comprobación a los 5 s.
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(databaseHealthCheck).toHaveBeenCalledTimes(2);
+      expect(mocks.publishDatabaseConnectivityBlock).toHaveBeenCalledWith(
+        true, expect.stringContaining('La comprobación SQLite superó 6 s.'),
+        'health-monitor',
+      );
+    } finally {
+      monitor.stopDatabaseHealthMonitor();
+      warn.mockRestore();
+    }
+  });
+
+  it('un timeout aislado seguido de verificación correcta no provoca reconexión', async () => {
+    const databaseHealthCheck = vi.fn()
+      .mockImplementationOnce(() => new Promise<never>(() => undefined))
+      .mockResolvedValue({ ok: true, status: activeStatus, checkedAt: '2026-11-04', message: 'Accesible.' });
+    installFakeWindow(databaseHealthCheck);
+    const monitor = await import('./databaseHealthMonitor');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      monitor.startDatabaseHealthMonitor();
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(databaseHealthCheck).toHaveBeenCalledTimes(2);
+      expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+        true, expect.any(String), 'health-monitor',
+      );
+    } finally {
+      monitor.stopDatabaseHealthMonitor();
+      warn.mockRestore();
+    }
+  });
+
+  it('un evento change de conexión no bloquea sin error SQLite', async () => {
+    const databaseHealthCheck = vi.fn().mockResolvedValue({
+      ok: true, status: activeStatus, checkedAt: '2026-11-04', message: 'Accesible.',
+    });
+    const fakeWindow = installFakeWindow(databaseHealthCheck);
+    const monitor = await import('./databaseHealthMonitor');
+    monitor.startDatabaseHealthMonitor();
+    fakeWindow.dispatch('online');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.stopExternalDataSyncPolling).not.toHaveBeenCalled();
+    expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+      true, expect.any(String), 'health-monitor',
+    );
     monitor.stopDatabaseHealthMonitor();
   });
 });
