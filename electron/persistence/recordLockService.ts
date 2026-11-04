@@ -1,5 +1,6 @@
 import { hostname, userInfo } from 'node:os';
 import type { Database } from 'better-sqlite3';
+import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
 import {
   acquireRecordLockInTransaction,
   getRecordLockInTransaction,
@@ -105,6 +106,7 @@ export function createRecordLockService(
       return Promise.resolve(recordLockError('Identificador de bloqueo inválido.'));
     }
 
+    const startedAt = Date.now();
     return withDatabaseOperationLock(
       getDatabasePath(),
       async () => {
@@ -126,6 +128,10 @@ export function createRecordLockService(
       }
 
       return recordLockError(error instanceof Error ? error.message : unexpectedErrorMessage);
+    }).then((result) => {
+      // Los nombres proceden de cadenas fijas de la propia aplicación.
+      recordMultiuserMetric('record-lock', unexpectedErrorMessage, Date.now() - startedAt, !result.ok);
+      return result;
     });
   }
 
