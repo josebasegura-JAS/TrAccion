@@ -31,6 +31,7 @@ const STARTUP_OPERATIONS = new Set([
 ]);
 
 const RECOVERY_OPERATIONS = new Set([
+  'database:health-check',
   'database:get-current-lock',
   'database:force-release-lock',
   'database:select-directory',
@@ -46,6 +47,9 @@ const sqliteIpcContext = new AsyncLocalStorage<SqliteIpcOperationContext>();
 
 let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
 let queuedOperations = 0;
+// Mantener la reserva hasta que termine la operación REAL, incluso si el
+// llamante ya recibió timeout. No se permite crear otra comprobación detrás.
+const singleFlightOperations = new Map<string, Promise<unknown>>();
 let runningOperation: { name: string; startedAt: number; timedOut: boolean } | null = null;
 
 export function getSqliteIpcQueueDiagnostics(): {
@@ -170,7 +174,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, operationName: string, 
 export function enqueueSqliteIpc<T>(
   operationName: string,
   operation: QueuedIpcOperation<T>,
+  singleFlight = false,
 ): Promise<Awaited<T>> {
+  if (singleFlight) {
+    const existing = singleFlightOperations.get(operationName);
+    if (existing) {
+      const queue = getSqliteIpcQueueDiagnostics();
+      console.warn(
+        `[sqlite-ipc-queue] ${operationName}: petición compartida, sin nuevo encolado. ` +
+        `pendientes=${queue.queuedOperations}, ejecutando=${queue.runningOperation ?? 'ninguna'}, ` +
+        `tiempoEjecuciónMs=${queue.runningMs ?? 0}, timeout=${queue.timedOut}.`,
+      );
+      return existing as Promise<Awaited<T>>;
+    }
+  }
   const startedAt = Date.now();
   queuedOperations += 1;
   const timeoutMs = resolveSqliteIpcTimeoutMs(operationName);
@@ -219,6 +236,15 @@ export function enqueueSqliteIpc<T>(
   });
 
   void queueExecution.catch(rejectObservedOperation);
+  if (singleFlight) {
+    singleFlightOperations.set(operationName, observedOperation);
+    // El timeout de respuesta no liquida la operación: conservar la reserva
+    // hasta que finalice realmente (o falle) la función subyacente.
+    void queueExecution.then(
+      () => { singleFlightOperations.delete(operationName); },
+      () => { singleFlightOperations.delete(operationName); },
+    );
+  }
   sqliteIpcQueue = queueExecution.catch(() => undefined);
   return observedOperation;
 }
