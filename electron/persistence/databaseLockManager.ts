@@ -70,6 +70,8 @@ export interface DatabaseLockManager {
     notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
   ): void;
   isDatabaseWriteBlockedByHeartbeat(): boolean;
+  /** Solo tras una verificación completa de SQLite, serializada por la cola. */
+  clearHeartbeatBlock(): boolean;
   assertDatabaseWritesAllowed(): void;
 }
 
@@ -108,6 +110,7 @@ export function createDatabaseLockManager(
   let notifyConnectivityIssue: ((payload: DatabaseConnectivityIssuePayload) => void) | null = null;
   let databaseWriteBlockedByHeartbeat = false;
   let heartbeatConsecutiveFailureCount = 0;
+  let heartbeatOperationsInFlight = 0;
 
   function getLockPath(databasePath: string): string {
     return `${databasePath}.lockdir`;
@@ -483,22 +486,28 @@ export function createDatabaseLockManager(
   }
 
   function markHeartbeatRecovered(): void {
-    if (heartbeatConsecutiveFailureCount === 0 && !databaseWriteBlockedByHeartbeat) {
-      return;
-    }
+    // Un heartbeat vigente ha comprobado la propiedad del lock y escrito
+    // correctamente en SMB. También puede restablecer el bloqueo.
+    clearHeartbeatBlock(true);
+  }
 
+  function clearHeartbeatBlock(fromHeartbeat = false): boolean {
+    // Una comprobación de salud no puede rehabilitar escrituras mientras
+    // otro heartbeat sigue pendiente de resultado. El heartbeat que acaba
+    // de superar la comprobación puede resolver su propio estado.
+    if (!fromHeartbeat && heartbeatOperationsInFlight > 0) return false;
+    if (heartbeatConsecutiveFailureCount === 0 && !databaseWriteBlockedByHeartbeat) return true;
     heartbeatConsecutiveFailureCount = 0;
-
     if (databaseWriteBlockedByHeartbeat) {
       databaseWriteBlockedByHeartbeat = false;
       publishConnectivityIssue({
         blocked: false,
         failedHeartbeatCount: 0,
         updatedAt: new Date().toISOString(),
-        message:
-          'La conexión con la carpeta compartida de SQLite se ha recuperado. Escrituras reactivadas.',
+        message: 'La conexión con la carpeta compartida de SQLite se ha recuperado. Escrituras reactivadas.',
       });
     }
+    return true;
   }
 
   async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
@@ -518,10 +527,19 @@ export function createDatabaseLockManager(
     lockPath: string,
     lock: DatabaseLockInfo,
   ): ReturnType<typeof setInterval> {
+    let inFlight = false;
     return setInterval(() => {
-      heartbeatDatabaseLock(lockPath, lock)
+      // Un SMB bloqueado no debe acumular nuevos readFile/writeFile en libuv.
+      if (inFlight) return;
+      inFlight = true;
+      heartbeatOperationsInFlight += 1;
+      void heartbeatDatabaseLock(lockPath, lock)
         .then(() => markHeartbeatRecovered())
-        .catch((error: unknown) => markHeartbeatFailure(error));
+        .catch((error: unknown) => markHeartbeatFailure(error))
+        .finally(() => {
+          heartbeatOperationsInFlight -= 1;
+          inFlight = false;
+        });
     }, LOCK_HEARTBEAT_MS);
   }
 
@@ -555,6 +573,7 @@ export function createDatabaseLockManager(
     startDatabaseLockHeartbeat,
     setConnectivityIssueNotifier,
     isDatabaseWriteBlockedByHeartbeat,
+    clearHeartbeatBlock,
     assertDatabaseWritesAllowed,
   };
 }
