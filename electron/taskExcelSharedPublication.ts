@@ -3,6 +3,41 @@ import { mkdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/pr
 import path from 'node:path';
 
 const LOCK_DIRECTORY = '.traccion-tareas-excel.lockdir';
+export const TASK_EXCEL_GENERATION_LOCK_DIRECTORY = '.traccion-tareas-excel-generation.lockdir';
+const PUBLISHED_MARKER_NAME = '.traccion-tareas-excel-published.json';
+
+export class TaskExcelLockBusyError extends Error {
+  constructor() {
+    super('Otro equipo está generando el Excel de Tareas.');
+    this.name = 'TaskExcelLockBusyError';
+  }
+}
+
+/** El marcador es una optimización, no sustituye la revalidación de SQLite. */
+export async function hasPublishedTaskExcelSignature(directory: string, signature: string, fileName: string): Promise<boolean> {
+  try {
+    const raw = await readFile(path.join(directory, PUBLISHED_MARKER_NAME), 'utf8');
+    const marker: unknown = JSON.parse(raw);
+    if (!marker || typeof marker !== 'object') return false;
+    const data = marker as { signature?: unknown; fileName?: unknown };
+    if (data.signature !== signature || data.fileName !== fileName) return false;
+    const target = await stat(path.join(directory, fileName));
+    return target.isFile() && target.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function markPublishedTaskExcelSignature(directory: string, signature: string, fileName: string): Promise<void> {
+  const tempPath = path.join(directory, `.traccion-tareas-excel-marker-${randomUUID()}.tmp`);
+  try {
+    await writeFile(tempPath, JSON.stringify({ signature, fileName }), 'utf8');
+    await rename(tempPath, path.join(directory, PUBLISHED_MARKER_NAME));
+  } finally {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+  }
+}
+
 const OWNER_FILE = 'owner.json';
 const WAIT_MS = 12_000;
 const RETRY_MS = 250;
@@ -28,11 +63,12 @@ export async function withSharedTaskExcelLock<T>(
     sleep?: (ms: number) => Promise<void>;
     waitMs?: number;
     staleMs?: number;
+    lockDirectoryName?: string;
   } = {},
 ): Promise<T> {
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
-  const lockPath = path.join(directory, LOCK_DIRECTORY);
+  const lockPath = path.join(directory, options.lockDirectoryName ?? LOCK_DIRECTORY);
   const ownerPath = path.join(lockPath, OWNER_FILE);
   const token = randomUUID();
   const start = now();
@@ -62,6 +98,7 @@ export async function withSharedTaskExcelLock<T>(
       if (acquired || (error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
       await checkExistingLock();
       if (now() - start >= (options.waitMs ?? WAIT_MS)) {
+        if (options.lockDirectoryName === TASK_EXCEL_GENERATION_LOCK_DIRECTORY) throw new TaskExcelLockBusyError();
         throw new Error('El Excel de tareas está siendo actualizado por otro equipo. No se ha reemplazado el archivo anterior.');
       }
       await sleep(RETRY_MS);

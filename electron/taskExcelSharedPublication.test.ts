@@ -5,6 +5,10 @@ import path from 'node:path';
 import { rm } from 'node:fs/promises';
 import {
   publishTaskExcel,
+  TASK_EXCEL_GENERATION_LOCK_DIRECTORY,
+  TaskExcelLockBusyError,
+  hasPublishedTaskExcelSignature,
+  markPublishedTaskExcelSignature,
   taskExcelSnapshotSignature,
   withSharedTaskExcelLock,
 } from './taskExcelSharedPublication.js';
@@ -102,4 +106,39 @@ describe('publicación segura del Excel de Tareas', () => {
       taskExcelSnapshotSignature([a,{ value: '{"id":"b","estado":"cerrada"}' }]),
     );
   });
+  it('no permite dos generaciones simultáneas; el segundo equipo reintentará', async () => {
+    const dir = await tempDir();
+    let release!: () => void;
+    let ready!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { ready = resolve; });
+    const first = withSharedTaskExcelLock(dir, async () => {
+      ready();
+      await waiting;
+    }, { lockDirectoryName: TASK_EXCEL_GENERATION_LOCK_DIRECTORY, waitMs: 0 });
+    await started;
+    await expect(withSharedTaskExcelLock(dir, async () => {
+      throw new Error('No debe llegar a generar');
+    }, { lockDirectoryName: TASK_EXCEL_GENERATION_LOCK_DIRECTORY, waitMs: 0 }))
+      .rejects.toBeInstanceOf(TaskExcelLockBusyError);
+    release();
+    await first;
+    const result = await withSharedTaskExcelLock(dir, async () => 'nuevo turno', {
+      lockDirectoryName: TASK_EXCEL_GENERATION_LOCK_DIRECTORY, waitMs: 0,
+    });
+    expect(result).toBe('nuevo turno');
+  });
+
+  it('omite generación solo si la firma coincide y el fichero publicado existe', async () => {
+    const dir = await tempDir();
+    const name = 'Tareas_abiertas_04-11-2026.xlsx';
+    await writeFile(path.join(dir, name), 'documento-vigente');
+    await markPublishedTaskExcelSignature(dir, 'firma-1', name);
+    expect(await hasPublishedTaskExcelSignature(dir, 'firma-1', name)).toBe(true);
+    expect(await hasPublishedTaskExcelSignature(dir, 'firma-2', name)).toBe(false);
+    expect(await hasPublishedTaskExcelSignature(dir, 'firma-1', 'otro.xlsx')).toBe(false);
+    await rm(path.join(dir, name));
+    expect(await hasPublishedTaskExcelSignature(dir, 'firma-1', name)).toBe(false);
+  });
+
 });
