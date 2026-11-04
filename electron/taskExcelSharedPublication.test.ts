@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, readFile, readdir, stat, utimes, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { rm } from 'node:fs/promises';
@@ -79,7 +79,7 @@ describe('publicación segura del Excel de Tareas', () => {
     expect(await readFile(finalPath, 'utf8')).toBe('VIGENTE');
   });
 
-  it('recupera un bloqueo abandonado y no modifica un bloqueo activo', async () => {
+  it('no elimina ni reutiliza un lock antiguo sin verificar que el titular ha terminado', async () => {
     const dir = await tempDir();
     const lockPath = path.join(dir, '.traccion-tareas-excel.lockdir');
     await import('node:fs/promises').then((fs) => fs.mkdir(lockPath));
@@ -87,9 +87,10 @@ describe('publicación segura del Excel de Tareas', () => {
     const old = new Date(Date.now() - 20 * 60_000);
     await utimes(lockPath, old, old);
     let invoked = 0;
-    await withSharedTaskExcelLock(dir, async () => { invoked += 1; }, { waitMs: 2_000 });
-    expect(invoked).toBe(1);
-    await expect(stat(lockPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(withSharedTaskExcelLock(dir, async () => { invoked += 1; }, { waitMs: 2_000 }))
+      .rejects.toThrow('Bloqueo antiguo');
+    expect(invoked).toBe(0);
+    expect(await readFile(path.join(lockPath, 'owner.json'), 'utf8')).toBe('proceso-finalizado');
   });
 
   it('la firma cambia ante altas, cierres y modificaciones, pero no con el orden', () => {
