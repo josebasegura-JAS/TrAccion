@@ -8,9 +8,9 @@ guardado, bloqueos de edición, copias de seguridad o sincronización.
 Cada instalación escribe, aproximadamente una vez por minuto, un fichero
 **local** en el perfil de Windows de la aplicación:
 
-`%APPDATA%/traccion-v1/last-multiuser-performance.json`
+`<directorio userData de TrAcción>/last-multiuser-performance.json`
 
-La ubicación exacta depende de `app.getPath('userData')` de Electron.
+La ubicación exacta depende de `app.getPath('userData')` de Electron (habitualmente dentro de `%APPDATA%` en Windows).
 **No** se guarda en la carpeta compartida ni se transmiten datos.
 
 El fichero se sobrescribe con un resumen de hasta las últimas **3.000**
