@@ -1,5 +1,6 @@
 import { beginSqliteWrite, finishSqliteWrite } from './sqliteIncidentJournal.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { recordMultiuserMetric } from './multiuserPerformanceDiagnostics.js';
 
 /**
  * Cola de serialización para las operaciones IPC que tocan SQLite: garantiza
@@ -202,6 +203,7 @@ export function enqueueSqliteIpc<T>(
 
   const queueExecution = sqliteIpcQueue.then(async (): Promise<void> => {
     const queuedMs = Date.now() - startedAt;
+    recordMultiuserMetric('ipc-wait', operationName, queuedMs);
     if (queuedMs > 100) {
       console.warn(`[sqlite-ipc-queue] ${operationName} esperó ${queuedMs} ms en cola.`);
     }
@@ -220,15 +222,18 @@ export function enqueueSqliteIpc<T>(
       rejectObservedOperation,
     );
 
+    let runningOperationFailed = false;
     try {
       await operationPromise;
       if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'completed');
     } catch (error) {
+      runningOperationFailed = true;
       if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'failed', error instanceof Error ? error.name : 'Error no tipificado');
       throw error;
     } finally {
       runningOperation = null;
       const operationMs = Date.now() - operationStartedAt;
+      recordMultiuserMetric('ipc-run', operationName, operationMs, runningOperationFailed);
       if (operationMs > 250 && operationMs < timeoutMs) {
         console.warn(`[sqlite-ipc-queue] ${operationName} tardó ${operationMs} ms.`);
       }
