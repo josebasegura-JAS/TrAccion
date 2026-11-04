@@ -243,5 +243,53 @@ describe('recordLocks — funciones SQL puras sobre editing_locks', () => {
 
       expect(result.status).toBe('idle');
     });
+    it('consulta locks caducados sin escribir ni limpiarlos físicamente', () => {
+      const past = new Date(Date.now() - 60_000).toISOString();
+      db.prepare(
+        `INSERT INTO editing_locks (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+         VALUES ('tareas', 'task-1', 'owner-a', 'Ana', 'PC-ANA', ?, ?)`,
+      ).run(past, past);
+      db.pragma('query_only = ON');
+      try {
+        const result = getRecordLockInTransaction(db, { module: 'tareas', recordId: 'task-1' }, ownerB, new Date().toISOString());
+        expect(result.status).toBe('idle');
+        expect(result.ok).toBe(true);
+      } finally {
+        db.pragma('query_only = OFF');
+      }
+      const count = db.prepare('SELECT COUNT(*) AS total FROM editing_locks').get() as { total: number };
+      expect(count.total).toBe(1);
+      // El acquire posterior sigue retirando el lock antiguo con transacción.
+      const acquired = acquireRecordLockInTransaction(db, { module: 'tareas', recordId: 'task-1' }, ownerB);
+      expect(acquired.status).toBe('acquired');
+    });
+
+    it('ignora un bloqueo de módulo caducado en consultas de registros', () => {
+      const past = new Date(Date.now() - 60_000).toISOString();
+      db.prepare(
+        `INSERT INTO editing_locks (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+         VALUES ('comite', ?, 'owner-a', 'Ana', 'PC-ANA', ?, ?)`,
+      ).run(MODULE_LOCK_RECORD_ID, past, past);
+      db.pragma('query_only = ON');
+      try {
+        const result = getRecordLockInTransaction(db, { module: 'comite', recordId: 'sesion-2' }, ownerB, new Date().toISOString());
+        expect(result.status).toBe('idle');
+      } finally {
+        db.pragma('query_only = OFF');
+      }
+    });
+
+    it('sigue detectando un bloqueo activo de otro usuario sin escrituras', () => {
+      acquireRecordLockInTransaction(db, { module: 'tareas', recordId: 'task-2' }, ownerA);
+      db.pragma('query_only = ON');
+      try {
+        const result = getRecordLockInTransaction(db, { module: 'tareas', recordId: 'task-2' }, ownerB, new Date().toISOString());
+        expect(result.status).toBe('locked');
+        expect(result.lock?.ownerId).toBe('owner-a');
+      } finally {
+        db.pragma('query_only = OFF');
+      }
+    });
+
   });
 });
