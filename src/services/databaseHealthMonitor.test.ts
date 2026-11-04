@@ -339,7 +339,10 @@ describe('databaseHealthMonitor', () => {
 
       // Aunque la recarga antigua termine tarde, ella sola no desbloquea.
       finishRecovery();
-      await vi.advanceTimersByTimeAsync(0);
+      // Resolver la promesa anterior sin ejecutar todavía el siguiente
+      // temporizador de verificación. La operación caducada no desbloquea.
+      await Promise.resolve();
+      await Promise.resolve();
       expect(mocks.startExternalDataSyncPolling).not.toHaveBeenCalled();
     } finally {
       monitor.stopDatabaseHealthMonitor();
