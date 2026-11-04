@@ -122,7 +122,7 @@ contextBridge.exposeInMainWorld('traccion', {
       expectedValue: string | null;
     }>,
   ) => ipcRenderer.invoke('plantilla:save-records-if-unchanged', { records }),
-  loadTaskRecords: (filter?: { mode?: 'all' | 'active' | 'historical'; id?: string }) =>
+  loadTaskRecords: (filter?: { mode?: 'all' | 'active' | 'historical'; id?: string; ids?: string[] }) =>
     ipcRenderer.invoke('tasks:load-records', filter),
   saveTaskRecordIfUnchanged: (record: {
     id: string;

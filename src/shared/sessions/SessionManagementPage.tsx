@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
-import { CLOSED_TASK_PHASE, DEFAULT_TASK_PHASE, isTaskClosed } from '../../features/tareas/domain/task';
+import { CLOSED_TASK_PHASE, DEFAULT_TASK_PHASE, isTaskClosed, type Task } from '../../features/tareas/domain/task';
 import { buildActaObservacionesFromSession } from '../../features/actas/domain/acta';
 import { useActasStore } from '../../features/actas/store/useActasStore';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
@@ -20,6 +20,7 @@ import { TaskEditor } from '../../components/TaskEditor';
 import { type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import { buildImportedManagedSession, type ManagedSessionStateStore } from './createSessionStore';
+import { loadSessionLinkedTasks, missingSessionTaskIds } from './sessionLinkedTaskLoader';
 import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
 import { HistoricSessionCard, SessionCard, SessionPanel } from './SessionManagementPageCards';
 import { SessionImportPreviewModal } from './SessionImportPreviewModal';
@@ -28,7 +29,6 @@ import { SessionCloseModal } from './SessionCloseModal';
 import {
   matchesSessionSearch,
   groupClosedSessionsByYear,
-  openSessionsReferenceMissingTasks,
   sessionExportColumns,
   sortOpenSessions,
 } from './sessionManagementPage.helpers';
@@ -74,8 +74,6 @@ export function SessionManagementPage({
     tasks,
     load: loadTasks,
     reloadFromStorage: reloadTasksFromStorage,
-    loadHistoricalTasks,
-    historicalTasksLoaded,
   } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -101,38 +99,46 @@ export function SessionManagementPage({
   }, [load, loadTasks]);
 
   useEffect(() => {
-    const needsHistory = sessionSearch.trim().length >= 2 || openPanel === 'history';
-    if (!needsHistory) {
-      return;
-    }
-
-    if (!hasLoadedHistoricalSessions) {
+    if ((sessionSearch.trim().length >= 2 || openPanel === 'history') &&
+        !hasLoadedHistoricalSessions) {
       loadHistoricalSessions();
     }
-    if (!historicalTasksLoaded) {
-      void loadHistoricalTasks();
-    }
-  }, [
-    hasLoadedHistoricalSessions,
-    historicalTasksLoaded,
-    loadHistoricalSessions,
-    loadHistoricalTasks,
-    openPanel,
-    sessionSearch,
-  ]);
+  }, [hasLoadedHistoricalSessions, loadHistoricalSessions, openPanel, sessionSearch]);
 
-  const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
-  const openSessionNeedsHistoricalTasks = useMemo(
-    () => openSessionsReferenceMissingTasks(sessions, tasksById),
-    [sessions, tasksById],
-  );
+  // Los puntos históricos se recuperan por ID y solo en las sesiones que
+  // se están consultando; no contaminan el store global ni obligan a
+  // cargar todas las tareas cerradas de la empresa.
+  const [linkedTasks, setLinkedTasks] = useState<Map<string, Task>>(new Map());
+  const requestedLinkedTaskIds = useRef<Set<string>>(new Set());
+  const tasksById = useMemo(() => {
+    const map = new Map(linkedTasks);
+    tasks.forEach((task) => map.set(task.id, task));
+    return map;
+  }, [linkedTasks, tasks]);
 
   useEffect(() => {
-    if (!openSessionNeedsHistoricalTasks || historicalTasksLoaded) {
-      return;
-    }
-    void loadHistoricalTasks();
-  }, [historicalTasksLoaded, loadHistoricalTasks, openSessionNeedsHistoricalTasks]);
+    const showHistory = sessionSearch.trim().length >= 2 || openPanel === 'history';
+    const relevantSessions = showHistory
+      ? sessions
+      : sessions.filter((session) => session.status === 'open');
+    const missing = missingSessionTaskIds(relevantSessions, new Set(tasksById.keys()))
+      .filter((id) => !requestedLinkedTaskIds.current.has(id));
+    if (missing.length === 0 || !window.traccion?.loadTaskRecords) return;
+    missing.forEach((id) => requestedLinkedTaskIds.current.add(id));
+    void loadSessionLinkedTasks(missing)
+      .then((loaded) => {
+        setLinkedTasks((previous) => {
+          const next = new Map(previous);
+          loaded.forEach((task) => next.set(task.id, task));
+          return next;
+        });
+      })
+      .catch((error: unknown) => {
+        // No marcar el resultado como vacío ni descartar los puntos ya cargados.
+        missing.forEach((id) => requestedLinkedTaskIds.current.delete(id));
+        console.warn('[sesiones] No se han podido recuperar los puntos vinculados.', error);
+      });
+  }, [openPanel, sessionSearch, sessions, tasksById]);
   const rutaResumenComites = useConfiguracionStore((state) => state.rutaResumenComites);
   const rutaResumenParitaria = useConfiguracionStore((state) => state.rutaResumenParitaria);
 
@@ -775,7 +781,6 @@ export function SessionManagementPage({
           if (!importedSessionsResult.ok) throw new Error(importedSessionsResult.message);
 
           await reloadTasksFromStorage();
-          await loadHistoricalTasks();
           loadHistoricalSessions();
           setOpenPanel('history');
           setImportPreview(null);
