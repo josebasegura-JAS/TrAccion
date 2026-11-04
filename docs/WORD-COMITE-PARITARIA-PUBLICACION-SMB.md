@@ -5,7 +5,7 @@ Se refuerza exclusivamente la persistencia de los resúmenes Word históricos de
 
 ## Medidas
 - Los dos módulos utilizan un bloqueo exclusivo propio en la carpeta compartida, creado mediante `mkdir`; cada bloqueo tiene un token UUID. Espera máxima normal de 10 segundos, reintentos de 250 ms, heartbeat de 5 segundos.
-- Se considera un bloqueo abandonado cuando lleva más de 10 minutos sin renovar su mtime. La recuperación vuelve a comprobar su antigüedad antes de trasladarlo a un nombre único y retirarlo. Los clientes verifican la propiedad antes de publicar.
+- Si el bloqueo supera los 10 minutos sin renovar su mtime, se **rechaza** la publicación y se solicita comprobar manualmente si algún equipo sigue actualizando. No se retira automáticamente: la antigüedad por sí sola no acredita abandono. Los clientes verifican la propiedad antes de publicar.
 - Se genera un temporal con UUID **en el directorio de destino** y se verifica su tamaño antes de modificar el original.
 - El original se renombra a un respaldo único (no se destruyen respaldos anteriores). Se publica el temporal mediante `rename`. Ante fallo, se intenta restaurar el original. Si falla la restauración por corte SMB, el respaldo queda disponible.
 - En un siguiente intento, si el resumen vigente ha desaparecido y existe **un solo** respaldo reconocible, se restaura automáticamente bajo el bloqueo. También se reconocen los respaldos `.traccion-backup` anteriores.
