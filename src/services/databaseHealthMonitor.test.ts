@@ -366,7 +366,8 @@ describe('databaseHealthMonitor', () => {
       await vi.advanceTimersByTimeAsync(2_000);
       fakeWindow.dispatch('offline');
       finishRecovery();
-      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
       expect(mocks.startExternalDataSyncPolling).not.toHaveBeenCalled();
       expect(mocks.publishDatabaseConnectivityState).not.toHaveBeenCalledWith(
         'recovered', expect.any(String),
