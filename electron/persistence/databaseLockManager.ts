@@ -1,6 +1,7 @@
 import { mkdir, readFile, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
+import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
 import {
   getCurrentSqliteIpcOperationName,
   isCurrentSqliteIpcReadOnly,
@@ -453,14 +454,31 @@ export function createDatabaseLockManager(
       return operation();
     }
 
+    // Solo registrar la operación IPC (nombre fijo), nunca la ruta SMB.
+    const operationName = getCurrentSqliteIpcOperationName() ?? 'background:exclusive';
+    const waitStartedAt = Date.now();
     const lockPath = getLockPath(databasePath);
-    const operationLock = await acquireLock(databasePath, waitMs);
+    let operationLock: DatabaseLockInfo;
+    try {
+      operationLock = await acquireLock(databasePath, waitMs);
+      recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt);
+    } catch (error) {
+      recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt, true);
+      throw error;
+    }
+    const heldStartedAt = Date.now();
+    let operationFailed = false;
     try {
       return await operation();
+    } catch (error) {
+      operationFailed = true;
+      throw error;
     } finally {
       await releaseLock(lockPath, operationLock).catch((error: unknown) => {
+        operationFailed = true;
         console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
       });
+      recordMultiuserMetric('smb-lock-held', operationName, Date.now() - heldStartedAt, operationFailed);
     }
   }
 
