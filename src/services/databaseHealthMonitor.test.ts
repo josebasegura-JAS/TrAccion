@@ -311,4 +311,90 @@ describe('databaseHealthMonitor', () => {
     );
     monitor.stopDatabaseHealthMonitor();
   });
+  it('si la recuperación supera 60 s, bloquea edición y no repite recargas mientras sigue pendiente', async () => {
+    let finishRecovery!: () => void;
+    const pendingRecovery = new Promise<void>((resolve) => { finishRecovery = resolve; });
+    mocks.forceExternalDataRefreshAfterRecovery.mockImplementationOnce(() => pendingRecovery);
+
+    const check = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: errorStatus, checkedAt: '2026-11-04', message: 'SMB caída.' })
+      .mockResolvedValue({ ok: true, status: activeStatus, checkedAt: '2026-11-04', message: 'Conexión comprobada.' });
+    installFakeWindow(check);
+    const monitor = await import('./databaseHealthMonitor');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      monitor.startDatabaseHealthMonitor();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(mocks.forceExternalDataRefreshAfterRecovery).toHaveBeenCalledTimes(1);
+      expect(mocks.startExternalDataSyncPolling).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(mocks.startExternalDataSyncPolling).not.toHaveBeenCalled();
+      expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+        false, expect.any(String), 'health-monitor',
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(mocks.forceExternalDataRefreshAfterRecovery).toHaveBeenCalledTimes(1);
+
+      // Aunque la recarga antigua termine tarde, ella sola no desbloquea.
+      finishRecovery();
+      // Resolver la promesa anterior sin ejecutar todavía el siguiente
+      // temporizador de verificación. La operación caducada no desbloquea.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mocks.startExternalDataSyncPolling).not.toHaveBeenCalled();
+    } finally {
+      monitor.stopDatabaseHealthMonitor();
+      warn.mockRestore();
+    }
+  });
+
+  it('un evento offline invalida una recuperación anterior y no reactiva la edición por su resultado', async () => {
+    let finishRecovery!: () => void;
+    mocks.forceExternalDataRefreshAfterRecovery.mockImplementationOnce(() =>
+      new Promise<void>((resolve) => { finishRecovery = resolve; }),
+    );
+    const check = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: errorStatus, checkedAt: '2026-11-04', message: 'Sin red.' })
+      .mockResolvedValue({ ok: true, status: activeStatus, checkedAt: '2026-11-04', message: 'Conectada.' });
+    const fakeWindow = installFakeWindow(check);
+    const monitor = await import('./databaseHealthMonitor');
+    try {
+      monitor.startDatabaseHealthMonitor();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(2_000);
+      fakeWindow.dispatch('offline');
+      finishRecovery();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mocks.startExternalDataSyncPolling).not.toHaveBeenCalled();
+      expect(mocks.publishDatabaseConnectivityState).not.toHaveBeenCalledWith(
+        'recovered', expect.any(String),
+      );
+    } finally {
+      monitor.stopDatabaseHealthMonitor();
+    }
+  });
+
+  it('detener el monitor durante una recarga impide que una respuesta tardía reactive escrituras', async () => {
+    let finishRecovery!: () => void;
+    mocks.forceExternalDataRefreshAfterRecovery.mockImplementationOnce(() =>
+      new Promise<void>((resolve) => { finishRecovery = resolve; }),
+    );
+    const check = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: errorStatus, checkedAt: '2026-11-04', message: 'Sin red.' })
+      .mockResolvedValue({ ok: true, status: activeStatus, checkedAt: '2026-11-04', message: 'Conectada.' });
+    installFakeWindow(check);
+    const monitor = await import('./databaseHealthMonitor');
+    monitor.startDatabaseHealthMonitor();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    monitor.stopDatabaseHealthMonitor();
+    mocks.startExternalDataSyncPolling.mockClear();
+    finishRecovery();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.startExternalDataSyncPolling).not.toHaveBeenCalled();
+  });
+
 });

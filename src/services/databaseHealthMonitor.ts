@@ -12,6 +12,7 @@ const RECONNECT_FAST_INTERVAL_MS = 2_000;
 const RECONNECT_SLOW_INTERVAL_MS = 5_000;
 const RECONNECT_FAST_ATTEMPTS = 5;
 const HEALTH_CHECK_TIMEOUT_MS = 6_000;
+const RECOVERY_TIMEOUT_MS = 60_000;
 // Un único timeout de respuesta NO demuestra una desconexión SMB. El IPC
 // puede estar esperando detrás de una operación válida en la cola SQLite.
 const TRANSIENT_TIMEOUTS_BEFORE_BLOCK = 2;
@@ -48,16 +49,20 @@ let checkInProgress = false;
 let consecutiveFailures = 0;
 let consecutiveHealthCheckTimeouts = 0;
 let blockedByHealthMonitor = false;
+// Cada cambio de conexión confirmado invalida recuperaciones antiguas.
+let recoveryGeneration = 0;
+// No se ejecutan dos recargas completas a la vez, ni siquiera tras timeout.
+let recoveryWorkInFlight: Promise<void> | null = null;
 let monitorStarted = false;
 let browserOnlineHandler: (() => void) | null = null;
 let browserOfflineHandler: (() => void) | null = null;
 let networkConnection: NetworkInformationLike | null = null;
 let networkConnectionChangeHandler: (() => void) | null = null;
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, ms: number, label = 'La comprobación SQLite'): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutId = window.setTimeout(
-      () => reject(new Error(`La comprobación SQLite superó ${ms / 1_000} s.`)),
+      () => reject(new Error(`${label} superó ${ms / 1_000} s.`)),
       ms,
     );
     promise.then(
@@ -112,6 +117,7 @@ function markPotentialNetworkTransition(message: string, confirmedOffline = fals
   // NO que el recurso SQLite/SMB sea inaccesible. Verificar sin interrumpir
   // la edición que aún está confirmada como disponible.
   if (confirmedOffline) {
+    recoveryGeneration += 1;
     consecutiveFailures = Math.max(1, consecutiveFailures);
     blockEditing(message);
   }
@@ -128,6 +134,13 @@ function getNetworkInformation(): NetworkInformationLike | null {
 }
 
 async function completeRecovery(): Promise<void> {
+  // Una llamada SMB puede seguir ejecutándose después de que el timeout
+  // haya rechazado su espera. No se permite solapar recargas de todos los
+  // stores ni dar por recuperada la base basándose en un resultado antiguo.
+  if (recoveryWorkInFlight) {
+    throw new Error('Recuperación SQLite anterior todavía en ejecución. Se conserva la edición bloqueada.');
+  }
+  const generation = ++recoveryGeneration;
   publishDatabaseConnectivityBlock(
     true,
     'Conexión recuperada. Actualizando los datos compartidos antes de reactivar la edición…',
@@ -138,12 +151,38 @@ async function completeRecovery(): Promise<void> {
     'Conexión recuperada. Actualizando los datos compartidos…',
   );
 
-  const status = await refreshDatabaseStatus();
-  if (!status?.ready || status.phase !== 'active' || status.isDefaultPath !== false) {
-    throw new Error(status?.message ?? 'SQLite todavía no está operativa como base compartida.');
+  const work = (async (): Promise<void> => {
+    const status = await refreshDatabaseStatus();
+    if (!status?.ready || status.phase !== 'active' || status.isDefaultPath !== false) {
+      throw new Error(status?.message ?? 'SQLite todavía no está operativa como base compartida.');
+    }
+    // La sincronización debe finalizar antes de liberar la edición.
+    await forceExternalDataRefreshAfterRecovery();
+  })();
+  recoveryWorkInFlight = work;
+  const onWorkSettled = (): void => {
+    if (recoveryWorkInFlight === work) {
+      recoveryWorkInFlight = null;
+      // Tras un timeout o corte, un chequeo nuevo debe verificar el estado
+      // que realmente haya dejado el trabajo anterior. Nunca desbloqueamos
+      // desde este callback, aunque ese trabajo termine correctamente.
+      if (monitorStarted && generation !== recoveryGeneration) requestDatabaseReconnectCheck();
+    }
+  };
+  void work.then(onWorkSettled, onWorkSettled);
+
+  try {
+    await withTimeout(work, RECOVERY_TIMEOUT_MS, 'La recuperación completa de SQLite');
+  } catch (error) {
+    // Timeout o error: invalida esta ejecución. Su trabajo subyacente puede
+    // continuar, pero no podrá publicar estado "recovered" al completarse.
+    if (generation === recoveryGeneration) recoveryGeneration += 1;
+    throw error;
   }
 
-  await forceExternalDataRefreshAfterRecovery();
+  if (!monitorStarted || generation !== recoveryGeneration) {
+    throw new Error('La recuperación quedó invalidada por un cambio de conexión o reinicio del monitor.');
+  }
   startExternalDataSyncPolling({ preserveSeenTokens: true, runImmediately: false });
   blockedByHealthMonitor = false;
   consecutiveFailures = 0;
@@ -247,6 +286,7 @@ export function stopDatabaseHealthMonitor(): void {
     return;
   }
   monitorStarted = false;
+  recoveryGeneration += 1;
   clearScheduledCheck();
   if (browserOnlineHandler) window.removeEventListener('online', browserOnlineHandler);
   if (browserOfflineHandler) window.removeEventListener('offline', browserOfflineHandler);
