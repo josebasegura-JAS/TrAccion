@@ -1,6 +1,6 @@
 import { getConnectionDiagnostics, subscribeConnectionDiagnostics } from '../../services/databaseHealthMonitor';
 import { useDatabaseConnectivityState } from '../../services/databaseConnectivityState';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, ClipboardCopy, Trash2 } from 'lucide-react';
 import {
   clearPerformanceMetrics,
@@ -32,7 +32,7 @@ function formatMultiuserReport(report: TraccionMultiuserPerformanceReport): stri
           ].join(' | '))
         : [`${category} | Sin muestras`];
     }),
-  ].join('\\n');
+  ].join('\n');
 }
 
 let previousShutdownLoaded = false;
@@ -94,7 +94,7 @@ export function PerformanceDiagnostics() {
   const [multiuser, setMultiuser] = useState<TraccionMultiuserPerformanceReport | null>(null);
   const [multiuserError, setMultiuserError] = useState('');
   const [multiuserLoading, setMultiuserLoading] = useState(false);
-  const refreshMultiuser = async (): Promise<TraccionMultiuserPerformanceReport | null> => {
+  const refreshMultiuser = useCallback(async (): Promise<TraccionMultiuserPerformanceReport | null> => {
     if (!window.traccion?.getMultiuserPerformanceReport) {
       setMultiuserError('Métricas multiusuario no disponibles en esta versión.');
       return null;
@@ -111,8 +111,8 @@ export function PerformanceDiagnostics() {
     } finally {
       setMultiuserLoading(false);
     }
-  };
-  useEffect(() => { void refreshMultiuser(); }, []);
+  }, []);
+  useEffect(() => { void refreshMultiuser(); }, [refreshMultiuser]);
 
   useEffect(() => {
     void window.traccion?.getStartupPerformance?.().then(setStartup).catch(() => setStartup(null));
