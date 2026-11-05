@@ -22,7 +22,7 @@ describe('reintentos de sincronización cuando fallan recargas SQLite', () => {
     await expect(reloadIntegratedStores(['tareas'])).rejects.toThrow('SMB');
     await expect(reloadIntegratedStores(['comite-sesiones'])).resolves.toBeUndefined();
     expect(mocks.reloadRegisteredSyncableStores).toHaveBeenNthCalledWith(
-      2, ['tareas', 'comite-sesiones'], { silentPersistenceFeedback: true },
+      2, ['tareas', 'comite-sesiones'], { silentPersistenceFeedback: true, deferInactive: true },
     );
   });
 
@@ -35,7 +35,7 @@ describe('reintentos de sincronización cuando fallan recargas SQLite', () => {
     await expect(reloadIntegratedStores()).rejects.toThrow('corte');
     await reloadIntegratedStores(['tareas']);
     expect(mocks.reloadRegisteredSyncableStores).toHaveBeenNthCalledWith(
-      2, undefined, { silentPersistenceFeedback: true },
+      2, undefined, { silentPersistenceFeedback: true, deferInactive: true },
     );
   });
 
@@ -47,11 +47,11 @@ describe('reintentos de sincronización cuando fallan recargas SQLite', () => {
     await expect(reloadIntegratedStores(['tareas', 'tareas'])).rejects.toThrow('momentáneo');
     await reloadIntegratedStores(['tareas', 'paritaria-sesiones']);
     expect(mocks.reloadRegisteredSyncableStores).toHaveBeenNthCalledWith(
-      2, ['tareas', 'paritaria-sesiones'], { silentPersistenceFeedback: true },
+      2, ['tareas', 'paritaria-sesiones'], { silentPersistenceFeedback: true, deferInactive: true },
     );
     await reloadIntegratedStores(['actas']);
     expect(mocks.reloadRegisteredSyncableStores).toHaveBeenNthCalledWith(
-      3, ['actas'], { silentPersistenceFeedback: true },
+      3, ['actas'], { silentPersistenceFeedback: true, deferInactive: true },
     );
   });
 });

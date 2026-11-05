@@ -153,7 +153,7 @@ describe('externalDataSync multiusuario', () => {
     // entre la hidratación inicial y el comienzo del polling.
     expect(reloadRegisteredSyncableStores).toHaveBeenCalledTimes(1);
     expect(reloadRegisteredSyncableStores).toHaveBeenCalledWith(['teletrabajo'], {
-      silentPersistenceFeedback: true,
+      silentPersistenceFeedback: true, deferInactive: true,
     });
 
     reloadRegisteredSyncableStores.mockClear();
@@ -163,7 +163,7 @@ describe('externalDataSync multiusuario', () => {
 
     expect(reloadRegisteredSyncableStores).toHaveBeenCalledTimes(1);
     expect(reloadRegisteredSyncableStores).toHaveBeenCalledWith(['teletrabajo'], {
-      silentPersistenceFeedback: true,
+      silentPersistenceFeedback: true, deferInactive: true,
     });
 
     module.stopExternalDataSyncPolling();
@@ -235,7 +235,7 @@ describe('externalDataSync multiusuario', () => {
     expect(loadPersistedRecords).toHaveBeenCalledTimes(1);
     expect(applyPersistedRecordsSnapshotToLocalStorage).toHaveBeenCalledTimes(1);
     expect(reloadRegisteredSyncableStores).toHaveBeenCalledWith(['teletrabajo'], {
-      silentPersistenceFeedback: true,
+      silentPersistenceFeedback: true, deferInactive: true,
     });
 
     module.stopExternalDataSyncPolling();

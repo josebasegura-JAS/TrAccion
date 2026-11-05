@@ -1,4 +1,5 @@
 import { runWithSilentPersistenceFeedback } from './persistence';
+import type { AppView } from '../navigation/navigation';
 
 export type SyncableStoreRegistration = {
   id: string;
@@ -27,6 +28,57 @@ const pendingReloads = new Map<string, PendingReload>();
 // Se ejecuta después: podría representar un token SQLite posterior.
 const activeReloads = new Map<string, Promise<void>>();
 const RELOAD_DEBOUNCE_MS = 50;
+
+/**
+ * Los datos utilizados por el Dashboard o en flujos transversales se mantienen
+ * activos; el resto puede invalidarse sin leer SQLite hasta entrar en su módulo.
+ * Nunca se pospone una escritura ni una validación de concurrencia (OCC).
+ */
+const VIEW_STORE_IDS: Partial<Record<AppView, readonly string[]>> = {
+  dashboard: ['tareas', 'comite-sesiones', 'paritaria-sesiones', 'actas', 'teletrabajo', 'licencias-sin-sueldo', 'loteria', 'configuracion'],
+  tareas: ['tareas', 'configuracion'],
+  coordinacion: ['coordinacion', 'tareas', 'configuracion'],
+  comite: ['comite-sesiones', 'paritaria-sesiones', 'actas', 'tareas', 'configuracion'],
+  paritaria: ['comite-sesiones', 'paritaria-sesiones', 'actas', 'tareas', 'configuracion'],
+  actas: ['actas', 'comite-sesiones', 'paritaria-sesiones', 'configuracion'],
+  plantilla: ['plantilla', 'configuracion'],
+  'ayuda-escolar': ['ayuda-escolar', 'plantilla', 'configuracion'],
+  teletrabajo: ['teletrabajo', 'plantilla', 'configuracion'],
+  'licencias-sin-sueldo': ['licencias-sin-sueldo', 'plantilla', 'configuracion'],
+  'ticket-restaurante': ['ticket-restaurante', 'plantilla', 'configuracion'],
+  presupuestos: ['presupuestos', 'configuracion'],
+  sorteos: ['sorteos', 'plantilla', 'configuracion'],
+  loteria: ['loteria', 'plantilla', 'configuracion'],
+  vinculograma: ['vinculograma', 'plantilla', 'configuracion'],
+  'criterios-rrll': ['criterios-rrll', 'tareas', 'configuracion'],
+  'actividades-externas': ['actividades-externas', 'plantilla', 'configuracion'],
+  especiales: ['especiales', 'plantilla', 'configuracion'],
+  ajustes: ['configuracion'],
+};
+const ALWAYS_ACTIVE_STORE_IDS = new Set(['tareas', 'configuracion']);
+const deferredStoreIds = new Set<string>();
+const deferredStoreVersion = new Map<string, number>();
+let activeView: AppView = 'dashboard';
+
+export function setActiveSyncView(view: AppView): void {
+  activeView = view;
+}
+
+function isStoreNeeded(storeId: string, view: AppView): boolean {
+  return ALWAYS_ACTIVE_STORE_IDS.has(storeId) || (VIEW_STORE_IDS[view] ?? []).includes(storeId);
+}
+
+export function getDeferredSyncStoreIds(): string[] {
+  return Array.from(deferredStoreIds);
+}
+
+export async function flushDeferredSyncStoresForView(view: AppView): Promise<void> {
+  const ids = Array.from(deferredStoreIds).filter((id) => isStoreNeeded(id, view));
+  if (!ids.length) return;
+  // Los ID permanecen pendientes hasta que se haya aplicado la última lectura.
+  await reloadRegisteredSyncableStores(ids, { silentPersistenceFeedback: true });
+}
+
 
 function scheduleStoreReload(
   store: SyncableStoreRegistration,
@@ -80,7 +132,7 @@ function scheduleStoreReload(
 
 export async function reloadRegisteredSyncableStores(
   storeIds?: string[],
-  options: { silentPersistenceFeedback?: boolean } = {},
+  options: { silentPersistenceFeedback?: boolean; deferInactive?: boolean } = {},
 ): Promise<void> {
   const requestedStoreIds = storeIds ? new Set(storeIds) : null;
   const stores = getRegisteredSyncableStores().filter(
@@ -88,8 +140,23 @@ export async function reloadRegisteredSyncableStores(
   );
 
   await Promise.all(
-    stores.map((store) =>
-      scheduleStoreReload(store, options.silentPersistenceFeedback === true),
-    ),
+    stores.map(async (store) => {
+      if (options.deferInactive && !isStoreNeeded(store.id, activeView)) {
+        deferredStoreIds.add(store.id);
+        deferredStoreVersion.set(store.id, (deferredStoreVersion.get(store.id) ?? 0) + 1);
+        return;
+      }
+      const versionAtStart = deferredStoreVersion.get(store.id) ?? 0;
+      try {
+        await scheduleStoreReload(store, options.silentPersistenceFeedback === true);
+        // Una invalidación posterior no puede borrarse al finalizar esta lectura.
+        if ((deferredStoreVersion.get(store.id) ?? 0) === versionAtStart) {
+          deferredStoreIds.delete(store.id);
+        }
+      } catch (error) {
+        deferredStoreIds.add(store.id);
+        throw error;
+      }
+    }),
   );
 }

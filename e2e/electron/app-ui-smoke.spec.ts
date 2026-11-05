@@ -7,6 +7,8 @@ import {
 } from './electronTestUtils';
 
 test('arranca en Inicio y muestra estructura principal sin error de render', async () => {
+  // El primer arranque en CI (sin base compartida) incluye splash e hidratación.
+  test.setTimeout(90_000);
   const { page, close } = await launchTraccionElectron();
 
   try {

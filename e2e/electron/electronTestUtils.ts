@@ -64,8 +64,9 @@ async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
   while (Date.now() < deadline) {
     for (const candidate of app.windows()) {
       if (!candidate.url().startsWith('http://127.0.0.1:5173')) continue;
-      const dashboardHeading = candidate.getByRole('heading', { name: 'Dashboard RRLL' });
-      if (await dashboardHeading.isVisible().catch(() => false)) return candidate;
+      // Detectar la ventana por su URL, no por el render del Dashboard.
+      // La interfaz puede seguir hidratándose cuando Electron ya creó su ventana.
+      return candidate;
     }
 
     const remaining = Math.max(250, Math.min(2_000, deadline - Date.now()));
@@ -134,7 +135,9 @@ export async function launchTraccionElectron(
   try {
     page = await waitForMainWindow(app);
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible();
+    // Separar detección de ventana y renderizado evita agotar los 30 s
+    // haciendo polling del heading mientras la ventana ya existe.
+    await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible({ timeout: 45_000 });
     if (options.sharedDatabaseDirectory) await expectSharedDatabaseReady(page);
   } catch (error) {
     await closeTraccionElectron(app);

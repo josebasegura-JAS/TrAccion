@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { reloadRegisteredSyncableStores } from './syncableStoreRegistry';
+import { flushDeferredSyncStoresForView, reloadRegisteredSyncableStores } from './syncableStoreRegistry';
+import type { AppView } from '../navigation/navigation';
 import { hasActiveSharedEditing, subscribeSharedEditingActivity } from './sharedEditingActivity';
 import {
   applyPersistedRecordsSnapshotToLocalStorage,
@@ -134,9 +135,14 @@ export async function reloadIntegratedStores(storeIds?: string[]): Promise<void>
     selectedIds?.forEach((id) => pendingReloadStoreIds.add(id));
   }
   // Si una recarga falla, conservar los IDs pendientes y no avanzar tokens.
-  await reloadRegisteredSyncableStores(selectedIds, { silentPersistenceFeedback: true });
+  await reloadRegisteredSyncableStores(selectedIds, { silentPersistenceFeedback: true, deferInactive: true });
   pendingReloadAllStores = false;
   pendingReloadStoreIds.clear();
+}
+
+export async function flushPendingModuleChangesBeforeNavigation(view: AppView): Promise<void> {
+  await ensureSyncableStoresRegistered();
+  await flushDeferredSyncStoresForView(view);
 }
 
 function canPollStatus(status: TraccionDatabaseStatus): boolean {
