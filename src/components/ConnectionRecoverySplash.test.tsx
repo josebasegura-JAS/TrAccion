@@ -4,6 +4,12 @@ import { ConnectionRecoverySplash } from './ConnectionRecoverySplash';
 import { getRecoveryStepStatuses } from './connectionRecoverySteps';
 import { publishDatabaseConnectivityState } from '../services/databaseConnectivityState';
 
+const databaseMock = vi.hoisted(() => ({ configured: true }));
+
+vi.mock('../services/databaseStatus', () => ({
+  useDatabaseStatus: () => ({ isDefaultPath: !databaseMock.configured }),
+}));
+
 vi.mock('../services/databaseHealthMonitor', () => ({
   getConnectionDiagnostics: () => ({
     lastSuccessAt: null,
@@ -17,6 +23,7 @@ vi.mock('../services/databaseHealthMonitor', () => ({
 }));
 
 afterEach(() => {
+  databaseMock.configured = true;
   cleanup();
   publishDatabaseConnectivityState('connected');
   vi.useRealTimers();
@@ -27,6 +34,20 @@ describe('ConnectionRecoverySplash', () => {
     expect(getRecoveryStepStatuses('reconnecting')).toEqual(['done', 'active', 'pending', 'pending']);
     expect(getRecoveryStepStatuses('syncing')).toEqual(['done', 'done', 'active', 'pending']);
     expect(getRecoveryStepStatuses('recovered')).toEqual(['done', 'done', 'done', 'done']);
+  });
+
+  it('permite entrar en Ajustes si aún no hay una base SQLite compartida configurada', async () => {
+    databaseMock.configured = false;
+    const background = document.createElement('button');
+    background.textContent = 'Ajustes';
+    document.body.appendChild(background);
+    render(<ConnectionRecoverySplash />);
+    await act(async () => {
+      publishDatabaseConnectivityState('reconnecting', 'Sin base compartida', 1);
+    });
+    expect(screen.queryByRole('dialog', { name: 'TrAcción' })).toBeNull();
+    expect(background.inert).not.toBe(true);
+    background.remove();
   });
 
   it('bloquea la aplicación y restaura la interacción cuando SQLite se recupera', async () => {
