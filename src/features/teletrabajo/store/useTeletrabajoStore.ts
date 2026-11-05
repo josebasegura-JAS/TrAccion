@@ -86,7 +86,7 @@ interface TeletrabajoStateStore {
   filters: TeletrabajoFilters;
   pendingHistoricoImport: PendingHistoricoImport | null;
   load: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   createWithConcurrencyCheck: (draft: TeletrabajoDraft) => Promise<TeletrabajoUpdateResult>;
   updateWithConcurrencyCheck: (
     id: string,
@@ -169,41 +169,25 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       )
       .catch((error) => logTeletrabajoPersistenceError('loadTeletrabajo', error));
   },
-  reloadFromStorage: () => {
-    void Promise.all([loadSolicitudesFromSqliteOrStorage(), loadPuestosYGruposConMigracion()])
-      .then(
-        ([
-          nextSolicitudes,
-          { puestos: nextPuestosTeletrabajo, gruposCobertura: nextGruposCobertura },
-        ]) => {
-          set((state) => {
-            const hasSolicitudesChanged = !areSolicitudesEquivalent(
-              state.solicitudes,
-              nextSolicitudes,
-            );
-            const hasPuestosChanged = !arePuestosTeletrabajoEquivalent(
-              state.puestosTeletrabajo,
-              nextPuestosTeletrabajo,
-            );
-            const hasGruposChanged = !areGruposCoberturaEquivalent(
-              state.gruposCobertura,
-              nextGruposCobertura,
-            );
-
-            if (!hasSolicitudesChanged && !hasPuestosChanged && !hasGruposChanged) {
-              return state;
-            }
-
-            return buildTeletrabajoState(
-              nextSolicitudes,
-              nextPuestosTeletrabajo,
-              nextGruposCobertura,
-              state.selectedSolicitudId,
-            );
-          });
-        },
-      )
-      .catch((error) => logTeletrabajoPersistenceError('reloadTeletrabajoFromStorage', error));
+  reloadFromStorage: async () => {
+    try {
+      const [
+        nextSolicitudes,
+        { puestos: nextPuestosTeletrabajo, gruposCobertura: nextGruposCobertura },
+      ] = await Promise.all([loadSolicitudesFromSqliteOrStorage(), loadPuestosYGruposConMigracion()]);
+      set((state) => {
+        const hasSolicitudesChanged = !areSolicitudesEquivalent(state.solicitudes, nextSolicitudes);
+        const hasPuestosChanged = !arePuestosTeletrabajoEquivalent(state.puestosTeletrabajo, nextPuestosTeletrabajo);
+        const hasGruposChanged = !areGruposCoberturaEquivalent(state.gruposCobertura, nextGruposCobertura);
+        if (!hasSolicitudesChanged && !hasPuestosChanged && !hasGruposChanged) return state;
+        return buildTeletrabajoState(
+          nextSolicitudes, nextPuestosTeletrabajo, nextGruposCobertura, state.selectedSolicitudId,
+        );
+      });
+    } catch (error) {
+      logTeletrabajoPersistenceError('reloadTeletrabajoFromStorage', error);
+      throw error;
+    }
   },
   createWithConcurrencyCheck: async (draft) => {
     const now = new Date().toISOString();
