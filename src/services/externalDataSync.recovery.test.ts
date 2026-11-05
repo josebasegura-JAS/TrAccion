@@ -96,34 +96,66 @@ describe('externalDataSync recuperación de red', () => {
 
     sync.stopExternalDataSyncPolling();
   });
-  it('repite la recuperación si otro equipo escribe mientras se rehidratan los módulos', async () => {
+  it('no repite la recuperación si otro equipo guarda durante la recarga', async () => {
     const later = { ...tokenSnapshot, taskRecordsUpdatedAt: '2026-10-15T09:01:00.000Z' };
-    const getPersistedRecordsToken = vi.fn()
-      .mockResolvedValueOnce(later)
-      .mockResolvedValueOnce(later);
-    const loadPersistedRecords = vi.fn()
-      .mockResolvedValueOnce(persistedSnapshot)
-      .mockResolvedValueOnce({ ...persistedSnapshot, ...later, records: [] });
+    const getPersistedRecordsToken = vi.fn().mockResolvedValue(later);
+    const loadPersistedRecords = vi.fn().mockResolvedValue(persistedSnapshot);
+    window.traccion = { getPersistedRecordsToken, loadPersistedRecords } as unknown as TraccionApi;
+
+    const sync = await import('./externalDataSync');
+    const registry = await import('./syncableStoreRegistry');
+    await expect(sync.forceExternalDataRefreshAfterRecovery()).resolves.toBeUndefined();
+    expect(loadPersistedRecords).toHaveBeenCalledTimes(1);
+    expect(registry.refreshRegisteredStoresAfterRecovery).toHaveBeenCalledTimes(1);
+    expect(getPersistedRecordsToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('detecta en el siguiente sondeo los cambios producidos durante la recuperación', async () => {
+    const later = { ...tokenSnapshot, taskRecordsUpdatedAt: '2026-10-15T09:01:00.000Z' };
+    const getPersistedRecordsToken = vi.fn().mockResolvedValue(later);
+    const loadPersistedRecords = vi.fn().mockResolvedValue(persistedSnapshot);
     window.traccion = { getPersistedRecordsToken, loadPersistedRecords } as unknown as TraccionApi;
 
     const sync = await import('./externalDataSync');
     const registry = await import('./syncableStoreRegistry');
     await sync.forceExternalDataRefreshAfterRecovery();
-    expect(loadPersistedRecords).toHaveBeenCalledTimes(2);
-    expect(registry.refreshRegisteredStoresAfterRecovery).toHaveBeenCalledTimes(2);
+
+    sync.startExternalDataSyncPolling({ preserveSeenTokens: true, runImmediately: false });
+    await vi.advanceTimersByTimeAsync(12_000);
+    await flushPromises();
+
+    expect(registry.reloadRegisteredSyncableStores).toHaveBeenCalledWith(['tareas'], {
+      silentPersistenceFeedback: true,
+      deferInactive: true,
+    });
+    expect(loadPersistedRecords).toHaveBeenCalledTimes(1);
+    sync.stopExternalDataSyncPolling();
   });
 
-  it('no confirma recuperación si cambian los datos en las dos verificaciones', async () => {
-    const nextA = { ...tokenSnapshot, taskRecordsUpdatedAt: 'v2' };
-    const nextB = { ...tokenSnapshot, taskRecordsUpdatedAt: 'v3' };
-    const getPersistedRecordsToken = vi.fn()
-      .mockResolvedValueOnce(nextA)
-      .mockResolvedValueOnce(nextB);
+  it('bloquea la recuperación cuando SQLite deja de estar accesible tras recargar', async () => {
+    const unavailable = {
+      ...tokenSnapshot,
+      status: { ...readyStatus, ready: false, phase: 'locked', message: 'SMB desconectado' } as TraccionDatabaseStatus,
+    };
+    const getPersistedRecordsToken = vi.fn().mockResolvedValue(unavailable);
     const loadPersistedRecords = vi.fn().mockResolvedValue(persistedSnapshot);
     window.traccion = { getPersistedRecordsToken, loadPersistedRecords } as unknown as TraccionApi;
+
     const sync = await import('./externalDataSync');
-    await expect(sync.forceExternalDataRefreshAfterRecovery()).rejects.toThrow('edición bloqueada');
-    expect(loadPersistedRecords).toHaveBeenCalledTimes(2);
+    await expect(sync.forceExternalDataRefreshAfterRecovery()).rejects.toThrow('SMB desconectado');
+  });
+
+  it('no confirma recuperación si falla la recarga del módulo activo', async () => {
+    const loadPersistedRecords = vi.fn().mockResolvedValue(persistedSnapshot);
+    const getPersistedRecordsToken = vi.fn().mockResolvedValue(tokenSnapshot);
+    window.traccion = { getPersistedRecordsToken, loadPersistedRecords } as unknown as TraccionApi;
+
+    const registry = await import('./syncableStoreRegistry');
+    vi.mocked(registry.refreshRegisteredStoresAfterRecovery).mockRejectedValueOnce(new Error('Fallo de lectura SQLite'));
+    const sync = await import('./externalDataSync');
+
+    await expect(sync.forceExternalDataRefreshAfterRecovery()).rejects.toThrow('Fallo de lectura SQLite');
+    expect(getPersistedRecordsToken).not.toHaveBeenCalled();
   });
 
 });
