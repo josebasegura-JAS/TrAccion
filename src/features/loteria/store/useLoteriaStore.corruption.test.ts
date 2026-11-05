@@ -16,9 +16,10 @@ describe('Lotería: no ignorar registros de SQLite ilegibles', () => {
       requests: [{ id: 'erronea', campaignYear: campaign.year, value: '{corrupto', updatedAt: 'v2' }],
     }));
     Object.defineProperty(window, 'traccion', { configurable: true, value: { loadLoteriaRecords: loader } });
-    useLoteriaStore.getState().reloadFromStorage();
-    await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(useLoteriaStore.getState().reloadFromStorage()).rejects.toThrow(
+      /Lotería: la solicitud erronea no se puede leer/,
+    );
+    expect(loader).toHaveBeenCalledOnce();
     expect(useLoteriaStore.getState().campaign).toBe(previous);
     expect(useLoteriaStore.getState().campaignUpdatedAt).toBe('v1');
   });
