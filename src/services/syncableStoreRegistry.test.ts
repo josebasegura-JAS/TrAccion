@@ -47,4 +47,59 @@ describe('reloadRegisteredSyncableStores', () => {
     await Promise.all([first, second]);
     expect(reload).toHaveBeenCalledTimes(1);
   });
+  it('serializa recargas del mismo store sin perder la segunda solicitud', async () => {
+    vi.useFakeTimers();
+    let finishFirst: (() => void) | undefined;
+    const firstExecution = new Promise<void>((resolve) => { finishFirst = resolve; });
+    let started = 0;
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    const reload = vi.fn(async () => {
+      started += 1;
+      concurrent += 1;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      if (started === 1) await firstExecution;
+      concurrent -= 1;
+    });
+    const id = 'pr1-serialized-reload';
+    registerSyncableStore({ id, reloadFromStorage: reload });
+
+    const first = reloadRegisteredSyncableStores([id]);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    const second = reloadRegisteredSyncableStores([id]);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(maxConcurrent).toBe(1);
+
+    finishFirst?.();
+    await Promise.all([first, second]);
+    expect(reload).toHaveBeenCalledTimes(2);
+    expect(maxConcurrent).toBe(1);
+  });
+
+  it('reintenta una recarga posterior aunque la anterior haya fallado', async () => {
+    vi.useFakeTimers();
+    let rejectFirst: ((reason?: unknown) => void) | undefined;
+    const firstExecution = new Promise<void>((_, reject) => { rejectFirst = reject; });
+    let callCount = 0;
+    const reload = vi.fn(async () => {
+      callCount += 1;
+      if (callCount === 1) await firstExecution;
+    });
+    const id = 'pr1-retry-after-failure';
+    registerSyncableStore({ id, reloadFromStorage: reload });
+    const first = reloadRegisteredSyncableStores([id]);
+    // Registrar el rechazo antes de provocar el fallo.
+    const firstFailure = expect(first).rejects.toThrow('Fallo simulado');
+    await vi.advanceTimersByTimeAsync(50);
+    const second = reloadRegisteredSyncableStores([id]);
+    await vi.advanceTimersByTimeAsync(50);
+    rejectFirst?.(new Error('Fallo simulado'));
+    await firstFailure;
+    await second;
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+
 });
