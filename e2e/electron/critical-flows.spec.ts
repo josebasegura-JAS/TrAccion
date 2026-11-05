@@ -18,23 +18,36 @@ async function expectNoConsoleErrors(page: Page, action: () => Promise<void>): P
 }
 
 test('flujo crítico: crear una tarea desde UI y verificar que queda visible', async () => {
-  const { page, close } = await launchTraccionElectronWithIsolatedSharedDatabase();
+  // El límite global de 45 s incluye el primer arranque real de Electron,
+  // inicialización SQLite y cierre. Cada expectativa funcional mantiene su
+  // timeout propio, y los pasos identifican dónde se atasca un CI lento.
+  test.setTimeout(90_000);
+  const launched = await test.step('Arrancar Electron con SQLite compartida aislada', () =>
+    launchTraccionElectronWithIsolatedSharedDatabase(),
+  );
+  const { page, close } = launched;
   const taskTitle = `E2E tarea ${Date.now()}`;
 
   try {
     await expectNoConsoleErrors(page, async () => {
-      await navigateToModule(page, 'Operativa diaria', 'Tareas');
-      await page.getByRole('button', { name: /Nueva tarea/ }).click();
+      await test.step('Navegar a Tareas y abrir nueva tarea', async () => {
+        await navigateToModule(page, 'Operativa diaria', 'Tareas');
+        await page.getByRole('button', { name: /Nueva tarea/ }).click();
+      });
 
       const dialog = page.getByRole('dialog', { name: 'Nueva tarea' });
-      await dialog.getByLabel('Título').fill(taskTitle);
-      await dialog.getByRole('button', { name: 'Guardar' }).click();
+      await test.step('Cumplimentar y guardar la tarea', async () => {
+        await dialog.getByLabel('Título').fill(taskTitle);
+        await dialog.getByRole('button', { name: 'Guardar' }).click();
+        await expect(dialog).not.toBeVisible({ timeout: 10_000 });
+      });
 
-      await expect(dialog).not.toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(taskTitle, { exact: true }).first()).toBeVisible({ timeout: 10_000 });
+      await test.step('Verificar la tarea creada en el listado', async () => {
+        await expect(page.getByText(taskTitle, { exact: true }).first()).toBeVisible({ timeout: 10_000 });
+      });
     });
   } finally {
-    await close();
+    await test.step('Cerrar Electron y limpiar la base de pruebas', () => close());
   }
 });
 
