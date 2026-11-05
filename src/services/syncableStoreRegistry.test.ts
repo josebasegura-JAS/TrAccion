@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { registerSyncableStore, reloadRegisteredSyncableStores } from './syncableStoreRegistry';
+import { flushDeferredSyncStoresForView, getDeferredSyncStoreIds, registerSyncableStore, reloadRegisteredSyncableStores, setActiveSyncView } from './syncableStoreRegistry';
 
 describe('reloadRegisteredSyncableStores', () => {
   afterEach(() => {
+    setActiveSyncView('dashboard');
     vi.useRealTimers();
   });
 
@@ -100,6 +101,56 @@ describe('reloadRegisteredSyncableStores', () => {
     await firstFailure;
     await second;
     expect(reload).toHaveBeenCalledTimes(2);
+  });
+
+  it('aplaza los módulos fuera de la pantalla y los carga antes de abrirlos', async () => {
+    vi.useFakeTimers();
+    setActiveSyncView('dashboard');
+    const reload = vi.fn(async () => undefined);
+    registerSyncableStore({ id: 'presupuestos', reloadFromStorage: reload });
+    await reloadRegisteredSyncableStores(['presupuestos'], { deferInactive: true });
+    expect(reload).not.toHaveBeenCalled();
+    expect(getDeferredSyncStoreIds()).toContain('presupuestos');
+
+    const flush = flushDeferredSyncStoresForView('presupuestos');
+    await vi.advanceTimersByTimeAsync(50);
+    await flush;
+    expect(reload).toHaveBeenCalledOnce();
+    expect(getDeferredSyncStoreIds()).not.toContain('presupuestos');
+  });
+
+  it('mantiene activos los datos del Dashboard aunque solicite diferimiento', async () => {
+    vi.useFakeTimers();
+    setActiveSyncView('dashboard');
+    const reload = vi.fn(async () => undefined);
+    registerSyncableStore({ id: 'comite-sesiones', reloadFromStorage: reload });
+    const refresh = reloadRegisteredSyncableStores(['comite-sesiones'], { deferInactive: true });
+    await vi.advanceTimersByTimeAsync(50);
+    await refresh;
+    expect(reload).toHaveBeenCalledOnce();
+    expect(getDeferredSyncStoreIds()).not.toContain('comite-sesiones');
+  });
+
+  it('una invalidación nueva durante la carga no se pierde al completar la anterior', async () => {
+    vi.useFakeTimers();
+    setActiveSyncView('presupuestos');
+    let release: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const reload = vi.fn(() => waiting);
+    registerSyncableStore({ id: 'presupuestos', reloadFromStorage: reload });
+    const first = reloadRegisteredSyncableStores(['presupuestos'], { deferInactive: true });
+    await vi.advanceTimersByTimeAsync(50);
+    setActiveSyncView('dashboard');
+    await reloadRegisteredSyncableStores(['presupuestos'], { deferInactive: true });
+    release?.();
+    await first;
+    expect(getDeferredSyncStoreIds()).toContain('presupuestos');
+
+    const next = flushDeferredSyncStoresForView('presupuestos');
+    await vi.advanceTimersByTimeAsync(50);
+    await next;
+    expect(reload).toHaveBeenCalledTimes(2);
+    expect(getDeferredSyncStoreIds()).not.toContain('presupuestos');
   });
 
 });
