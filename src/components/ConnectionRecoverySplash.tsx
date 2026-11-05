@@ -4,7 +4,7 @@ import { Check, Clock3, Database, LoaderCircle, RotateCw, WifiOff } from 'lucide
 import { useDatabaseConnectivityState } from '../services/databaseConnectivityState';
 import { getConnectionDiagnostics, subscribeConnectionDiagnostics } from '../services/databaseHealthMonitor';
 
-import { getRecoveryStepStatuses } from './connectionRecoverySteps';
+import { getRecoveryStepStatuses, STEPS } from './connectionRecoverySteps';
 
 /**
  * Presentación a pantalla completa: el monitor de SQLite es el único que puede
