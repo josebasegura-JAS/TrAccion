@@ -4,19 +4,7 @@ import { Check, Clock3, Database, LoaderCircle, RotateCw, WifiOff } from 'lucide
 import { useDatabaseConnectivityState } from '../services/databaseConnectivityState';
 import { getConnectionDiagnostics, subscribeConnectionDiagnostics } from '../services/databaseHealthMonitor';
 
-type RecoveryStepStatus = 'done' | 'active' | 'pending';
-const STEPS = [
-  'Detectar interrupción de conexión',
-  'Comprobar acceso a SQLite compartida',
-  'Actualizar datos del módulo activo',
-  'Reanudar la aplicación',
-] as const;
-
-export function getRecoveryStepStatuses(phase: 'reconnecting' | 'syncing' | 'recovered'): RecoveryStepStatus[] {
-  if (phase === 'reconnecting') return ['done', 'active', 'pending', 'pending'];
-  if (phase === 'syncing') return ['done', 'done', 'active', 'pending'];
-  return ['done', 'done', 'done', 'done'];
-}
+import { getRecoveryStepStatuses } from './connectionRecoverySteps';
 
 /**
  * Presentación a pantalla completa: el monitor de SQLite es el único que puede
