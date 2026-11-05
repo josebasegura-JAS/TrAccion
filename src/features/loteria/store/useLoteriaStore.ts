@@ -16,7 +16,7 @@ interface LotteryState {
   campaignUpdatedAt: string | null;
   requestUpdatedAt: Record<string, string | null>;
   load: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   saveCampaign: (campaign: LotteryCampaign) => Promise<{ ok: boolean; message: string }>;
 }
 
@@ -259,18 +259,21 @@ export const useLoteriaStore = create<LotteryState>((set, get) => ({
       emitPersistenceFeedback({ kind: 'error', key: LOTTERY_STORAGE_KEY, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : 'No se ha podido cargar Lotería desde SQLite.' });
     });
   },
-  reloadFromStorage: () => {
-    void loadCampaignFromSqlite().then((loaded) => {
+  reloadFromStorage: async () => {
+    try {
+      const loaded = await loadCampaignFromSqlite();
       if (loaded) {
         set(loaded);
         writeLocalArchiveCache(loaded.campaign);
       } else {
         set({ campaign: readCampaign(), campaignUpdatedAt: null, requestUpdatedAt: {} });
       }
-    }).catch((error) => {
-      // Mantener el estado anterior y sus tokens OCC; nunca sustituirlo por caché tras un fallo.
+    } catch (error) {
+      // Conservar los datos anteriores y propagar el fallo: la sincronización
+      // no puede marcar el token como aplicado si la lectura SQLite falló.
       emitPersistenceFeedback({ kind: 'error', key: LOTTERY_STORAGE_KEY, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : 'No se ha podido actualizar Lotería desde SQLite.' });
-    });
+      throw error;
+    }
   },
   saveCampaign: async (campaign) => {
     const saveSnapshot = window.traccion?.saveLoteriaSnapshotIfUnchanged;
