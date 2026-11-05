@@ -48,7 +48,9 @@ export function ConnectionRecoverySplash() {
     const block = () => {
       Array.from(document.body.children).forEach((child) => {
         if (!(child instanceof HTMLElement) || child === overlay || original.has(child)) return;
-        original.set(child, child.inert);
+        // jsdom no define inert de forma nativa: normalizar a booleano
+        // permite restaurar exactamente un estado interactivo válido.
+        original.set(child, child.inert === true);
         child.inert = true;
       });
     };
