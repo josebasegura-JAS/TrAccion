@@ -23,6 +23,9 @@ type PendingReload = {
 };
 
 const pendingReloads = new Map<string, PendingReload>();
+// Una recarga nueva no debe solaparse con otra del mismo store.
+// Se ejecuta después: podría representar un token SQLite posterior.
+const activeReloads = new Map<string, Promise<void>>();
 const RELOAD_DEBOUNCE_MS = 50;
 
 function scheduleStoreReload(
@@ -47,20 +50,28 @@ function scheduleStoreReload(
 
     pending.timer = setTimeout(() => {
       pendingReloads.delete(store.id);
-      void (async () => {
-        try {
-          if (pending.silentPersistenceFeedback) {
-            await runWithSilentPersistenceFeedback(async () => {
-              await pending.store.reloadFromStorage();
-            });
-          } else {
+      const previous = activeReloads.get(pending.store.id);
+      const execution = (async () => {
+        // Esperar a la lectura anterior, aunque fallara; el nuevo token
+        // necesita una oportunidad propia de actualizar el store.
+        if (previous) await previous.catch(() => undefined);
+        if (pending.silentPersistenceFeedback) {
+          await runWithSilentPersistenceFeedback(async () => {
             await pending.store.reloadFromStorage();
-          }
-          pending.waiters.forEach((waiter) => waiter.resolve());
-        } catch (error) {
-          pending.waiters.forEach((waiter) => waiter.reject(error));
+          });
+        } else {
+          await pending.store.reloadFromStorage();
         }
       })();
+      activeReloads.set(pending.store.id, execution);
+      void execution.then(
+        () => pending.waiters.forEach((waiter) => waiter.resolve()),
+        (error: unknown) => pending.waiters.forEach((waiter) => waiter.reject(error)),
+      ).finally(() => {
+        if (activeReloads.get(pending.store.id) === execution) {
+          activeReloads.delete(pending.store.id);
+        }
+      });
     }, RELOAD_DEBOUNCE_MS);
 
     pendingReloads.set(store.id, pending);
