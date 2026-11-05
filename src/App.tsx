@@ -1,6 +1,6 @@
 import { ExcelBackupRetryBanner } from './components/ExcelBackupRetryBanner';
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, LockKeyhole, RefreshCw, WifiOff } from 'lucide-react';
+import { AlertTriangle, LockKeyhole } from 'lucide-react';
 import { AppUpdateChecker } from './components/AppUpdateChecker';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { BackgroundActivityIndicator } from './components/BackgroundActivityIndicator';
@@ -11,10 +11,10 @@ import { Sidebar } from './components/Sidebar';
 import { resolveActiveViewForNavigation, resolveCommitteeOrganForNavigation, type AppView } from './navigation/navigation';
 import { flushPendingModuleChangesBeforeNavigation, startExternalDataSyncPolling, stopExternalDataSyncPolling } from './services/externalDataSync';
 import { setActiveSyncView } from './services/syncableStoreRegistry';
-import { getConnectionDiagnostics, subscribeConnectionDiagnostics, requestDatabaseReconnectCheck, startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './services/databaseHealthMonitor';
+import { startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './services/databaseHealthMonitor';
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
-import { useDatabaseConnectivityState } from './services/databaseConnectivityState';
+import { ConnectionRecoverySplash } from './components/ConnectionRecoverySplash';
 import { hasDirtyEditors } from './services/dirtyEditors';
 import { recordPerformanceMetric } from './services/performanceMetrics';
 import { useAppDialog } from './hooks/useAppDialog';
@@ -113,72 +113,6 @@ function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }
       <div><strong>Error de guardado</strong><p>{feedback.message || 'No se han podido guardar los últimos cambios. Revisa la conexión o la persistencia antes de continuar editando.'}</p>
         {isLockIssue && <button className="persistence-error-banner__action" onClick={onGoToAjustes} type="button">Ver bloqueo en Ajustes</button>}
       </div>
-    </section>
-  );
-}
-
-function ConnectionRecoveryBanner() {
-  const connectivity = useDatabaseConnectivityState();
-  const [diagnostics, setDiagnostics] = useState(getConnectionDiagnostics);
-  const [restarting, setRestarting] = useState(false);
-  const [restartError, setRestartError] = useState('');
-  useEffect(() => subscribeConnectionDiagnostics(() => setDiagnostics(getConnectionDiagnostics())), []);
-  const staleConnectionMs = diagnostics.lastFailureAt ? Date.now() - new Date(diagnostics.lastFailureAt).getTime() : 0;
-  const offerRestart = connectivity.phase === 'reconnecting' && (diagnostics.consecutiveFailures >= 5 || staleConnectionMs >= 30_000);
-  if (connectivity.phase === 'connected') return null;
-
-  const recovered = connectivity.phase === 'recovered';
-  const syncing = connectivity.phase === 'syncing';
-  return (
-    <section
-      className={`mb-2 flex items-center gap-3 rounded-xl border px-3.5 py-2.5 shadow-sm ${
-        recovered
-          ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
-          : 'border-amber-400/25 bg-amber-400/10 text-amber-50'
-      }`}
-      role="status"
-      aria-live="polite"
-    >
-      <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${recovered ? 'bg-emerald-400/15' : 'bg-amber-400/15'}`}>
-        {recovered ? (
-          <CheckCircle2 size={19} aria-hidden="true" />
-        ) : syncing ? (
-          <RefreshCw className="animate-spin" size={19} aria-hidden="true" />
-        ) : (
-          <WifiOff className="animate-pulse" size={19} aria-hidden="true" />
-        )}
-      </span>
-      <div className="min-w-0 flex-1">
-        <strong className="block text-sm">
-          {recovered ? 'Conexión restablecida' : syncing ? 'Sincronizando datos compartidos' : 'Reconectando con la base compartida'}
-        </strong>
-        <p className="mt-0.5 truncate text-xs opacity-80">{connectivity.message}</p>
-      </div>
-      {offerRestart && (
-        <button type="button" disabled={restarting || !window.traccion?.requestSafeRestart}
-          className="shrink-0 rounded-lg border border-amber-300/25 px-3 py-1.5 text-xs font-semibold text-amber-50 disabled:opacity-50"
-          onClick={() => {
-            if (!window.traccion?.requestSafeRestart) return;
-            setRestarting(true);
-            setRestartError('');
-            void window.traccion.requestSafeRestart().then((result) => {
-              if (!result.ok) setRestartError(result.message ?? 'No se pudo reiniciar TrAcción.');
-            }).catch((error: unknown) => setRestartError(error instanceof Error ? error.message : 'Error al solicitar el reinicio.'))
-              .finally(() => setRestarting(false));
-          }}>
-          {restarting ? 'Preparando reinicio…' : 'Reiniciar TrAcción'}
-        </button>
-      )}
-      {restartError && <span className="text-xs text-amber-100" role="alert">{restartError}</span>}
-      {!recovered && !syncing ? (
-        <button
-          className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-300/15"
-          onClick={requestDatabaseReconnectCheck}
-          type="button"
-        >
-          Reintentar ahora
-        </button>
-      ) : null}
     </section>
   );
 }
@@ -334,7 +268,6 @@ export function App() {
           <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
           <main className={`app-shell__content ${activeView === 'dashboard' ? 'app-shell__content--dashboard' : ''}`}>
             <div className={`app-module-stage ${activeView === 'dashboard' ? 'app-module-stage--dashboard' : ''}`}>
-              <ConnectionRecoveryBanner />
               <SqliteReadOnlyBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
               <PersistenceErrorBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
               <GlobalBusyIndicator />
@@ -368,6 +301,7 @@ export function App() {
         </div>
       </div>
       {dialogNode}
+      <ConnectionRecoverySplash />
     </AppShellErrorBoundary>
     </ToastProvider>
   );
