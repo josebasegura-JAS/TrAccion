@@ -1,5 +1,5 @@
 export type RecoveryStepStatus = 'done' | 'active' | 'pending';
-const STEPS = [
+export const STEPS = [
   'Detectar interrupción de conexión',
   'Comprobar acceso a SQLite compartida',
   'Actualizar datos del módulo activo',
