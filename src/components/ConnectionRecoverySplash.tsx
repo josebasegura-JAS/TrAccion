@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Clock3, Database, LoaderCircle, RotateCw, WifiOff } from 'lucide-react';
 import { useDatabaseConnectivityState } from '../services/databaseConnectivityState';
+import { useDatabaseStatus } from '../services/databaseStatus';
 import { getConnectionDiagnostics, subscribeConnectionDiagnostics } from '../services/databaseHealthMonitor';
 
 import { getRecoveryStepStatuses, STEPS } from './connectionRecoverySteps';
@@ -12,13 +13,18 @@ import { getRecoveryStepStatuses, STEPS } from './connectionRecoverySteps';
  */
 export function ConnectionRecoverySplash() {
   const connectivity = useDatabaseConnectivityState();
+  const databaseStatus = useDatabaseStatus();
   const [diagnostics, setDiagnostics] = useState(getConnectionDiagnostics);
   const [elapsed, setElapsed] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [restarting, setRestarting] = useState(false);
   const [restartError, setRestartError] = useState('');
 
-  const active = connectivity.phase === 'reconnecting' || connectivity.phase === 'syncing';
+  // Si aún no hay una ruta SQLite compartida configurada, el usuario debe
+  // poder abrir Ajustes. El splash solo corresponde a una conexión compartida
+  // previamente configurada que está en proceso de recuperación.
+  const active = databaseStatus?.isDefaultPath === false &&
+    (connectivity.phase === 'reconnecting' || connectivity.phase === 'syncing');
   useEffect(() => subscribeConnectionDiagnostics(() => setDiagnostics(getConnectionDiagnostics())), []);
   useEffect(() => {
     if (!active) {
