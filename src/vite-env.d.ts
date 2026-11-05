@@ -154,6 +154,24 @@ interface CommitteeSummaryUpdateResult { ok: boolean; message: string; filePath?
 type ParitariaSummaryUpdatePayload = CommitteeSummaryUpdatePayload;
 type ParitariaSummaryUpdateResult = CommitteeSummaryUpdateResult;
 
+interface TraccionMultiuserMetricSummary {
+  category: 'ipc-wait' | 'ipc-run' | 'smb-lock-wait' | 'smb-lock-held' | 'record-lock' | 'backup' | 'excel';
+  operation: string;
+  count: number;
+  failed: number;
+  averageMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  maxMs: number;
+}
+interface TraccionMultiuserPerformanceReport {
+  startedAt: string;
+  recordedAt: string;
+  sampleCount: number;
+  truncatedToRecent: number;
+  groups: TraccionMultiuserMetricSummary[];
+}
+
 interface TraccionApi {
   updateCommitteeSummaryWord?: (payload: CommitteeSummaryUpdatePayload) => Promise<CommitteeSummaryUpdateResult>;
   updateParitariaSummaryWord?: (payload: ParitariaSummaryUpdatePayload) => Promise<ParitariaSummaryUpdateResult>;
@@ -168,6 +186,7 @@ interface TraccionApi {
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   getLastShutdownPerformance?: () => Promise<TraccionShutdownPerformance | null>;
   getStartupPerformance?: () => Promise<TraccionStartupPerformance>;
+  getMultiuserPerformanceReport?: () => Promise<TraccionMultiuserPerformanceReport>;
   databaseHealthCheck: () => Promise<TraccionDatabaseHealthCheckResult>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
