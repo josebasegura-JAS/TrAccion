@@ -57,6 +57,7 @@ const VIEW_STORE_IDS: Partial<Record<AppView, readonly string[]>> = {
 };
 const ALWAYS_ACTIVE_STORE_IDS = new Set(['tareas', 'configuracion']);
 const deferredStoreIds = new Set<string>();
+const deferredStoreVersion = new Map<string, number>();
 let activeView: AppView = 'dashboard';
 
 export function setActiveSyncView(view: AppView): void {
@@ -142,11 +143,16 @@ export async function reloadRegisteredSyncableStores(
     stores.map(async (store) => {
       if (options.deferInactive && !isStoreNeeded(store.id, activeView)) {
         deferredStoreIds.add(store.id);
+        deferredStoreVersion.set(store.id, (deferredStoreVersion.get(store.id) ?? 0) + 1);
         return;
       }
+      const versionAtStart = deferredStoreVersion.get(store.id) ?? 0;
       try {
         await scheduleStoreReload(store, options.silentPersistenceFeedback === true);
-        deferredStoreIds.delete(store.id);
+        // Una invalidación posterior no puede borrarse al finalizar esta lectura.
+        if ((deferredStoreVersion.get(store.id) ?? 0) === versionAtStart) {
+          deferredStoreIds.delete(store.id);
+        }
       } catch (error) {
         deferredStoreIds.add(store.id);
         throw error;
