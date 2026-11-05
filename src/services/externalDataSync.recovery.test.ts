@@ -36,6 +36,8 @@ describe('externalDataSync recuperación de red', () => {
     vi.doMock('./syncableStoreRegistrations', () => ({}));
     vi.doMock('./syncableStoreRegistry', () => ({
       reloadRegisteredSyncableStores: vi.fn().mockResolvedValue(undefined),
+      refreshRegisteredStoresAfterRecovery: vi.fn().mockResolvedValue(undefined),
+      flushDeferredSyncStoresForView: vi.fn().mockResolvedValue(undefined),
     }));
     vi.doMock('./sharedEditingActivity', () => ({
       hasActiveSharedEditing: () => false,
@@ -94,4 +96,34 @@ describe('externalDataSync recuperación de red', () => {
 
     sync.stopExternalDataSyncPolling();
   });
+  it('repite la recuperación si otro equipo escribe mientras se rehidratan los módulos', async () => {
+    const later = { ...tokenSnapshot, taskRecordsUpdatedAt: '2026-10-15T09:01:00.000Z' };
+    const getPersistedRecordsToken = vi.fn()
+      .mockResolvedValueOnce(later)
+      .mockResolvedValueOnce(later);
+    const loadPersistedRecords = vi.fn()
+      .mockResolvedValueOnce(persistedSnapshot)
+      .mockResolvedValueOnce({ ...persistedSnapshot, ...later, records: [] });
+    window.traccion = { getPersistedRecordsToken, loadPersistedRecords } as unknown as TraccionApi;
+
+    const sync = await import('./externalDataSync');
+    const registry = await import('./syncableStoreRegistry');
+    await sync.forceExternalDataRefreshAfterRecovery();
+    expect(loadPersistedRecords).toHaveBeenCalledTimes(2);
+    expect(registry.refreshRegisteredStoresAfterRecovery).toHaveBeenCalledTimes(2);
+  });
+
+  it('no confirma recuperación si cambian los datos en las dos verificaciones', async () => {
+    const nextA = { ...tokenSnapshot, taskRecordsUpdatedAt: 'v2' };
+    const nextB = { ...tokenSnapshot, taskRecordsUpdatedAt: 'v3' };
+    const getPersistedRecordsToken = vi.fn()
+      .mockResolvedValueOnce(nextA)
+      .mockResolvedValueOnce(nextB);
+    const loadPersistedRecords = vi.fn().mockResolvedValue(persistedSnapshot);
+    window.traccion = { getPersistedRecordsToken, loadPersistedRecords } as unknown as TraccionApi;
+    const sync = await import('./externalDataSync');
+    await expect(sync.forceExternalDataRefreshAfterRecovery()).rejects.toThrow('edición bloqueada');
+    expect(loadPersistedRecords).toHaveBeenCalledTimes(2);
+  });
+
 });
