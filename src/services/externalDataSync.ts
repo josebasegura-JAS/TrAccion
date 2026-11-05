@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { flushDeferredSyncStoresForView, reloadRegisteredSyncableStores } from './syncableStoreRegistry';
+import { flushDeferredSyncStoresForView, refreshRegisteredStoresAfterRecovery, reloadRegisteredSyncableStores } from './syncableStoreRegistry';
 import type { AppView } from '../navigation/navigation';
 import { hasActiveSharedEditing, subscribeSharedEditingActivity } from './sharedEditingActivity';
 import {
@@ -339,29 +339,45 @@ export async function forceExternalDataRefreshAfterRecovery(): Promise<void> {
 
   await ensureSyncableStoresRegistered();
 
-  const snapshot = await window.traccion.loadPersistedRecords();
-  if (!canPollStatus(snapshot.status)) {
-    throw new Error(snapshot.status.message ?? 'SQLite no está operativa tras recuperar la conexión.');
+  // Los módulos no visibles quedan invalidados en el registro desde el
+  // primer intento; solo los necesarios para la vista actual se releen ahora.
+  // Si hay escrituras de otro equipo durante la recuperación, una segunda
+  // pasada evita desbloquear sobre una instantánea anterior.
+  let consistentToken: TraccionPersistedRecordsTokenSnapshot | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const snapshot = await window.traccion.loadPersistedRecords();
+    if (!canPollStatus(snapshot.status)) {
+      throw new Error(snapshot.status.message ?? 'SQLite no está operativa tras recuperar la conexión.');
+    }
+    applyPersistedRecordsSnapshotToLocalStorage(snapshot);
+    await refreshRegisteredStoresAfterRecovery();
+
+    const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
+    if (!canPollStatus(tokenSnapshot.status)) {
+      throw new Error(tokenSnapshot.status.message ?? 'SQLite dejó de estar disponible durante el refresco.');
+    }
+    const changedDuringRecovery =
+      tokenSnapshot.latestUpdatedAt !== snapshot.latestUpdatedAt ||
+      tokenSnapshot.taskRecordsUpdatedAt !== snapshot.taskRecordsUpdatedAt ||
+      tokenSnapshot.sorteosDrawsUpdatedAt !== snapshot.sorteosDrawsUpdatedAt ||
+      tokenSnapshot.sorteosExclusionsUpdatedAt !== snapshot.sorteosExclusionsUpdatedAt ||
+      JSON.stringify(tokenSnapshot.directStoreUpdatedAt ?? {}) !==
+        JSON.stringify(snapshot.directStoreUpdatedAt ?? {});
+
+    if (!changedDuringRecovery) {
+      consistentToken = tokenSnapshot;
+      break;
+    }
   }
-
-  applyPersistedRecordsSnapshotToLocalStorage(snapshot);
-
-  // Todos los stores se fuerzan a releer su fuente SQLite. Algunos módulos
-  // mantienen una copia efímera de representación en sessionStorage, pero nunca se usa
-  // como fuente autoritativa para recuperar una caída.
-  await reloadIntegratedStores();
-  updateSeenTokens(snapshot);
-
-  const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
-  if (!canPollStatus(tokenSnapshot.status)) {
-    throw new Error(tokenSnapshot.status.message ?? 'SQLite dejó de estar disponible durante el refresco.');
+  if (!consistentToken) {
+    throw new Error('Los datos compartidos cambiaron durante la recuperación. Se mantiene la edición bloqueada para reintentar.');
   }
-  updateSeenTokens(tokenSnapshot);
+  updateSeenTokens(consistentToken);
 
   const now = new Date().toISOString();
   setState({
     status: 'applied',
-    message: 'Conexión recuperada; datos compartidos refrescados.',
+    message: 'Conexión recuperada; módulos necesarios actualizados y restantes pendientes de recarga.',
     lastCheckedAt: now,
     lastAppliedAt: now,
     lastError: null,

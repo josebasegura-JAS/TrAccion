@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { flushDeferredSyncStoresForView, getDeferredSyncStoreIds, registerSyncableStore, reloadRegisteredSyncableStores, setActiveSyncView } from './syncableStoreRegistry';
+import { flushDeferredSyncStoresForView, getDeferredSyncStoreIds, refreshRegisteredStoresAfterRecovery, registerSyncableStore, reloadRegisteredSyncableStores, setActiveSyncView } from './syncableStoreRegistry';
 
 describe('reloadRegisteredSyncableStores', () => {
   afterEach(() => {
@@ -151,6 +151,29 @@ describe('reloadRegisteredSyncableStores', () => {
     await next;
     expect(reload).toHaveBeenCalledTimes(2);
     expect(getDeferredSyncStoreIds()).not.toContain('presupuestos');
+  });
+
+  it('recupera la vista activa en lotes y deja los módulos inactivos pendientes', async () => {
+    vi.useFakeTimers();
+    setActiveSyncView('dashboard');
+    const activeReload = vi.fn(async () => undefined);
+    const inactiveReload = vi.fn(async () => undefined);
+    registerSyncableStore({ id: 'loteria', reloadFromStorage: activeReload });
+    registerSyncableStore({ id: 'presupuestos', reloadFromStorage: inactiveReload });
+
+    const recovery = refreshRegisteredStoresAfterRecovery();
+    await vi.runAllTimersAsync();
+    await recovery;
+
+    expect(activeReload).toHaveBeenCalled();
+    expect(inactiveReload).not.toHaveBeenCalled();
+    expect(getDeferredSyncStoreIds()).toContain('presupuestos');
+    expect(getDeferredSyncStoreIds()).not.toContain('loteria');
+
+    const flush = flushDeferredSyncStoresForView('presupuestos');
+    await vi.runAllTimersAsync();
+    await flush;
+    expect(inactiveReload).toHaveBeenCalled();
   });
 
 });

@@ -80,6 +80,37 @@ export async function flushDeferredSyncStoresForView(view: AppView): Promise<voi
 }
 
 
+/**
+ * Recuperación de red: invalida todos los stores antes de liberar la edición.
+ * Primero relee los datos necesarios para la pantalla visible en lotes pequeños;
+ * el resto continúa invalidado hasta que se visite su módulo (PR2).
+ * No se declara completada una lectura que falló.
+ */
+export async function refreshRegisteredStoresAfterRecovery(): Promise<void> {
+  const stores = getRegisteredSyncableStores();
+  for (const store of stores) {
+    deferredStoreIds.add(store.id);
+    deferredStoreVersion.set(store.id, (deferredStoreVersion.get(store.id) ?? 0) + 1);
+  }
+
+  const priority = ['configuracion', 'tareas'];
+  const needed = stores
+    .map((store) => store.id)
+    .filter((id) => isStoreNeeded(id, activeView));
+  const ordered = [
+    ...priority.filter((id) => needed.includes(id)),
+    ...needed.filter((id) => !priority.includes(id)),
+  ];
+
+  // Un lote de dos como máximo reduce las ráfagas frente a Promise.all
+  // sobre los 17 módulos. La cola SQLite sigue siendo la autoridad.
+  for (let index = 0; index < ordered.length; index += 2) {
+    await reloadRegisteredSyncableStores(ordered.slice(index, index + 2), {
+      silentPersistenceFeedback: true,
+    });
+  }
+}
+
 function scheduleStoreReload(
   store: SyncableStoreRegistration,
   silentPersistenceFeedback: boolean,
