@@ -10,6 +10,31 @@ import {
   type PerformanceMetric,
 } from '../../services/performanceMetrics';
 
+const MULTIUSER_CATEGORIES = [
+  'ipc-wait', 'ipc-run', 'smb-lock-wait', 'smb-lock-held', 'record-lock', 'backup', 'excel',
+] as const;
+
+function formatMultiuserReport(report: TraccionMultiuserPerformanceReport): string {
+  return [
+    'TrAcción · Rendimiento multiusuario (equipo local)',
+    `Inicio de medición: ${report.startedAt}`,
+    `Informe generado: ${report.recordedAt}`,
+    `Muestras conservadas: ${report.sampleCount} (máximo ${report.truncatedToRecent}; se descartan las más antiguas)`,
+    'Nota: 0 muestras no demuestra ausencia de problemas; las operaciones que nunca terminan pueden no generar una duración.',
+    '',
+    'Categoría | Operación | N | Fallos | Media ms | P50 ms | P95 ms | Máximo ms',
+    ...MULTIUSER_CATEGORIES.flatMap((category) => {
+      const groups = report.groups.filter((group) => group.category === category);
+      return groups.length
+        ? groups.map((group) => [
+            group.category, group.operation, group.count, group.failed, group.averageMs,
+            group.p50Ms, group.p95Ms, group.maxMs,
+          ].join(' | '))
+        : [`${category} | Sin muestras`];
+    }),
+  ].join('\\n');
+}
+
 let previousShutdownLoaded = false;
 
 async function loadPreviousShutdownMetrics(): Promise<void> {
@@ -66,6 +91,29 @@ export function PerformanceDiagnostics() {
   }, []);
   const [startup, setStartup] = useState<TraccionStartupPerformance | null>(null);
   const [copyState, setCopyState] = useState('');
+  const [multiuser, setMultiuser] = useState<TraccionMultiuserPerformanceReport | null>(null);
+  const [multiuserError, setMultiuserError] = useState('');
+  const [multiuserLoading, setMultiuserLoading] = useState(false);
+  const refreshMultiuser = async (): Promise<TraccionMultiuserPerformanceReport | null> => {
+    if (!window.traccion?.getMultiuserPerformanceReport) {
+      setMultiuserError('Métricas multiusuario no disponibles en esta versión.');
+      return null;
+    }
+    setMultiuserLoading(true);
+    try {
+      const report = await window.traccion.getMultiuserPerformanceReport();
+      setMultiuser(report);
+      setMultiuserError('');
+      return report;
+    } catch {
+      setMultiuserError('No se pudo consultar el informe de métricas multiusuario.');
+      return null;
+    } finally {
+      setMultiuserLoading(false);
+    }
+  };
+  useEffect(() => { void refreshMultiuser(); }, []);
+
   useEffect(() => {
     void window.traccion?.getStartupPerformance?.().then(setStartup).catch(() => setStartup(null));
   }, []);
@@ -97,6 +145,59 @@ export function PerformanceDiagnostics() {
         </div>
       </summary>
       <div className="border-t border-metro-border p-4">
+        <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Métricas multiusuario">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-bold text-metro-text">Rendimiento multiusuario · Esta sesión</h4>
+              <p className="mt-1 text-xs text-metro-muted">Métricas locales de esperas SQLite, bloqueos SMB, reservas, backups y Excel. No se escriben en la carpeta compartida.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={multiuserLoading} className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"
+                onClick={() => void refreshMultiuser()}>{multiuserLoading ? 'Actualizando…' : 'Actualizar métricas'}</button>
+              <button type="button" className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text"
+                onClick={() => {
+                  void (async () => {
+                    const report = await refreshMultiuser();
+                    if (!report) { setCopyState('No se pudo obtener el informe multiusuario'); return; }
+                    try {
+                      await navigator.clipboard.writeText(formatMultiuserReport(report));
+                      setCopyState('Informe multiusuario completo copiado');
+                    } catch {
+                      setCopyState('No se pudo copiar el informe multiusuario');
+                    }
+                  })();
+                }}><ClipboardCopy size={13} className="mr-1 inline" /> Copiar informe completo</button>
+            </div>
+          </div>
+          {multiuserError && <p className="mb-2 text-xs text-amber-300">{multiuserError}</p>}
+          <p className="mb-2 text-xs text-metro-muted">
+            {multiuser ? `Desde ${multiuser.startedAt} · ${multiuser.sampleCount} muestras conservadas (límite ${multiuser.truncatedToRecent})` : 'Sin informe disponible'}
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead><tr className="border-b border-metro-border">
+                <th className="py-2 pr-3">Categoría</th><th className="py-2 pr-3">Operación</th>
+                <th className="py-2 pr-2 text-right">N</th><th className="py-2 pr-2 text-right">Fallos</th>
+                <th className="py-2 pr-2 text-right">Media</th><th className="py-2 pr-2 text-right">P50</th>
+                <th className="py-2 pr-2 text-right">P95</th><th className="py-2 text-right">Máx.</th>
+              </tr></thead>
+              <tbody>
+                {multiuser?.groups.map((group) => (
+                  <tr key={`${group.category}:${group.operation}`} className="border-b border-metro-border">
+                    <td className="py-1.5 pr-3">{group.category}</td><td className="py-1.5 pr-3">{group.operation}</td>
+                    <td className="py-1.5 pr-2 text-right">{group.count}</td><td className="py-1.5 pr-2 text-right">{group.failed}</td>
+                    <td className="py-1.5 pr-2 text-right">{group.averageMs} ms</td><td className="py-1.5 pr-2 text-right">{group.p50Ms} ms</td>
+                    <td className="py-1.5 pr-2 text-right">{group.p95Ms} ms</td><td className="py-1.5 text-right">{group.maxMs} ms</td>
+                  </tr>
+                ))}
+                {multiuser && multiuser.groups.length === 0 && (
+                  <tr><td colSpan={8} className="py-3 text-metro-muted">Todavía no hay muestras. Usa Tareas y realiza guardados, luego actualiza.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-metro-muted">Una operación nativa bloqueada puede no producir una muestra hasta finalizar. Este informe no incluye contenido de tareas ni datos de personas.</p>
+        </section>
         <section className="mb-5 rounded-lg border border-metro-border bg-metro-surface p-3" aria-label="Bloqueos del proceso principal">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h4 className="text-sm font-bold text-metro-text">Bloqueos de Electron · Registro local</h4>
