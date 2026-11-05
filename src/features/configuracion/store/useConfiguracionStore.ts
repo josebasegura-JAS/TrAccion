@@ -85,7 +85,7 @@ type SharedRouteSettings = Pick<
 
 interface ConfiguracionStore extends ConfiguracionState {
   load: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   setRutaPlantillaTeletrabajo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaLicenciaSinSueldo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaDenegacionLicenciaSinSueldo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
@@ -350,14 +350,20 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     set(readConfiguracion());
     void readConfiguracionFromSqlite().then((configuracion) => { if (configuracion) set(configuracion); }).catch((error) => console.warn('Configuración no cargada desde SQLite.', error));
   },
-  reloadFromStorage: () => {
+  reloadFromStorage: async () => {
     const applyIfChanged = (configuracion: ConfiguracionState) => {
       const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaExportacionActividadesExternas, rutaExportacionCriteriosRrll, rutaExportacionTicketRestaurante, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
       const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaDenegacionLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaExportacionActividadesExternas, rutaExportacionCriteriosRrll, rutaExportacionTicketRestaurante, rutaResumenComites, rutaResumenParitaria, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
       if (!areConfiguracionesEquivalent(current, configuracion)) set(configuracion);
     };
     if (window.traccion?.loadConfiguracion) {
-      void readConfiguracionFromSqlite().then((configuracion) => { if (configuracion) applyIfChanged(configuracion); }).catch((error) => console.warn('Configuración no recargada desde SQLite.', error));
+      try {
+        const configuracion = await readConfiguracionFromSqlite();
+        if (configuracion) applyIfChanged(configuracion);
+      } catch (error) {
+        console.warn('Configuración no recargada desde SQLite.', error);
+        throw error;
+      }
       return;
     }
     applyIfChanged(readConfiguracion());
