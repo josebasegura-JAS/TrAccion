@@ -9,7 +9,8 @@ import { ToastProvider } from './components/ui/Toast';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { resolveActiveViewForNavigation, resolveCommitteeOrganForNavigation, type AppView } from './navigation/navigation';
-import { startExternalDataSyncPolling, stopExternalDataSyncPolling } from './services/externalDataSync';
+import { flushPendingModuleChangesBeforeNavigation, startExternalDataSyncPolling, stopExternalDataSyncPolling } from './services/externalDataSync';
+import { setActiveSyncView } from './services/syncableStoreRegistry';
 import { getConnectionDiagnostics, subscribeConnectionDiagnostics, requestDatabaseReconnectCheck, startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './services/databaseHealthMonitor';
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
@@ -238,6 +239,7 @@ class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErr
 export function App() {
   const { confirm, dialogNode } = useAppDialog();
   const [activeView, setActiveView] = useState<AppView>('dashboard');
+  useEffect(() => { setActiveSyncView(activeView); }, [activeView]);
   const navigationStartedAtRef = useRef<{ view: AppView; startedAt: number } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
 
@@ -282,6 +284,20 @@ export function App() {
     if (hasDirtyEditors()) {
       const shouldLeave = await confirm('Hay cambios sin guardar en el formulario abierto. Si cambia de módulo ahora, el borrador se conservará para poder recuperarlo. ¿Desea continuar?', { title: 'Cambios sin guardar', confirmLabel: 'Cambiar de módulo', cancelLabel: 'Seguir editando' });
       if (!shouldLeave) return;
+    }
+    // No mostrar un módulo invalidado antes de aplicar los cambios del otro equipo.
+    // Si falla la recarga, no permitir entrar con datos obsoletos.
+    setActiveSyncView(nextView);
+    try {
+      await flushPendingModuleChangesBeforeNavigation(nextView);
+    } catch (error) {
+      setActiveSyncView(activeView);
+      console.warn('No se ha podido actualizar el módulo antes de abrirlo.', error);
+      await confirm(
+        'No se ha podido actualizar este módulo desde la base compartida. Se mantiene la pantalla anterior para evitar trabajar con datos desactualizados. Comprueba la conexión y vuelve a intentarlo.',
+        { title: 'Actualización pendiente', confirmLabel: 'Entendido', cancelLabel: 'Cerrar' },
+      );
+      return;
     }
     navigationStartedAtRef.current = { view: nextView, startedAt: performance.now() };
     setActiveView(nextView);
