@@ -13,6 +13,7 @@ export interface LotteryWorkflow {
   participantesPreparados: boolean;
   avisoPersonasEnviado: boolean;
   seguimientoIniciado: boolean;
+  seguimientoFinalizado: boolean;
   campanaCerrada: boolean;
 }
 
@@ -88,6 +89,7 @@ export const createDefaultLotteryCampaign = (year = new Date().getFullYear()): L
     participantesPreparados: false,
     avisoPersonasEnviado: false,
     seguimientoIniciado: false,
+    seguimientoFinalizado: false,
     campanaCerrada: false,
   },
   requests: [],
