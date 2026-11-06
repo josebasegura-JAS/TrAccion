@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDatabaseStatus } from '../services/databaseStatus';
+import { useDatabaseConnectivityState } from '../services/databaseConnectivityState';
+import { useEditingAvailability } from '../services/editingAvailability';
 import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import {
   readHydrationMetadata,
   readStorageItem,
   writeStorageItem,
 } from '../services/persistence';
-import { AlertTriangle, Database, Home, LockKeyhole, Pin, PinOff, Settings, X } from 'lucide-react';
+import { Database, Home, Pin, PinOff, Settings, X } from 'lucide-react';
 import { getGroupForView, navigationGroups, type AppView, type NavigationGroupId } from '../navigation/navigation';
 
 const traccionLogoSrc = '../assets/logo/traccion-logo.png';
@@ -25,7 +27,6 @@ type DatabaseIndicatorViewModel = {
   syncStatusText: string;
   dotClassName: string;
   textClassName: string;
-  icon: 'database' | 'lock';
   requiresAttention: boolean;
 };
 
@@ -43,28 +44,28 @@ const buildDatabaseIndicatorViewModel = (
   syncStatusText: string,
 ): DatabaseIndicatorViewModel => {
   const hydrationMetadata = typeof window === 'undefined' ? null : readHydrationMetadata();
-  const routeText = databaseStatus?.path ?? hydrationMetadata?.sqlitePath ?? 'ruta SQLite no confirmada';
+  const routeText = databaseStatus?.path ?? hydrationMetadata?.sqlitePath ?? 'ruta de base de datos no confirmada';
   const lastSyncText = formatDatabaseTimestamp(hydrationMetadata?.lastUpdatedAt);
 
   if (!databaseStatus) {
-    return { label: 'Sin SQLite', statusText: 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-orange-400 ring-orange-300/25', textClassName: 'text-orange-100', icon: 'database', requiresAttention: true };
+    return { label: 'Base de datos no disponible', statusText: 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-amber-100', requiresAttention: true };
   }
   if (databaseStatus.phase === 'locked') {
-    return { label: 'Bloq.', statusText: databaseStatus.message ?? 'base bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-slate-400 ring-slate-300/25', textClassName: 'text-slate-200', icon: 'lock', requiresAttention: true };
+    return { label: 'Base de datos ocupada', statusText: databaseStatus.message ?? 'base bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-slate-200', requiresAttention: true };
   }
   if (databaseStatus.phase === 'error') {
-    return { label: 'Error', statusText: databaseStatus.message ?? 'error o ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', icon: 'database', requiresAttention: true };
+    return { label: 'Error', statusText: databaseStatus.message ?? 'error o ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', requiresAttention: true };
   }
   if (databaseStatus.ready && databaseStatus.isDefaultPath === false) {
-    return { label: 'SQLite', statusText: 'SQLite activa en ruta compartida/personalizada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-emerald-400 ring-emerald-300/25', textClassName: 'text-emerald-100', icon: 'database', requiresAttention: false };
+    return { label: 'Base de datos activa', statusText: 'Base de datos activa en ruta compartida', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-emerald-400 ring-emerald-300/25', textClassName: 'text-emerald-100', requiresAttention: false };
   }
   if (databaseStatus.ready) {
-    return { label: 'Revisar', statusText: 'ruta local no permitida; configura la base compartida', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-amber-100', icon: 'database', requiresAttention: true };
+    return { label: 'Revisar', statusText: 'ruta local no permitida; configura la base compartida', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-amber-100', requiresAttention: true };
   }
   if (databaseStatus.phase === 'fallback') {
-    return { label: 'Sin SQLite', statusText: databaseStatus.message ?? 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-orange-400 ring-orange-300/25', textClassName: 'text-orange-100', icon: 'database', requiresAttention: true };
+    return { label: 'Base de datos no disponible', statusText: databaseStatus.message ?? 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-amber-100', requiresAttention: true };
   }
-  return { label: 'Revisar', statusText: databaseStatus.message ?? 'ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', icon: 'database', requiresAttention: true };
+  return { label: 'Revisar', statusText: databaseStatus.message ?? 'ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', requiresAttention: true };
 };
 
 const isSidebarPinAllowed = () =>
@@ -103,11 +104,24 @@ export function Sidebar({
   const shouldShowPanel = isPanelOpen || isPinned;
   const databaseStatus = useDatabaseStatus();
   const externalDataSyncStatus = useExternalDataSyncStatus();
+  const connectivity = useDatabaseConnectivityState();
+  const editingAvailability = useEditingAvailability();
   const syncStatusText = `${externalDataSyncStatus.message} Última comprobación: ${formatDatabaseTimestamp(
     externalDataSyncStatus.lastCheckedAt,
   )}. Últimos cambios aplicados: ${formatDatabaseTimestamp(externalDataSyncStatus.lastAppliedAt)}.`;
-  const databaseIndicator = buildDatabaseIndicatorViewModel(databaseStatus, syncStatusText);
-  const databaseIndicatorTooltip = `Ruta activa: ${databaseIndicator.routeText}\nEstado: ${databaseIndicator.statusText}\nÚltima sincronización/hidratación: ${databaseIndicator.lastSyncText}\n${databaseIndicator.syncStatusText}`;
+  const rawDatabaseIndicator = buildDatabaseIndicatorViewModel(databaseStatus, syncStatusText);
+  const recovering = editingAvailability.connectivityBlocked || connectivity.phase === 'reconnecting' || connectivity.phase === 'syncing';
+  const databaseIndicator = recovering
+    ? {
+      ...rawDatabaseIndicator,
+      label: 'Recuperando conexión',
+      statusText: editingAvailability.reason || connectivity.message || 'Reconectando con la base compartida',
+      dotClassName: 'bg-amber-400 ring-amber-300/25',
+      textClassName: 'text-amber-100',
+      requiresAttention: true,
+    }
+    : rawDatabaseIndicator;
+  const databaseIndicatorTooltip = `Base de datos: ${databaseIndicator.label}\nEstado: ${databaseIndicator.statusText}\nRuta: ${databaseIndicator.routeText}\nÚltima sincronización/hidratación: ${databaseIndicator.lastSyncText}\n${databaseIndicator.syncStatusText}`;
 
   useEffect(() => { writeStorageItem(SIDEBAR_PINNED_KEY, String(isPinned)); }, [isPinned]);
   useEffect(() => { writeStorageItem(SIDEBAR_ACTIVE_GROUP_KEY, activeGroupId); }, [activeGroupId]);
@@ -175,12 +189,17 @@ export function Sidebar({
             })}
           </div>
           <div className="mt-auto flex flex-col items-center gap-2 border-t border-white/10 pt-3">
-            <button aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`} className="relative flex w-12 flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.035] px-1 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white" data-tip={!shouldShowPanel ? databaseIndicatorTooltip : undefined} onClick={handleDatabaseIndicatorSelect} type="button">
-              <span aria-hidden="true" className={`flex h-4 w-4 items-center justify-center rounded-full ring-4 ${databaseIndicator.dotClassName}`}>
-                {databaseIndicator.icon === 'lock' ? <LockKeyhole className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} /> : <Database className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />}
+            <button
+              aria-label={`Estado de base de datos: ${databaseIndicator.label}. ${databaseIndicator.statusText}`}
+              title={databaseIndicatorTooltip}
+              className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] transition hover:bg-white/[0.07] focus:outline-none focus:ring-2 focus:ring-sky-400/50"
+              data-tip={databaseIndicatorTooltip}
+              onClick={handleDatabaseIndicatorSelect}
+              type="button"
+            >
+              <span aria-hidden="true" className={`flex h-7 w-7 items-center justify-center rounded-full ring-2 ring-white/10 ${databaseIndicator.dotClassName}`}>
+                <Database className="h-4 w-4 text-slate-950/85" strokeWidth={2.5} />
               </span>
-              {databaseIndicator.requiresAttention && <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5 text-amber-200 drop-shadow" strokeWidth={2.6} />}
-              <span className="max-w-full truncate">{databaseIndicator.label}</span>
             </button>
             <button aria-current={activeView === 'ajustes' ? 'page' : undefined} aria-label="Ajustes" className={`relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${activeView === 'ajustes' ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25' : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'}`} data-tip={!shouldShowPanel ? 'Ajustes' : undefined} onClick={handleSettingsSelect} type="button">
               {activeView === 'ajustes' && <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />}
@@ -213,10 +232,17 @@ export function Sidebar({
             })}
           </nav>
           <div className="border-t border-white/10 px-4 py-3 text-xs leading-5 text-slate-500">
-            <button aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`} className="mb-3 flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-left transition hover:bg-white/[0.07]" data-tip={databaseIndicatorTooltip} onClick={handleDatabaseIndicatorSelect} type="button">
-              <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-4 ${databaseIndicator.dotClassName}`}>{databaseIndicator.icon === 'lock' ? <LockKeyhole className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} /> : <Database className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />}</span>
-              {databaseIndicator.requiresAttention && <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0 text-amber-200" strokeWidth={2.5} />}
-              <span className="min-w-0"><span className={`block truncate font-semibold ${databaseIndicator.textClassName}`}>{databaseIndicator.label}</span><span className="block truncate text-[11px] text-slate-400">{databaseIndicator.statusText}</span><span className="block truncate text-[11px] text-slate-500">{externalDataSyncStatus.message}</span></span>
+            <button
+              aria-label={`Estado de base de datos: ${databaseIndicator.label}. ${databaseIndicator.statusText}`}
+              title={databaseIndicatorTooltip}
+              className="mb-3 flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 transition hover:bg-white/[0.07] focus:outline-none focus:ring-2 focus:ring-sky-400/50"
+              data-tip={databaseIndicatorTooltip}
+              onClick={handleDatabaseIndicatorSelect}
+              type="button"
+            >
+              <span aria-hidden="true" className={`flex h-7 w-7 items-center justify-center rounded-full ring-2 ring-white/10 ${databaseIndicator.dotClassName}`}>
+                <Database className="h-4 w-4 text-slate-950/85" strokeWidth={2.5} />
+              </span>
             </button>
             {isPinAllowed
               ? isPinned
