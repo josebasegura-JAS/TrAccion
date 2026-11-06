@@ -6,7 +6,7 @@ describe('buildDatabaseStatusBadge', () => {
   it('no presenta localStorage como modo operativo cuando no hay estado SQLite', () => {
     const badge = buildDatabaseStatusBadge(null);
 
-    expect(badge.label).toBe('SQLite no disponible');
+    expect(badge.label).toBe('Base de datos no disponible');
     expect(badge.detail).toBe('edición bloqueada');
     expect(badge.title).toContain('edición permanece bloqueada');
     expect(badge.title.toLowerCase()).not.toContain('fallback localstorage');
@@ -22,7 +22,7 @@ describe('buildDatabaseStatusBadge', () => {
       message: 'No se puede acceder a la ruta compartida.',
     });
 
-    expect(badge.label).toBe('SQLite no disponible');
+    expect(badge.label).toBe('Base de datos no disponible');
     expect(badge.requiresAttention).toBe(true);
     expect(badge.title).toContain('Edición bloqueada');
   });
@@ -36,7 +36,7 @@ describe('buildDatabaseStatusBadge', () => {
       isDefaultPath: false,
     });
 
-    expect(badge.label).toBe('SQLite activo');
+    expect(badge.label).toBe('Base de datos activa');
     expect(badge.tone).toBe('ok');
     expect(badge.requiresAttention).toBe(false);
   });

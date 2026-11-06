@@ -9,7 +9,7 @@ export interface DatabaseStatusBadgeViewModel {
 }
 
 function fallbackPath(status: TraccionDatabaseStatus | null): string {
-  return status?.path ?? 'ruta SQLite no confirmada';
+  return status?.path ?? 'ruta de base de datos no confirmada';
 }
 
 export function buildDatabaseStatusBadge(
@@ -17,9 +17,9 @@ export function buildDatabaseStatusBadge(
 ): DatabaseStatusBadgeViewModel {
   if (!status) {
     return {
-      label: 'SQLite no disponible',
+      label: 'Base de datos no disponible',
       detail: 'edición bloqueada',
-      title: 'Base de datos: estado SQLite no disponible. La edición permanece bloqueada hasta recuperar la base compartida.',
+      title: 'Base de datos: estado sin confirmar. La edición permanece bloqueada hasta recuperar la base compartida.',
       tone: 'unknown',
       requiresAttention: true,
     };
@@ -28,9 +28,9 @@ export function buildDatabaseStatusBadge(
   if (status.ready) {
     if (status.isDefaultPath !== false) {
       return {
-        label: 'SQLite no compartida',
+        label: 'Base de datos no compartida',
         detail: 'ruta local no permitida',
-        title: `Base de datos: la ruta local no es válida para trabajar. Configura la SQLite compartida en Ajustes. Ruta detectada: ${fallbackPath(status)}`,
+        title: `Base de datos: la ruta local no es válida para trabajar. Configura la base de datos compartida en Ajustes. Ruta detectada: ${fallbackPath(status)}`,
         tone: 'warning',
         requiresAttention: true,
       };
@@ -40,18 +40,18 @@ export function buildDatabaseStatusBadge(
 
     if (status.message?.toLowerCase().includes('bloquean nuevas escrituras')) {
       return {
-        label: 'SQLite solo lectura',
+        label: 'Base de datos solo lectura',
         detail: status.message,
-        title: `Base de datos: SQLite activo, pero con escrituras bloqueadas. Ruta: ${fallbackPath(status)}. ${status.message}`,
+        title: `Base de datos conectada, pero con escrituras bloqueadas. Ruta: ${fallbackPath(status)}. ${status.message}`,
         tone: 'warning',
         requiresAttention: true,
       };
     }
 
     return {
-      label: 'SQLite activo',
+      label: 'Base de datos activa',
       detail: routeKind,
-      title: `Base de datos: SQLite activo (${routeKind}). Ruta: ${fallbackPath(status)}`,
+      title: `Base de datos activa (${routeKind}). Ruta: ${fallbackPath(status)}`,
       tone: 'ok',
       requiresAttention: false,
     };
@@ -62,9 +62,9 @@ export function buildDatabaseStatusBadge(
       ? ` Lock: ${status.lock.username}@${status.lock.hostname} · PID ${status.lock.pid}`
       : '';
     return {
-      label: 'SQLite ocupado',
+      label: 'Base de datos ocupada',
       detail: status.message ?? 'base bloqueada temporalmente',
-      title: `Base de datos: SQLite ocupado. Ruta: ${fallbackPath(status)}.${lockOwner}`,
+      title: `Base de datos ocupada temporalmente. Ruta: ${fallbackPath(status)}.${lockOwner}`,
       tone: 'locked',
       requiresAttention: true,
     };
@@ -72,28 +72,28 @@ export function buildDatabaseStatusBadge(
 
   if (status.phase === 'fallback') {
     return {
-      label: 'SQLite no disponible',
-      detail: status.message ?? 'SQLite no activo',
-      title: `Base de datos: SQLite no disponible. Edición bloqueada. Ruta prevista: ${fallbackPath(status)}. ${status.message ?? ''}`,
-      tone: 'warning',
+      label: 'Base de datos no disponible',
+      detail: status.message ?? 'Base de datos inactiva',
+      title: `Base de datos no disponible. Edición bloqueada. Ruta prevista: ${fallbackPath(status)}. ${status.message ?? ''}`,
+      tone: 'error',
       requiresAttention: true,
     };
   }
 
   if (status.phase === 'error') {
     return {
-      label: 'SQLite error',
+      label: 'Error de base de datos',
       detail: status.message ?? 'ruta no accesible',
-      title: `Base de datos: error SQLite. Ruta: ${fallbackPath(status)}. ${status.message ?? ''}`,
+      title: `Error de conexión con la base de datos. Ruta: ${fallbackPath(status)}. ${status.message ?? ''}`,
       tone: 'error',
       requiresAttention: true,
     };
   }
 
   return {
-    label: 'SQLite no activo',
+    label: 'Base de datos inactiva',
     detail: status.message ?? 'ruta no accesible',
-    title: `Base de datos: SQLite no activo. Ruta: ${fallbackPath(status)}. ${status.message ?? ''}`,
+    title: `Base de datos inactiva. Ruta: ${fallbackPath(status)}. ${status.message ?? ''}`,
     tone: 'error',
     requiresAttention: true,
   };

@@ -1,12 +1,12 @@
-import { Database } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useDatabaseStatus } from '../services/databaseStatus';
-import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/databaseStatusView';
+import { buildDatabaseStatusBadge } from '../services/databaseStatusView';
 import {
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from '../services/persistence';
 import { StatusBadge } from './ui/StatusBadge';
+import { DatabaseHealthIcon } from './ui/DatabaseHealthIcon';
 
 function defaultFeedback(): PersistenceFeedback {
   const now = new Date();
@@ -16,22 +16,6 @@ function defaultFeedback(): PersistenceFeedback {
     updatedAt: now.toISOString(),
     message: `Guardado ${now.toLocaleTimeString('es-ES', { hour12: false })}`,
   };
-}
-
-function databaseTone(tone: DatabaseStatusTone): 'success' | 'warning' | 'error' | 'muted' {
-  if (tone === 'ok') {
-    return 'success';
-  }
-
-  if (tone === 'error') {
-    return 'error';
-  }
-
-  if (tone === 'locked') {
-    return 'muted';
-  }
-
-  return 'warning';
 }
 
 function feedbackTone(kind: PersistenceFeedback['kind']): 'success' | 'warning' | 'error' {
@@ -67,15 +51,7 @@ export function ModalDatabaseStatus() {
 
   return (
     <div className="flex min-w-0 shrink-0 items-center gap-2" aria-label="Estado de base de datos del popup">
-      <StatusBadge
-        className="max-w-[10rem]"
-        icon={<Database size={12} aria-hidden="true" />}
-        size="xs"
-        title={databaseBadge.title}
-        tone={databaseTone(databaseBadge.tone)}
-      >
-        {databaseBadge.label}
-      </StatusBadge>
+      <DatabaseHealthIcon status={databaseBadge} />
       <StatusBadge className="max-w-[9rem]" size="xs" tone={feedbackTone(feedback.kind)}>
         {feedbackLabel(feedback)}
       </StatusBadge>

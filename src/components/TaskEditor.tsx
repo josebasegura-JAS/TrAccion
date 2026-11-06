@@ -17,6 +17,7 @@ import { Textarea } from './ui/Field';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 import { ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { InlineNotice } from './ui/InlineNotice';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { TaskAttachmentsSection } from './task-editor/TaskAttachmentsSection';
 import { TaskCircuitsSection } from './task-editor/TaskCircuitsSection';
@@ -137,6 +138,17 @@ export function TaskEditor({
             {isCreate ? 'Nueva tarea' : task?.titulo || 'Tarea'}
           </ModalTitle>
           <div className="flex shrink-0 items-center gap-2">
+            {lockMessage && !isFormReadOnly && (
+              <span
+                className="hidden max-w-[14rem] items-center gap-1.5 truncate rounded-full border border-sky-400/20 bg-sky-950/20 px-2 py-1 text-[11px] font-medium text-sky-200/85 sm:inline-flex"
+                title={lockMessage}
+                role="status"
+                aria-label={lockMessage}
+              >
+                <LockKeyhole size={12} aria-hidden="true" className="shrink-0" />
+                <span className="truncate">Edición reservada</span>
+              </span>
+            )}
             <ModalDatabaseStatus />
             <ModalCloseButton label="Cerrar editor" onClick={() => void requestClose()} />
           </div>
@@ -144,11 +156,8 @@ export function TaskEditor({
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void handleSubmit(); }}>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
-            {lockMessage && (
-              <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${isFormReadOnly ? 'border-red-400/30 bg-red-950/20 text-red-200' : 'border-amber-400/30 bg-amber-950/20 text-amber-200'}`}>
-                <LockKeyhole size={15} />
-                <span>{lockMessage}</span>
-              </div>
+            {lockMessage && isFormReadOnly && (
+              <InlineNotice tone="warning"><strong className="font-semibold">Edición no disponible.</strong> {lockMessage}</InlineNotice>
             )}
 
             <fieldset disabled={isFormReadOnly} className="space-y-3 disabled:opacity-70">

@@ -17,6 +17,7 @@ import {
   UserRoundPlus,
 } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { InlineNotice } from '../../../components/ui/InlineNotice';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
 import type { Employee } from '../../plantilla/domain/employee';
@@ -781,12 +782,11 @@ export function LoteriaPage() {
       {activeSection === null && <LoteriaHistoricalPanel />}
 
       {remoteConflict && (
-        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/50 p-3 text-sm text-amber-200">
+        <InlineNotice tone="warning" action={<ActionButton variant="secondary" onClick={() => { setDraft(campaign); clearRecoveryDraft(); setRemoteConflict(false); }}>Descartar borrador y cargar cambios compartidos</ActionButton>}>
           <span>La campaña compartida ha cambiado mientras editabas. Tu borrador sigue intacto, pero no se permite guardarlo sobre la nueva versión. Copia los cambios que necesites antes de descartarlo.</span>
-          <ActionButton variant="secondary" onClick={() => { setDraft(campaign); clearRecoveryDraft(); setRemoteConflict(false); }}>Descartar borrador y cargar cambios compartidos</ActionButton>
-        </div>
+        </InlineNotice>
       )}
-      {excelPending && <p role="alert" className="px-3 text-xs text-amber-300">Excel automático pendiente de actualizar. Los datos ya están guardados en SQLite. Reintenta desde la cabecera cuando no tengas cambios sin guardar.</p>}
+      {excelPending && <InlineNotice tone="warning">Excel automático pendiente de actualizar. Los datos ya están guardados en SQLite. Reintenta desde la cabecera cuando no tengas cambios sin guardar.</InlineNotice>}
       <FloatingSaveAction
         buttonLabel="Guardar Lotería"
         onSave={() => persist(draft, 'Cambios de Lotería guardados.')}
