@@ -38,7 +38,7 @@ test('flujo crítico: crear una tarea desde UI y verificar que queda visible', a
       const dialog = page.getByRole('dialog', { name: 'Nueva tarea' });
       await test.step('Cumplimentar y guardar la tarea', async () => {
         await dialog.getByLabel('Título').fill(taskTitle);
-        await dialog.getByRole('button', { name: 'Guardar' }).click();
+        await dialog.getByRole('region', { name: 'Acciones rápidas' }).getByRole('button', { name: 'Guardar' }).click();
         await expect(dialog).not.toBeVisible({ timeout: 10_000 });
       });
 
@@ -65,7 +65,7 @@ test('persistencia crítica: una tarea sigue disponible después de cerrar y rea
 
     const dialog = firstLaunch.page.getByRole('dialog', { name: 'Nueva tarea' });
     await dialog.getByLabel('Título').fill(taskTitle);
-    await dialog.getByRole('button', { name: 'Guardar' }).click();
+    await dialog.getByRole('region', { name: 'Acciones rápidas' }).getByRole('button', { name: 'Guardar' }).click();
     await expect(firstLaunch.page.getByText(taskTitle, { exact: true }).first()).toBeVisible();
 
     await closeTraccionElectron(firstLaunch.app);
