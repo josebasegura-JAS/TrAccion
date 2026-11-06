@@ -1,132 +1,77 @@
-/* Ajustes visuales del módulo Tareas.
- * Compacta los cinco KPIs superiores y la zona de controles de tareas activas
- * para recuperar altura útil sin modificar datos, cálculos ni comportamiento.
- * Las reglas quedan acotadas al módulo y aprovechan las clases semánticas ya
- * existentes para evitar afectar a otras pantallas.
+/* Diseño compacto de Tareas: la tabla tiene prioridad visual.
+ * Acotado al módulo. No modifica datos, preferencias ni eventos.
  */
 
-.tareas-kpi-grid {
-  gap: 0.5rem;
+/* Banda de indicadores: una línea en escritorio y scroll contenido en tamaños reducidos. */
+#tareas .tareas-kpi-grid {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / .25) transparent;
+}
+#tareas .tareas-kpi-card {
+  min-height: 45px;
+  border-radius: 0;
+  box-shadow: none;
 }
 
-.tareas-kpi-card {
-  gap: 0.5rem;
-  border-radius: 0.75rem;
-  padding: 0.375rem 0.75rem;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.025),
-    0 6px 16px rgb(2 6 23 / 0.14);
-}
-
-.tareas-kpi-card__icon {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 0.5rem;
-}
-
-.tareas-kpi-card__icon svg {
-  width: 0.875rem;
-  height: 0.875rem;
-}
-
-.tareas-kpi-card__content {
+/* Filtros, búsqueda y acciones en una fila a partir de 1600px.
+ * Las acciones siguen existiendo cuando se compactan: nunca se ocultan. */
+#tareas .tareas-toolbar {
   display: grid;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 0.375rem;
-  row-gap: 0.125rem;
-}
-
-.tareas-kpi-card__value {
-  font-size: 1.125rem;
-}
-
-.tareas-kpi-card__label {
-  margin-top: 0;
-  font-size: 0.75rem;
-}
-
-.tareas-kpi-card__detail {
-  grid-column: 1 / -1;
-  margin-top: 0;
-  font-size: 0.625rem;
-  line-height: 1.2;
-}
-
-/*
- * Toolbar de tareas activas en dos filas:
- * 1) filtros de responsable + contador de registros
- * 2) búsqueda + acciones
- *
- * El segundo contenedor se aplana con display: contents para recolocar sus
- * tres bloques visuales sin alterar el JSX ni los handlers existentes.
- */
-#tareas > .tareas-kpi-grid + div > div:first-child {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 1fr) max-content;
   align-items: center;
-  column-gap: 0.75rem;
-  row-gap: 0.5rem;
+  gap: .625rem;
 }
-
-#tareas > .tareas-kpi-grid + div > div:first-child > :first-child {
-  grid-column: 1;
-  grid-row: 1;
-  margin-bottom: 0;
-}
-
-#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) {
+#tareas .tareas-toolbar-main {
   display: contents;
 }
-
-/* En la primera fila conservamos el contador; el título ya está implícito en
- * la página y en los KPIs, por lo que no necesita ocupar espacio visual. */
-#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :first-child {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: end;
-  min-width: max-content;
+#tareas .tareas-responsables {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / .25) transparent;
+  white-space: nowrap;
+  padding-bottom: 2px;
 }
-
-#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :first-child > svg,
-#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :first-child > .whitespace-nowrap {
-  display: none;
+#tareas .tareas-responsables button {
+  flex-shrink: 0;
 }
-
-#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :nth-child(2) {
-  grid-column: 1;
-  grid-row: 2;
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-}
-
-#tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :nth-child(3) {
-  grid-column: 2;
-  grid-row: 2;
-  flex-wrap: nowrap;
+#tareas .tareas-toolbar-actions {
   justify-content: flex-end;
-  min-width: max-content;
+  white-space: nowrap;
+}
+#tareas .tareas-toolbar-search {
+  min-width: 0;
 }
 
-/* En anchos reducidos priorizamos que no exista overflow. En escritorio se
- * mantienen estrictamente las dos filas; solo se permite una tercera fila de
- * acciones cuando el espacio disponible ya no permite conservar legibilidad. */
-@media (max-width: 1180px) {
-  #tareas > .tareas-kpi-grid + div > div:first-child {
-    grid-template-columns: minmax(0, 1fr) auto;
+@media (max-width: 1599px) {
+  #tareas .tareas-toolbar {
+    grid-template-columns: minmax(0, 1fr) max-content;
   }
-
-  #tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :nth-child(2) {
+  #tareas .tareas-responsables {
     grid-column: 1 / -1;
   }
+  #tareas .tareas-toolbar-search {
+    grid-column: 1;
+  }
+  #tareas .tareas-toolbar-actions {
+    grid-column: 2;
+  }
+}
 
-  #tareas > .tareas-kpi-grid + div > div:first-child > :nth-child(2) > :nth-child(3) {
-    grid-column: 1 / -1;
-    grid-row: 3;
-    flex-wrap: wrap;
+@media (max-width: 850px) {
+  #tareas .tareas-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #tareas .tareas-responsables,
+  #tareas .tareas-toolbar-search,
+  #tareas .tareas-toolbar-actions {
+    grid-column: 1;
+  }
+  #tareas .tareas-toolbar-actions {
     justify-content: flex-start;
-    min-width: 0;
+    flex-wrap: wrap;
   }
+}
+
+/* La fila de filtros rápidos no reserva espacio extra si no hay chips activos. */
+#tareas .tareas-toolbar + div button {
+  white-space: nowrap;
 }

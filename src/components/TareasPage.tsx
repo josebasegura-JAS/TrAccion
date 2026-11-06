@@ -171,54 +171,22 @@ function CompactTaskSummaryCard({
   detail: string;
   tone: 'blue' | 'amber' | 'cyan' | 'rose' | 'red';
 }) {
-  const toneMap = {
-    blue: {
-      card: 'border-sky-400/20 bg-[linear-gradient(135deg,rgba(30,64,175,0.14),rgba(14,34,57,0.9))]',
-      icon: 'border-sky-400/15 bg-sky-400/10 text-sky-300',
-      label: 'text-sky-300',
-    },
-    amber: {
-      card: 'border-amber-400/20 bg-[linear-gradient(135deg,rgba(217,119,6,0.09),rgba(14,34,57,0.9))]',
-      icon: 'border-amber-400/15 bg-amber-400/10 text-amber-300',
-      label: 'text-amber-300',
-    },
-    cyan: {
-      card: 'border-cyan-400/20 bg-[linear-gradient(135deg,rgba(6,182,212,0.09),rgba(14,34,57,0.9))]',
-      icon: 'border-cyan-400/15 bg-cyan-400/10 text-cyan-300',
-      label: 'text-cyan-300',
-    },
-    rose: {
-      card: 'border-rose-400/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.10),rgba(14,34,57,0.9))]',
-      icon: 'border-rose-400/15 bg-rose-400/10 text-rose-300',
-      label: 'text-rose-300',
-    },
-    red: {
-      card: 'border-red-400/20 bg-[linear-gradient(135deg,rgba(239,68,68,0.10),rgba(14,34,57,0.9))]',
-      icon: 'border-red-400/15 bg-red-400/10 text-red-300',
-      label: 'text-red-300',
-    },
+  const toneClass = {
+    blue: 'text-sky-300',
+    amber: 'text-amber-300',
+    cyan: 'text-cyan-300',
+    rose: 'text-rose-300',
+    red: 'text-red-300',
   }[tone];
 
   return (
     <div
-      className={`tareas-kpi-card flex min-w-0 items-center gap-3 rounded-2xl border px-3.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_8px_20px_rgba(2,6,23,0.16)] ${toneMap.card}`}
+      className="tareas-kpi-card flex min-w-max flex-1 items-center justify-center gap-2 border-r border-white/10 px-3 py-2 last:border-r-0"
+      title={`${value} ${label}. ${detail}`}
     >
-      <span
-        className={`tareas-kpi-card__icon grid h-9 w-9 shrink-0 place-items-center rounded-full border ${toneMap.icon}`}
-      >
-        <Icon size={17} />
-      </span>
-      <span className="tareas-kpi-card__content min-w-0 flex-1">
-        <span className="tareas-kpi-card__value block text-[1.45rem] font-black leading-none text-metro-text">
-          {value}
-        </span>
-        <span className={`tareas-kpi-card__label mt-0.5 block truncate text-sm font-extrabold ${toneMap.label}`}>
-          {label}
-        </span>
-        <span className="tareas-kpi-card__detail mt-0.5 block truncate text-[11px] font-medium text-metro-muted">
-          {detail}
-        </span>
-      </span>
+      <Icon aria-hidden="true" className={`shrink-0 ${toneClass}`} size={17} />
+      <span className="text-[17px] font-bold leading-none tabular-nums text-metro-text">{value}</span>
+      <span className={`whitespace-nowrap text-xs font-semibold ${toneClass}`}>{label}</span>
     </div>
   );
 }
@@ -720,7 +688,7 @@ export function TareasPage({
   };
 
   return (
-    <section className="space-y-3" id="tareas">
+    <section className="space-y-2" id="tareas">
       <PageHeader
         helpSections={TAREAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del centro operativo, prioridades, seguimiento e histórico."
@@ -728,7 +696,7 @@ export function TareasPage({
         title="Tareas"
       />
 
-      <div className="tareas-kpi-grid grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5">
+      <div className="tareas-kpi-grid flex min-w-0 items-center overflow-x-auto rounded-xl border border-sky-300/15 bg-[#122239]/85 shadow-[0_6px_16px_rgba(2,6,23,0.14)]" aria-label="Resumen de tareas activas">
         <CompactTaskSummaryCard
           detail="Total de tareas activas"
           icon={ListChecks}
@@ -766,9 +734,9 @@ export function TareasPage({
         />
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-sky-300/[0.12] bg-[#0e2239]/70 shadow-[0_12px_30px_rgba(2,6,23,0.22)]">
-        <div className="border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
-          <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5">
+      <div className="overflow-hidden rounded-xl border border-sky-300/[0.12] bg-[#0e2239]/70 shadow-[0_12px_30px_rgba(2,6,23,0.22)]">
+        <div className="tareas-toolbar border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-3 py-2">
+          <div className="tareas-responsables flex min-w-0 items-center gap-1.5 overflow-x-auto">
             <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${!responsibleFilter ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('')} type="button">Todas</button>
             <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === '__mine__' ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('__mine__')} type="button">Mías</button>
             {taskResponsibles
@@ -779,29 +747,23 @@ export function TareasPage({
             ))}
             <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === '__unassigned__' ? 'border-amber-300/30 bg-amber-400/10 text-amber-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('__unassigned__')} type="button">Sin asignar</button>
           </div>
-          <div className="grid min-w-0 items-center gap-3 xl:grid-cols-[auto_minmax(280px,1fr)_auto]">
-            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-              <ListChecks size={16} className="shrink-0 text-sky-300" />
-              <span className="whitespace-nowrap">Tareas activas</span>
-              <button type="button" onClick={() => setQuickActionsOnly((value) => !value)} className={`rounded-md border px-2 py-1 text-[11px] ${quickActionsOnly ? "border-red-400 text-red-300" : "border-metro-border text-metro-muted"}`}><Bell size={12} className="mr-1 inline"/>Con acciones pendientes</button>
-              <CountBadge>{activeTaskRows.length} registros</CountBadge>
-            </div>
-
+          <div className="tareas-toolbar-main">
             <SearchField
               onChange={(event) => setFilter('search', event.target.value)}
               onClear={() => setFilter('search', '')}
               placeholder="Buscar tareas, texto de seguimiento o palabras clave..."
               value={filters.search}
-              wrapperClassName="w-full min-w-0 xl:max-w-[520px]"
+              wrapperClassName="tareas-toolbar-search w-full min-w-0"
             />
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
+            <div className="tareas-toolbar-actions flex min-w-0 items-center gap-1.5">
               <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
                 Nueva tarea
               </ActionButton>
               <ActionButton
                 icon={Settings}
-                iconOnly={false}
+                iconOnly
+                title="Orígenes"
                 onClick={() => setIsOriginsModalOpen(true)}
                 size="sm"
                 variant="secondary"
@@ -810,7 +772,8 @@ export function TareasPage({
               </ActionButton>
               <ActionButton
                 icon={FileSpreadsheet}
-                iconOnly={false}
+                iconOnly
+                title="Excel compartido"
                 loading={isGeneratingOpenTasksExcel}
                 onClick={() => void handleGenerateOpenTasksExcel()}
                 size="sm"
@@ -819,6 +782,7 @@ export function TareasPage({
                 {isGeneratingOpenTasksExcel ? 'Generando…' : 'Excel compartido'}
               </ActionButton>
               <ExportPrintButtons
+                compactIcons
                 payload={{
                   title: 'Tareas activas',
                   filename: 'tareas-activas',
@@ -831,16 +795,19 @@ export function TareasPage({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 px-3 pt-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2 border-b border-sky-300/10 px-3 py-2 text-xs">
           <button type="button" aria-pressed={attentionOnly} onClick={() => setAttentionOnly((value) => !value)} className={`rounded-lg border px-2.5 py-1.5 font-semibold ${attentionOnly ? 'border-rose-400/50 bg-rose-400/15 text-rose-200' : 'border-metro-border text-metro-muted hover:text-metro-text'}`}>
             Requieren atención ({attentionCount})
           </button>
           <button type="button" aria-pressed={attentionOrder} onClick={() => { setAttentionOrder((value) => !value); if (preferences.sort) setSort(null); }} className={`rounded-lg border px-2.5 py-1.5 font-semibold ${attentionOrder && !preferences.sort ? 'border-sky-400/40 bg-sky-400/10 text-sky-200' : 'border-metro-border text-metro-muted hover:text-metro-text'}`}>
             Priorizar atención {attentionOrder && !preferences.sort ? '✓' : ''}
           </button>
-          <span className="text-metro-muted">Atención: bloqueadas, vencidas, vencen hoy o prioridad alta/crítica.</span>
+          <span className="hidden text-metro-muted 2xl:inline">Atención: bloqueadas, vencidas, vencen hoy o prioridad alta/crítica.</span>
+          <span className="min-w-0 flex-1" />
+          <button type="button" aria-pressed={quickActionsOnly} onClick={() => setQuickActionsOnly((value) => !value)} className={`rounded-lg border px-2.5 py-1.5 font-semibold ${quickActionsOnly ? "border-rose-400/40 bg-rose-400/15 text-rose-200" : "border-metro-border text-metro-muted hover:text-metro-text"}`}><Bell size={12} className="mr-1 inline"/>Con acciones pendientes</button>
+          <CountBadge>{activeTaskRows.length} registros</CountBadge>
         </div>
-        <div className="px-3 pt-3">
+        <div className="px-3 pt-1">
           <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
         </div>
 
@@ -852,7 +819,7 @@ export function TareasPage({
           columns={activeTaskColumns}
           emptyMessage="No hay tareas activas con la búsqueda aplicada."
           getRowId={(task) => task.id}
-          maxHeightClassName="max-h-[520px]"
+          maxHeightClassName="max-h-[min(72vh,1000px)]"
           onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
