@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDatabaseStatus } from '../services/databaseStatus';
+import { useDatabaseConnectivityState } from '../services/databaseConnectivityState';
+import { useEditingAvailability } from '../services/editingAvailability';
+import { resolveEditorDatabaseIndicator } from '../services/editorDatabaseIndicator';
 import { buildDatabaseStatusBadge } from '../services/databaseStatusView';
 import {
   subscribeToPersistenceFeedback,
@@ -7,16 +10,6 @@ import {
 } from '../services/persistence';
 import { StatusBadge } from './ui/StatusBadge';
 import { DatabaseHealthIcon } from './ui/DatabaseHealthIcon';
-
-function defaultFeedback(): PersistenceFeedback {
-  const now = new Date();
-
-  return {
-    kind: 'saved',
-    updatedAt: now.toISOString(),
-    message: `Guardado ${now.toLocaleTimeString('es-ES', { hour12: false })}`,
-  };
-}
 
 function feedbackTone(kind: PersistenceFeedback['kind']): 'success' | 'warning' | 'error' {
   if (kind === 'saving') {
@@ -39,22 +32,31 @@ function feedbackLabel(feedback: PersistenceFeedback): string {
     return `✕ ${feedback.message || 'Error BBDD'}`;
   }
 
-  return '✓ Libre';
+  return 'Guardado';
 }
 
 export function ModalDatabaseStatus() {
   const databaseStatus = useDatabaseStatus();
-  const databaseBadge = useMemo(() => buildDatabaseStatusBadge(databaseStatus), [databaseStatus]);
-  const [feedback, setFeedback] = useState<PersistenceFeedback>(() => defaultFeedback());
+  const connectivity = useDatabaseConnectivityState();
+  const editing = useEditingAvailability();
+  const databaseBadge = useMemo(() => resolveEditorDatabaseIndicator(
+    buildDatabaseStatusBadge(databaseStatus),
+    connectivity.phase,
+    editing.connectivityBlocked,
+    connectivity.message,
+  ), [databaseStatus, connectivity.phase, connectivity.message, editing.connectivityBlocked]);
+  const [feedback, setFeedback] = useState<PersistenceFeedback | null>(null);
 
   useEffect(() => subscribeToPersistenceFeedback(setFeedback), []);
 
   return (
     <div className="flex min-w-0 shrink-0 items-center gap-2" aria-label="Estado de base de datos del popup">
       <DatabaseHealthIcon status={databaseBadge} />
-      <StatusBadge className="max-w-[9rem]" size="xs" tone={feedbackTone(feedback.kind)}>
-        {feedbackLabel(feedback)}
-      </StatusBadge>
+      {!editing.connectivityBlocked && connectivity.phase !== 'reconnecting' && connectivity.phase !== 'syncing' && feedback && feedback.kind !== 'saved' && (
+        <StatusBadge className="max-w-[9rem]" size="xs" tone={feedbackTone(feedback.kind)}>
+          {feedbackLabel(feedback)}
+        </StatusBadge>
+      )}
     </div>
   );
 }
