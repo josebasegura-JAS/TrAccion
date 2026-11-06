@@ -115,7 +115,7 @@ function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) 
   const databaseStatus = useDatabaseStatus();
   const editingAvailability = useEditingAvailability();
   if (editingAvailability.allowed || editingAvailability.connectivityBlocked) return null;
-  const detail = editingAvailability.reason || databaseStatus?.message || (databaseStatus ? 'SQLite no está activa.' : 'Comprobando la conexión con SQLite.');
+  const detail = editingAvailability.reason || databaseStatus?.message || (databaseStatus ? 'La base de datos no está activa.' : 'Comprobando la conexión con la base de datos.');
   return (
     <section className="sqlite-readonly-banner" role="alert" aria-live="assertive"><LockKeyhole size={20} aria-hidden="true" />
       <div className="min-w-0 flex-1"><strong>Base compartida no disponible: edición bloqueada</strong><p>{detail} TrAcción no permite trabajar en local. No se guardará ninguna modificación hasta confirmar la conexión con la base compartida.</p></div>
