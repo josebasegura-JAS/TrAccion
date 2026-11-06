@@ -100,6 +100,7 @@ export function createRecordLockService(
     payload: RecordLockPayload,
     unavailableMessage: string,
     unexpectedErrorMessage: string,
+    metricName: 'adquirir bloqueo' | 'renovar bloqueo' | 'liberar bloqueo',
     run: (db: Database) => RecordLockResult,
   ): Promise<RecordLockResult> {
     if (!validateRecordLockPayload(payload)) {
@@ -130,7 +131,7 @@ export function createRecordLockService(
       return recordLockError(error instanceof Error ? error.message : unexpectedErrorMessage);
     }).then((result) => {
       // Los nombres proceden de cadenas fijas de la propia aplicación.
-      recordMultiuserMetric('record-lock', unexpectedErrorMessage, Date.now() - startedAt, !result.ok);
+      recordMultiuserMetric('record-lock', metricName, Date.now() - startedAt, !result.ok);
       return result;
     });
   }
@@ -163,6 +164,7 @@ export function createRecordLockService(
         payload,
         'SQLite no está disponible para coordinar bloqueos.',
         'No se ha podido adquirir el bloqueo del registro.',
+        'adquirir bloqueo',
         (db) => acquireRecordLockInTransaction(db, payload, currentOwnerContext()),
       ),
     heartbeatRecordLock: (payload) =>
@@ -170,6 +172,7 @@ export function createRecordLockService(
         payload,
         'SQLite no está disponible para renovar bloqueos.',
         'No se ha podido renovar el bloqueo del registro.',
+        'renovar bloqueo',
         (db) => heartbeatRecordLockInTransaction(db, payload, currentOwnerContext()),
       ),
     releaseRecordLock: (payload) =>
@@ -177,6 +180,7 @@ export function createRecordLockService(
         payload,
         'SQLite no está disponible para liberar bloqueos.',
         'No se ha podido liberar el bloqueo del registro.',
+        'liberar bloqueo',
         (db) => releaseRecordLockInTransaction(db, payload, currentOwnerContext()),
       ),
     getRecordLock: (payload) => readLockWithoutExclusiveSmbLease(payload),

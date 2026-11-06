@@ -5,7 +5,7 @@
  * operaciones y duraciones. La instantánea la escribe Electron en userData,
  * nunca en SMB. La instrumentación no participa en la persistencia.
  */
-export type MultiuserMetricCategory = 'ipc-wait' | 'ipc-run' | 'smb-lock-wait' | 'smb-lock-held' | 'record-lock' | 'backup' | 'excel';
+export type MultiuserMetricCategory = 'ipc-wait' | 'ipc-run' | 'sqlite-stage' | 'smb-lock-wait' | 'smb-lock-held' | 'record-lock' | 'backup' | 'excel';
 
 export interface MultiuserMetricSummary {
   category: MultiuserMetricCategory;
