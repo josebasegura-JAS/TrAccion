@@ -2,11 +2,14 @@ import type { Dispatch, SetStateAction } from 'react';
 import { Activity, CalendarDays, Flag, UserRound } from 'lucide-react';
 import { TASK_PRIORITIES, type TaskDraft } from '../../features/tareas/domain/task';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
-import { Select } from '../ui/Field';
+import { Input, Select } from '../ui/Field';
 
-export function TaskStatusPanel({ draft, setDraft }: {
+export function TaskStatusPanel({ draft, setDraft, responsibleOptions, responsibleSelectValue, otherResponsibleValue }: {
   draft: TaskDraft;
   setDraft: Dispatch<SetStateAction<TaskDraft>>;
+  responsibleOptions: string[];
+  responsibleSelectValue: string;
+  otherResponsibleValue: string;
 }) {
   const taskStates = useConfiguracionStore((state) => state.taskStates);
   const stateOptions = taskStates.filter((state) => state.active || state.id === draft.estado);
@@ -28,10 +31,18 @@ export function TaskStatusPanel({ draft, setDraft }: {
             {TASK_PRIORITIES.map((value) => <option key={value} value={value}>{value}</option>)}
           </Select>
         </label>
-        <div className="grid grid-cols-[90px_minmax(0,1fr)] gap-2 px-2 py-2 text-xs text-slate-300">
+        <label className="grid grid-cols-[90px_minmax(0,1fr)] items-center gap-2 px-2 py-2 text-xs text-slate-200">
           <span className="flex items-center gap-1.5"><UserRound size={14} className="text-sky-300" />Responsable</span>
-          <span className="truncate font-semibold text-slate-100" title={draft.responsable || 'Sin asignar'}>{draft.responsable || 'Sin asignar'}</span>
-        </div>
+          <span className="min-w-0">
+            <Select aria-label="Responsable de la tarea" className="h-8 w-full rounded-lg border-sky-400/35 bg-sky-500/10 px-2 text-xs font-semibold text-sky-100" value={responsibleSelectValue} onChange={(event) => setDraft((current) => ({ ...current, responsable: event.target.value }))}>
+              <option value="">Sin asignar</option>
+              {responsibleOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+            </Select>
+            {responsibleSelectValue === 'Otros' && (
+              <Input aria-label="Indica el responsable" className="mt-1 h-8 rounded-lg px-2 text-xs" placeholder="Indica el responsable" value={otherResponsibleValue} onChange={(event) => setDraft((current) => ({ ...current, responsable: `Otros: ${event.target.value}` }))} />
+            )}
+          </span>
+        </label>
         <div className="grid grid-cols-[90px_minmax(0,1fr)] items-center gap-2 px-2 py-2 text-xs text-slate-300">
           <span className="flex items-center gap-1.5"><CalendarDays size={14} className="text-sky-300" />Fecha límite</span>
           <span className="font-semibold text-slate-100">{draft.fechaLimite ? draft.fechaLimite.split('-').reverse().join('/') : 'Sin fecha límite'}</span>

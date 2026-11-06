@@ -168,10 +168,7 @@ export function TaskEditor({
                 creationDate={creationDate}
                 draft={draft}
                 originOptions={originOptions}
-                otherResponsibleValue={otherResponsibleValue}
                 phaseOptions={phaseOptions}
-                responsibleOptions={responsibleOptions}
-                responsibleSelectValue={responsibleSelectValue}
                 setDraft={setDraft}
                 task={task}
               />
@@ -231,7 +228,7 @@ export function TaskEditor({
               </TaskEditorSection>
                 </fieldset>
                 <aside className="min-w-0 space-y-3">
-                  <fieldset disabled={isFormReadOnly} className="border-0 p-0 disabled:opacity-70"><TaskStatusPanel draft={draft} setDraft={setDraft} /></fieldset>
+                  <fieldset disabled={isFormReadOnly} className="border-0 p-0 disabled:opacity-70"><TaskStatusPanel draft={draft} setDraft={setDraft} responsibleOptions={responsibleOptions} responsibleSelectValue={responsibleSelectValue} otherResponsibleValue={otherResponsibleValue} /></fieldset>
                   <section aria-label="Acciones rápidas" className="rounded-xl border border-sky-300/20 bg-[#102239]/90 p-3">
                     <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-100"><Zap aria-hidden="true" size={17} className="text-cyan-300" />Acciones rápidas</h3>
                     <div className="grid grid-cols-2 gap-2 [&_button]:min-w-0 [&_button]:w-full">

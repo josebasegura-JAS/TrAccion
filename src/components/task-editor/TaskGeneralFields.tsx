@@ -10,9 +10,6 @@ export function TaskGeneralFields({
   task,
   phaseOptions,
   originOptions,
-  responsibleOptions,
-  responsibleSelectValue,
-  otherResponsibleValue,
   creationDate,
 }: {
   draft: TaskDraft;
@@ -20,9 +17,6 @@ export function TaskGeneralFields({
   task: Task | null;
   phaseOptions: string[];
   originOptions: string[];
-  responsibleOptions: string[];
-  responsibleSelectValue: string;
-  otherResponsibleValue: string;
   creationDate: string;
 }) {
   const createdBy = task?.createdBy?.trim() || draft.createdBy?.trim() || 'Creador no registrado';
@@ -39,20 +33,10 @@ export function TaskGeneralFields({
       }
     >
       <div className="space-y-2.5">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.35fr)_minmax(220px,1fr)]">
-          <label className="min-w-0 text-[11px] font-semibold text-metro-muted">
-            Título <span className="text-metro-red">*</span>
-            <Input className="h-9 rounded-lg px-3 text-sm" required value={draft.titulo} onChange={(e) => setDraft((current) => ({ ...current, titulo: e.target.value }))} />
-          </label>
-          <label className="min-w-0 text-[11px] font-semibold text-metro-muted">
-            Responsable
-            <Select className="h-9 rounded-lg px-2 text-sm" value={responsibleSelectValue} onChange={(e) => setDraft((current) => ({ ...current, responsable: e.target.value }))}>
-              <option value="">Sin asignar</option>
-              {responsibleOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-            </Select>
-            {responsibleSelectValue === 'Otros' && <Input className="mt-1 h-8 rounded-lg px-2 text-xs" placeholder="Indica el responsable" value={otherResponsibleValue} onChange={(e) => setDraft((current) => ({ ...current, responsable: `Otros: ${e.target.value}` }))} />}
-          </label>
-        </div>
+        <label className="block min-w-0 text-[11px] font-semibold text-metro-muted">
+          Título <span className="text-metro-red">*</span>
+          <Input className="h-9 rounded-lg px-3 text-sm" required value={draft.titulo} onChange={(event) => setDraft((current) => ({ ...current, titulo: event.target.value }))} />
+        </label>
         <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))]">
           <label className="min-w-0 text-[11px] font-semibold text-metro-muted">Tipo
             <Select className="h-8 rounded-lg px-2 text-xs" value={draft.tipo} onChange={(e) => setDraft((current) => ({ ...current, tipo: e.target.value as TaskDraft['tipo'] }))}>{TASK_TYPES.map((value) => <option key={value}>{value}</option>)}</Select>
