@@ -53,7 +53,7 @@ export function TaskGeneralFields({
             {responsibleSelectValue === 'Otros' && <Input className="mt-1 h-8 rounded-lg px-2 text-xs" placeholder="Indica el responsable" value={otherResponsibleValue} onChange={(e) => setDraft((current) => ({ ...current, responsable: `Otros: ${e.target.value}` }))} />}
           </label>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))]">
           <label className="min-w-0 text-[11px] font-semibold text-metro-muted">Tipo
             <Select className="h-8 rounded-lg px-2 text-xs" value={draft.tipo} onChange={(e) => setDraft((current) => ({ ...current, tipo: e.target.value as TaskDraft['tipo'] }))}>{TASK_TYPES.map((value) => <option key={value}>{value}</option>)}</Select>
           </label>
