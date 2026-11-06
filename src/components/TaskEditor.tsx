@@ -233,18 +233,11 @@ export function TaskEditor({
                 <aside className="min-w-0 space-y-3">
                   <fieldset disabled={isFormReadOnly} className="border-0 p-0 disabled:opacity-70"><TaskStatusPanel draft={draft} setDraft={setDraft} /></fieldset>
                   <section aria-label="Acciones rápidas">
-                    <h3 className="sr-only">Acciones rápidas</h3>
+                    <h3 className="mb-2 flex items-center gap-2 px-1 text-sm font-bold text-slate-100"><Zap aria-hidden="true" size={17} className="text-cyan-300" />Acciones rápidas</h3>
                               <div className="rounded-xl border border-sky-300/20 bg-[#102239]/90 p-3">
             <div className="grid grid-cols-2 gap-2 [&_button]:w-full">
               <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar</ActionButton>
               <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">Cancelar</ActionButton>
-              {!isCreate && task && (
-                <ActionButton disabled={isFormReadOnly} iconOnly={false} className="col-span-2" variant="delete" onClick={() => void (async () => {
-                  const result = await removeTask(task.id, loadedUpdatedAt);
-                  if (!result.ok) { setSaveStatus(result.message); setSaveStatusIsError(true); return; }
-                  clearRecoveryDraft(); onDone();
-                })()}>Eliminar</ActionButton>
-              )}
               {!isCreate && task && !isTaskClosed(task) && (
                 <ActionButton
                   disabled={isFormReadOnly}
@@ -301,6 +294,14 @@ export function TaskEditor({
                 </ActionButton>
               )}
               
+              <div className="col-span-2 mt-1 border-t border-red-400/20 pt-2">              {!isCreate && task && (
+                <ActionButton disabled={isFormReadOnly} iconOnly={false} variant="delete" onClick={() => void (async () => {
+                  const result = await removeTask(task.id, loadedUpdatedAt);
+                  if (!result.ok) { setSaveStatus(result.message); setSaveStatusIsError(true); return; }
+                  clearRecoveryDraft(); onDone();
+                })()}>Eliminar</ActionButton>
+              )}
+</div>
               <div className="col-span-2"><InlineSaveFeedback /></div>
               {saveStatus && saveStatusIsError && (
                 <p
