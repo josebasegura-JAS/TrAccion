@@ -1,4 +1,5 @@
 import type { LotteryCashMovement, LotteryCashSnapshot } from '../domain/arqueos';
+import { selectCurrentLotteryCampaignYear } from '../domain/loteriaCampaignYear';
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
@@ -148,15 +149,6 @@ function readStoredValue(): unknown {
   } catch {
     return null;
   }
-}
-
-export function selectCurrentLotteryCampaignYear(years: readonly string[], currentYear: number): number {
-  // Permitir preparar la próxima campaña antes del cambio de año.
-  // Nunca seleccionar automáticamente un ejercicio antiguo.
-  const available = years.map(Number).filter((year) =>
-    Number.isInteger(year) && year >= currentYear && year <= currentYear + 1,
-  );
-  return available.length > 0 ? Math.max(...available) : currentYear;
 }
 
 function readCampaign(): LotteryCampaign {
