@@ -1,4 +1,5 @@
 import { AlertTriangle, Check, Database } from 'lucide-react';
+import { isConflictFeedback } from '../services/persistenceNotificationPolicy';
 import { useEffect, useRef, useState } from 'react';
 import {
   isPersistenceFeedbackSilent,
@@ -13,7 +14,7 @@ const MAX_OPERATION_VISIBLE_MS = 30000;
 const UNKNOWN_OPERATION_KEY = '__global__';
 
 type IndicatorState = {
-  kind: 'saving' | 'saved' | 'error';
+  kind: 'saving' | 'saved' | 'error' | 'conflict' | 'unknown';
   message: string;
   slow: boolean;
   readError?: boolean;
@@ -81,9 +82,12 @@ export function GlobalBusyIndicator() {
         pendingOperations.add(key);
         clearSafetyTimeout(key);
         safetyTimeouts.set(key, window.setTimeout(() => {
-          pendingOperations.delete(key);
+          // El plazo de visibilidad no confirma ni cancela la operación.
+          // Conservamos la clave pendiente hasta recibir un resultado real.
           safetyTimeouts.delete(key);
-          if (pendingOperations.size === 0) setState(null);
+          setState((current) => current?.kind === 'error' || current?.kind === 'conflict'
+            ? current
+            : { kind: 'unknown', message: 'El guardado sigue pendiente de confirmación…', slow: true });
         }, MAX_OPERATION_VISIBLE_MS));
         setState({ kind: 'saving', message: savingMessage(feedback), slow: false });
         scheduleSlowState();
@@ -93,10 +97,13 @@ export function GlobalBusyIndicator() {
       pendingOperations.delete(key);
       clearSafetyTimeout(key);
 
-      if (pendingOperations.size > 0) return;
-      clearSlowTimeout();
-
       if (feedback.kind === 'error') {
+        clearSlowTimeout();
+        if (isConflictFeedback(feedback)) {
+          setState({ kind: 'conflict', message: feedback.message, slow: false });
+          completionTimeoutRef.current = window.setTimeout(() => setState(null), ERROR_VISIBLE_MS);
+          return;
+        }
         setState({
           kind: 'error',
           message: feedback.message || (feedback.operation === 'read' ? 'No se han podido actualizar los datos.' : 'No se han podido guardar los cambios.'),
@@ -106,6 +113,13 @@ export function GlobalBusyIndicator() {
         completionTimeoutRef.current = window.setTimeout(() => setState(null), ERROR_VISIBLE_MS);
         return;
       }
+
+      if (pendingOperations.size > 0) {
+        // El éxito de otra clave no confirma los guardados aún pendientes.
+        setState({ kind: 'saving', message: 'Hay cambios pendientes de guardado…', slow: true });
+        return;
+      }
+      clearSlowTimeout();
 
       // Si la pantalla ya incorpora InlineSaveFeedback, la confirmación final
       // se muestra allí. El indicador global no repite el mismo "Guardado".
@@ -139,8 +153,10 @@ export function GlobalBusyIndicator() {
       : 'Guardando los cambios.'
     : state.kind === 'error'
       ? state.readError ? 'Se conserva la última información cargada.' : 'El cambio no se ha guardado.'
-      : null;
-  const isError = state.kind === 'error';
+      : state.kind === 'conflict' ? 'No se ha sobrescrito la versión de otra persona.'
+        : state.kind === 'unknown' ? 'No cierres la ventana: todavía no hay confirmación del resultado.'
+          : null;
+  const isError = state.kind === 'error' || state.kind === 'conflict' || state.kind === 'unknown';
 
   return (
     <div
@@ -151,9 +167,9 @@ export function GlobalBusyIndicator() {
     >
       <div className="global-busy-indicator__panel">
         <span className="global-busy-indicator__icon" aria-hidden="true">
-          {state.kind === 'saving' ? <Database size={18} className="global-busy-indicator__database" /> : null}
+          {state.kind === 'saving' || state.kind === 'unknown' ? <Database size={18} className="global-busy-indicator__database" /> : null}
           {state.kind === 'saved' ? <Check size={19} /> : null}
-          {state.kind === 'error' ? <AlertTriangle size={18} /> : null}
+          {state.kind === 'error' || state.kind === 'conflict' ? <AlertTriangle size={18} /> : null}
         </span>
         <span className="global-busy-indicator__copy">
           <strong>{label}</strong>
