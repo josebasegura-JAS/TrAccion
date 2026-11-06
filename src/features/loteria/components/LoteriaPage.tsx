@@ -12,7 +12,6 @@ import {
   Plus,
   Save,
   Search,
-  RotateCcw,
   Ticket,
   UserRound,
   UserRoundPlus,
