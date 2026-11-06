@@ -23,7 +23,7 @@ const patterns = [
   ['modal', /\b(?:alert|confirm|showAlert|showConfirm)\s*\(/g],
   ['nativo', /\b(?:window\.)?(?:alert|confirm|prompt)\s*\(/g],
   ['persistencia', /\b(?:emitPersistenceFeedback|publishPersistenceBusy|clearPersistenceBusy|subscribeToPersistenceFeedback)\s*\(/g],
-  ['estado-local', /\b(?:set(?:Error|Warning|Message|SaveStatus|Feedback|Notice|Notification|ImportMessage|Status)|role\s*=\s*["']alert["'])\b?/g],
+  ['estado-local', /\b(?:set(?:Error|Warning|Message|SaveStatus|Feedback|Notice|Notification|ImportMessage|Status)|role\s*=\s*["']alert["'])/g],
   ['registro-tecnico', /\bconsole\.(?:error|warn)\s*\(/g],
 ];
 const extensions = new Set(['.ts', '.tsx', '.js', '.jsx']);
