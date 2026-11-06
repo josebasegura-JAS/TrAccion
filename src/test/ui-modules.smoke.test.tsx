@@ -128,6 +128,13 @@ describe('humo UI de módulos principales', () => {
   ])('renderiza el módulo %s sin romper', async (_moduleName, ui, expectedText) => {
     render(<ToastProvider>{ui}</ToastProvider>);
 
+    // En la barra compacta de Tareas, «Orígenes» es un botón solo con icono,
+    // pero conserva su nombre accesible y la misma funcionalidad.
+    if (_moduleName === 'Peticiones') {
+      expect(await screen.findByRole('button', { name: 'Orígenes' })).toBeInTheDocument();
+      return;
+    }
+
     expect((await screen.findAllByText(expectedText))[0]).toBeInTheDocument();
   });
 });
