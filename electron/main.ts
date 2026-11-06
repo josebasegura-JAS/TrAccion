@@ -1,4 +1,5 @@
 import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
+import { registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
 import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
 import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics.js';
 import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
@@ -341,17 +342,29 @@ if (!app.requestSingleInstanceLock()) {
     const multiuserReportTimer = setInterval(() => { void persistMultiuserReport(); }, 60_000);
     multiuserReportTimer.unref?.();
     app.on('will-quit', () => { clearInterval(multiuserReportTimer); void persistMultiuserReport(); });
+    // Los eventos de navegador solo indican transición de interfaz de red.
+    // No afirman que SMB haya recuperado conectividad.
+    let watchdogNetworkSender: ((phase: 'online' | 'offline' | 'connection-change') => void) | null = null;
+    ipcMain.on('app:network-transition-diagnostic', (_event, phase: unknown) => {
+      if (phase === 'online' || phase === 'offline' || phase === 'connection-change') {
+        try { watchdogNetworkSender?.(phase); } catch { /* diagnóstico opcional */ }
+      }
+    });
     // El watchdog reside fuera del event loop principal; solo escribe diagnósticos locales.
     try {
       const watchdog = utilityProcess.fork(path.join(__dirname, 'mainWatchdogWorker.js'), [], {
         serviceName: 'TrAcción main watchdog',
       });
+      registerMainWatchdogOperationSender((message) => watchdog.postMessage(message));
+      watchdogNetworkSender = (phase) => watchdog.postMessage({ kind: 'network', phase, at: Date.now() });
       const sendHeartbeat = () => watchdog.postMessage({ kind: 'heartbeat', at: Date.now(), file: app.getPath('userData') });
       sendHeartbeat();
       const heartbeatTimer = setInterval(sendHeartbeat, 2_000);
-      watchdog.on('exit', () => clearInterval(heartbeatTimer));
+      watchdog.on('exit', () => { clearInterval(heartbeatTimer); registerMainWatchdogOperationSender(null); watchdogNetworkSender = null; });
       app.on('will-quit', () => {
         clearInterval(heartbeatTimer);
+        registerMainWatchdogOperationSender(null);
+        watchdogNetworkSender = null;
         try { watchdog.postMessage({ kind: 'shutdown', at: Date.now() }); } catch { /* ya cerrado */ }
       });
     } catch (error) {
