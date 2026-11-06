@@ -321,7 +321,7 @@ export function AjustesPage() {
     try {
       setCurrentDatabaseLock(await window.traccion.getCurrentDatabaseLock());
     } catch (error) {
-      setDatabaseLockCheckError(error instanceof Error ? error.message : 'No se ha podido comprobar el bloqueo SQLite.');
+      setDatabaseLockCheckError(error instanceof Error ? error.message : 'No se ha podido comprobar el bloqueo de la base de datos.');
     } finally {
       setIsCheckingDatabaseLock(false);
     }
@@ -384,20 +384,20 @@ export function AjustesPage() {
 
   const applyDatabaseStatus = async (nextStatus: TraccionDatabaseStatus) => {
     publishDatabaseStatus(nextStatus);
-    setDatabaseActionStatus(nextStatus.message ?? (nextStatus.ready ? 'Base de datos actualizada.' : 'No se ha podido activar SQLite.'));
+    setDatabaseActionStatus(nextStatus.message ?? (nextStatus.ready ? 'Base de datos actualizada.' : 'No se ha podido activar la base de datos.'));
     await refreshCurrentDatabaseLock();
     load();
   };
 
   const handleSelectDatabaseDirectory = async () => {
     if (!window.traccion?.selectDatabaseDirectory) {
-      setDatabaseActionStatus('El cambio de ubicación SQLite solo está disponible en la aplicación de escritorio.');
+      setDatabaseActionStatus('El cambio de ubicación de la base de datos solo está disponible en la aplicación de escritorio.');
       return;
     }
     try {
       await applyDatabaseStatus(await window.traccion.selectDatabaseDirectory());
     } catch (error) {
-      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido cambiar la ubicación SQLite.');
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido cambiar la ubicación de la base de datos.');
     }
   };
 
@@ -406,7 +406,7 @@ export function AjustesPage() {
     try {
       await applyDatabaseStatus(await window.traccion.resetDatabaseDirectory());
     } catch (error) {
-      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido quitar la ruta SQLite configurada.');
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido quitar la ruta de base de datos configurada.');
     }
   };
 
@@ -419,7 +419,7 @@ export function AjustesPage() {
       setDatabaseActionStatus(result.message);
       await refreshCurrentDatabaseLock();
     } catch (error) {
-      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido liberar el bloqueo SQLite.');
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido liberar el bloqueo de la base de datos.');
     } finally {
       setIsForcingLockRelease(false);
     }
@@ -545,7 +545,7 @@ export function AjustesPage() {
     : databaseStatus?.phase === 'locked'
       ? 'Bloqueada temporalmente'
       : databaseStatus?.phase === 'fallback'
-        ? 'Modo consulta / sin conexión SQLite'
+        ? 'Modo consulta / sin conexión con la base de datos'
         : databaseStatus?.phase === 'error'
           ? 'Error de conexión'
           : 'No inicializada';
@@ -611,7 +611,7 @@ export function AjustesPage() {
     try {
       const liveStatus = await refreshDatabaseStatus();
       if (!liveStatus?.ready || liveStatus.phase !== 'active') {
-        setStatus('No se han guardado las rutas: la SQLite compartida no está activa. Corrige primero la ruta de Base de datos para garantizar que el cambio llegue a todos los usuarios.');
+        setStatus('No se han guardado las rutas: la base de datos compartida no está activa. Corrige primero la ruta de Base de datos para garantizar que el cambio llegue a todos los usuarios.');
         return;
       }
       for (const field of TEMPLATE_FIELDS) {
@@ -715,7 +715,7 @@ export function AjustesPage() {
             <p className="ui-eyebrow">Ajustes</p>
             <h2 className="mt-1 text-xl font-bold text-metro-text">Configuración de TrAcción</h2>
             <p className="mt-1 max-w-4xl text-sm leading-5 text-metro-muted">
-              Configuración común para RRLL. Las rutas se guardan en la SQLite compartida y se aplican
+              Configuración común para RRLL. Las rutas se guardan en la base de datos compartida y se aplican
               a todos los usuarios que trabajan con la misma base de datos.
             </p>
           </div>
@@ -818,7 +818,7 @@ export function AjustesPage() {
             <span className="ui-shortcut-card__icon"><Database size={17} /></span>
             <div>
               <h3 className="text-base font-bold text-metro-text">Base de datos y protecciones</h3>
-              <p className="mt-0.5 text-xs text-metro-muted">Ruta SQLite, desbloqueo, copias, actualizaciones y mantenimiento.</p>
+              <p className="mt-0.5 text-xs text-metro-muted">Ruta de base de datos, desbloqueo, copias, actualizaciones y mantenimiento.</p>
             </div>
           </div>
           <ChevronDown className="shrink-0 text-metro-muted transition-transform group-open:rotate-180" size={18} />
