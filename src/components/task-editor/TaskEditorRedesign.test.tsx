@@ -20,7 +20,7 @@ const draft = {
 const setDraft = (() => undefined) as Dispatch<SetStateAction<TaskDraft>>;
 
 describe('rediseño del editor de Tareas', () => {
-  it('presenta título y responsable en el resumen sin duplicar Estado ni Prioridad', () => {
+  it('presenta título a ancho completo sin duplicar Responsable, Estado ni Prioridad', () => {
     const html = renderToStaticMarkup(
       <TaskGeneralFields
         draft={draft}
@@ -28,25 +28,29 @@ describe('rediseño del editor de Tareas', () => {
         task={null}
         phaseOptions={['tarea']}
         originOptions={['LAB']}
-        responsibleOptions={['jasegura']}
-        responsibleSelectValue="jasegura"
-        otherResponsibleValue=""
         creationDate="2026-07-28"
       />,
     );
     expect(html).toContain('Resumen');
     expect(html).toContain('Título');
-    expect(html).toContain('Responsable');
+    expect(html).not.toContain('>Responsable<');
     expect(html).not.toContain('>Estado<');
     expect(html).not.toContain('>Prioridad<');
   });
 
-  it('ofrece Estado y Prioridad como selectores en el panel lateral', () => {
-    const html = renderToStaticMarkup(<TaskStatusPanel draft={draft} setDraft={setDraft} />);
+  it('ofrece Estado, Prioridad y Responsable como selectores en el panel lateral', () => {
+    const html = renderToStaticMarkup(<TaskStatusPanel draft={draft} setDraft={setDraft} responsibleOptions={['jasegura', 'Otros']} responsibleSelectValue="jasegura" otherResponsibleValue="" />);
     expect(html).toContain('Estado de la tarea');
     expect(html).toContain('aria-label="Estado de la tarea"');
     expect(html).toContain('aria-label="Prioridad de la tarea"');
+    expect(html).toContain('aria-label="Responsable de la tarea"');
     expect(html).toContain('30/11/2026');
     expect(html).toContain('jasegura');
+  });
+
+  it('mantiene la entrada manual para responsable Otros', () => {
+    const html = renderToStaticMarkup(<TaskStatusPanel draft={{ ...draft, responsable: 'Otros: Responsable externo' }} setDraft={setDraft} responsibleOptions={['jasegura', 'Otros']} responsibleSelectValue="Otros" otherResponsibleValue="Responsable externo" />);
+    expect(html).toContain('aria-label="Indica el responsable"');
+    expect(html).toContain('Responsable externo');
   });
 });
