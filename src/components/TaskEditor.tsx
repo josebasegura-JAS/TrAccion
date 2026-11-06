@@ -264,7 +264,7 @@ export function TaskEditor({
                     onClick={() => setTaskPrintPreviewHtml(buildTaskReportHtml({ task, draft }))}
                     type="button"
                     variant="secondary"
-                  />
+                  >Imprimir</ActionButton>
                   <ActionButton
                     icon={FileSpreadsheet}
                     iconOnly={false}
@@ -311,8 +311,6 @@ export function TaskEditor({
               )}
 
 
-            </div>
-          </div>
                     </div>
                   </section>
                   {!isCreate && task && <TaskLinksSection task={liveTask ?? task} />}
