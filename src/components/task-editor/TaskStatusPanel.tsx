@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { Activity, CalendarDays, Flag, UserRound } from 'lucide-react';
 import { TASK_PRIORITIES, type TaskDraft } from '../../features/tareas/domain/task';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
-import { Input, Select } from '../ui/Field';
+import { Select } from '../ui/Field';
 
 export function TaskStatusPanel({ draft, setDraft }: {
   draft: TaskDraft;
@@ -33,8 +33,8 @@ export function TaskStatusPanel({ draft, setDraft }: {
           <span className="truncate font-semibold text-slate-100" title={draft.responsable || 'Sin asignar'}>{draft.responsable || 'Sin asignar'}</span>
         </div>
         <div className="grid grid-cols-[90px_minmax(0,1fr)] items-center gap-2 px-2 py-2 text-xs text-slate-300">
-          <label htmlFor="task-sidebar-deadline" className="flex items-center gap-1.5"><CalendarDays size={14} className="text-sky-300" />Fecha límite</label>
-          <Input id="task-sidebar-deadline" aria-label="Fecha límite (panel de estado)" className="h-8 rounded-md px-2 text-xs" type="date" value={draft.fechaLimite} onChange={(event) => setDraft((current) => ({ ...current, fechaLimite: event.target.value }))} />
+          <span className="flex items-center gap-1.5"><CalendarDays size={14} className="text-sky-300" />Fecha límite</span>
+          <span className="font-semibold text-slate-100">{draft.fechaLimite ? draft.fechaLimite.split('-').reverse().join('/') : 'Sin fecha límite'}</span>
         </div>
       </div>
     </section>
