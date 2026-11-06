@@ -1,6 +1,7 @@
 import type { Database } from 'better-sqlite3';
 import { pruneLocalStorageBackups } from './maintenanceQueries.js';
 import { getDirectStoreUpdatedAtSnapshot } from './directStoreUpdatedAt.js';
+import { createSqliteStageDiagnostic } from './sqliteStageDiagnostic.js';
 import { getSorteosCollectionUpdatedAt } from './sorteosRepository.js';
 import {
   isMetadataRow,
@@ -513,20 +514,30 @@ export function createPersistedRecordsRepository(deps: PersistedRecordsRepositor
           return emptyTokenSnapshot(currentStatus);
         }
 
-        const db = deps.requireDatabase();
-        const latestRow = db
-          .prepare('SELECT updated_at FROM persisted_records ORDER BY updated_at DESC LIMIT 1')
-          .get();
-        const latestUpdatedAt = isUpdatedAtRow(latestRow) ? latestRow.updated_at : null;
-        return {
-          status: currentStatus,
-          refreshToken: readRefreshToken(db),
-          latestUpdatedAt,
-          taskRecordsUpdatedAt: deps.getTaskRecordsUpdatedAt(db),
-          sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
-          sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
-          directStoreUpdatedAt: getDirectStoreUpdatedAtSnapshot(db),
-        };
+        const diagnostic = createSqliteStageDiagnostic('token');
+        try {
+          const db = deps.requireDatabase();
+          const latestRow = diagnostic.stage('marca-general', () => db
+            .prepare('SELECT updated_at FROM persisted_records ORDER BY updated_at DESC LIMIT 1')
+            .get());
+          const latestUpdatedAt = isUpdatedAtRow(latestRow) ? latestRow.updated_at : null;
+          const refreshToken = diagnostic.stage('marca-refresco', () => readRefreshToken(db));
+          const taskRecordsUpdatedAt = diagnostic.stage('tareas', () => deps.getTaskRecordsUpdatedAt(db));
+          const sorteosDrawsUpdatedAt = diagnostic.stage('sorteos', () => getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'));
+          const sorteosExclusionsUpdatedAt = diagnostic.stage('sorteos-exclusiones', () => getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'));
+          const directStoreUpdatedAt = diagnostic.stage('modulos-directos', () => getDirectStoreUpdatedAtSnapshot(db));
+          return {
+            status: currentStatus,
+            refreshToken,
+            latestUpdatedAt,
+            taskRecordsUpdatedAt,
+            sorteosDrawsUpdatedAt,
+            sorteosExclusionsUpdatedAt,
+            directStoreUpdatedAt,
+          };
+        } finally {
+          diagnostic.finish();
+        }
       },
       (nextStatus) => emptyTokenSnapshot(nextStatus),
     );
