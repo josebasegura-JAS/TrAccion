@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
+import { notificationLayout } from './ui/notificationStyles';
 import {
   isPersistenceFeedbackSilent,
   subscribeToPersistenceFeedback,
@@ -63,7 +64,7 @@ export function InlineSaveFeedback({ visibleMs = DEFAULT_VISIBLE_MS }: InlineSav
     <span
       aria-atomic="true"
       aria-live="polite"
-      className="inline-flex max-w-[18rem] items-center gap-1.5 px-1 text-xs font-semibold text-emerald-300"
+      className={notificationLayout.inlineSaved}
       data-inline-save-feedback="true"
       role="status"
       title={message}
