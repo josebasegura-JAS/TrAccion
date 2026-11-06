@@ -1,6 +1,7 @@
 import { ExcelBackupRetryBanner } from './components/ExcelBackupRetryBanner';
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, LockKeyhole } from 'lucide-react';
+import { nextWriteError } from './services/persistenceNotificationPolicy';
 import { AppUpdateChecker } from './components/AppUpdateChecker';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { BackgroundActivityIndicator } from './components/BackgroundActivityIndicator';
@@ -97,14 +98,7 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
 function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
   const [feedback, setFeedback] = useState<PersistenceFeedback | null>(null);
   useEffect(() => subscribeToPersistenceFeedback((nextFeedback) => {
-    if (nextFeedback.kind === 'error') setFeedback(nextFeedback);
-    else if (nextFeedback.kind === 'saved') {
-      setFeedback((current) => {
-        if (!current) return null;
-        const sameKey = !current.key || !nextFeedback.key || current.key === nextFeedback.key;
-        return sameKey ? null : current;
-      });
-    }
+    setFeedback((current) => nextWriteError(current, nextFeedback));
   }), []);
   if (!feedback) return null;
   const isLockIssue = isTemporarySqliteLockMessage(feedback.message || '');
