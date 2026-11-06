@@ -82,7 +82,7 @@ export function StepCard({
             onChange={(event) => onReviewChange(event.target.checked)}
             type="checkbox"
           />
-          Mes revisado
+          {reviewLabel}
         </label>
       ) : null}
     </div>
