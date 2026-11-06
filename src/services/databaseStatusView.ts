@@ -19,7 +19,7 @@ export function buildDatabaseStatusBadge(
     return {
       label: 'Base de datos no disponible',
       detail: 'edición bloqueada',
-      title: 'Base de datos: estado Base de datos no disponible. La edición permanece bloqueada hasta recuperar la base compartida.',
+      title: 'Base de datos: estado sin confirmar. La edición permanece bloqueada hasta recuperar la base compartida.',
       tone: 'unknown',
       requiresAttention: true,
     };
@@ -42,7 +42,7 @@ export function buildDatabaseStatusBadge(
       return {
         label: 'Base de datos solo lectura',
         detail: status.message,
-        title: `Base de datos: Base de datos activa, pero con escrituras bloqueadas. Ruta: ${fallbackPath(status)}. ${status.message}`,
+        title: `Base de datos conectada, pero con escrituras bloqueadas. Ruta: ${fallbackPath(status)}. ${status.message}`,
         tone: 'warning',
         requiresAttention: true,
       };
@@ -51,7 +51,7 @@ export function buildDatabaseStatusBadge(
     return {
       label: 'Base de datos activa',
       detail: routeKind,
-      title: `Base de datos: Base de datos activa (${routeKind}). Ruta: ${fallbackPath(status)}`,
+      title: `Base de datos activa (${routeKind}). Ruta: ${fallbackPath(status)}`,
       tone: 'ok',
       requiresAttention: false,
     };
@@ -64,7 +64,7 @@ export function buildDatabaseStatusBadge(
     return {
       label: 'Base de datos ocupada',
       detail: status.message ?? 'base bloqueada temporalmente',
-      title: `Base de datos: Base de datos ocupada. Ruta: ${fallbackPath(status)}.${lockOwner}`,
+      title: `Base de datos ocupada temporalmente. Ruta: ${fallbackPath(status)}.${lockOwner}`,
       tone: 'locked',
       requiresAttention: true,
     };
@@ -74,8 +74,8 @@ export function buildDatabaseStatusBadge(
     return {
       label: 'Base de datos no disponible',
       detail: status.message ?? 'Base de datos inactiva',
-      title: `Base de datos: Base de datos no disponible. Edición bloqueada. Ruta prevista: ${fallbackPath(status)}. ${status.message ?? ''}`,
-      tone: 'warning',
+      title: `Base de datos no disponible. Edición bloqueada. Ruta prevista: ${fallbackPath(status)}. ${status.message ?? ''}`,
+      tone: 'error',
       requiresAttention: true,
     };
   }
@@ -84,7 +84,7 @@ export function buildDatabaseStatusBadge(
     return {
       label: 'Error de base de datos',
       detail: status.message ?? 'ruta no accesible',
-      title: `Base de datos: error de base de datos. Ruta: ${fallbackPath(status)}. ${status.message ?? ''}`,
+      title: `Error de conexión con la base de datos. Ruta: ${fallbackPath(status)}. ${status.message ?? ''}`,
       tone: 'error',
       requiresAttention: true,
     };
@@ -93,7 +93,7 @@ export function buildDatabaseStatusBadge(
   return {
     label: 'Base de datos inactiva',
     detail: status.message ?? 'ruta no accesible',
-    title: `Base de datos: Base de datos inactiva. Ruta: ${fallbackPath(status)}. ${status.message ?? ''}`,
+    title: `Base de datos inactiva. Ruta: ${fallbackPath(status)}. ${status.message ?? ''}`,
     tone: 'error',
     requiresAttention: true,
   };
