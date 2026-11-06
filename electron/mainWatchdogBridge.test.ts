@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { notifyMainWatchdogOperation, registerMainWatchdogOperationSender } from './mainWatchdogBridge';
+import { notifyMainWatchdogOperation, registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
 
 afterEach(() => registerMainWatchdogOperationSender(null));
 
