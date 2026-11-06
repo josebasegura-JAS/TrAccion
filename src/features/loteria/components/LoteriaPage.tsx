@@ -857,7 +857,7 @@ export function LoteriaPage() {
         </SectionShell>
       ) : null}
 
-      {activeSection === null && <LoteriaHistoricalPanel />}
+      {activeSection === null && <LoteriaHistoricalPanel activeYear={draft.year} />}
 
       {campaignDialogNode}
       {workflowSaving && <InlineNotice tone="info">Guardando el avance del flujograma…</InlineNotice>}
