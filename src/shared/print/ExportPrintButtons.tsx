@@ -11,12 +11,15 @@ interface ExportPrintButtonsProps<T> {
   htmlBuilder?: () => string;
   /** Tamaño de las acciones. Por defecto 'sm' para mantener compactas las cabeceras de módulo. */
   size?: 'sm' | 'md';
+  /** Acciones solo con icono, para barras densas; conservan nombre accesible. */
+  compactIcons?: boolean;
 }
 
 export function ExportPrintButtons<T>({
   payload,
   htmlBuilder,
   size = 'sm',
+  compactIcons = false,
 }: ExportPrintButtonsProps<T>) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const toast = useToast();
@@ -29,7 +32,7 @@ export function ExportPrintButtons<T>({
             toast.error(message, { title: 'No se ha podido exportar' });
           })
         }
-        iconOnly={false}
+        iconOnly={compactIcons}
         size={size}
         variant="excel"
       >
@@ -44,7 +47,7 @@ export function ExportPrintButtons<T>({
               : buildPrintableTableHtml({ ...payload, generatedAt: new Date() }),
           )
         }
-        iconOnly={false}
+        iconOnly={compactIcons}
         size={size}
         variant="print"
       >
