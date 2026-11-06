@@ -101,7 +101,11 @@ export function GlobalBusyIndicator() {
         clearSlowTimeout();
         if (isConflictFeedback(feedback)) {
           setState({ kind: 'conflict', message: feedback.message, slow: false });
-          completionTimeoutRef.current = window.setTimeout(() => setState(null), ERROR_VISIBLE_MS);
+          completionTimeoutRef.current = window.setTimeout(() => {
+            setState(pendingOperations.size > 0
+              ? { kind: 'unknown', message: 'Hay operaciones pendientes de confirmación…', slow: true }
+              : null);
+          }, ERROR_VISIBLE_MS);
           return;
         }
         setState({
@@ -110,7 +114,11 @@ export function GlobalBusyIndicator() {
           slow: false,
           readError: feedback.operation === 'read',
         });
-        completionTimeoutRef.current = window.setTimeout(() => setState(null), ERROR_VISIBLE_MS);
+        completionTimeoutRef.current = window.setTimeout(() => {
+            setState(pendingOperations.size > 0
+              ? { kind: 'unknown', message: 'Hay operaciones pendientes de confirmación…', slow: true }
+              : null);
+          }, ERROR_VISIBLE_MS);
         return;
       }
 
