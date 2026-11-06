@@ -339,10 +339,12 @@ export async function writeSharedStorageItemAsync(
       // El resultado sigue devolviendo ok=false para que el módulo muestre el aviso contextual,
       // pero no se pinta el banner global rojo como si la BBDD estuviera fallando.
       emitPersistenceFeedback({
-        kind: 'saved',
+        kind: 'error',
+        category: 'conflict',
+        operation: 'write',
         updatedAt: new Date().toISOString(),
         key,
-        message: 'Conflicto de versión detectado; no se ha sobrescrito el cambio compartido.',
+        message: conflictMessage,
       });
       return { ok: false, message: conflictMessage, updatedAt: null };
     }
@@ -466,10 +468,12 @@ export async function writeSharedStorageItemsAtomicallyAsync(
 
     if (isConcurrencyConflictMessage(message)) {
       emitPersistenceFeedback({
-        kind: 'saved',
+        kind: 'error',
+        category: 'conflict',
+        operation: 'write',
         updatedAt: new Date().toISOString(),
         key: feedbackKey,
-        message: 'Conflicto de versión detectado; no se ha sobrescrito ningún dato compartido.',
+        message: 'Cambio no guardado — otro usuario modificó estos datos. Recarga la página antes de volver a editar.',
       });
       return {
         ok: false,
