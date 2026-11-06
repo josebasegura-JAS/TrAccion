@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Dispatch, SetStateAction } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { TaskDraft } from '../../features/tareas/domain/task';
 import { TaskGeneralFields } from './TaskGeneralFields';
@@ -16,7 +17,7 @@ const draft = {
   origen: '',
 } as TaskDraft;
 
-const setDraft = (() => undefined) as React.Dispatch<React.SetStateAction<TaskDraft>>;
+const setDraft = (() => undefined) as Dispatch<SetStateAction<TaskDraft>>;
 
 describe('rediseño del editor de Tareas', () => {
   it('presenta título y responsable en el resumen sin duplicar Estado ni Prioridad', () => {
