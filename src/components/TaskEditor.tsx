@@ -17,6 +17,7 @@ import { Textarea } from './ui/Field';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 import { ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { InlineNotice } from './ui/InlineNotice';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { TaskAttachmentsSection } from './task-editor/TaskAttachmentsSection';
 import { TaskCircuitsSection } from './task-editor/TaskCircuitsSection';
@@ -156,10 +157,7 @@ export function TaskEditor({
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void handleSubmit(); }}>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {lockMessage && isFormReadOnly && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-950/20 px-3 py-2 text-xs text-amber-100" role="alert">
-                <LockKeyhole size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
-                <span><strong className="font-semibold">Edición no disponible.</strong> {lockMessage}</span>
-              </div>
+              <InlineNotice tone="warning"><strong className="font-semibold">Edición no disponible.</strong> {lockMessage}</InlineNotice>
             )}
 
             <fieldset disabled={isFormReadOnly} className="space-y-3 disabled:opacity-70">
