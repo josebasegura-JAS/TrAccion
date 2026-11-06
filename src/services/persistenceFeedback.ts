@@ -15,6 +15,8 @@ export interface PersistenceFeedback {
   visibility?: PersistenceFeedbackVisibility;
   /** Diferencia un error de lectura de un guardado fallido. */
   operation?: 'read' | 'write';
+  /** Conflicto de versión: escritura rechazada sin fallo de conectividad. */
+  category?: 'conflict';
 }
 
 const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
