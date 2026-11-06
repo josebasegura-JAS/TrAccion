@@ -12,6 +12,7 @@ let stalled = false;
 let receivedHeartbeat = false;
 let file = '';
 let activeOperation: { name: string; startedAt: number } | null = null;
+let lastCompletedOperation: { name: string; endedAt: number } | null = null;
 let lastNetworkEvent: { phase: string; at: number } | null = null;
 
 function record(phase: 'stalled' | 'recovered', durationMs: number): void {
@@ -33,6 +34,7 @@ process.parentPort.on('message', (event: { data: Pulse & { file?: string } }) =>
     if (data.phase === 'start' && /^[a-z][a-z0-9:-]{0,79}$/.test(data.name)) {
       activeOperation = { name: data.name, startedAt: Date.now() };
     } else if (data.phase === 'finish' && activeOperation?.name === data.name) {
+      lastCompletedOperation = { name: data.name, endedAt: Date.now() };
       activeOperation = null;
     }
     return;
