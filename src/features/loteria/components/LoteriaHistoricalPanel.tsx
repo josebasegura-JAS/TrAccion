@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { buildLotteryHistoricalSummaries, type LotteryHistoricalSummary } from '../domain/loteriaHistory';
 
-export function LoteriaHistoricalPanel() {
+export function LoteriaHistoricalPanel({ activeYear }: { activeYear: number }) {
   const [rows, setRows] = useState<LotteryHistoricalSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -15,7 +15,7 @@ export function LoteriaHistoricalPanel() {
     try {
       const snapshot = await loader();
       if (!snapshot.status.ready || snapshot.status.phase !== 'active') throw new Error('SQLite no está disponible.');
-      const next = buildLotteryHistoricalSummaries(snapshot.campaigns, snapshot.requests, new Date().getFullYear());
+      const next = buildLotteryHistoricalSummaries(snapshot.campaigns, snapshot.requests, activeYear);
       setRows(next);
       setYear(next[0]?.year ?? null);
       setLoaded(true);

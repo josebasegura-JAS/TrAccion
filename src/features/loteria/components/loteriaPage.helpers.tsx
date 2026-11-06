@@ -32,6 +32,7 @@ export function StepCard({
   onClick,
   reviewed,
   onReviewChange,
+  reviewLabel = 'Mes revisado',
 }: {
   active: boolean;
   done: boolean;
@@ -42,6 +43,7 @@ export function StepCard({
   onClick: () => void;
   reviewed?: boolean;
   onReviewChange?: (checked: boolean) => void;
+  reviewLabel?: string;
 }) {
   return (
     <div
@@ -80,7 +82,7 @@ export function StepCard({
             onChange={(event) => onReviewChange(event.target.checked)}
             type="checkbox"
           />
-          Mes revisado
+          {reviewLabel}
         </label>
       ) : null}
     </div>

@@ -1,4 +1,5 @@
 import type { LotteryCashMovement, LotteryCashSnapshot } from '../domain/arqueos';
+import { selectCurrentLotteryCampaignYear } from '../domain/loteriaCampaignYear';
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
@@ -18,6 +19,7 @@ interface LotteryState {
   load: () => void;
   reloadFromStorage: () => Promise<void>;
   saveCampaign: (campaign: LotteryCampaign) => Promise<{ ok: boolean; message: string }>;
+  startNextCampaign: () => Promise<{ ok: boolean; message: string }>;
 }
 
 interface LotteryCampaignArchive {
@@ -121,6 +123,8 @@ function normalizeCampaign(value: unknown, fallbackYear = new Date().getFullYear
     workflow: {
       ...fallback.workflow,
       ...storedWorkflow,
+      seguimientoFinalizado: typeof storedWorkflow.seguimientoFinalizado === 'boolean'
+        ? storedWorkflow.seguimientoFinalizado : Boolean(storedWorkflow.campanaCerrada),
       participantesPreparados: typeof storedWorkflow.participantesPreparados === 'boolean'
         ? storedWorkflow.participantesPreparados
         : Boolean(storedWorkflow.excelImportado || requests.length > 0),
@@ -153,8 +157,9 @@ function readCampaign(): LotteryCampaign {
   if (!stored) return createDefaultLotteryCampaign(currentYear);
 
   if (isCampaignArchive(stored)) {
-    const currentCampaign = stored.campaigns[String(currentYear)];
-    return currentCampaign ? normalizeCampaign(currentCampaign, currentYear) : createDefaultLotteryCampaign(currentYear);
+    const activeYear = selectCurrentLotteryCampaignYear(Object.keys(stored.campaigns), currentYear);
+    const activeCampaign = stored.campaigns[String(activeYear)];
+    return activeCampaign ? normalizeCampaign(activeCampaign, activeYear) : createDefaultLotteryCampaign(currentYear);
   }
 
   const legacyCampaign = normalizeCampaign(stored, currentYear);
@@ -195,7 +200,8 @@ async function loadCampaignFromSqlite(): Promise<{
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') return null;
 
   const currentYear = new Date().getFullYear();
-  const campaignRecord = snapshot.campaigns.find((record) => record.id === String(currentYear));
+  const selectedYear = selectCurrentLotteryCampaignYear(snapshot.campaigns.map((record) => record.id), currentYear);
+  const campaignRecord = snapshot.campaigns.find((record) => record.id === String(selectedYear));
   if (!campaignRecord) {
     return {
       campaign: createDefaultLotteryCampaign(currentYear),
@@ -213,7 +219,7 @@ async function loadCampaignFromSqlite(): Promise<{
   if (!rawCampaign || typeof rawCampaign !== 'object' || Array.isArray(rawCampaign)) {
     throw new Error('Lotería: el registro de campaña de SQLite tiene un formato inválido.');
   }
-  const currentYearRequests = snapshot.requests.filter((record) => record.campaignYear === currentYear);
+  const currentYearRequests = snapshot.requests.filter((record) => record.campaignYear === selectedYear);
   const requests: LotteryRequest[] = [];
   for (const record of currentYearRequests) {
     let parsed: LotteryRequest | null;
@@ -227,7 +233,7 @@ async function loadCampaignFromSqlite(): Promise<{
     }
     requests.push(parsed);
   }
-  const campaign = normalizeCampaign({ ...rawCampaign, requests }, currentYear);
+  const campaign = normalizeCampaign({ ...rawCampaign, requests }, selectedYear);
   return {
     campaign,
     campaignUpdatedAt: campaignRecord.updatedAt,
@@ -273,6 +279,75 @@ export const useLoteriaStore = create<LotteryState>((set, get) => ({
       // no puede marcar el token como aplicado si la lectura SQLite falló.
       emitPersistenceFeedback({ kind: 'error', key: LOTTERY_STORAGE_KEY, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : 'No se ha podido actualizar Lotería desde SQLite.' });
       throw error;
+    }
+  },
+  startNextCampaign: async () => {
+    const previous = get().campaign;
+    if (!previous.workflow.campanaCerrada) {
+      return { ok: false, message: 'Primero debes cerrar y guardar la campaña actual.' };
+    }
+    const nextYear = previous.year + 1;
+    if (!Number.isInteger(nextYear) || nextYear > new Date().getFullYear() + 1) {
+      return { ok: false, message: 'Solo puedes abrir la campaña del año siguiente.' };
+    }
+
+    const loadRecords = window.traccion?.loadLoteriaRecords;
+    const saveSnapshot = window.traccion?.saveLoteriaSnapshotIfUnchanged;
+    if (!loadRecords || !saveSnapshot) {
+      return { ok: false, message: 'La apertura de una campaña nueva necesita SQLite compartida en TrAcción de escritorio.' };
+    }
+    try {
+      const snapshot = await loadRecords();
+      publishDatabaseStatus(snapshot.status);
+      if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+        return { ok: false, message: 'SQLite no está disponible para abrir la nueva campaña.' };
+      }
+      const existing = snapshot.campaigns.find((record) => record.id === String(nextYear));
+      if (existing) {
+        return { ok: false, message: `La campaña ${nextYear} ya existe. No se ha sobrescrito ningún dato.` };
+      }
+      const current = snapshot.campaigns.find((record) => record.id === String(previous.year));
+      if (!current) {
+        return { ok: false, message: 'La campaña actual debe estar guardada antes de abrir otra.' };
+      }
+      let currentData: { workflow?: { campanaCerrada?: boolean } };
+      try {
+        currentData = JSON.parse(current.value) as typeof currentData;
+      } catch {
+        return { ok: false, message: 'No se puede verificar el cierre de la campaña actual.' };
+      }
+      if (!currentData.workflow?.campanaCerrada) {
+        return { ok: false, message: 'La campaña compartida todavía no está cerrada. Recarga antes de continuar.' };
+      }
+
+      const next = createDefaultLotteryCampaign(nextYear);
+      // La inserción OCC con expectativa null impide reemplazar otra campaña
+      // creada simultáneamente por el segundo equipo.
+      publishPersistenceBusy(LOTTERY_STORAGE_KEY, 'Abriendo nueva campaña de Lotería…');
+      const result = await saveSnapshot({
+        year: nextYear,
+        campaignValue: JSON.stringify({ ...next, requests: [] }),
+        requests: [],
+        expectedCampaignUpdatedAt: null,
+        expectedRequestUpdatedAt: {},
+      });
+      publishDatabaseStatus(result.status);
+      if (!result.ok) {
+        emitPersistenceFeedback({ kind: 'error', key: LOTTERY_STORAGE_KEY, updatedAt: new Date().toISOString(), message: result.message });
+        return { ok: false, message: result.message };
+      }
+      clearPersistenceBusy(LOTTERY_STORAGE_KEY, 'Nueva campaña de Lotería creada.');
+      set({
+        campaign: next,
+        campaignUpdatedAt: result.campaignUpdatedAt,
+        requestUpdatedAt: {},
+      });
+      writeLocalArchiveCache(next);
+      return { ok: true, message: `Campaña ${nextYear} abierta. El histórico de ${previous.year} se conserva.` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido abrir la nueva campaña.';
+      emitPersistenceFeedback({ kind: 'error', key: LOTTERY_STORAGE_KEY, updatedAt: new Date().toISOString(), message });
+      return { ok: false, message };
     }
   },
   saveCampaign: async (campaign) => {
