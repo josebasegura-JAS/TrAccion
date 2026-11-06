@@ -21,7 +21,18 @@ function record(phase: 'stalled' | 'recovered', durationMs: number): void {
     if (existsSync(file) && statSync(file).size > 256_000) {
       renameSync(file, file + '.previous');
     }
-    appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), phase, durationMs, thresholdMs: STALL_MS }) + '\n', 'utf8');
+    appendFileSync(file, JSON.stringify({
+      at: new Date().toISOString(),
+      phase,
+      durationMs,
+      thresholdMs: STALL_MS,
+      activeOperation: activeOperation?.name ?? null,
+      activeOperationMs: activeOperation ? Math.max(0, Date.now() - activeOperation.startedAt) : null,
+      lastCompletedOperation: lastCompletedOperation?.name ?? null,
+      lastCompletedOperationAgeMs: lastCompletedOperation ? Math.max(0, Date.now() - lastCompletedOperation.endedAt) : null,
+      networkEvent: lastNetworkEvent?.phase ?? null,
+      networkEventAgeMs: lastNetworkEvent ? Math.max(0, Date.now() - lastNetworkEvent.at) : null,
+    }) + '\n', 'utf8');
   } catch (error) {
     console.error('[main-watchdog] No se pudo escribir registro local.', error);
   }
