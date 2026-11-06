@@ -44,28 +44,28 @@ const buildDatabaseIndicatorViewModel = (
   syncStatusText: string,
 ): DatabaseIndicatorViewModel => {
   const hydrationMetadata = typeof window === 'undefined' ? null : readHydrationMetadata();
-  const routeText = databaseStatus?.path ?? hydrationMetadata?.sqlitePath ?? 'ruta SQLite no confirmada';
+  const routeText = databaseStatus?.path ?? hydrationMetadata?.sqlitePath ?? 'ruta de base de datos no confirmada';
   const lastSyncText = formatDatabaseTimestamp(hydrationMetadata?.lastUpdatedAt);
 
   if (!databaseStatus) {
-    return { label: 'Sin SQLite', statusText: 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-orange-100', requiresAttention: true };
+    return { label: 'Base de datos no disponible', statusText: 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-amber-100', requiresAttention: true };
   }
   if (databaseStatus.phase === 'locked') {
-    return { label: 'Bloq.', statusText: databaseStatus.message ?? 'base bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-slate-200', requiresAttention: true };
+    return { label: 'Base de datos ocupada', statusText: databaseStatus.message ?? 'base bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-slate-200', requiresAttention: true };
   }
   if (databaseStatus.phase === 'error') {
-    return { label: 'Error', statusText: databaseStatus.message ?? 'error o ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', icon: 'database', requiresAttention: true };
+    return { label: 'Error', statusText: databaseStatus.message ?? 'error o ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', requiresAttention: true };
   }
   if (databaseStatus.ready && databaseStatus.isDefaultPath === false) {
-    return { label: 'SQLite', statusText: 'SQLite activa en ruta compartida/personalizada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-emerald-400 ring-emerald-300/25', textClassName: 'text-emerald-100', icon: 'database', requiresAttention: false };
+    return { label: 'Base de datos activa', statusText: 'Base de datos activa en ruta compartida', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-emerald-400 ring-emerald-300/25', textClassName: 'text-emerald-100', requiresAttention: false };
   }
   if (databaseStatus.ready) {
-    return { label: 'Revisar', statusText: 'ruta local no permitida; configura la base compartida', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-amber-100', icon: 'database', requiresAttention: true };
+    return { label: 'Revisar', statusText: 'ruta local no permitida; configura la base compartida', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-amber-100', requiresAttention: true };
   }
   if (databaseStatus.phase === 'fallback') {
-    return { label: 'Sin SQLite', statusText: databaseStatus.message ?? 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-orange-100', icon: 'database', requiresAttention: true };
+    return { label: 'Base de datos no disponible', statusText: databaseStatus.message ?? 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-amber-100', requiresAttention: true };
   }
-  return { label: 'Revisar', statusText: databaseStatus.message ?? 'ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', icon: 'database', requiresAttention: true };
+  return { label: 'Revisar', statusText: databaseStatus.message ?? 'ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', requiresAttention: true };
 };
 
 const isSidebarPinAllowed = () =>
