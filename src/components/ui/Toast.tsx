@@ -20,6 +20,7 @@ import {
   type ToastOptions,
   type ToastTone,
 } from './toastContext';
+import { notificationLayout, notificationToneStyles } from './notificationStyles';
 
 const DEFAULT_DURATION_BY_TONE: Record<ToastTone, number> = {
   success: 3_000,
@@ -29,19 +30,12 @@ const DEFAULT_DURATION_BY_TONE: Record<ToastTone, number> = {
 };
 const MAX_VISIBLE_TOASTS = 4;
 
-const toneClassName: Record<ToastTone, string> = {
-  error: 'border-red-400/40 bg-red-950/95 text-red-50',
-  info: 'border-blue-400/35 bg-slate-950/95 text-blue-50',
-  success: 'border-emerald-400/35 bg-slate-950/95 text-emerald-50',
-  warning: 'border-amber-400/40 bg-slate-950/95 text-amber-50',
-};
-
 function toastSignature(tone: ToastTone, message: string, options?: ToastOptions): string {
   return `${tone}\u0000${options?.title?.trim() ?? ''}\u0000${message.trim()}`;
 }
 
 function ToastIcon({ tone }: { tone: ToastTone }) {
-  const props = { 'aria-hidden': true, className: 'mt-0.5 shrink-0', size: 18 } as const;
+  const props = { 'aria-hidden': true, size: 18 } as const;
   if (tone === 'success') return <CheckCircle2 {...props} />;
   if (tone === 'error') return <XCircle {...props} />;
   if (tone === 'warning') return <AlertTriangle {...props} />;
@@ -148,18 +142,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               aria-atomic="true"
               aria-live={assertive ? 'assertive' : 'polite'}
-              className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-3 py-3 text-sm shadow-2xl backdrop-blur ${toneClassName[item.tone]}`}
+              className={`${notificationLayout.toast} ${notificationToneStyles[item.tone].toast}`}
               key={item.id}
               role={assertive ? 'alert' : 'status'}
             >
-              <ToastIcon tone={item.tone} />
+              <span className={`${notificationLayout.icon} ${notificationToneStyles[item.tone].icon}`}><ToastIcon tone={item.tone} /></span>
               <div className="min-w-0 flex-1">
-                {item.options?.title ? <p className="font-bold">{item.options.title}</p> : null}
-                <p className="whitespace-pre-wrap leading-5 opacity-95">{item.message}</p>
+                {item.options?.title ? <p className={notificationLayout.title}>{item.options.title}</p> : null}
+                <p className={notificationLayout.message}>{item.message}</p>
               </div>
               <button
                 aria-label="Cerrar notificación"
-                className="shrink-0 rounded-md p-1 opacity-70 transition hover:bg-white/10 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current"
+                className={notificationLayout.dismiss}
                 onClick={() => dismiss(item.id)}
                 type="button"
               >

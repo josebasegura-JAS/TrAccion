@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, Info, X, CircleHelp } from 'lucide-react';
 import { useId, useRef } from 'react';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
+import { notificationLayout, notificationToneStyles } from './notificationStyles';
 
 type AppDialogAlertType = 'info' | 'warning' | 'error';
 
@@ -34,18 +35,18 @@ function getDialogIcon({ danger, mode, type }: Pick<AppDialogProps, 'danger' | '
 
 function getIconClassName({ danger, mode, type }: Pick<AppDialogProps, 'danger' | 'mode' | 'type'>): string {
   if (mode === 'confirm') {
-    return danger ? 'bg-red-950/40 text-red-200 ring-red-400/30' : 'bg-metro-surface text-metro-muted ring-metro-border';
+    return danger ? notificationToneStyles.error.icon : 'bg-metro-surface text-metro-muted ring-metro-border';
   }
 
   if (type === 'warning') {
-    return 'bg-yellow-950/30 text-metro-warning ring-yellow-400/30';
+    return notificationToneStyles.warning.icon;
   }
 
   if (type === 'error') {
-    return 'bg-red-950/40 text-red-200 ring-red-400/30';
+    return notificationToneStyles.error.icon;
   }
 
-  return 'bg-blue-950/30 text-metro-info ring-blue-400/30';
+  return notificationToneStyles.info.icon;
 }
 
 function getDefaultTitle(mode: AppDialogProps['mode'], type: AppDialogAlertType, danger: boolean): string {
@@ -105,12 +106,12 @@ export function AppDialog({
         tabIndex={-1}
       >
         <div className="flex min-h-0 flex-1 items-start gap-3 overflow-y-auto">
-          <div className={`mt-0.5 shrink-0 rounded-full p-2 ring-1 ${getIconClassName({ danger, mode, type })}`}>
+          <div className={`${notificationLayout.icon} ${getIconClassName({ danger, mode, type })}`}>
             {getDialogIcon({ danger, mode, type })}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-bold text-metro-text" id={titleId}>{resolvedTitle}</h2>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-metro-muted" id={messageId}>{message}</p>
+            <h2 className={notificationLayout.dialogTitle} id={titleId}>{resolvedTitle}</h2>
+            <p className={notificationLayout.dialogMessage} id={messageId}>{message}</p>
           </div>
         </div>
 
