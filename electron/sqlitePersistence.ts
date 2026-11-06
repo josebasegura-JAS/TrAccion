@@ -75,6 +75,7 @@ import {
   type DatabaseLockInfo,
 } from './persistence/sqliteLockLifecycle.js';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
+import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
 import { activateSqliteDatabase } from './persistence/databaseActivation.js';
 import { backupExistingDatabase } from './persistence/emergencyDatabaseBackup.js';
 import { forceReleaseDatabaseLockWithRecovery } from './persistence/databaseLockRecovery.js';
@@ -685,22 +686,23 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   // Un timeout IPC no cancela la operación SQLite subyacente. Una consulta
   // SELECT 1 desde este canal podría dar un falso positivo de recuperación
   // mientras una escritura anterior sigue bloqueada o con resultado incierto.
+  const diagnostic = createSqliteStageDiagnostic('health');
   try {
-    const databaseStats = await stat(currentStatus.path);
+    const databaseStats = await diagnostic.stageAsync('archivo', () => stat(currentStatus.path));
     if (!databaseStats.isFile()) {
       throw new Error('La ruta configurada ya no apunta a un fichero SQLite.');
     }
 
     const db = requireDatabase();
-    db.prepare('SELECT 1 AS ok').get();
-    const schemaVersion = readCurrentSchemaVersion(db);
+    diagnostic.stage('consulta', () => db.prepare('SELECT 1 AS ok').get());
+    const schemaVersion = diagnostic.stage('esquema', () => readCurrentSchemaVersion(db));
     if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
       throw new Error(
         `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
       );
     }
 
-    const identity = readDatabaseIdentity(db);
+    const identity = diagnostic.stage('identidad', () => readDatabaseIdentity(db));
     if (!identity || !currentStatus.databaseUuid || identity.databaseUuid !== currentStatus.databaseUuid) {
       throw new Error('La identidad de la base SQLite ha cambiado durante la sesión.');
     }
@@ -711,7 +713,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     // Esta comprobación se ejecuta dentro de la cola IPC, después de
     // comprobar fichero, SELECT, esquema e identidad. Nunca rehabilitar
     // escrituras si sigue pendiente una E/S de heartbeat anterior.
-    if (!clearHeartbeatBlock()) {
+    if (!diagnostic.stage('bloqueo-heartbeat', () => clearHeartbeatBlock())) {
       return {
         ok: false,
         status: getSqliteStatus(),
@@ -738,6 +740,8 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       checkedAt,
       message,
     };
+  } finally {
+    diagnostic.finish();
   }
 }
 
