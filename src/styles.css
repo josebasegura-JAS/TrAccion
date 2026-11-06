@@ -483,6 +483,10 @@ a {
 .global-busy-indicator--error .global-busy-indicator__icon { color: rgb(254 202 202); border-color: rgba(248, 113, 113, 0.3); background: rgba(127, 29, 29, 0.5); }
 .global-busy-indicator--saved .global-busy-indicator__panel { border-color: rgba(52, 211, 153, 0.4); }
 .global-busy-indicator--error .global-busy-indicator__panel { border-color: rgba(248, 113, 113, 0.4); }
+.global-busy-indicator--conflict .global-busy-indicator__panel,
+.global-busy-indicator--unknown .global-busy-indicator__panel { border-color: rgba(251, 191, 36, 0.45); }
+.global-busy-indicator--conflict .global-busy-indicator__icon,
+.global-busy-indicator--unknown .global-busy-indicator__icon { color: rgb(252 211 77); border-color: rgba(251, 191, 36, 0.3); background: rgba(120, 53, 15, 0.5); }
 
 .global-busy-indicator__database { animation: globalBusyPulse 900ms ease-in-out infinite alternate; }
 .global-busy-indicator__copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
