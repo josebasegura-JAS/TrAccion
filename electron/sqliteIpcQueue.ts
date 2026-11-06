@@ -1,6 +1,7 @@
 import { beginSqliteWrite, finishSqliteWrite } from './sqliteIncidentJournal.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { recordMultiuserMetric } from './multiuserPerformanceDiagnostics.js';
+import { notifyMainWatchdogOperation } from './mainWatchdogBridge.js';
 
 /**
  * Cola de serialización para las operaciones IPC que tocan SQLite: garantiza
@@ -211,6 +212,7 @@ export function enqueueSqliteIpc<T>(
     const operationStartedAt = Date.now();
     queuedOperations = Math.max(0, queuedOperations - 1);
     runningOperation = { name: operationName, startedAt: operationStartedAt, timedOut: false };
+    notifyMainWatchdogOperation('start', operationName);
     const writeJournalId = readOnly ? null : beginSqliteWrite(operationName);
     const operationPromise = sqliteIpcContext.run(
       { operationName, readOnly },
@@ -231,6 +233,7 @@ export function enqueueSqliteIpc<T>(
       if (writeJournalId) finishSqliteWrite(writeJournalId, operationName, 'failed', error instanceof Error ? error.name : 'Error no tipificado');
       throw error;
     } finally {
+      notifyMainWatchdogOperation('finish', operationName);
       runningOperation = null;
       const operationMs = Date.now() - operationStartedAt;
       recordMultiuserMetric('ipc-run', operationName, operationMs, runningOperationFailed);

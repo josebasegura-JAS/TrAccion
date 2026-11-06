@@ -1,4 +1,15 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+/**
+ * Evidencia de cambio de red del navegador (no equivale a disponibilidad SMB).
+ * No lee interfaces, direcciones IP, credenciales ni carpetas compartidas.
+ */
+window.addEventListener('online', () => ipcRenderer.send('app:network-transition-diagnostic', 'online'));
+window.addEventListener('offline', () => ipcRenderer.send('app:network-transition-diagnostic', 'offline'));
+const networkInformation = (navigator as Navigator & {
+  connection?: { addEventListener?: (event: 'change', listener: () => void) => void };
+}).connection;
+networkInformation?.addEventListener?.('change', () => ipcRenderer.send('app:network-transition-diagnostic', 'connection-change'));
+
 
 const createOutlookDraft = (payload: unknown) =>
   ipcRenderer.invoke('especiales:create-outlook-draft', payload);
