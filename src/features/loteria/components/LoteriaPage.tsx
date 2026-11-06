@@ -12,6 +12,7 @@ import {
   Plus,
   Save,
   Search,
+  RotateCcw,
   Ticket,
   UserRound,
   UserRoundPlus,
@@ -39,6 +40,7 @@ import {
 import { useLoteriaStore } from '../store/useLoteriaStore';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { hasLotteryRemoteConflict, reconcileLotteryDraft } from '../domain/loteriaDraftSync';
 import { exportSavedLotteryCampaign, isLotteryExcelPending } from '../domain/loteriaExcelPending';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
@@ -70,6 +72,7 @@ export function LoteriaPage() {
   const campaign = useLoteriaStore((state) => state.campaign);
   const load = useLoteriaStore((state) => state.load);
   const saveCampaign = useLoteriaStore((state) => state.saveCampaign);
+  const startNextCampaign = useLoteriaStore((state) => state.startNextCampaign);
   const employees = useEmployeeStore((state) => state.employees);
   const rutaExportacionLoteria = useConfiguracionStore((state) => state.rutaExportacionLoteria);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
@@ -87,6 +90,9 @@ export function LoteriaPage() {
   const [message, setMessage] = useState('');
   const [excelPending, setExcelPending] = useState(false);
   const [remoteConflict, setRemoteConflict] = useState(false);
+  const [workflowSaving, setWorkflowSaving] = useState(false);
+  const [openingCampaign, setOpeningCampaign] = useState(false);
+  const { confirm: confirmCampaign, dialogNode: campaignDialogNode } = useAppDialog();
   const [excelSyncing, setExcelSyncing] = useState(false);
   const previousSavedCampaign = useRef(campaign);
 
@@ -138,7 +144,7 @@ export function LoteriaPage() {
 
   const septemberDone = draft.workflow.loteroAvisado && draft.workflow.encargoConfirmado;
   const octoberDone = draft.workflow.participantesPreparados && draft.workflow.avisoPersonasEnviado;
-  const seguimientoDone = draft.workflow.seguimientoIniciado;
+  const seguimientoDone = draft.workflow.seguimientoFinalizado;
   const cierreDone = draft.workflow.campanaCerrada;
 
   const recommendedStep = useMemo(() => {
@@ -160,7 +166,7 @@ export function LoteriaPage() {
         action: 'Abrir participantes de octubre',
       };
     }
-    if (!seguimientoDone || pendingAmount > 0 || availableNumero1 < 0 || availableNumero2 < 0) {
+    if (!seguimientoDone) {
       const detail = availableNumero1 < 0 || availableNumero2 < 0
         ? 'Hay más décimos solicitados que encargados en alguno de los números. Corrige las cantidades antes de cerrar.'
         : pendingAmount > 0
@@ -179,7 +185,9 @@ export function LoteriaPage() {
         section: 'cierre' as WorkspaceSection,
         eyebrow: 'Siguiente acción recomendada',
         title: 'Cuadrar y cerrar la campaña',
-        detail: 'No quedan cobros pendientes y las existencias cuadran. Revisa el resumen final antes de cerrar.',
+        detail: pendingAmount > 0 || availableNumero1 < 0 || availableNumero2 < 0
+          ? 'Hay importes pendientes o un descuadre de décimos. Revísalos y, si procede, cierra expresamente la campaña dejando constancia en el resumen.'
+          : 'Revisa el resumen final y confirma el cierre de la campaña.',
         action: 'Abrir cierre',
       };
     }
@@ -343,22 +351,91 @@ export function LoteriaPage() {
     setMessage(checked ? 'Octubre revisado. Puedes seguir incorporando participantes.' : 'Octubre vuelve a quedar pendiente.');
   };
 
-  const setCampaignClosed = (value: boolean) => {
+  const saveWorkflowReview = async (next: LotteryCampaign, success: string): Promise<void> => {
+    if (workflowSaving || remoteConflict) {
+      setMessage('No es posible modificar el cierre mientras hay otro guardado pendiente o un conflicto entre equipos.');
+      return;
+    }
+    setWorkflowSaving(true);
+    try {
+      const result = await saveCampaign(next);
+      if (!result.ok) {
+        setMessage(result.message || 'No se ha podido guardar el estado de la campaña.');
+        return;
+      }
+      setDraft(next);
+      clearRecoveryDraft();
+      setMessage(success);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se ha podido actualizar el flujo de Lotería.');
+    } finally {
+      setWorkflowSaving(false);
+    }
+  };
+
+  const setSeguimientoReviewed = async (checked: boolean) => {
+    if (!checked && draft.workflow.campanaCerrada) {
+      setMessage('Reabre primero el paso 4 antes de volver a marcar el seguimiento como pendiente.');
+      return;
+    }
+    const next: LotteryCampaign = {
+      ...draft,
+      workflow: {
+        ...draft.workflow,
+        seguimientoIniciado: checked ? true : draft.workflow.seguimientoIniciado,
+        seguimientoFinalizado: checked,
+      },
+    };
+    await saveWorkflowReview(next, checked ? 'Paso 3 · Seguimiento revisado y guardado.' : 'Paso 3 · Seguimiento vuelve a estar pendiente.');
+  };
+
+  const setCampaignClosed = async (value: boolean) => {
+    if (value && !draft.workflow.seguimientoFinalizado) {
+      setMessage('Marca primero el paso 3 · Seguimiento como revisado.');
+      return;
+    }
     if (value) {
+      const warnings: string[] = [];
       const available1 = lotteryAvailableCountByNumber(draft, 1);
       const available2 = lotteryAvailableCountByNumber(draft, 2);
-      if (available1 < 0 || available2 < 0) {
-        setMessage('No se puede cerrar la campaña: hay más décimos solicitados que encargados en alguno de los números.');
-        return;
-      }
-      if (lotteryPendingPaymentAmount(draft) > 0) {
-        setMessage('No se puede cerrar la campaña mientras existan importes pendientes de cobro.');
-        return;
-      }
+      if (available1 < 0 || available2 < 0) warnings.push('Hay más décimos solicitados que encargados en alguno de los números.');
+      const pending = lotteryPendingPaymentAmount(draft);
+      if (pending > 0) warnings.push(`Quedan ${money(pending)} pendientes de cobro.`);
+      const message = warnings.length
+        ? `¿Cerrar la campaña ${draft.year} con estas incidencias?\\n\\n${warnings.join('\\n')}\\n\\nSe conservarán los registros y las cantidades pendientes en el histórico.`
+        : `¿Confirmar el cierre de la campaña de Lotería ${draft.year}? Los registros y arqueos quedarán guardados por ejercicio.`;
+      const confirmed = await confirmCampaign(message, { title: 'Cerrar campaña de Lotería', confirmLabel: 'Cerrar campaña', cancelLabel: 'Cancelar' });
+      if (!confirmed) return;
     }
+    const next: LotteryCampaign = { ...draft, workflow: { ...draft.workflow, campanaCerrada: value } };
+    await saveWorkflowReview(next, value ? `Campaña ${draft.year} cerrada y guardada. Puedes abrir ${draft.year + 1} cuando lo necesites.` : 'Campaña reabierta y guardada.');
+  };
 
-    setWorkflowFlag('campanaCerrada', value);
-    setMessage(value ? 'Campaña preparada para cerrar. Guarda el cierre para confirmarlo.' : 'Campaña reabierta en el borrador.');
+  const openNextCampaign = async () => {
+    if (openingCampaign || workflowSaving) return;
+    if (dirty || remoteConflict) {
+      setMessage('Guarda o descarta los cambios pendientes antes de abrir otra campaña.');
+      return;
+    }
+    const confirmed = await confirmCampaign(
+      `¿Abrir la campaña de Lotería ${draft.year + 1}?\\n\\nSe creará con los pasos pendientes y sin participantes, pagos ni arqueos. La campaña ${draft.year} permanecerá guardada en el histórico.`,
+      { title: 'Nueva campaña de Lotería', confirmLabel: `Abrir campaña ${draft.year + 1}`, cancelLabel: 'Cancelar' },
+    );
+    if (!confirmed) return;
+    setOpeningCampaign(true);
+    try {
+      const result = await startNextCampaign();
+      setMessage(result.message);
+      if (result.ok) {
+        clearRecoveryDraft();
+        setActiveSection(null);
+        setSearch('');
+        setPaymentFilter('todos');
+        setParticipantSearch('');
+      }
+    } finally {
+      setOpeningCampaign(false);
+    }
   };
 
   const updateRequest = (id: string, patch: Partial<LotteryRequest>) => {
@@ -526,6 +603,7 @@ export function LoteriaPage() {
           <>
             <span className="inline-flex h-10 items-center rounded-xl border border-metro-red/40 bg-metro-red/10 px-3 text-xs font-extrabold text-red-200">Lotería {draft.year}</span>
             <ActionButton icon={Save} iconOnly={false} onClick={() => void persist()} disabled={remoteConflict} variant="save">Guardar todo</ActionButton>
+            {cierreDone && <ActionButton icon={Plus} iconOnly={false} onClick={() => void openNextCampaign()} disabled={dirty || remoteConflict || openingCampaign || workflowSaving} variant="add">{openingCampaign ? 'Abriendo campaña…' : `Nueva campaña ${draft.year + 1}`}</ActionButton>}
             <ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} variant="excel">Exportar Excel</ActionButton>
             {excelPending && <ActionButton icon={Download} iconOnly={false} onClick={() => void syncExcel(campaign)} disabled={dirty || excelSyncing} variant="secondary">{excelSyncing ? 'Actualizando Excel…' : 'Reintentar Excel pendiente'}</ActionButton>}
           </>
@@ -542,8 +620,8 @@ export function LoteriaPage() {
             <div className="grid gap-2 lg:grid-cols-4">
               <StepCard active={recommendedStep.section === 'septiembre'} done={septemberDone} icon={CalendarDays} month="1 · Septiembre" title="Encargo" detail={septemberDone ? 'Encargo preparado y confirmado.' : 'Números, cantidades y lotero.'} onClick={() => setActiveSection('septiembre')} reviewed={septemberDone} onReviewChange={(checked) => void setSeptemberReviewed(checked)} />
               <StepCard active={recommendedStep.section === 'octubre'} done={octoberDone} icon={UserRoundPlus} month="2 · Octubre" title="Participantes" detail={octoberDone ? 'Participantes preparados y avisados.' : 'Altas, cantidades y aviso CCO.'} onClick={() => setActiveSection('octubre')} reviewed={octoberDone} onReviewChange={(checked) => void setOctoberReviewed(checked)} />
-              <StepCard active={recommendedStep.section === 'seguimiento'} done={seguimientoDone && pendingAmount === 0 && availableNumero1 >= 0 && availableNumero2 >= 0} icon={Euro} month="3 · Seguimiento" title="Cobros" detail={pendingAmount > 0 ? `${money(pendingAmount)} pendientes de cobro.` : 'Décimos y pagos revisados.'} onClick={() => setActiveSection('seguimiento')} />
-              <StepCard active={recommendedStep.section === 'cierre'} done={cierreDone} icon={ClipboardCheck} month="4 · Cierre" title="Cuadre" detail={cierreDone ? 'Campaña cerrada.' : 'Sobrantes, caja y cierre final.'} onClick={() => setActiveSection('cierre')} />
+              <StepCard active={recommendedStep.section === 'seguimiento'} done={seguimientoDone} icon={Euro} month="3 · Seguimiento" title="Cobros" detail={seguimientoDone ? 'Seguimiento revisado.' : pendingAmount > 0 ? `${money(pendingAmount)} pendientes de cobro.` : 'Décimos y pagos por revisar.'} onClick={() => setActiveSection('seguimiento')} reviewed={seguimientoDone} onReviewChange={(checked) => void setSeguimientoReviewed(checked)} reviewLabel="Seguimiento revisado" />
+              <StepCard active={recommendedStep.section === 'cierre'} done={cierreDone} icon={ClipboardCheck} month="4 · Cierre" title="Cuadre" detail={cierreDone ? 'Campaña cerrada.' : 'Sobrantes, caja y cierre final.'} onClick={() => setActiveSection('cierre')} reviewed={cierreDone} onReviewChange={(checked) => void setCampaignClosed(checked)} reviewLabel="Campaña cerrada" />
             </div>
           </section>
 
@@ -781,6 +859,8 @@ export function LoteriaPage() {
 
       {activeSection === null && <LoteriaHistoricalPanel />}
 
+      {campaignDialogNode}
+      {workflowSaving && <InlineNotice tone="info">Guardando el avance del flujograma…</InlineNotice>}
       {remoteConflict && (
         <InlineNotice tone="warning" action={<ActionButton variant="secondary" onClick={() => { setDraft(campaign); clearRecoveryDraft(); setRemoteConflict(false); }}>Descartar borrador y cargar cambios compartidos</ActionButton>}>
           <span>La campaña compartida ha cambiado mientras editabas. Tu borrador sigue intacto, pero no se permite guardarlo sobre la nueva versión. Copia los cambios que necesites antes de descartarlo.</span>
@@ -810,7 +890,7 @@ export function LoteriaPage() {
             </div>
             <div className="grid gap-3 xl:grid-cols-[0.85fr_1.15fr]">
               <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
-                <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-xs font-extrabold text-metro-text">Resumen por número</h4><label className="inline-flex items-center gap-2 text-xs text-metro-muted"><input checked={draft.workflow.campanaCerrada} onChange={(e) => setCampaignClosed(e.target.checked)} type="checkbox" />Campaña cerrada</label></div>
+                <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-xs font-extrabold text-metro-text">Resumen por número</h4><label className="inline-flex items-center gap-2 text-xs text-metro-muted"><input checked={draft.workflow.campanaCerrada} onChange={(e) => void setCampaignClosed(e.target.checked)} disabled={workflowSaving} type="checkbox" />Campaña cerrada</label></div>
                 <div className="space-y-2">
                   <div className="rounded-xl border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero1 || 'Número 1'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero1)} /><SummaryPill label="Solicitados" value={String(requestedNumero1)} /><SummaryPill label="Disponibles" value={String(availableNumero1)} tone={stockTone(availableNumero1)} /></div></div>
                   <div className="rounded-xl border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero2 || 'Número 2'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero2)} /><SummaryPill label="Solicitados" value={String(requestedNumero2)} /><SummaryPill label="Disponibles" value={String(availableNumero2)} tone={stockTone(availableNumero2)} /></div></div>
