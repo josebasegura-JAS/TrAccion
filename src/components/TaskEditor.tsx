@@ -315,7 +315,8 @@ export function TaskEditor({
                   </section>
                   {!isCreate && task && <TaskLinksSection task={liveTask ?? task} />}
 
-              <TaskCircuitsSection
+              <fieldset disabled={isFormReadOnly} className="border-0 p-0 disabled:opacity-70">
+                <TaskCircuitsSection
                 areaCircuitOptions={areaCircuitOptions}
                 customAreaTarget={customAreaTarget}
                 draft={draft}
@@ -334,6 +335,7 @@ export function TaskEditor({
                 showCircuitPicker={showCircuitPicker}
                 unionCircuitOptions={unionCircuitOptions}
               />
+              </fieldset>
 
 
                 </aside>
