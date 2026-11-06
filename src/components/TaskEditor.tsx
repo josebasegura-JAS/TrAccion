@@ -162,8 +162,8 @@ export function TaskEditor({
               <InlineNotice tone="warning"><strong className="font-semibold">Edición no disponible.</strong> {lockMessage}</InlineNotice>
             )}
 
-            <fieldset disabled={isFormReadOnly} className="grid min-w-0 gap-3 border-0 p-0 lg:grid-cols-[minmax(0,1fr)_minmax(310px,360px)] xl:grid-cols-[minmax(0,1fr)_minmax(330px,390px)] disabled:opacity-70">
-                <div className="min-w-0 space-y-3">
+            <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(310px,360px)] xl:grid-cols-[minmax(0,1fr)_minmax(330px,390px)]">
+                <fieldset disabled={isFormReadOnly} className="min-w-0 space-y-3 border-0 p-0 disabled:opacity-70">
               <TaskGeneralFields
                 creationDate={creationDate}
                 draft={draft}
@@ -229,9 +229,9 @@ export function TaskEditor({
               <TaskEditorSection icon={FileText} title="Observaciones">
                 <Textarea className="min-h-16" value={draft.observaciones} onChange={(e) => setDraft((current) => ({ ...current, observaciones: e.target.value }))} />
               </TaskEditorSection>
-                </div>
+                </fieldset>
                 <aside className="min-w-0 space-y-3">
-                  <TaskStatusPanel draft={draft} setDraft={setDraft} />
+                  <fieldset disabled={isFormReadOnly} className="border-0 p-0 disabled:opacity-70"><TaskStatusPanel draft={draft} setDraft={setDraft} /></fieldset>
                   <section aria-label="Acciones rápidas">
                     <h3 className="sr-only">Acciones rápidas</h3>
                               <div className="rounded-xl border border-sky-300/20 bg-[#102239]/90 p-3">
@@ -340,7 +340,7 @@ export function TaskEditor({
 
 
                 </aside>
-            </fieldset>
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-sky-300/10 bg-[#0c1b2e]/95 px-4 py-2 lg:hidden">
