@@ -5,6 +5,7 @@ import {
   FileText,
   LockKeyhole,
   Printer,
+  Zap,
 } from 'lucide-react';
 import { useState } from 'react';
 import { isTaskClosed, type Task, type TaskDraft } from '../features/tareas/domain/task';
@@ -23,6 +24,7 @@ import { TaskAttachmentsSection } from './task-editor/TaskAttachmentsSection';
 import { TaskCircuitsSection } from './task-editor/TaskCircuitsSection';
 import { TaskEditorSection } from './task-editor/TaskEditorSection';
 import { TaskGeneralFields } from './task-editor/TaskGeneralFields';
+import { TaskStatusPanel } from './task-editor/TaskStatusPanel';
 import { TaskTrackingSection } from './task-editor/TaskTrackingSection';
 import { useTaskEditorController, type TaskCreateOverride } from './task-editor/useTaskEditorController';
 import { useAppDialog } from '../hooks/useAppDialog';
@@ -126,7 +128,7 @@ export function TaskEditor({
       <ModalShell
         blockEditorShortcuts={false}
         labelledBy="task-editor-title"
-        maxWidthClassName="max-w-[1080px]"
+        maxWidthClassName="max-w-[1660px]"
         onClose={() => void requestClose()}
         panelClassName="bg-[#0b1a2c]"
       >
@@ -155,12 +157,13 @@ export function TaskEditor({
         </ModalHeader>
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void handleSubmit(); }}>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 lg:px-4">
             {lockMessage && isFormReadOnly && (
               <InlineNotice tone="warning"><strong className="font-semibold">Edición no disponible.</strong> {lockMessage}</InlineNotice>
             )}
 
-            <fieldset disabled={isFormReadOnly} className="space-y-3 disabled:opacity-70">
+            <fieldset disabled={isFormReadOnly} className="grid min-w-0 gap-3 border-0 p-0 lg:grid-cols-[minmax(0,1fr)_minmax(310px,360px)] xl:grid-cols-[minmax(0,1fr)_minmax(330px,390px)] disabled:opacity-70">
+                <div className="min-w-0 space-y-3">
               <TaskGeneralFields
                 creationDate={creationDate}
                 draft={draft}
@@ -174,7 +177,7 @@ export function TaskEditor({
               />
 
               <TaskEditorSection icon={FileText} title="Descripción">
-                <Textarea className="min-h-20" value={draft.descripcion} onChange={(e) => setDraft((current) => ({ ...current, descripcion: e.target.value }))} />
+                <Textarea className="min-h-[85px] border-sky-200/15 bg-[#233b55]/60 text-sm leading-6" value={draft.descripcion} onChange={(e) => setDraft((current) => ({ ...current, descripcion: e.target.value }))} />
               </TaskEditorSection>
 
               <TaskTrackingSection
@@ -208,28 +211,6 @@ export function TaskEditor({
                 onCompleteQuickAction={completeQuickAction}
               />
 
-              {!isCreate && task && <TaskLinksSection task={liveTask ?? task} />}
-
-              <TaskCircuitsSection
-                areaCircuitOptions={areaCircuitOptions}
-                customAreaTarget={customAreaTarget}
-                draft={draft}
-                isCommitteeCircuit={isCommitteeCircuit}
-                isParitariaCircuit={isParitariaCircuit}
-                selectedAreaTarget={selectedAreaTarget}
-                selectedUnionOrigin={selectedUnionOrigin}
-                sendToDirection={sendToDirection}
-                sendToUnion={sendToUnion}
-                setCustomAreaTarget={setCustomAreaTarget}
-                setDraft={setDraft}
-                setSelectedAreaTarget={setSelectedAreaTarget}
-                setSendToDirection={setSendToDirection}
-                setSendToUnion={setSendToUnion}
-                setShowCircuitPicker={setShowCircuitPicker}
-                showCircuitPicker={showCircuitPicker}
-                unionCircuitOptions={unionCircuitOptions}
-              />
-
               <TaskAttachmentsSection
                 documentStatus={documentStatus}
                 draft={draft}
@@ -248,13 +229,17 @@ export function TaskEditor({
               <TaskEditorSection icon={FileText} title="Observaciones">
                 <Textarea className="min-h-16" value={draft.observaciones} onChange={(e) => setDraft((current) => ({ ...current, observaciones: e.target.value }))} />
               </TaskEditorSection>
-            </fieldset>
-          </div>
-
-          <div className="shrink-0 border-t border-sky-300/10 bg-[#0c1b2e]/95 px-3 py-2">
-            <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden">
+                </div>
+                <aside className="min-w-0 space-y-3">
+                  <TaskStatusPanel draft={draft} setDraft={setDraft} />
+                  <section aria-label="Acciones rápidas">
+                    <h3 className="sr-only">Acciones rápidas</h3>
+                              <div className="rounded-xl border border-sky-300/20 bg-[#102239]/90 p-3">
+            <div className="grid grid-cols-2 gap-2 [&_button]:w-full">
+              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar</ActionButton>
+              <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">Cancelar</ActionButton>
               {!isCreate && task && (
-                <ActionButton disabled={isFormReadOnly} iconOnly={false} variant="delete" onClick={() => void (async () => {
+                <ActionButton disabled={isFormReadOnly} iconOnly={false} className="col-span-2" variant="delete" onClick={() => void (async () => {
                   const result = await removeTask(task.id, loadedUpdatedAt);
                   if (!result.ok) { setSaveStatus(result.message); setSaveStatusIsError(true); return; }
                   clearRecoveryDraft(); onDone();
@@ -281,7 +266,7 @@ export function TaskEditor({
                 <>
                   <ActionButton
                     icon={Printer}
-                    iconOnly
+                    iconOnly={false}
                     title="Imprimir"
                     onClick={() => setTaskPrintPreviewHtml(buildTaskReportHtml({ task, draft }))}
                     type="button"
@@ -301,7 +286,7 @@ export function TaskEditor({
                   </ActionButton>
                 </>
               )}
-              {!isCreate && task && <AuditHistoryButton className="px-2" entityId={task.id} entityTitle={task.titulo || 'Tarea sin título'} module="tareas" />}
+              {!isCreate && task && <AuditHistoryButton className="px-2 w-full" entityId={task.id} entityTitle={task.titulo || 'Tarea sin título'} module="tareas" />}
               {!isCreate && task && (
                 <ActionButton
                   disabled={!criterionLinkReady || (isFormReadOnly && !linkedCriterionId)}
@@ -315,18 +300,54 @@ export function TaskEditor({
                     : 'Criterio RRLL'}
                 </ActionButton>
               )}
-              <div className="min-w-0 flex-1" />
-              <InlineSaveFeedback />
+              
+              <div className="col-span-2"><InlineSaveFeedback /></div>
               {saveStatus && saveStatusIsError && (
                 <p
-                  className="max-w-[24rem] truncate px-1 text-right text-[11px] font-semibold text-red-300"
+                  className="col-span-2 break-words px-1 text-left text-[11px] font-semibold text-red-300"
                   title={saveStatus}
                 >
                   {saveStatus}
                 </p>
               )}
-              <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">Cancelar</ActionButton>
-              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar</ActionButton>
+
+
+            </div>
+          </div>
+
+                  </section>
+                                {!isCreate && task && <TaskLinksSection task={liveTask ?? task} />}
+
+              <TaskCircuitsSection
+                areaCircuitOptions={areaCircuitOptions}
+                customAreaTarget={customAreaTarget}
+                draft={draft}
+                isCommitteeCircuit={isCommitteeCircuit}
+                isParitariaCircuit={isParitariaCircuit}
+                selectedAreaTarget={selectedAreaTarget}
+                selectedUnionOrigin={selectedUnionOrigin}
+                sendToDirection={sendToDirection}
+                sendToUnion={sendToUnion}
+                setCustomAreaTarget={setCustomAreaTarget}
+                setDraft={setDraft}
+                setSelectedAreaTarget={setSelectedAreaTarget}
+                setSendToDirection={setSendToDirection}
+                setSendToUnion={setSendToUnion}
+                setShowCircuitPicker={setShowCircuitPicker}
+                showCircuitPicker={showCircuitPicker}
+                unionCircuitOptions={unionCircuitOptions}
+              />
+
+
+                </aside>
+            </fieldset>
+          </div>
+
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-sky-300/10 bg-[#0c1b2e]/95 px-4 py-2 lg:hidden">
+            <InlineSaveFeedback />
+            <div className="flex items-center gap-2">
+              <ActionButton onClick={() => void requestClose()} variant="secondary">Cancelar</ActionButton>
+              <ActionButton disabled={!canSubmit} type="submit" variant="save">Guardar</ActionButton>
             </div>
           </div>
         </form>
