@@ -4,6 +4,7 @@ import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
 import {
   acquireRecordLockInTransaction,
   getRecordLockInTransaction,
+  listOtherRecordLocks,
   heartbeatRecordLockInTransaction,
   releaseRecordLockInTransaction,
   recordLockError,
@@ -42,6 +43,7 @@ export interface RecordLockService {
   heartbeatRecordLock: (payload: RecordLockPayload) => Promise<RecordLockResult>;
   releaseRecordLock: (payload: RecordLockPayload) => Promise<RecordLockResult>;
   getRecordLock: (payload: RecordLockPayload) => Promise<RecordLockResult>;
+  listOtherLocks: (moduleName: string) => Promise<{ ok: boolean; locks: Record<string, RecordLockResult['lock']>; message: string }>;
 }
 
 function isTemporaryDatabaseOperationLockError(error: unknown): boolean {
@@ -184,5 +186,15 @@ export function createRecordLockService(
         (db) => releaseRecordLockInTransaction(db, payload, currentOwnerContext()),
       ),
     getRecordLock: (payload) => readLockWithoutExclusiveSmbLease(payload),
+    listOtherLocks: async (moduleName) => {
+      try {
+        if (!moduleName.trim()) return { ok: false, locks: {}, message: 'Módulo inválido.' };
+        const db = ensureRecordLockDatabase();
+        if (!db) return { ok: false, locks: {}, message: 'SQLite no disponible.' };
+        return { ok: true, locks: listOtherRecordLocks(db, moduleName.trim(), currentOwnerContext(), new Date().toISOString()), message: '' };
+      } catch (error) {
+        return { ok: false, locks: {}, message: error instanceof Error ? error.message : 'Error al consultar bloqueos.' };
+      }
+    },
   };
 }
