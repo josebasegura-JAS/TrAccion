@@ -11,8 +11,11 @@ export function TaskQuickActionsPreview({ task }: { task: Task }) {
   const actions = getTaskQuickActions(task);
   const pending = actions.filter((action) => !action.completedAt).length;
   const completed = actions.length - pending;
+  const today = new Date();
+  const todayLocal = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
   return (
     <section
+      id={`task-actions-${task.id}`}
       aria-label={`Acciones vinculadas a ${task.titulo}`}
       className="px-4 py-3 sm:pl-9"
     >
@@ -26,7 +29,7 @@ export function TaskQuickActionsPreview({ task }: { task: Task }) {
       <ul className="space-y-1.5">
         {actions.map((action) => {
           const completedAction = Boolean(action.completedAt);
-          const isOverdue = !completedAction && Boolean(action.fechaObjetivo) && action.fechaObjetivo! < new Date().toLocaleDateString('en-CA');
+          const isOverdue = !completedAction && Boolean(action.fechaObjetivo) && action.fechaObjetivo < todayLocal;
           return (
             <li
               className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-lg border border-metro-border/60 bg-metro-surface/55 px-3 py-2 text-xs"
