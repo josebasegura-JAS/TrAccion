@@ -289,6 +289,7 @@ export function useTaskEditorController({
     if (!isCreate &&
       sendToDirection === recoveryBaseline.sendToDirection &&
       sendToUnion === recoveryBaseline.sendToUnion &&
+      (!sendToUnion || draft.sindicato === recoveryBaseline.draft.sindicato) &&
       selectedAreaTarget === recoveryBaseline.selectedAreaTarget) {
       return Promise.resolve({ ok: true, message: 'Circuitos de Coordinación sin cambios.' });
     }
