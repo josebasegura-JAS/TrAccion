@@ -120,9 +120,10 @@ describe('sincronización ligera de listados de Tareas', () => {
       closedAt: '2026-11-09T08:01:00.000Z',
     });
     const updatedHistorical = { ...closed, titulo: 'Histórica actualizada' };
+    const deleted = { ...task('deleted', 'Eliminada', '2026-11-09T08:01:00.000Z'), deletedAt: '2026-11-09T08:04:00.000Z' };
     native.loadTaskRecords.mockResolvedValueOnce(snapshot(active))
       .mockResolvedValueOnce(snapshot(closed))
-      .mockResolvedValueOnce(snapshot(active, updatedHistorical));
+      .mockResolvedValueOnce(snapshot(active, updatedHistorical, deleted));
 
     await useTaskStore.getState().reloadFromStorage();
     await useTaskStore.getState().loadHistoricalTasks();
@@ -134,6 +135,7 @@ describe('sincronización ligera de listados de Tareas', () => {
     const state = useTaskStore.getState();
     expect(state.historicalTasksLoaded).toBe(true);
     expect(state.tasks.find((entry) => entry.id === 'h')?.titulo).toBe('Histórica actualizada');
+    expect(state.tasks.some((entry) => entry.id === 'deleted')).toBe(false);
     expect(native.loadTaskRecords).toHaveBeenLastCalledWith({ mode: 'all', id: undefined });
   });
 
