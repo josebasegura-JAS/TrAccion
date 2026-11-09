@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { Employee } from '../../plantilla/domain/employee';
 import {
   validateNewTeletrabajoAdmission,
+  getTeletrabajoModalidad,
+  isTeletrabajoOrdinaryAdmissionClosed,
   validateTeletrabajoClassificationChange,
 } from '../domain/modalidadTramitacion';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
@@ -726,6 +728,16 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
             if (expectedUpdatedAt && currentRecord.updatedAt !== expectedUpdatedAt) {
               throw new Error(
                 'Esta solicitud ha sido modificada por otro usuario. Recarga antes de eliminarla.',
+              );
+            }
+
+            // La pertenencia a la campaña ordinaria queda congelada al cerrar
+            // su admisión. No permitir borrar ordinarias desde la vía normal;
+            // las rectificaciones excepcionales requieren flujo auditado.
+            if (getTeletrabajoModalidad(latestSolicitud) === 'ordinaria'
+              && isTeletrabajoOrdinaryAdmissionClosed(latestSolicitud.periodo, new Date())) {
+              throw new Error(
+                'La campaña ordinaria está cerrada. No se puede eliminar este expediente desde la gestión habitual; requiere una rectificación justificada.',
               );
             }
 
