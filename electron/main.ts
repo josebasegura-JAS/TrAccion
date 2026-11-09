@@ -1,5 +1,6 @@
 import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
 import { registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
+import { startLocalInstanceUpdateListener } from './localUpdateInstances.js';
 import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
 import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics.js';
 import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
@@ -336,6 +337,24 @@ if (!app.requestSingleInstanceLock()) {
     const startupStartedAt = Date.now();
     startupMark('Electron preparado');
     app.setAppUserModelId('com.metro.rrll.traccion');
+    // Cada proceso portable anuncia su presencia únicamente en este PC.
+    // Al actualizar, las otras instancias podrán solicitar su propio cierre
+    // ordenado (formularios y cierre SQLite) sin matar procesos.
+    try {
+      const unregisterLocalPeer = await startLocalInstanceUpdateListener(
+        async () => {
+          const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed());
+          return window ? rendererAllowsAppClose(window) : false;
+        },
+        () => {
+          isRendererCloseApproved = true;
+          app.quit();
+        },
+      );
+      app.on('will-quit', unregisterLocalPeer);
+    } catch (error) {
+      console.warn('[actualizador] No se ha podido registrar la coordinación entre instancias locales.', error);
+    }
     // Diagnóstico ligero y LOCAL, no escribe ni consulta la carpeta SMB.
     // Cada equipo genera su propio fichero para comparar dos usuarios.
     let multiuserReportWriting = false;
