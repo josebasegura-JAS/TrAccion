@@ -158,7 +158,24 @@ export function registerCoreDatabaseIpc(): void {
     const updatesDirectoryPath = await getUpdatesDirectory();
     return checkForAppUpdate(app.getVersion(), updatesDirectoryPath);
   });
-  ipcMain.handle('app-update:apply', async () => {
+  ipcMain.handle('app-update:apply', async (event) => {
+    // Verificar también el editor de la instancia que inicia la actualización.
+    // No preparar un .cmd que pueda reemplazar el EXE si aquí hay cambios pendientes.
+    const initiatingWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!initiatingWindow || initiatingWindow.isDestroyed()) {
+      return { ok: false, message: 'No se ha podido identificar la ventana que solicita la actualización.' };
+    }
+    try {
+      const approved: unknown = await initiatingWindow.webContents.executeJavaScript(
+        'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : true',
+        true,
+      );
+      if (approved === false) {
+        return { ok: false, message: 'Actualización cancelada para conservar los cambios sin guardar.' };
+      }
+    } catch {
+      return { ok: false, message: 'No se ha podido verificar el estado de edición. La actualización no continuará.' };
+    }
     const updatesDirectoryPath = await getUpdatesDirectory();
     const result = await applyAppUpdate(app.getVersion(), updatesDirectoryPath);
     if (result.ok) {
