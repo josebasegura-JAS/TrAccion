@@ -85,11 +85,11 @@ function reuseUnchangedTasks(previous: Task[], incoming: Task[]): Task[] {
 function activeSnapshotState(
   state: TaskStateStore,
   incoming: Task[],
-): Partial<TaskStateStore> {
+): TaskStateStore | Partial<TaskStateStore> {
   const tasks = reuseUnchangedTasks(state.tasks, incoming);
   const selectedTaskId = selectedTaskIdAfterRefresh(tasks, state.selectedTaskId);
   if (tasks === state.tasks && selectedTaskId === state.selectedTaskId && !state.historicalTasksLoaded) {
-    return {};
+    return state;
   }
   return { tasks, selectedTaskId, historicalTasksLoaded: false };
 }
