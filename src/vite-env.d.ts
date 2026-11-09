@@ -230,6 +230,7 @@ interface TraccionApi {
   heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   getRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
+  listOtherTaskLocks?: () => Promise<{ ok: boolean; locks: Record<string, TraccionRecordLockOwnerInfo | null>; message: string }>;
   loadSorteosRecords?: () => Promise<TraccionSorteosRecordsSnapshot>;
   saveSorteosSnapshotIfUnchanged?: (snapshot: TraccionConditionalSorteosSnapshot) => Promise<TraccionConditionalSorteosSaveResult>;
   loadEmployeeRecords?: () => Promise<TraccionEmployeeRecordsSnapshot>;

@@ -7,6 +7,7 @@ import {
   Clock3,
   FileSpreadsheet,
   ListChecks,
+  LockKeyhole,
   PlayCircle,
   Settings,
 } from 'lucide-react';
@@ -312,6 +313,30 @@ export function TareasPage({
   const [attentionOnly, setAttentionOnly] = useState(false);
   const [attentionOrder, setAttentionOrder] = useState(true);
   const [windowsUser, setWindowsUser] = useState('');
+  const [otherTaskLocks, setOtherTaskLocks] = useState<Record<string, TraccionRecordLockOwnerInfo | null>>({});
+  useEffect(() => {
+    let active = true;
+    let querying = false;
+    const refresh = async () => {
+      if (querying || !window.traccion?.listOtherTaskLocks || document.visibilityState === 'hidden') return;
+      querying = true;
+      try {
+        const result = await window.traccion.listOtherTaskLocks();
+        if (active && result.ok) setOtherTaskLocks(result.locks);
+      } catch (error) {
+        console.warn('[tareas] No se han podido actualizar los indicadores de edición.', error);
+      } finally { querying = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 20_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [editorMode]);
   const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -546,7 +571,7 @@ export function TareasPage({
           const activity = taskFollowUpLabel(task, Date.now());
           return (
             <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-1.5">{pendingQuickActions(task) > 0 && <span title={`${pendingQuickActions(task)} acciones pendientes`} className="inline-flex shrink-0 items-center gap-0.5 text-red-400"><Bell size={14}/><span className="text-[10px] font-bold">{pendingQuickActions(task)}</span></span>}<span className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</span></div>
+              <div className="flex min-w-0 items-center gap-1.5">{(otherTaskLocks[task.id] || otherTaskLocks.__module__) && <span className="inline-flex shrink-0 text-amber-400" title="Esta tarea está siendo editada por otra persona" aria-label="Edición reservada por otra persona"><LockKeyhole size={14} aria-hidden="true" /></span>}{pendingQuickActions(task) > 0 && <span title={`${pendingQuickActions(task)} acciones pendientes`} className="inline-flex shrink-0 items-center gap-0.5 text-red-400"><Bell size={14}/><span className="text-[10px] font-bold">{pendingQuickActions(task)}</span></span>}<span className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</span></div>
               {activity && <div className={`mt-0.5 truncate text-[11px] font-normal leading-4 ${activity.className}`} title={activity.label}>{activity.label}</div>}
             </div>
           );
@@ -617,7 +642,7 @@ export function TareasPage({
         className: 'text-metro-muted',
       },
     ],
-    [taskStates],
+    [taskStates, otherTaskLocks],
   );
 
   const sortedTasks = useMemo(

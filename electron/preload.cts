@@ -114,6 +114,7 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('recordLock:release', payload),
   getRecordLock: (payload: { module: string; recordId: string }) =>
     ipcRenderer.invoke('recordLock:get', payload),
+  listOtherTaskLocks: () => ipcRenderer.invoke('recordLock:list-other-tasks'),
   loadSorteosRecords: () => ipcRenderer.invoke('sorteos:load-records'),
   saveSorteosSnapshotIfUnchanged: (snapshot: {
     draws: Array<{ id: string; value: string }>;

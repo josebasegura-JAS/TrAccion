@@ -15,6 +15,7 @@ import {
   createManualLocalBackup,
   getPersistedRecordSnapshot,
   getRecordLock,
+  listOtherTaskLocks,
   getSqliteStatus,
   checkSqliteHealth,
   heartbeatRecordLock,
@@ -402,6 +403,7 @@ export function registerCoreDatabaseIpc(): void {
       ? enqueueSqliteIpc('recordLock:release', () => releaseRecordLock(normalized))
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
+  ipcMain.handle('recordLock:list-other-tasks', () => enqueueSqliteIpc('recordLock:list-other-tasks', () => listOtherTaskLocks(), true));
   ipcMain.handle('recordLock:get', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
