@@ -1683,6 +1683,10 @@ export async function getRecordLock(payload: RecordLockPayload): Promise<RecordL
   return getRecordLockService().getRecordLock(payload);
 }
 
+export async function listOtherTaskLocks() {
+  return getRecordLockService().listOtherLocks('tareas');
+}
+
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
   const previousStatus = getSqliteStatus();
   const previousDatabasePath = database ? previousStatus.path : null;
