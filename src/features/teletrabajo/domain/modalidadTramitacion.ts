@@ -83,6 +83,16 @@ export function validateTeletrabajoClassificationChange(
 ): { ok: true; modalidad?: TeletrabajoModalidadTramitacion } | { ok: false; message: string } {
   const previousClass = getTeletrabajoModalidad(previous);
   const nextClass = classifyTeletrabajoSolicitud(next);
+  // La pertenencia a una campaña se compone de periodo + modalidad.
+  // No basta con comparar "ordinaria": cambiar de 2026 a 2027 también
+  // alteraría retroactivamente el censo de la campaña anterior.
+  if (previousClass !== 'sin_clasificar'
+    && getTeletrabajoOrdinaryDeadline(previous.periodo) !== getTeletrabajoOrdinaryDeadline(next.periodo)) {
+    return {
+      ok: false,
+      message: 'No se puede mover una solicitud ya clasificada a otro periodo editando su ficha. Requiere una rectificación expresa y auditada.',
+    };
+  }
   if (previousClass !== 'sin_clasificar' && nextClass !== previousClass) {
     return {
       ok: false,
