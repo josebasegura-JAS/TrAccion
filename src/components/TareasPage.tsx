@@ -571,7 +571,7 @@ export function TareasPage({
           const activity = taskFollowUpLabel(task, Date.now());
           return (
             <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-1.5">{(otherTaskLocks[task.id] || otherTaskLocks.__module__) && <LockKeyhole size={14} className="shrink-0 text-amber-400" aria-label="Edición reservada por otra persona" title="Esta tarea está siendo editada por otra persona" />}{pendingQuickActions(task) > 0 && <span title={`${pendingQuickActions(task)} acciones pendientes`} className="inline-flex shrink-0 items-center gap-0.5 text-red-400"><Bell size={14}/><span className="text-[10px] font-bold">{pendingQuickActions(task)}</span></span>}<span className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</span></div>
+              <div className="flex min-w-0 items-center gap-1.5">{(otherTaskLocks[task.id] || otherTaskLocks.__module__) && <span className="inline-flex shrink-0 text-amber-400" title="Esta tarea está siendo editada por otra persona" aria-label="Edición reservada por otra persona"><LockKeyhole size={14} aria-hidden="true" /></span>}{pendingQuickActions(task) > 0 && <span title={`${pendingQuickActions(task)} acciones pendientes`} className="inline-flex shrink-0 items-center gap-0.5 text-red-400"><Bell size={14}/><span className="text-[10px] font-bold">{pendingQuickActions(task)}</span></span>}<span className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</span></div>
               {activity && <div className={`mt-0.5 truncate text-[11px] font-normal leading-4 ${activity.className}`} title={activity.label}>{activity.label}</div>}
             </div>
           );
