@@ -37,6 +37,13 @@ runs:
             Write-Error "npm ci falló con código $exitCode. Error no recuperable o máximo de intentos alcanzado."
             exit $exitCode
           }
+          # El origen de GitHub para binarios de Electron ha devuelto 504
+          # repetidamente. Electron documenta ELECTRON_MIRROR como alternativa.
+          # Solo cambiar el origen del binario al fallar la descarga normal.
+          if ($output -match '(?i)(node_modules[\\/]electron|electron.*install\.js|electron.*download|HTTPError: Response code 504)') {
+            $env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
+            Write-Warning "Descarga de Electron no disponible; se usará el mirror documentado para el siguiente intento."
+          }
           $delaySeconds = 15 * $attempt
           Write-Warning "Descarga transitoria fallida; nuevo intento en $delaySeconds segundos."
           Start-Sleep -Seconds $delaySeconds
