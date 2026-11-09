@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import type { Employee } from '../../plantilla/domain/employee';
+import {
+  validateNewTeletrabajoAdmission,
+  validateTeletrabajoClassificationChange,
+} from '../domain/modalidadTramitacion';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
 import {
   importEncuestaFromFile,
@@ -190,10 +194,15 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     }
   },
   createWithConcurrencyCheck: async (draft) => {
-    const now = new Date().toISOString();
+    const normalizedDraft = normalizeDraft(draft);
+    const nowDate = new Date();
+    const admission = validateNewTeletrabajoAdmission(normalizedDraft, nowDate);
+    if (!admission.ok) return { ok: false, message: admission.message };
+    const now = nowDate.toISOString();
     const solicitud: TeletrabajoSolicitud = {
       id: createSolicitudId(),
-      ...normalizeDraft(draft),
+      ...normalizedDraft,
+      modalidadTramitacion: admission.modalidad,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -269,10 +278,13 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
               );
             }
 
+            const classification = validateTeletrabajoClassificationChange(latestSolicitud, normalizedDraft);
+            if (!classification.ok) throw new Error(classification.message);
             registerTeletrabajoUpdateAudit(latestSolicitud, normalizedDraft);
             const updatedSolicitud: TeletrabajoSolicitud = {
               ...latestSolicitud,
               ...normalizedDraft,
+              ...(classification.modalidad ? { modalidadTramitacion: classification.modalidad } : {}),
               updatedAt: new Date().toISOString(),
             };
             const saveResult = await saveTeletrabajoSolicitudToSqlite(
