@@ -16,9 +16,9 @@ export async function loadFreshTaskAfterLock(taskId: string): Promise<Task> {
 }
 
 /** Nunca reemplazar un borrador que ya contiene cambios sin guardar. */
-export function hasUnsavedTaskEditorChanges(
-  current: Record<string, unknown>,
-  baseline: Record<string, unknown>,
+export function hasUnsavedTaskEditorChanges<T extends object>(
+  current: T,
+  baseline: T,
 ): boolean {
   return JSON.stringify(current) !== JSON.stringify(baseline);
 }
