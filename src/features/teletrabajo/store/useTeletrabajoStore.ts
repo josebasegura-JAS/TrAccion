@@ -315,6 +315,17 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     const baseSolicitudes = await loadSolicitudesFromSqliteOrStorage();
     const result = await importEncuestaFromFile(file, employees, baseSolicitudes, options);
 
+    // Las importaciones ordinarias también respetan el cierre de admisión.
+    // No se bloquea la modificación posterior de expedientes existentes.
+    const existingIds = new Set(baseSolicitudes.map((item) => item.id));
+    for (const candidate of result.solicitudes) {
+      if (existingIds.has(candidate.id)) continue;
+      const admission = validateNewTeletrabajoAdmission(candidate, new Date());
+      if (!admission.ok) {
+        throw new Error(`No se puede incorporar una solicitud desde la encuesta: ${admission.message}`);
+      }
+    }
+
     if (result.diagnostics.unresolvedPuestos.length > 0) {
       return result;
     }
