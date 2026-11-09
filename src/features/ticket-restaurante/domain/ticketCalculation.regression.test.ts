@@ -94,4 +94,32 @@ describe('Ticket Restaurante — regresiones de cálculo mensual', () => {
     expect(march.rows[0]).toMatchObject({ ausenciasMes: 0, ticketsFinales: 22 });
     expect(absence.afectaTicket).toBe(true);
   });
+  it('ENF iniciada antes de marzo se descuenta en abril sin generar deuda anterior al corte', () => {
+    const absence: TicketRestaurantAbsence = {
+      id: 'enf-larga', empleado: '123', nombreApellidos: 'Ana Metro',
+      desde: '2025-12-03', hasta: '2026-04-30', motivo: 'ENF', totalDias: 149,
+      afectaTicket: true, createdAt: now, updatedAt: now, deletedAt: null,
+    };
+    const march = calculateTicketContribution([person], [calendar], [absence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG, 2026, 3);
+    const april = calculateMonthlyTicketOrder([person], [calendar], [absence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG, 2026, 4);
+    expect(march.rows[0]).toMatchObject({ ausenciasMes: 22, ticketsFinales: 0 });
+    expect(april.rows[0]).toMatchObject({ deudaEntrante: 22, ausenciasAplicadas: 22, ticketsFinales: 0 });
+  });
+
+  it('no descuenta días de ENF anteriores al 1 de marzo', () => {
+    const absence: TicketRestaurantAbsence = {
+      id: 'enf-corte', empleado: '123', nombreApellidos: 'Ana Metro',
+      desde: '2026-02-20', hasta: '2026-03-03', motivo: 'ENF', totalDias: 12,
+      afectaTicket: true, createdAt: now, updatedAt: now, deletedAt: null,
+    };
+    const march = calculateTicketContribution([person], [calendar], [absence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG, 2026, 3);
+    const april = calculateMonthlyTicketOrder([person], [calendar], [absence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG, 2026, 4);
+    expect(march.rows[0]).toMatchObject({ ausenciasMes: 2, ticketsFinales: 20 });
+    expect(april.rows[0]).toMatchObject({ deudaEntrante: 2, ausenciasAplicadas: 2, ticketsFinales: 20 });
+  });
+
 });

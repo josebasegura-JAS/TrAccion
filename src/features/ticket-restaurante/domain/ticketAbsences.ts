@@ -41,7 +41,7 @@ function getPersonMonthAbsences(
     (absence) =>
       !absence.deletedAt &&
       absence.afectaTicket &&
-      absence.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
+      absence.hasta >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
       sameTicketEmployee(absence.empleado, empleado) &&
       absence.desde <= monthEnd &&
       absence.hasta >= monthStart,
@@ -67,6 +67,7 @@ export function buildEffectiveAbsenceByTicketDay(
   monthEnd: string,
 ): Map<string, TicketRestaurantAbsence> {
   const absenceByDate = new Map<string, TicketRestaurantAbsence>();
+  if (monthEnd < TICKET_RESTAURANT_MIN_ABSENCE_DATE) return absenceByDate;
   const noTicket = new Set(calendar.diasSinTicket);
   const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
 
@@ -74,7 +75,7 @@ export function buildEffectiveAbsenceByTicketDay(
     .sort(compareAbsencesByEffectivePriority)
     .forEach((absence) => {
       forEachIsoDate(
-        maxIsoDate(absence.desde, monthStart),
+        maxIsoDate(absence.desde, maxIsoDate(monthStart, TICKET_RESTAURANT_MIN_ABSENCE_DATE)),
         minIsoDate(absence.hasta, monthEnd),
         (fecha) => {
           if (calendarHasTicketRightOnDate(calendar, fecha, ticketIsoWeekdays, noTicket)) {
@@ -169,7 +170,7 @@ export function calculateTicketAbsenceMonthImpact(
     ? calendars.find((item) => !item.deletedAt && item.activo && item.id === person.calendarId)
     : undefined;
 
-  if (!person || !calendar || !absence.afectaTicket || absence.desde < TICKET_RESTAURANT_MIN_ABSENCE_DATE) {
+  if (!person || !calendar || !absence.afectaTicket || absence.hasta < TICKET_RESTAURANT_MIN_ABSENCE_DATE) {
     return { calendario: calendar?.nombre ?? 'Sin calendario', diasTicketMes: 0, descuentaTicket: false };
   }
 
@@ -187,7 +188,7 @@ export function calculateTicketAbsenceMonthImpact(
   const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
   const noTicket = new Set(calendar.diasSinTicket);
   let diasTicketMes = 0;
-  forEachIsoDate(maxIsoDate(absence.desde, monthStart), minIsoDate(absence.hasta, monthEnd), (fecha) => {
+  forEachIsoDate(maxIsoDate(absence.desde, maxIsoDate(monthStart, TICKET_RESTAURANT_MIN_ABSENCE_DATE)), minIsoDate(absence.hasta, monthEnd), (fecha) => {
     if (calendarHasTicketRightOnDate(calendar, fecha, ticketIsoWeekdays, noTicket)) diasTicketMes += 1;
   });
   return { calendario: calendar.nombre, diasTicketMes, descuentaTicket: diasTicketMes > 0 };
@@ -231,7 +232,7 @@ export function calculateTicketAbsenceTicketImpact(
     ? calendars.find((item) => !item.deletedAt && item.activo && item.id === person.calendarId)
     : undefined;
 
-  if (!person || !calendar || absence.desde < TICKET_RESTAURANT_MIN_ABSENCE_DATE) {
+  if (!person || !calendar || absence.hasta < TICKET_RESTAURANT_MIN_ABSENCE_DATE) {
     return { diasTicket: 0, afectaTicket: false, calendario: calendar?.nombre ?? 'Sin calendario' };
   }
 
@@ -255,7 +256,7 @@ export function calculateTicketAbsenceTicketImpact(
   const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
   const noTicket = new Set(calendar.diasSinTicket);
   let diasTicket = 0;
-  forEachIsoDate(absence.desde, absence.hasta, (fecha) => {
+  forEachIsoDate(maxIsoDate(absence.desde, TICKET_RESTAURANT_MIN_ABSENCE_DATE), absence.hasta, (fecha) => {
     if (calendarHasTicketRightOnDate(calendar, fecha, ticketIsoWeekdays, noTicket)) diasTicket += 1;
   });
   return { diasTicket, afectaTicket: diasTicket > 0, calendario: calendar.nombre };
@@ -271,7 +272,7 @@ export function filterTicketRestaurantAbsencesByMonth(
   return absences.filter(
     (absence) =>
       !absence.deletedAt &&
-      absence.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
+      absence.hasta >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
       absence.desde <= monthEnd &&
       absence.hasta >= monthStart,
   );

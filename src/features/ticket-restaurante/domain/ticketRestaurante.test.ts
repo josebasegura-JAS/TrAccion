@@ -596,7 +596,7 @@ describe('ticket restaurante calculation domain', () => {
     expect(normalized.debtStartDate).toBe(TICKET_RESTAURANT_MIN_ABSENCE_DATE);
   });
 
-  it('ignora ausencias con fecha de inicio anterior al 1 de marzo de 2026', () => {
+  it('descuenta solo los días desde marzo para una baja iniciada en febrero', () => {
     const calendar = buildCalendar();
     const person = buildTicketPerson(
       {
@@ -632,11 +632,11 @@ describe('ticket restaurante calculation domain', () => {
     );
 
     expect(april.rows[0]).toMatchObject({
-      deudaEntrante: 0,
-      ausenciasAplicadas: 0,
+      deudaEntrante: 7,
+      ausenciasAplicadas: 7,
       deudaPendiente: 0,
     });
-    expect(filterTicketRestaurantAbsencesByMonth([previousAbsence], 2026, 3)).toEqual([]);
+    expect(filterTicketRestaurantAbsencesByMonth([previousAbsence], 2026, 3)).toHaveLength(1);
   });
 
   it('resuelve solapes por día usando la ausencia más reciente antes de decidir si descuenta', () => {
@@ -915,11 +915,11 @@ describe('ticket restaurante absence importer domain', () => {
     ).toBe(true);
   });
 
-  it('fecha anterior a 2026-03-01 no afecta por defecto', () => {
+  it('fecha anterior a 2026-03-01 puede afectar a partir de marzo', () => {
     expect(
       normalizeTicketRestaurantAbsenceRow({ empleado: '1', desde: '28/02/2026', motivo: 'IT' }, 'a')
         .afectaTicket,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('ignora duplicado exacto', () => {

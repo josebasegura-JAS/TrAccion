@@ -88,10 +88,9 @@ export function normalizeTicketCalculationRules(
   rules: Partial<TicketCalculationRules> | undefined,
 ): TicketCalculationRules {
   const defaultRules = DEFAULT_TICKET_RESTAURANT_CONFIG.rules;
-  // El módulo excluye por diseño las ausencias que empiezan antes de
-  // TICKET_RESTAURANT_MIN_ABSENCE_DATE (constante). Un debtStartDate anterior
-  // a esa fecha prometería una deuda que el filtro de ausencias nunca podría
-  // alimentar, así que se acota aquí al mínimo del módulo.
+  // Las bajas iniciadas antes de la fecha mínima pueden seguir vigentes,
+  // pero la deuda solo se calcula por días dentro del periodo gestionado.
+  // Se acota debtStartDate para impedir deuda anterior a ese periodo.
   const rawDebtStartDate =
     typeof rules?.debtStartDate === 'string' && isIsoDate(rules.debtStartDate)
       ? rules.debtStartDate
