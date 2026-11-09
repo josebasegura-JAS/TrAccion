@@ -170,9 +170,16 @@ export function buildImportedTaskRecord(
   now = new Date().toISOString(),
 ): Task {
   const { externalKey, draft, closedAt } = entry;
+  // Una importación de sesiones anterior a 2026 se incorpora como histórico
+  // cerrado desde su creación, sin imponer ese cierre en futuras lecturas.
+  const historicalYear = Number((closedAt ?? '').match(/^(\d{4})/)?.[1] ?? 0);
+  const isHistoricalSession = historicalYear > 0 && historicalYear < 2026;
+  const importedDraft = isHistoricalSession
+    ? { ...draft, estado: 'cerrada', fase: CLOSED_TASK_PHASE }
+    : draft;
   return normalizeTask({
     id: createTaskId(),
-    ...draft,
+    ...importedDraft,
     sessionDocumentCode: '',
     sessionModule: '',
     sessionDate: '',
@@ -181,7 +188,7 @@ export function buildImportedTaskRecord(
     createdAt: closedAt ?? now,
     updatedAt: now,
     deletedAt: null,
-    closedAt: isTaskClosed(draft) ? (closedAt ?? now) : null,
+    closedAt: isTaskClosed(importedDraft) ? (closedAt ?? now) : null,
   });
 }
 
