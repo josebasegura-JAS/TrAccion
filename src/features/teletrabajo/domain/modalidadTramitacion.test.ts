@@ -63,6 +63,14 @@ describe('Teletrabajo: modalidad ordinaria y extraordinaria', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('bloquea mover una solicitud ordinaria a otro periodo aunque conserve la modalidad', () => {
+    const result = validateTeletrabajoClassificationChange(
+      { ...normal, modalidadTramitacion: 'ordinaria' },
+      { periodo: '2027-2028', fechaSolicitud: '2027-07-20' },
+    );
+    expect(result.ok).toBe(false);
+  });
+
   it('permite completar fechas antiguas sin clasificar y tramitar expedientes ordinarios existentes', () => {
     expect(validateTeletrabajoClassificationChange(
       { ...normal, fechaSolicitud: '' },
