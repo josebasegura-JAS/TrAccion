@@ -18,6 +18,7 @@ function ExpandableTable({ onOpen, rows = initial }: { onOpen: (row: Row) => voi
     id: 'title',
     header: 'Título',
     accessor: (row) => row.title,
+    sortable: true,
     width: 300,
     render: (row) => (
       <span>
@@ -89,8 +90,24 @@ describe('DataTable: detalle expandido opcional', () => {
     expect(screen.getByText('Acción A')).toBeInTheDocument();
     expect(screen.getByText('Acción C')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Título/ }));
-    expect(screen.getByText('Acción A')).toBeInTheDocument();
-    expect(screen.getByText('Acción C')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /Título/ })).toHaveAttribute('aria-sort', 'ascending');
+    const rowsAsc = screen.getAllByRole('row');
+    expect(rowsAsc[1]).toHaveTextContent('Primera tarea');
+    expect(rowsAsc[2]).toHaveAttribute('data-expanded-for', 'a');
+    expect(rowsAsc[2]).toHaveTextContent('Acción A');
+    expect(rowsAsc[4]).toHaveTextContent('Tercera tarea');
+    expect(rowsAsc[5]).toHaveAttribute('data-expanded-for', 'c');
+    expect(rowsAsc[5]).toHaveTextContent('Acción C');
+
+    fireEvent.click(screen.getByRole('button', { name: /Título/ }));
+    expect(screen.getByRole('columnheader', { name: /Título/ })).toHaveAttribute('aria-sort', 'descending');
+    const rowsDesc = screen.getAllByRole('row');
+    expect(rowsDesc[1]).toHaveTextContent('Tercera tarea');
+    expect(rowsDesc[2]).toHaveAttribute('data-expanded-for', 'c');
+    expect(rowsDesc[2]).toHaveTextContent('Acción C');
+    expect(rowsDesc[4]).toHaveTextContent('Primera tarea');
+    expect(rowsDesc[5]).toHaveAttribute('data-expanded-for', 'a');
+    expect(rowsDesc[5]).toHaveTextContent('Acción A');
   });
 
   it('no incluye detalle si la tarea no tiene acciones o desaparece del filtro', () => {
