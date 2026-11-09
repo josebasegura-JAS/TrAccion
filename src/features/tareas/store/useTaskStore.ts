@@ -149,8 +149,10 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
     // Evita que el polling borre el histórico visible cada 12 s.
     // Solo se consulta "all" cuando la persona ya ha cargado el histórico.
     const includesHistorical = get().historicalTasksLoaded;
-    const tasks = await readTasksForStore(includesHistorical ? 'all' : 'active');
+    const snapshot = await readTasksForStore(includesHistorical ? 'all' : 'active');
     if (request !== latestActiveTaskRead) return;
+    // El modo SQL "all" también incluye tombstones; nunca mostrarlos en la UI.
+    const tasks = includesHistorical ? snapshot.filter((task) => !task.deletedAt) : snapshot;
     set((state) => activeSnapshotState(state, tasks, includesHistorical));
   },
 
