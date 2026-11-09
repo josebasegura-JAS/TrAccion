@@ -51,6 +51,35 @@ describe('coordinationTaskTargets', () => {
     expect(next.areaTaskIds.Finanzas).toEqual(['task-e', 'task-a']);
   });
 
+  it('guardar sin cambiar circuitos no reordena registros ni provoca nueva escritura', () => {
+    const next = updateTaskTargets(baseState, 'task-a', {
+      direction: true,
+      unionName: 'LAB',
+      areaName: 'Operaciones',
+    });
+
+    expect(next).toBe(baseState);
+    expect(next.unionTaskIds.LAB).toEqual(['task-a', 'task-b']);
+    expect(next.areaTaskIds.Operaciones).toEqual(['task-a', 'task-d']);
+    expect(coordinationTargetsEqual(baseState, next)).toBe(true);
+  });
+
+  it('corrige asignaciones duplicadas incluso si coincide uno de los destinos', () => {
+    const duplicated = {
+      ...baseState,
+      unionTaskIds: { ...baseState.unionTaskIds, ELA: ['task-c', 'task-a'] },
+    };
+    const next = updateTaskTargets(duplicated, 'task-a', {
+      direction: true,
+      unionName: 'LAB',
+      areaName: 'Operaciones',
+    });
+
+    expect(next).not.toBe(duplicated);
+    expect(next.unionTaskIds.ELA).toEqual(['task-c']);
+    expect(next.unionTaskIds.LAB).toContain('task-a');
+  });
+
   it('actualiza Dirección, sindicato y área como una única transformación', () => {
     const next = updateTaskTargets(baseState, 'task-a', {
       direction: false,
