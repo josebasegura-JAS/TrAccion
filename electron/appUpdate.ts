@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { closeOtherLocalInstancesForUpdate } from './localUpdateInstances.js';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -311,6 +312,17 @@ export async function applyAppUpdate(
       message: `No se ha podido copiar o verificar la nueva versión: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+
+  // No lanzar el sustituidor mientras otro proceso local mantenga abierto
+  // el mismo EXE. Todos deben confirmar un cierre seguro y terminar su
+  // rutina habitual de liberación de SQLite antes de continuar.
+  let peersClosed: { ok: boolean; message: string };
+  try {
+    peersClosed = await closeOtherLocalInstancesForUpdate();
+  } catch (error) {
+    return { ok: false, message: `No se ha podido coordinar el cierre local: ${String(error)}` };
+  }
+  if (!peersClosed.ok) return peersClosed;
 
   const scriptPath = path.join(stagingDir, 'traccion-apply-update.cmd');
   // Restaurado el actualizador portable probado: sin dependencias de PowerShell.
