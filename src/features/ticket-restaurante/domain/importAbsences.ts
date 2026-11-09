@@ -142,7 +142,7 @@ export function parseTicketRestaurantCleanAbsenceRows(
       .map((row) => readCleanRow(row, fieldByColumn))
       .filter(hasAnyValue)
       .map((row, index) => normalizeTicketRestaurantAbsenceRow(row, `preview-clean-${index + 1}`))
-      .filter(isOnOrAfterMinimumAbsenceDate),
+      .filter(overlapsSupportedAbsencePeriod),
   );
 }
 
@@ -192,7 +192,7 @@ export function parseTicketRestaurantZerkosAbsenceRows(
     );
   });
 
-  return deduplicatePreviewRows(parsedRows.filter(isOnOrAfterMinimumAbsenceDate));
+  return deduplicatePreviewRows(parsedRows.filter(overlapsSupportedAbsencePeriod));
 }
 
 export function normalizeTicketRestaurantAbsenceRow(
@@ -332,8 +332,10 @@ export function saveTicketRestaurantAbsencePreviewRows(
   return { absences: result, summary, errors: [] };
 }
 
-function isOnOrAfterMinimumAbsenceDate(row: TicketRestaurantAbsencePreviewRow): boolean {
-  return !isIsoDate(row.desde) || row.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE;
+// Una baja iniciada antes de marzo puede seguir activa dentro del periodo gestionado.
+// Las fechas originales se conservan para no alterar el histórico del empleado.
+function overlapsSupportedAbsencePeriod(row: TicketRestaurantAbsencePreviewRow): boolean {
+  return !isIsoDate(row.hasta) || row.hasta >= TICKET_RESTAURANT_MIN_ABSENCE_DATE;
 }
 
 function validateTicketRestaurantAbsencePreviewRow(
@@ -618,7 +620,9 @@ function normalizeAfectaTicket(value: string | undefined, desde: string): boolea
   if (['no', 'n'].includes(normalized)) {
     return false;
   }
-  return isIsoDate(desde) && desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE;
+  // La ausencia puede comenzar antes del inicio de la gestión de tickets.
+  // Solo los días posteriores al corte serán computables.
+  return isIsoDate(desde);
 }
 
 function toIsoDate(year: number, month: number, day: number): string {
