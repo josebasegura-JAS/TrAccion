@@ -53,10 +53,20 @@ function resolvePeriodoStartDate(periodo: string | null | undefined): string {
 }
 
 export function evaluateTeletrabajoAntiguedad(
-  solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'fechaSolicitud' | 'periodo'>,
+  solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'fechaSolicitud' | 'periodo' | 'tipoSolicitud'>,
   employee: Pick<Employee, 'antiguedadPuesto'> | null | undefined,
 ): TeletrabajoAntiguedadEvaluation {
-  const fechaReferenciaValue = resolvePeriodoStartDate(solicitud.periodo);
+  const inicioPeriodo = resolvePeriodoStartDate(solicitud.periodo);
+  const fechaPresentacion = parseIsoDate(solicitud.fechaSolicitud);
+  // Una solicitud nueva presentada tras el comienzo del periodo adquiere
+  // derecho a ser evaluada con su antigüedad a la fecha de presentación.
+  // Las solicitudes ordinarias y las renovaciones mantienen el 1 de septiembre.
+  const fechaReferenciaValue = solicitud.tipoSolicitud === 'nueva'
+    && fechaPresentacion
+    && inicioPeriodo
+    && solicitud.fechaSolicitud > inicioPeriodo
+    ? solicitud.fechaSolicitud
+    : inicioPeriodo;
 
   if (!employee) {
     return {
@@ -83,7 +93,7 @@ export function evaluateTeletrabajoAntiguedad(
   if (!fechaReferencia) {
     return {
       status: 'sin-dato',
-      title: 'Falta informar un periodo válido para comprobar la antigüedad contra el 1 de septiembre.',
+      title: 'Falta informar un periodo válido para comprobar la antigüedad.',
       antiguedadPuesto,
       fechaReferencia: fechaReferenciaValue,
     };

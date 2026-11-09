@@ -798,6 +798,23 @@ describe('getTeletrabajoIncidentSummary — un único badge para la app, fusiona
     expect(summary.label).not.toContain('presencialidad OK');
   });
 
+  it('el semáforo no bloquea por antigüedad una solicitud nueva presentada tras cumplir el año', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 0, dotacionComputable: 0 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100', antiguedadPuesto: '2025-11-01' })],
+    ]);
+    const nueva = buildSolicitud({ fechaSolicitud: '2026-11-05', diasTeletrabajo: ['martes'] });
+    const counts = buildSolicitudesByPeriodoPuestoCount([nueva]);
+
+    const semaforo = getTeletrabajoSemaforo(nueva, puestosByKey, counts, employeesByEmpleado);
+    const summary = getTeletrabajoIncidentSummary(nueva, puestosByKey, counts, employeesByEmpleado);
+
+    expect(semaforo.status).toBe('ok');
+    expect(summary.label).toBe('Sin incidencias');
+    expect(summary.title).not.toContain('Antigüedad insuficiente');
+  });
+
   it('añade "presencialidad OK" cuando la antigüedad bloquea pero la presencialidad sí se cumple', () => {
     const puesto = buildPuesto({ maxSolicitudes: 0, dotacionComputable: 0 });
     const puestosByKey = buildPuestosByKey([puesto]);
