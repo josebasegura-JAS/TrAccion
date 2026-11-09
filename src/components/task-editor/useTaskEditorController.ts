@@ -10,6 +10,7 @@ import {
   type TaskSeguimientoEntry,
 } from '../../features/tareas/domain/task';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
+import { loadFreshTaskAfterLock, hasUnsavedTaskEditorChanges } from './taskEditorLockSnapshot';
 import { useEditorShortcuts } from '../../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../../hooks/useRecoverableDraft';
 import { useUnsavedChanges } from '../../hooks/useUnsavedChanges';
@@ -118,6 +119,8 @@ export function useTaskEditorController({
   const [saveStatusIsError, setSaveStatusIsError] = useState(false);
   const [loadedIdentity, setLoadedIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState(task?.updatedAt ?? null);
+  const [freshLockTaskId, setFreshLockTaskId] = useState<string | null>(null);
+  const [freshLockError, setFreshLockError] = useState('');
   const [editingTrackingId, setEditingTrackingId] = useState<string | null>(null);
   const [editingTrackingDate, setEditingTrackingDate] = useState('');
   const [editingTrackingText, setEditingTrackingText] = useState('');
@@ -137,12 +140,73 @@ export function useTaskEditorController({
     recordId: task?.id ?? null,
     enabled: mode === 'edit' && Boolean(task?.id),
   });
-  const isFormReadOnly = !isCreate && (recordLock.isReadOnly || recordLock.status !== 'acquired');
-  const lockMessage = recordLock.message || (!isCreate && recordLock.status !== 'acquired' ? 'Adquiriendo bloqueo de edición compartida...' : '');
+  // El bloqueo solo otorga permiso de edición; la versión del formulario debe
+  // recargarse de SQLite antes de aceptar escrituras desde otra instancia.
+  const isLockSnapshotReady = recordLock.status === 'acquired' && freshLockTaskId === task?.id;
+  const isFormReadOnly = !isCreate && (recordLock.isReadOnly || !isLockSnapshotReady);
+  const lockMessage = freshLockError || (!isCreate && recordLock.status === 'acquired' && !isLockSnapshotReady
+    ? 'Sincronizando la última versión de la tarea antes de editar…'
+    : recordLock.message || (!isCreate && recordLock.status !== 'acquired' ? 'Adquiriendo bloqueo de edición compartida...' : ''));
+
   const canSubmit = draft.titulo.trim().length > 0 && !isFormReadOnly;
   const creationDate = isCreate
     ? todayIsoDate()
     : (draft.createdAt?.slice(0, 10) ?? task?.createdAt?.slice(0, 10) ?? todayIsoDate());
+
+  useEffect(() => {
+    if (isCreate || !task?.id || recordLock.status !== 'acquired') {
+      setFreshLockTaskId(null);
+      setFreshLockError('');
+      return;
+    }
+
+    let cancelled = false;
+    const taskId = task.id;
+    setFreshLockTaskId(null);
+    setFreshLockError('');
+    void (async () => {
+      try {
+        const latest = await loadFreshTaskAfterLock(taskId);
+        if (cancelled) return;
+        // No sustituir el borrador de una persona que había comenzado a editar
+        // antes de perder temporalmente el lease compartido.
+        const hasPendingChanges = hasUnsavedTaskEditorChanges({
+          draft, trackingText, trackingDate, sendToDirection, sendToUnion, selectedAreaTarget,
+        }, recoveryBaseline);
+        if (hasPendingChanges) {
+          setFreshLockError('Hay cambios sin guardar tras recuperar el bloqueo. Cierra y vuelve a abrir el detalle para evitar sobrescribirlos.');
+          return;
+        }
+
+        const latestDraft = toDraft(latest);
+        setDraft(latestDraft);
+        setLoadedUpdatedAt(latest.updatedAt);
+        setRecoveryBaseline({
+          draft: latestDraft,
+          trackingText: '',
+          trackingDate,
+          sendToDirection,
+          sendToUnion,
+          selectedAreaTarget,
+        });
+        setSaveStatus('');
+        setSaveStatusIsError(false);
+        // Refrescar también la fila de la tabla, sin alterar otras tareas.
+        useTaskStore.setState((state) => ({
+          tasks: state.tasks.map((entry) => entry.id === taskId ? latest : entry),
+        }));
+        setFreshLockTaskId(taskId);
+      } catch (error) {
+        if (!cancelled) {
+          setFreshLockError(`No se ha podido sincronizar la tarea: ${error instanceof Error ? error.message : String(error)}. Cierra y vuelve a abrir el detalle.`);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // Solo refrescar al ADQUIRIR el lease o cambiar de registro; nunca durante
+    // cada render o cada heartbeat de renovación del bloqueo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreate, task?.id, recordLock.status]);
 
   useEffect(() => {
     loadConfiguracion();
