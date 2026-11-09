@@ -33,7 +33,7 @@ export function AppUpdateChecker() {
       const mandatoryText = result.mandatory ? '\n\nEsta actualización está marcada como obligatoria.' : '';
       const wantsToUpdate = await confirm(
         `Hay una versión nueva de TrAcción disponible (V${result.latestVersion}, la tuya es V${result.currentVersion}).` +
-          `${details}${mandatoryText}\n\nLa aplicación se cerrará y se reabrirá automáticamente. ¿Actualizar ahora?`,
+          `${details}${mandatoryText}\n\nSe cerrarán ordenadamente todas las instancias de TrAcción abiertas en este equipo y se reabrirá la versión actualizada. Si alguna tiene cambios sin guardar, se cancelará la instalación. ¿Actualizar ahora?`,
         {
           title: result.mandatory ? 'Actualización obligatoria' : 'Actualización disponible',
           confirmLabel: 'Actualizar ahora',
