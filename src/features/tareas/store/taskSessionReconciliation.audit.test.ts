@@ -84,23 +84,18 @@ describe('auditoría de integridad: reconciliación legacy Comité/Paritaria', (
     expect(saveMock).not.toHaveBeenCalled();
   });
 
-  it('CARACTERIZACIÓN: un blob legacy cerrado vuelve a cerrar una tarea reabierta y la lectura la persiste', async () => {
+  it('REGRESIÓN: un blob legacy cerrado no vuelve a cerrar una tarea reabierta durante lecturas SQLite', async () => {
     const original = task();
     setLegacySession(legacySession());
     loadMock.mockResolvedValue([original]);
 
     const result = await readTasksForStore('active');
 
-    expect(result[0].estado).toBe('cerrada');
-    expect(result[0].seguimiento.some((item) => item.texto.includes('Tratada en Comité'))).toBe(true);
-    expect(saveMock).toHaveBeenCalledTimes(1);
-    expect(saveMock).toHaveBeenCalledWith(expect.objectContaining({
-      id: original.id,
-      estado: 'cerrada',
-    }), original.updatedAt);
+    expect(result[0]).toEqual(original);
+    expect(saveMock).not.toHaveBeenCalled();
   });
 
-  it('CARACTERIZACIÓN: una sesión anterior a 2026 fuerza el cierre incluso si su estado legacy es abierto', () => {
+  it('COMPATIBILIDAD: el helper legacy conserva su antigua regla para migraciones explícitas', () => {
     setLegacySession(legacySession({
       date: '2025-09-10',
       status: 'open',
@@ -137,8 +132,8 @@ describe('auditoría de integridad: reconciliación legacy Comité/Paritaria', (
 
     const result = await readTasksForStore('active');
 
-    expect(result[0].estado).toBe('cerrada');
-    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(result[0].estado).toBe('pendiente');
+    expect(saveMock).not.toHaveBeenCalled();
   });
 
   it('no modifica una tarea eliminada aunque aparezca vinculada a una sesión cerrada', async () => {
@@ -151,4 +146,65 @@ describe('auditoría de integridad: reconciliación legacy Comité/Paritaria', (
     expect(result[0].estado).toBe('pendiente');
     expect(saveMock).not.toHaveBeenCalled();
   });
+  it('preserva cambios de una tarea activa aunque el blob legacy esté cerrado y se consulte por id', async () => {
+    const original = task({
+      titulo: 'Reabierta y editada',
+      estado: 'en curso',
+      updatedAt: '2026-11-09T09:00:00.000Z',
+    });
+    setLegacySession(legacySession());
+    loadMock.mockResolvedValue([original]);
+
+    const result = await readTasksForStore('all', original.id);
+
+    expect(result).toEqual([original]);
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it('no guarda cambios por mera normalización de una tarea ya existente', async () => {
+    const original = task({ sessionDocumentCode: 'CE-2026-10' });
+    loadMock.mockResolvedValue([original]);
+    const result = await readTasksForStore('all');
+
+    expect(result[0].sessionDocumentCode).toBe('CE-2026-10');
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it('una tarea histórica reabierta después de 2025 conserva fase y estado', async () => {
+    const original = task({
+      createdAt: '2025-09-10T09:00:00.000Z',
+      updatedAt: '2026-11-09T10:00:00.000Z',
+      origen: 'Comité de Empresa',
+      fase: 'tarea',
+      estado: 'en curso',
+      closedAt: null,
+    });
+    setLegacySession(legacySession({ date: '2025-09-10', status: 'closed' }));
+    loadMock.mockResolvedValue([original]);
+
+    const result = await readTasksForStore('active');
+
+    expect(result[0]).toMatchObject({
+      fase: 'tarea',
+      estado: 'en curso',
+      closedAt: null,
+      updatedAt: original.updatedAt,
+    });
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it('mantiene el cierre histórico en registros sin edición posterior', () => {
+    const historical = normalizeTask({
+      ...task(),
+      createdAt: '2025-09-10T09:00:00.000Z',
+      updatedAt: '2025-09-10T09:00:00.000Z',
+      origen: 'Comité de Empresa',
+      fase: 'comite',
+      closedAt: null,
+    });
+
+    expect(historical.estado).toBe('cerrada');
+    expect(historical.fase).toBe('cerrada');
+  });
+
 });

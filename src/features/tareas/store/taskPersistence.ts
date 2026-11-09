@@ -6,7 +6,6 @@ import {
   isTask,
   normalizeTask,
   parseTasksSnapshot,
-  tasksDiffer,
 } from './taskNormalization';
 import { reconcileTasksWithClosedSessions } from './taskSessionReconciliation';
 
@@ -81,24 +80,25 @@ export async function readTasksForStore(mode: TaskSqliteLoadMode = 'active', id?
     }
 
     const normalizedSqliteTasks = sqliteTasks.map(normalizeTask);
-    const reconciledSqliteTasks = reconcileTasksWithClosedSessions(normalizedSqliteTasks);
-    const previousTasksById = new Map(normalizedSqliteTasks.map((task) => [task.id, task]));
     const migratedPeticiones = mode === 'active'
       ? readMigratedPeticiones().filter(
           (migratedTask) =>
             !isTaskClosed(migratedTask) &&
-            !reconciledSqliteTasks.some((task) => task.id === migratedTask.id),
+            !normalizedSqliteTasks.some((task) => task.id === migratedTask.id),
         )
       : [];
-    const tasks = [...reconciledSqliteTasks, ...migratedPeticiones].map(normalizeTask);
+    // Los registros ya existentes en SQLite son autoritativos. Una lectura no
+    // puede reconciliarlos contra un snapshot legacy potencialmente obsoleto,
+    // ni guardar automáticamente cambios derivados de su normalización.
+    const tasks = [...normalizedSqliteTasks, ...migratedPeticiones];
 
-    const normalizationPersisted = await persistTaskChangesBestEffort(
-      tasks,
-      previousTasksById,
-      'normalización o migración de tareas',
-    );
+    // Excepción explícita: la primera importación de peticiones anteriores.
+    // Únicamente se insertan registros todavía ausentes en SQLite.
+    const migrationPersisted = migratedPeticiones.length > 0
+      ? await persistMigratedPeticionesBestEffort(migratedPeticiones)
+      : true;
 
-    if (migratedPeticiones.length > 0 && normalizationPersisted) {
+    if (migratedPeticiones.length > 0 && migrationPersisted) {
       writeStorageItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
     }
 
@@ -125,29 +125,14 @@ export async function persistTaskDirectly(
   return { ok: result.ok, message: result.message, recordId: task.id };
 }
 
-async function persistTaskChangesBestEffort(
-  tasks: Task[],
-  previousTasksById: Map<string, Task>,
-  context: string,
-): Promise<boolean> {
-  if (!hasTaskSqliteRepository()) {
-    return false;
-  }
-
+async function persistMigratedPeticionesBestEffort(tasks: Task[]): Promise<boolean> {
   let allPersisted = true;
   for (const task of tasks) {
-    const previousTask = previousTasksById.get(task.id);
-    const expectedUpdatedAt = previousTask?.updatedAt ?? null;
-    if (previousTask && !tasksDiffer(previousTask, task)) {
-      continue;
-    }
-
-    const result = await persistTaskDirectly(task, expectedUpdatedAt);
+    const result = await persistTaskDirectly(task, null);
     if (!result.ok) {
       allPersisted = false;
-      console.warn(`[tareas] No se ha podido persistir ${context}.`, result.message);
+      console.warn('[tareas] No se ha podido migrar una petición histórica.', result.message);
     }
   }
-
   return allPersisted;
 }
