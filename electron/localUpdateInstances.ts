@@ -10,7 +10,8 @@ type PeerMessage =
 type PeerResponse = { ok: boolean; message: string };
 type PeerRegistration = { pid: number; port: number; secret: string; executablePath: string };
 
-const LOCAL_PEER_TIMEOUT_MS = 5_000;
+const LOCAL_PEER_TIMEOUT_MS = 90_000;
+const LOCAL_CLOSE_RESPONSE_MS = 10_000;
 const EXIT_TIMEOUT_MS = 60_000;
 const POLL_EXIT_MS = 250;
 
@@ -43,7 +44,8 @@ function sendMessage(peer: PeerRegistration, message: PeerMessage): Promise<Peer
       socket.destroy();
       reject(error);
     };
-    socket.setTimeout(LOCAL_PEER_TIMEOUT_MS, () => fail(new Error('La otra instancia no respondió a tiempo.')));
+    socket.setTimeout(message.kind === 'prepare' ? LOCAL_PEER_TIMEOUT_MS : LOCAL_CLOSE_RESPONSE_MS,
+      () => fail(new Error('La otra instancia no respondió a tiempo.')));
     socket.on('error', fail);
     socket.on('connect', () => socket.write(JSON.stringify(message) + '\n'));
     socket.on('data', (part: Buffer) => {
@@ -197,7 +199,7 @@ export async function startLocalInstanceUpdateListener(
           }
           socket.end(JSON.stringify({ ok: approved, message: approved ? 'Cierre permitido.' : 'Hay cambios pendientes o se canceló el cierre.' }) + '\n');
         }).catch(() => socket.end(JSON.stringify({ ok: false, message: 'No se pudo confirmar el estado de edición.' }) + '\n'));
-      } else if (request.kind === 'close' && request.token === preparedToken && Date.now() - preparedAt < 30_000) {
+      } else if (request.kind === 'close' && request.token === preparedToken && Date.now() - preparedAt < 180_000) {
         closing = true;
         socket.end(JSON.stringify({ ok: true, message: 'Iniciando cierre ordenado.' }) + '\n', () => setImmediate(close));
       } else {
