@@ -36,7 +36,7 @@ async function prepareFakePeer(approve: boolean) {
   ].join('')]);
   if (!child.pid) throw new Error('No se pudo abrir el proceso de prueba.');
 
-  let commands: string[] = [];
+  const commands: string[] = [];
   server = createServer((socket) => {
     let buffer = '';
     socket.on('data', (data: Buffer) => {
