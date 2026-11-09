@@ -23,7 +23,9 @@ jobs:
   checks:
     if: ${{ !inputs.limpiar_historial_antiguo }}
     name: Comprobación / ${{ matrix.lane }}
-    runs-on: windows-latest
+    # node-gyp de @electron/rebuild 3.6.1 no detecta VS2026 en windows-latest.
+    # Solo Electron necesita toolchain MSVC: fijar VS2022 sin afectar las demás lanes.
+    runs-on: ${{ matrix.lane == 'electron' && 'windows-2022' || 'windows-latest' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
