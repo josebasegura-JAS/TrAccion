@@ -15,6 +15,7 @@ import {
   readCurrentSchemaVersion,
 } from './persistence/schemaMigrations.js';
 import {
+  findForeignTaskEditingLock,
   type RecordLockOwnerInfo as RecordLockModuleOwnerInfo,
   type RecordLockPayload as RecordLockModulePayload,
   type RecordLockResult as RecordLockModuleResult,
@@ -982,6 +983,14 @@ export async function closeSessionWorkflowAtomically(
         }
 
         for (const task of payload.tasks) {
+          const conflictingEditor = findForeignTaskEditingLock(db, task.id, ownerId);
+          if (conflictingEditor) {
+            return {
+              ok: false,
+              status: currentStatus,
+              message: `No se puede cerrar la sesión: la tarea está siendo editada por ${conflictingEditor.ownerName}@${conflictingEditor.machineName}.`,
+            };
+          }
           const currentTaskUpdatedAt = readUpdatedAt('task_records', task.id);
           if (currentTaskUpdatedAt !== task.expectedUpdatedAt) {
             return {
@@ -1449,6 +1458,7 @@ const taskModule = createTaskRepository({
   enqueueLocalBackup,
   assertDatabaseWritesAllowed,
   isDatabaseWriteBlockedByHeartbeat,
+  findForeignTaskEditingLock: (db, taskId) => findForeignTaskEditingLock(db, taskId, ownerId),
 });
 const { loadTaskRecordsSnapshot, saveTaskRecordIfUnchanged } = taskModule;
 export { loadTaskRecordsSnapshot, saveTaskRecordIfUnchanged };
