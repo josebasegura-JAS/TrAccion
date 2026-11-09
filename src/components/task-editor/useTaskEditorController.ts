@@ -10,7 +10,7 @@ import {
   type TaskSeguimientoEntry,
 } from '../../features/tareas/domain/task';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
-import { readTasksForStore } from '../../features/tareas/store/taskPersistence';
+import { loadFreshTaskAfterLock, hasUnsavedTaskEditorChanges } from './taskEditorLockSnapshot';
 import { useEditorShortcuts } from '../../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../../hooks/useRecoverableDraft';
 import { useUnsavedChanges } from '../../hooks/useUnsavedChanges';
@@ -166,18 +166,13 @@ export function useTaskEditorController({
     setFreshLockError('');
     void (async () => {
       try {
-        const latest = (await readTasksForStore('all', taskId)).find((candidate) => candidate.id === taskId && !candidate.deletedAt);
+        const latest = await loadFreshTaskAfterLock(taskId);
         if (cancelled) return;
-        if (!latest) {
-          setFreshLockError('No se ha podido recuperar la tarea actual desde SQLite. Cierra y vuelve a abrir el detalle.');
-          return;
-        }
-
         // No sustituir el borrador de una persona que había comenzado a editar
         // antes de perder temporalmente el lease compartido.
-        const hasPendingChanges = JSON.stringify({
+        const hasPendingChanges = hasUnsavedTaskEditorChanges({
           draft, trackingText, trackingDate, sendToDirection, sendToUnion, selectedAreaTarget,
-        }) !== JSON.stringify(recoveryBaseline);
+        }, recoveryBaseline);
         if (hasPendingChanges) {
           setFreshLockError('Hay cambios sin guardar tras recuperar el bloqueo. Cierra y vuelve a abrir el detalle para evitar sobrescribirlos.');
           return;
