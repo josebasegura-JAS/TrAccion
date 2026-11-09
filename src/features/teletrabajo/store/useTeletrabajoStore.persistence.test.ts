@@ -237,6 +237,27 @@ describe('useTeletrabajoStore persistence', () => {
     expect(fakeBackend.solicitudes.size).toBe(0);
   });
 
+  it('impide eliminar ordinarias tras el cierre sin impedir su aprobación', async () => {
+    await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft());
+    const original = useTeletrabajoStore.getState().solicitudes[0];
+    vi.setSystemTime(new Date('2026-11-09T12:00:00.000Z'));
+
+    const removed = await useTeletrabajoStore.getState().removeWithConcurrencyCheck(
+      original.id,
+      original.updatedAt,
+    );
+    expect(removed.ok).toBe(false);
+    expect(removed.message).toContain('requiere una rectificación justificada');
+    expect(fakeBackend.solicitudes.has(original.id)).toBe(true);
+
+    const updated = await useTeletrabajoStore.getState().updateWithConcurrencyCheck(
+      original.id,
+      draft({ estado: 'aprobada' }),
+      original.updatedAt,
+    );
+    expect(updated.ok).toBe(true);
+  });
+
   it('permite solicitud extraordinaria desde el 1 de agosto y mantiene su modalidad en SQLite', async () => {
     vi.setSystemTime(new Date('2026-11-09T12:00:00.000Z'));
     const result = await useTeletrabajoStore.getState().createWithConcurrencyCheck(
