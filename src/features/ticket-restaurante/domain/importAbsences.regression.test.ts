@@ -24,12 +24,12 @@ describe('Ticket Restaurante — bajas iniciadas antes del periodo gestionado', 
     expect(rows).toHaveLength(0);
   });
 
-  it('conserva los datos inválidos en la previsualización para avisar', () => {
+  it('conserva errores de días en una baja vigente para avisar', () => {
     const rows = importTicketRestaurantAbsences([
       headings,
-      ['123', 'Persona de prueba', '03/12/2025', '', 'ENF', '10'],
+      ['123', 'Persona de prueba', '03/12/2025', '25/11/2026', 'ENF', '0'],
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.errors).toContain('Hasta debe ser una fecha válida.');
+    expect(rows[0]?.errors).toContain('Total días debe ser numérico y mayor que 0.');
   });
 });
