@@ -67,6 +67,26 @@ export function updateTaskTargets(
   taskId: string,
   targets: { direction: boolean; unionName: string | null; areaName: string | null },
 ): CoordinationState {
+  // Un guardado de la ficha no debe reordenar los destinos existentes:
+  // esa reordenación provocaba una escritura OCC innecesaria en Coordinación.
+  // Si existen asignaciones duplicadas entre grupos, sí corregirlas.
+  const currentUnions = Object.entries(state.unionTaskIds)
+    .filter(([, ids]) => ids.includes(taskId))
+    .map(([name]) => name);
+  const currentAreas = Object.entries(state.areaTaskIds)
+    .filter(([, ids]) => ids.includes(taskId))
+    .map(([name]) => name);
+  const unionName = targets.unionName?.trim() || null;
+  const areaName = targets.areaName?.trim() || null;
+  const sameUnion = unionName
+    ? currentUnions.length === 1 && currentUnions[0] === unionName
+    : currentUnions.length === 0;
+  const sameArea = areaName
+    ? currentAreas.length === 1 && currentAreas[0] === areaName
+    : currentAreas.length === 0;
+  if (state.directionTaskIds.includes(taskId) === targets.direction && sameUnion && sameArea) {
+    return state;
+  }
   return updateAreaTarget(
     updateUnionTarget(
       updateDirectionTarget(state, taskId, targets.direction),
