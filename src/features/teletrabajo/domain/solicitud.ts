@@ -3,6 +3,8 @@ export const TELETRABAJO_ESTADOS = ['pendiente', 'analizada', 'aprobada', 'deneg
 export const TELETRABAJO_DIAS = ['martes', 'miercoles', 'jueves'] as const;
 
 export type TeletrabajoTipoSolicitud = (typeof TELETRABAJO_TIPOS_SOLICITUD)[number];
+/** Modalidad administrativa, independiente de nueva/renovación. */
+export type TeletrabajoModalidadTramitacion = 'ordinaria' | 'extraordinaria';
 export type TeletrabajoEstado = (typeof TELETRABAJO_ESTADOS)[number];
 export type TeletrabajoDia = (typeof TELETRABAJO_DIAS)[number];
 
@@ -31,6 +33,8 @@ export interface TeletrabajoSolicitud {
   direccionTeletrabajo: string;
   estado: TeletrabajoEstado;
   tipoSolicitud: TeletrabajoTipoSolicitud;
+  /** Persistido en altas nuevas; opcional para conservar registros legacy intactos. */
+  modalidadTramitacion?: TeletrabajoModalidadTramitacion;
   diasTeletrabajo: TeletrabajoDia[];
   fechaSolicitud: string;
   fechaOrdenador: string;
