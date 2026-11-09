@@ -15,9 +15,32 @@ runs:
       if: ${{ inputs.lane == 'electron' }}
       with:
         python-version: '3.11'
-    - name: Dependencias desde lockfile
+    - name: Dependencias desde lockfile (reintentos ante fallo de descarga)
       shell: pwsh
-      run: npm ci --include=dev --no-audit --no-fund
+      run: |
+        # npm ci es determinista con package-lock. Reintentar solo si falla
+        # por un error de red transitorio (por ejemplo, el 504 de Electron).
+        $maxAttempts = 3
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+          $log = Join-Path $env:RUNNER_TEMP "traccion-npm-ci-attempt-$attempt.log"
+          Write-Host "npm ci: intento $attempt de $maxAttempts"
+          & npm ci --include=dev --no-audit --no-fund *>&1 |
+            ForEach-Object { "$_" | Tee-Object -FilePath $log -Append }
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -eq 0) {
+            Write-Host "Dependencias instaladas correctamente."
+            break
+          }
+          $output = Get-Content -Path $log -Raw
+          $transient = $output -match '(?i)(HTTPError: Response code (429|500|502|503|504)|\b(ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|ENOTFOUND)\b|Gateway Time-out)'
+          if (-not $transient -or $attempt -eq $maxAttempts) {
+            Write-Error "npm ci falló con código $exitCode. Error no recuperable o máximo de intentos alcanzado."
+            exit $exitCode
+          }
+          $delaySeconds = 15 * $attempt
+          Write-Warning "Descarga transitoria fallida; nuevo intento en $delaySeconds segundos."
+          Start-Sleep -Seconds $delaySeconds
+        }
     - name: TypeScript de pruebas, Electron y E2E
       if: ${{ inputs.lane == 'calidad' }}
       shell: pwsh
