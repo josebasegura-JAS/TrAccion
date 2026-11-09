@@ -330,6 +330,22 @@ export function getRecordLockInTransaction(
     : { ok: true, status: 'idle', lock: null, message: 'Sin bloqueo activo.' };
 }
 
+/**
+ * Comprobación read-only para escrituras de tareas ajenas al editor
+ * (p. ej. clasificación desde Comité o cierre de sesión).
+ * Debe ejecutarse DENTRO de la misma transacción que modifica task_records;
+ * una consulta previa en renderer dejaría una ventana de carrera.
+ */
+export function findForeignTaskEditingLock(
+  db: Database,
+  taskId: string,
+  ownerId: string,
+  now = new Date().toISOString(),
+): RecordLockOwnerInfo | null {
+  const row = readConflictingEditingLock(db, 'tareas', taskId, ownerId, now);
+  return row ? lockOwnerFromRow(row) : null;
+}
+
 /** Consulta agrupada, exclusivamente SELECT, de los bloqueos de otros usuarios. */
 export function listOtherRecordLocks(db: Database, moduleName: string, owner: OwnerContext, now: string): Record<string, RecordLockOwnerInfo> {
   const rows = db.prepare(`SELECT module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at FROM editing_locks WHERE module = ? AND owner_id <> ? AND expires_at > ?`).all(moduleName, owner.ownerId, now);
