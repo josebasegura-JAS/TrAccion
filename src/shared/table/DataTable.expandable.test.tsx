@@ -78,7 +78,7 @@ describe('DataTable: detalle expandido opcional', () => {
     expect(onOpen).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Ver acciones de Primera tarea' }));
     expect(screen.queryByText('Acción A')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Primera tarea'));
+    fireEvent.click(screen.getByRole('row', { name: /Primera tarea/ }));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
@@ -88,7 +88,7 @@ describe('DataTable: detalle expandido opcional', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ver acciones de Tercera tarea' }));
     expect(screen.getByText('Acción A')).toBeInTheDocument();
     expect(screen.getByText('Acción C')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Título.*Sin ordenar/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Título/ }));
     expect(screen.getByText('Acción A')).toBeInTheDocument();
     expect(screen.getByText('Acción C')).toBeInTheDocument();
   });
