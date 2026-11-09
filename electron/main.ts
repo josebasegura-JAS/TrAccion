@@ -7,7 +7,7 @@ import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { readFile, writeFile } from 'node:fs/promises';
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,35 +15,7 @@ const __dirname = path.dirname(__filename);
 const isDev = !app.isPackaged;
 
 const isMultiuserTestClientB = process.argv.includes('--traccion-test-user-b');
-function prepareSecondClientProfile(): boolean {
-  if (!isMultiuserTestClientB) return true;
-  try {
-    const primaryProfile = app.getPath('userData');
-    const preferencesPath = path.join(primaryProfile, 'sqlite-preferences.json');
-    if (!existsSync(preferencesPath)) {
-      console.error('[multiuser-test] Falta configuración de SQLite en el perfil principal.');
-      return false;
-    }
-    const preferences: unknown = JSON.parse(readFileSync(preferencesPath, 'utf8'));
-    if (!preferences || typeof preferences !== 'object') return false;
-    const directory = (preferences as { customDirectoryPath?: unknown }).customDirectoryPath;
-    if (typeof directory !== 'string' || !directory.trim() || !existsSync(path.join(directory, 'traccion.sqlite'))) {
-      console.error('[multiuser-test] Es necesario configurar una SQLite compartida existente en el perfil principal.');
-      return false;
-    }
-    const profileB = path.join(path.dirname(primaryProfile), path.basename(primaryProfile) + '-multiuser-test-B');
-    mkdirSync(profileB, { recursive: true });
-    // Solo se replica la configuración de la base; nunca la identidad de bloqueo.
-    copyFileSync(preferencesPath, path.join(profileB, 'sqlite-preferences.json'));
-    app.setPath('userData', profileB);
-    console.info('[multiuser-test] Cliente B: datos locales independientes, SQLite compartida.');
-    return true;
-  } catch (error) {
-    console.error('[multiuser-test] Error preparando el segundo perfil.', error);
-    return false;
-  }
-}
-const multiuserProfileReady = prepareSecondClientProfile();
+
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
@@ -345,7 +317,7 @@ async function registerIpcHandlers(): Promise<void> {
   registerCoreDatabaseIpc(); registerSorteosIpc(); registerPlantillaIpc(); registerTareasIpc(); registerSesionesIpc(); registerVinculogramaIpc(); registerCriteriosRrllIpc(); registerTicketRestauranteIpc(); registerPresupuestosIpc(); registerEspecialesIpc(); registerTeletrabajoIpc(); registerConfiguracionIpc(); registerLicenciasSinSueldoIpc(); registerSharedDocumentIpc(); registerLoteriaIpc(); registerOperationalExcelBackupIpc(); registerAyudaEscolarIpc();
 }
 
-if (!multiuserProfileReady || !app.requestSingleInstanceLock()) {
+if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
