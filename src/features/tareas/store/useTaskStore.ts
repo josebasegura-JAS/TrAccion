@@ -3,7 +3,7 @@ import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { emitPersistenceFeedback } from '../../../services/persistence';
 import { hasTaskSqliteRepository } from './taskSqliteRepository';
 import { isTaskClosed, type Task, type TaskDraft, type TaskQuickAction } from '../domain/task';
-import { firstActiveTaskId, normalizeTask } from './taskNormalization';
+import { firstActiveTaskId, normalizeTask, tasksDiffer } from './taskNormalization';
 import { readTasks, readTasksForStore, TASKS_STORAGE_KEY, type TaskUpdateResult } from './taskPersistence';
 import { closeTasksFromSessionPersisted } from './taskSessionClosure';
 import {
@@ -64,6 +64,38 @@ function warnTaskReadFailure(context: string, error: unknown): void {
   console.warn(`[tareas] ${context}. Se conserva el último snapshot válido.`, error);
 }
 
+/**
+ * Retain references for unchanged records. Zustand list subscribers do not
+ * need to render again when a polling snapshot contains the same data.
+ * Never infer content equality from updatedAt alone: imported records can
+ * carry corrections with the same timestamp.
+ */
+function reuseUnchangedTasks(previous: Task[], incoming: Task[]): Task[] {
+  const previousById = new Map(previous.map((task) => [task.id, task]));
+  const reconciled = incoming.map((task) => {
+    const existing = previousById.get(task.id);
+    return existing && !tasksDiffer(existing, task) ? existing : task;
+  });
+  return previous.length === reconciled.length &&
+    previous.every((task, index) => task === reconciled[index])
+    ? previous
+    : reconciled;
+}
+
+function activeSnapshotState(
+  state: TaskStateStore,
+  incoming: Task[],
+): Partial<TaskStateStore> {
+  const tasks = reuseUnchangedTasks(state.tasks, incoming);
+  const selectedTaskId = selectedTaskIdAfterRefresh(tasks, state.selectedTaskId);
+  if (tasks === state.tasks && selectedTaskId === state.selectedTaskId && !state.historicalTasksLoaded) {
+    return {};
+  }
+  return { tasks, selectedTaskId, historicalTasksLoaded: false };
+}
+
+let latestActiveTaskRead = 0;
+
 export const useTaskStore = create<TaskStateStore>((set, get) => ({
   tasks: [],
   selectedTaskId: '',
@@ -84,13 +116,11 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
       return;
     }
 
+    const request = ++latestActiveTaskRead;
     void readTasksForStore('active')
       .then((tasks) => {
-        set((state) => ({
-          tasks,
-          selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
-          historicalTasksLoaded: false,
-        }));
+        if (request !== latestActiveTaskRead) return;
+        set((state) => activeSnapshotState(state, tasks));
       })
       .catch((error: unknown) => {
         warnTaskReadFailure('No se han podido recargar las tareas activas', error);
@@ -109,12 +139,10 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
       throw new Error('Repositorio SQLite de tareas no disponible.');
     }
 
+    const request = ++latestActiveTaskRead;
     const tasks = await readTasksForStore('active');
-    set((state) => ({
-      tasks,
-      selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
-      historicalTasksLoaded: false,
-    }));
+    if (request !== latestActiveTaskRead) return;
+    set((state) => activeSnapshotState(state, tasks));
   },
 
   loadHistoricalTasks: async () => {
