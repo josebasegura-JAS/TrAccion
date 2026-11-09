@@ -1,12 +1,6 @@
 import { CheckCircle2, Circle, CalendarClock, UserRound } from 'lucide-react';
-import type { Task, TaskQuickAction } from '../../features/tareas/domain/task';
-
-export function getTaskQuickActions(task: Pick<Task, 'seguimiento'>): TaskQuickAction[] {
-  return task.seguimiento
-    .flatMap((entry) => entry.quickActions ?? [])
-    .sort((first, second) => Number(Boolean(first.completedAt)) - Number(Boolean(second.completedAt)));
-}
-
+import type { Task } from '../../features/tareas/domain/task';
+import { getTaskQuickActions } from './taskQuickActions';
 export function TaskQuickActionsPreview({ task }: { task: Task }) {
   const actions = getTaskQuickActions(task);
   const pending = actions.filter((action) => !action.completedAt).length;
