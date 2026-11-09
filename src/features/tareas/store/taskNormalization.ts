@@ -140,6 +140,12 @@ export function normalizeTask(task: Task): Task {
   } satisfies Task;
 
   if (!isHistoricalSessionImportTask(normalizedTask)) return normalizedTask;
+  // La regla anterior a 2026 solo debe completar registros históricos sin
+  // una edición posterior. Si una tarea fue modificada y quedó activa, su
+  // estado confirmado tiene prioridad sobre la clasificación del importador.
+  if (!isTaskClosed(normalizedTask) && normalizedTask.updatedAt !== normalizedTask.createdAt) {
+    return normalizedTask;
+  }
   const historicalDate = getHistoricalImportDate(normalizedTask);
   const closedAt = normalizedTask.closedAt ?? (historicalDate ? `${historicalDate}T00:00:00.000Z` : updatedAt);
   return { ...normalizedTask, fase: CLOSED_TASK_PHASE, estado: 'cerrada', closedAt };
