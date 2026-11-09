@@ -23,6 +23,11 @@ const RETRY_AFTER_TEMPORARY_LOCK_MS = 300;
 const MAX_CONSECUTIVE_TEMPORARY_HEARTBEAT_FAILURES = 2;
 const TEMPORARY_LOCK_NOTICE_DELAY_MS = 1_000;
 const LOCK_BUSY_MESSAGE = 'Abriendo registro…';
+
+// Las nuevas adquisiciones de una misma tarea esperan a que termine cualquier
+// liberación anterior del mismo proceso. Evita que una respuesta IPC tardía
+// libere accidentalmente la nueva reserva del mismo ownerId.
+const pendingLockCleanup = new Map<string, Promise<void>>();
 const TEMPORARY_LOCK_BUSY_MESSAGE = 'Base ocupada, reintentando…';
 
 const idleState: SharedRecordLockState = {
@@ -121,6 +126,9 @@ export function useSharedRecordLock({
 
     let cancelled = false;
     let acquired = false;
+    const activeLockKey = `${lockPayload.module}:${lockPayload.recordId}`;
+    const precedingCleanup = pendingLockCleanup.get(activeLockKey) ?? Promise.resolve();
+    const pendingAcquisitions = new Set<Promise<void>>();
 
     const setAcquired = (nextAcquired: boolean): void => {
       if (acquired === nextAcquired) {
@@ -248,17 +256,37 @@ export function useSharedRecordLock({
       }
 
       publishPersistenceBusy(lockBusyKey, LOCK_BUSY_MESSAGE);
-      void waitForNextPaint()
-        .then(() => traccionApi.acquireRecordLock?.(activeLockPayload))
-        .then((result) => {
+      const attempt = precedingCleanup
+        .catch(() => undefined)
+        .then(async () => {
+          if (cancelled) return;
+          await waitForNextPaint();
+          if (cancelled) return;
+          const result = await traccionApi.acquireRecordLock?.(activeLockPayload);
           if (!result) {
             handleAcquireError(new Error('IPC de bloqueo compartido no disponible.'));
             return;
           }
 
+          if (cancelled) {
+            // La ventana ya se cerró mientras Electron adquiría el bloqueo:
+            // liberarlo ANTES de permitir una nueva adquisición del mismo owner.
+            if (result.status === 'acquired') {
+              await traccionApi.releaseRecordLock?.(activeLockPayload);
+            }
+            return;
+          }
           applyResult(result);
         })
-        .catch(handleAcquireError);
+        .catch((error: unknown) => {
+          if (cancelled) {
+            console.warn('No se pudo completar la liberación de una adquisición cancelada.', error);
+          } else {
+            handleAcquireError(error);
+          }
+        });
+      pendingAcquisitions.add(attempt);
+      void attempt.finally(() => pendingAcquisitions.delete(attempt));
     }
 
     acquireLock();
@@ -332,12 +360,27 @@ export function useSharedRecordLock({
       clearTemporaryLockTimers();
       clearPersistenceBusy(lockBusyKey);
       window.clearInterval(heartbeatId);
-      if (acquired) {
-        setAcquired(false);
-        window.traccion?.releaseRecordLock?.(activeLockPayload).catch((error: unknown) => {
-          console.warn('No se ha podido liberar el bloqueo compartido del registro.', error);
-        });
-      }
+      // La limpieza espera a cualquier acquire IPC aún en vuelo. Al terminar,
+      // libera la reserva y desbloquea la apertura siguiente del mismo registro.
+      const olderCleanup = pendingLockCleanup.get(activeLockKey);
+      const cleanup = (async () => {
+        if (olderCleanup) await olderCleanup.catch(() => undefined);
+        await Promise.allSettled([...pendingAcquisitions]);
+        if (acquired) {
+          setAcquired(false);
+          try {
+            await traccionApi.releaseRecordLock?.(activeLockPayload);
+          } catch (error) {
+            console.warn('No se ha podido liberar el bloqueo compartido del registro.', error);
+          }
+        }
+      })();
+      pendingLockCleanup.set(activeLockKey, cleanup);
+      void cleanup.finally(() => {
+        if (pendingLockCleanup.get(activeLockKey) === cleanup) {
+          pendingLockCleanup.delete(activeLockKey);
+        }
+      });
     };
   }, [enabled, lockPayload]);
 
