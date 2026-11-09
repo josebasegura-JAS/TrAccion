@@ -272,7 +272,7 @@ export function filterTicketRestaurantAbsencesByMonth(
   return absences.filter(
     (absence) =>
       !absence.deletedAt &&
-      absence.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
+      absence.hasta >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
       absence.desde <= monthEnd &&
       absence.hasta >= monthStart,
   );
