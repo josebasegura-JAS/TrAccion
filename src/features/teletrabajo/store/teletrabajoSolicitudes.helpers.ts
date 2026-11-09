@@ -149,6 +149,9 @@ export function normalizeSolicitud(solicitud: TeletrabajoSolicitud): Teletrabajo
       solicitud.direccionTeletrabajo ?? EMPTY_TELETRABAJO_DRAFT.direccionTeletrabajo,
     estado: solicitud.estado,
     tipoSolicitud: solicitud.tipoSolicitud,
+    ...(solicitud.modalidadTramitacion === 'ordinaria' || solicitud.modalidadTramitacion === 'extraordinaria'
+      ? { modalidadTramitacion: solicitud.modalidadTramitacion }
+      : {}),
     diasTeletrabajo: Array.isArray(solicitud.diasTeletrabajo)
       ? normalizeDiasTeletrabajo(solicitud.diasTeletrabajo)
       : EMPTY_TELETRABAJO_DRAFT.diasTeletrabajo,
@@ -248,6 +251,9 @@ export function buildSolicitudesForNewPeriodo(
       periodo,
       estado: 'pendiente',
       tipoSolicitud: 'renovacion',
+      // Cada campaña nueva empieza sin fecha de presentación: nunca hereda la
+      // modalidad del periodo anterior, ni se clasifica antes de recibir fecha.
+      modalidadTramitacion: undefined,
       fechaSolicitud: '',
       revisado: false,
       validacionSeguridadInformatica: false,
