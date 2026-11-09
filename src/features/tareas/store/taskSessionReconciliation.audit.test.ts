@@ -65,7 +65,7 @@ beforeEach(() => {
   stored.clear();
   readMock.mockImplementation((key) => stored.get(key) ?? null);
   loadMock.mockImplementation(async () => [task()]);
-  saveMock.mockResolvedValue({ ok: true, message: 'Guardado.' });
+  saveMock.mockResolvedValue({ ok: true, message: 'Guardado.', currentUpdatedAt: null });
 });
 
 describe('auditoría de integridad: reconciliación legacy Comité/Paritaria', () => {
