@@ -30,7 +30,7 @@ export interface ManagedSessionStateStore {
   hasLoadedHistoricalSessions: boolean;
   load: () => void;
   loadHistoricalSessions: () => void;
-  reloadFromStorage: () => void;
+  reloadFromStorage: () => Promise<void>;
   create: (draft: ManagedSessionDraft) => string;
   createWithConcurrencyCheck: (
     draft: ManagedSessionDraft,
@@ -544,46 +544,57 @@ function reopenManagedSession(session: ManagedSession): ManagedSession {
 }
 
 export function createManagedSessionStore(config: SessionModuleConfig) {
+  // Todas las lecturas del mismo store comparten la misma generación.
+  // Una respuesta iniciada antes no puede sobrescribir otra más reciente.
+  let latestReadRequest = 0;
   return create<ManagedSessionStateStore>((set, get) => ({
     sessions: [],
     hasLoadedHistoricalSessions: false,
     load: () => {
+      const request = ++latestReadRequest;
       void measureSessionOperation(config.moduleId, 'abrir', () => readSessionsFromNativeOrBlob(config))
-        .then((sessions) =>
+        .then((sessions) => {
+          if (request !== latestReadRequest) return;
           set({
             sessions: filterSessionsForState(sessions, false),
             hasLoadedHistoricalSessions: false,
-          }),
-        )
+          });
+        })
         .catch((error) => reportModuleReadFailure(config.storageKey, config.moduleId, error));
     },
     loadHistoricalSessions: () => {
+      const request = ++latestReadRequest;
       void measureSessionOperation(config.moduleId, 'históricos', () => readSessionsFromNativeOrBlob(config))
-        .then((sessions) =>
+        .then((sessions) => {
+          if (request !== latestReadRequest) return;
           set({
             sessions: filterSessionsForState(sessions, true),
             hasLoadedHistoricalSessions: true,
-          }),
-        )
-        .catch((error) => reportModuleReadFailure(config.storageKey, config.moduleId, error));
-    },
-    reloadFromStorage: () => {
-      void measureSessionOperation(config.moduleId, 'sincronización', () => readSessionsFromNativeOrBlob(config))
-        .then((sessions) => {
-          const nextSessions = filterSessionsForState(
-            sessions,
-            get().hasLoadedHistoricalSessions,
-            getVisibleSessionIds(get().sessions),
-          );
-          // Compara contenido antes de actualizar el estado para evitar el
-          // re-render (y el parpadeo asociado) cuando el poll detecta cambio
-          // de updatedAt pero el contenido normalizado ya coincide con el
-          // que tenemos en memoria.
-          if (!areManagedSessionsEquivalent(get().sessions, nextSessions)) {
-            set({ sessions: nextSessions });
-          }
+          });
         })
         .catch((error) => reportModuleReadFailure(config.storageKey, config.moduleId, error));
+    },
+    reloadFromStorage: async () => {
+      const request = ++latestReadRequest;
+      try {
+        // Esperar realmente a SQLite y al commit del store: el coordinador
+        // no debe marcar el token como aplicado antes de que acabe la recarga.
+        const sessions = await measureSessionOperation(config.moduleId, 'sincronización', () => readSessionsFromNativeOrBlob(config));
+        if (request !== latestReadRequest) return;
+        const nextSessions = filterSessionsForState(
+          sessions,
+          get().hasLoadedHistoricalSessions,
+          getVisibleSessionIds(get().sessions),
+        );
+        if (!areManagedSessionsEquivalent(get().sessions, nextSessions)) {
+          set({ sessions: nextSessions });
+        }
+      } catch (error) {
+        reportModuleReadFailure(config.storageKey, config.moduleId, error);
+        // Propagar el fallo permite conservar la invalidación pendiente
+        // y reintentarlo; no se debe avanzar el token de sincronización.
+        throw error;
+      }
     },
     create: (draft) => {
       const session = buildSessionFromDraft(config, draft);
