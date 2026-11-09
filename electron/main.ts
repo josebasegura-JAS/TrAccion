@@ -292,7 +292,15 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     requestMainWindowShow(false);
   }, splashMaximumVisibleMs);
   const onBootVisible = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(); };
-  const onRendererReady = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) { startupMark('React preparado'); requestMainWindowShow(); } };
+  // Solo la primera señal pertenece al arranque. Una recarga tardía del
+  // renderer no debe añadir un segundo «React preparado» con minutos u horas.
+  let hasRecordedRendererReady = false;
+  const onRendererReady = (event: IpcMainEvent): void => {
+    if (event.sender !== mainWindow.webContents || hasRecordedRendererReady) return;
+    hasRecordedRendererReady = true;
+    startupMark('React preparado');
+    requestMainWindowShow();
+  };
   const rendererLoadStartedAt = Date.now();
   mainWindow.webContents.once('did-finish-load', () => {
     startupMark(`HTML del renderer cargado (${Date.now() - rendererLoadStartedAt} ms)`);
