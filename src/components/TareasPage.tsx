@@ -44,6 +44,7 @@ import {
 } from '../shared/table/useTableViewPreferences';
 import { SearchField } from './ui/SearchField';
 import { TaskEditor } from './TaskEditor';
+import { getTaskQuickActions, TaskQuickActionsPreview } from './task-editor/TaskQuickActionsPreview';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { TaskOriginsModal } from '../features/tareas/components/TaskOriginsModal';
 import { HistoricYearSection } from '../features/tareas/components/TareasHistoricSection';
@@ -396,6 +397,22 @@ export function TareasPage({
   );
 
   const [quickActionsOnly, setQuickActionsOnly] = useState(false);
+  const [expandedQuickActionTaskIds, setExpandedQuickActionTaskIds] = useState<Set<string>>(() => new Set());
+  const toggleQuickActionExpansion = (taskId: string) => {
+    setExpandedQuickActionTaskIds((current) => {
+      const next = new Set(current);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+  useEffect(() => {
+    const existingIds = new Set(tasks.filter((task) => !task.deletedAt).map((task) => task.id));
+    setExpandedQuickActionTaskIds((current) => {
+      const next = new Set([...current].filter((id) => existingIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [tasks]);
   const filteredTasks = useMemo(() => {
     const base = filterTasks(tasks, {
         ...filters,
@@ -569,9 +586,27 @@ export function TareasPage({
         accessor: (task) => task.titulo,
         render: (task) => {
           const activity = taskFollowUpLabel(task, Date.now());
+          const hasQuickActions = getTaskQuickActions(task).length > 0;
+          const expanded = expandedQuickActionTaskIds.has(task.id);
           return (
             <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-1.5">{(otherTaskLocks[task.id] || otherTaskLocks.__module__) && <span className="inline-flex shrink-0 text-amber-400" title="Esta tarea está siendo editada por otra persona" aria-label="Edición reservada por otra persona"><LockKeyhole size={14} aria-hidden="true" /></span>}{pendingQuickActions(task) > 0 && <span title={`${pendingQuickActions(task)} acciones pendientes`} className="inline-flex shrink-0 items-center gap-0.5 text-red-400"><Bell size={14}/><span className="text-[10px] font-bold">{pendingQuickActions(task)}</span></span>}<span className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</span></div>
+              <div className="flex min-w-0 items-center gap-1.5">
+                {hasQuickActions && (
+                  <button
+                    type="button"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sky-300 hover:bg-sky-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"
+                    aria-label={`${expanded ? 'Ocultar' : 'Mostrar'} acciones vinculadas de ${task.titulo}`}
+                    aria-controls={`task-actions-${task.id}`}
+                    aria-expanded={expanded}
+                    title={expanded ? 'Ocultar acciones vinculadas' : 'Ver acciones vinculadas'}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleQuickActionExpansion(task.id);
+                    }}
+                  >
+                    {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </button>
+                )}{(otherTaskLocks[task.id] || otherTaskLocks.__module__) && <span className="inline-flex shrink-0 text-amber-400" title="Esta tarea está siendo editada por otra persona" aria-label="Edición reservada por otra persona"><LockKeyhole size={14} aria-hidden="true" /></span>}{pendingQuickActions(task) > 0 && <span title={`${pendingQuickActions(task)} acciones pendientes`} className="inline-flex shrink-0 items-center gap-0.5 text-red-400"><Bell size={14}/><span className="text-[10px] font-bold">{pendingQuickActions(task)}</span></span>}<span className="truncate font-semibold text-metro-text" title={task.titulo}>{task.titulo}</span></div>
               {activity && <div className={`mt-0.5 truncate text-[11px] font-normal leading-4 ${activity.className}`} title={activity.label}>{activity.label}</div>}
             </div>
           );
@@ -642,7 +677,7 @@ export function TareasPage({
         className: 'text-metro-muted',
       },
     ],
-    [taskStates, otherTaskLocks],
+    [taskStates, otherTaskLocks, expandedQuickActionTaskIds],
   );
 
   const sortedTasks = useMemo(
@@ -848,6 +883,8 @@ export function TareasPage({
           onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
+          isRowExpanded={(task) => expandedQuickActionTaskIds.has(task.id) && getTaskQuickActions(task).length > 0}
+          renderExpandedRow={(task) => <TaskQuickActionsPreview task={task} />}
           onSortChange={setSort}
           rows={activeTaskRows}
           sort={preferences.sort}
