@@ -44,7 +44,8 @@ import {
 } from '../shared/table/useTableViewPreferences';
 import { SearchField } from './ui/SearchField';
 import { TaskEditor } from './TaskEditor';
-import { getTaskQuickActions, TaskQuickActionsPreview } from './task-editor/TaskQuickActionsPreview';
+import { TaskQuickActionsPreview } from './task-editor/TaskQuickActionsPreview';
+import { getTaskQuickActions } from './task-editor/taskQuickActions';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { TaskOriginsModal } from '../features/tareas/components/TaskOriginsModal';
 import { HistoricYearSection } from '../features/tareas/components/TareasHistoricSection';
