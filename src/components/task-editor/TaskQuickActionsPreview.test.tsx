@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Task } from '../../features/tareas/domain/task';
-import { getTaskQuickActions, TaskQuickActionsPreview } from './TaskQuickActionsPreview';
+import { TaskQuickActionsPreview } from './TaskQuickActionsPreview';
+import { getTaskQuickActions } from './taskQuickActions';
 
 const fixture = {
   id: 'task-123',
