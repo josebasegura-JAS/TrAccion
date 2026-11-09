@@ -175,11 +175,14 @@ export async function startLocalInstanceUpdateListener(
   const server: Server = createServer((socket) => {
     socket.setTimeout(LOCAL_PEER_TIMEOUT_MS, () => socket.destroy());
     let received = '';
+    let handled = false;
     socket.on('data', (part: Buffer) => {
+      if (handled) return;
       received += part.toString('utf8');
       if (received.length > 4096) return socket.destroy();
       const end = received.indexOf('\n');
       if (end < 0) return;
+      handled = true;
       let request: PeerMessage;
       try {
         request = JSON.parse(received.slice(0, end)) as PeerMessage;
