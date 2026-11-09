@@ -120,6 +120,7 @@ export interface TaskRepositoryDeps {
   enqueueLocalBackup: (reason: string) => void;
   assertDatabaseWritesAllowed: () => void;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
+  findForeignTaskEditingLock: (db: Database, taskId: string) => { ownerName: string; machineName: string } | null;
 }
 
 export interface TaskRepositoryApi {
@@ -147,6 +148,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
     enqueueLocalBackup,
     assertDatabaseWritesAllowed,
     isDatabaseWriteBlockedByHeartbeat,
+    findForeignTaskEditingLock,
   } = deps;
 
   let tasksMigrationDone = false;
@@ -240,6 +242,15 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
         const db = requireDatabase();
         const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
           maybeMigrateTasksFromPersistedRecord(db);
+          const foreignLock = findForeignTaskEditingLock(db, record.id);
+          if (foreignLock) {
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: null,
+              message: `No se puede modificar la tarea: está siendo editada por ${foreignLock.ownerName}@${foreignLock.machineName}.`,
+            };
+          }
           const row = db.prepare('SELECT updated_at FROM task_records WHERE id = ?').get(record.id);
           const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
 
