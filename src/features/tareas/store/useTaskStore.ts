@@ -85,13 +85,19 @@ function reuseUnchangedTasks(previous: Task[], incoming: Task[]): Task[] {
 function activeSnapshotState(
   state: TaskStateStore,
   incoming: Task[],
+  includesHistorical: boolean,
 ): TaskStateStore | Partial<TaskStateStore> {
+  // El histórico abierto necesita el snapshot completo, no solo las activas.
+  // Una lectura "active" iniciada antes de abrirlo nunca debe ocultarlo.
+  if (!includesHistorical && state.historicalTasksLoaded) return state;
   const tasks = reuseUnchangedTasks(state.tasks, incoming);
   const selectedTaskId = selectedTaskIdAfterRefresh(tasks, state.selectedTaskId);
-  if (tasks === state.tasks && selectedTaskId === state.selectedTaskId && !state.historicalTasksLoaded) {
+  const historicalTasksLoaded = includesHistorical;
+  if (tasks === state.tasks && selectedTaskId === state.selectedTaskId &&
+      state.historicalTasksLoaded === historicalTasksLoaded) {
     return state;
   }
-  return { tasks, selectedTaskId, historicalTasksLoaded: false };
+  return { tasks, selectedTaskId, historicalTasksLoaded };
 }
 
 let latestActiveTaskRead = 0;
@@ -120,7 +126,7 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
     void readTasksForStore('active')
       .then((tasks) => {
         if (request !== latestActiveTaskRead) return;
-        set((state) => activeSnapshotState(state, tasks));
+        set((state) => activeSnapshotState(state, tasks, false));
       })
       .catch((error: unknown) => {
         warnTaskReadFailure('No se han podido recargar las tareas activas', error);
@@ -140,9 +146,14 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
     }
 
     const request = ++latestActiveTaskRead;
-    const tasks = await readTasksForStore('active');
+    // Evita que el polling borre el histórico visible cada 12 s.
+    // Solo se consulta "all" cuando la persona ya ha cargado el histórico.
+    const includesHistorical = get().historicalTasksLoaded;
+    const snapshot = await readTasksForStore(includesHistorical ? 'all' : 'active');
     if (request !== latestActiveTaskRead) return;
-    set((state) => activeSnapshotState(state, tasks));
+    // El modo SQL "all" también incluye tombstones; nunca mostrarlos en la UI.
+    const tasks = includesHistorical ? snapshot.filter((task) => !task.deletedAt) : snapshot;
+    set((state) => activeSnapshotState(state, tasks, includesHistorical));
   },
 
   loadHistoricalTasks: async () => {
