@@ -45,6 +45,7 @@ function buildDeps(overrides: Partial<Parameters<typeof createTaskRepository>[0]
     enqueueLocalBackup: vi.fn(),
     assertDatabaseWritesAllowed: vi.fn(),
     isDatabaseWriteBlockedByHeartbeat: vi.fn(() => false),
+    findForeignTaskEditingLock: vi.fn(() => null),
     ...overrides,
   };
 }
@@ -67,6 +68,24 @@ describe('createTaskRepository', () => {
     const result = await saveTaskRecordIfUnchanged({ id: 'abc', value: '{}', expectedUpdatedAt: null });
 
     expect(result.ok).toBe(false);
+    expect(deps.enqueueLocalBackup).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un guardado desde Comité cuando otra persona tiene reservada la tarea', async () => {
+    const db = buildDb({ get: { updated_at: '2026-11-09T08:00:00.000Z' } });
+    const deps = buildDeps({
+      requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createTaskRepository>[0]['requireDatabase']>),
+      findForeignTaskEditingLock: vi.fn(() => ({ ownerName: 'Ana', machineName: 'PC-ANA' })),
+    });
+    const result = await createTaskRepository(deps as Parameters<typeof createTaskRepository>[0])
+      .saveTaskRecordIfUnchanged({
+        id: 'tarea-1',
+        value: '{}',
+        expectedUpdatedAt: '2026-11-09T08:00:00.000Z',
+      });
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('Ana@PC-ANA');
+    expect(db.run).not.toHaveBeenCalled();
     expect(deps.enqueueLocalBackup).not.toHaveBeenCalled();
   });
 

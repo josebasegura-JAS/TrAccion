@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   acquireRecordLockInTransaction,
   getRecordLockInTransaction,
+  findForeignTaskEditingLock,
   heartbeatRecordLockInTransaction,
   MODULE_LOCK_RECORD_ID,
   RECORD_LOCK_TTL_MS,
@@ -52,6 +53,38 @@ describe('recordLocks — funciones SQL puras sobre editing_locks', () => {
   afterEach(() => {
     db?.close();
     rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  describe('findForeignTaskEditingLock', () => {
+    it('detecta la reserva de otro usuario sin escribir en SQLite', () => {
+      acquireRecordLockInTransaction(db, { module: 'tareas', recordId: 'tarea-1' }, ownerA);
+      db.pragma('query_only = ON');
+      try {
+        expect(findForeignTaskEditingLock(db, 'tarea-1', ownerB.ownerId)).toMatchObject({
+          ownerId: ownerA.ownerId,
+          ownerName: ownerA.ownerName,
+          machineName: ownerA.hostname,
+        });
+        expect(findForeignTaskEditingLock(db, 'tarea-1', ownerA.ownerId)).toBeNull();
+        expect(findForeignTaskEditingLock(db, 'otra-tarea', ownerB.ownerId)).toBeNull();
+      } finally {
+        db.pragma('query_only = OFF');
+      }
+    });
+
+    it('respeta el bloqueo global ajeno de Tareas', () => {
+      acquireRecordLockInTransaction(db, { module: 'tareas', recordId: MODULE_LOCK_RECORD_ID }, ownerA);
+      expect(findForeignTaskEditingLock(db, 'tarea-2', ownerB.ownerId)?.ownerId).toBe(ownerA.ownerId);
+    });
+
+    it('no considera vigentes reservas caducadas', () => {
+      const expired = new Date(Date.now() - 100_000).toISOString();
+      db.prepare(
+        `INSERT INTO editing_locks (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+         VALUES ('tareas', 'tarea-3', 'owner-a', 'Ana', 'PC-ANA', ?, ?)`,
+      ).run(expired, expired);
+      expect(findForeignTaskEditingLock(db, 'tarea-3', ownerB.ownerId)).toBeNull();
+    });
   });
 
   describe('acquireRecordLockInTransaction', () => {
