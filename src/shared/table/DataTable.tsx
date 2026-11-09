@@ -1,4 +1,5 @@
 import {
+  Fragment,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -82,6 +83,9 @@ interface DataTableProps<Row, ColumnId extends string> {
   onRowClick?: (row: Row) => void;
   onRowDoubleClick?: (row: Row) => void;
   rowClassName?: (row: Row) => string;
+  /** Optional, read-only row beneath the corresponding table record. */
+  renderExpandedRow?: (row: Row) => ReactNode;
+  isRowExpanded?: (row: Row) => boolean;
   /** Aumenta el contraste del cebreado para pantallas operativas densas. */
   strongZebra?: boolean;
   ariaLabel: string;
@@ -207,6 +211,8 @@ export function DataTable<Row, ColumnId extends string>({
   onRowClick,
   onRowDoubleClick,
   rowClassName,
+  renderExpandedRow,
+  isRowExpanded,
   strongZebra = true,
   ariaLabel,
   maxHeightClassName = 'max-h-[460px]',
@@ -456,7 +462,7 @@ export function DataTable<Row, ColumnId extends string>({
         <table
           aria-colcount={visibleColumns.length}
           aria-label={ariaLabel}
-          aria-rowcount={sortedRows.length + 1}
+          aria-rowcount={renderExpandedRow ? undefined : sortedRows.length + 1}
           className={`w-full table-fixed text-left ${currentDensity.table}`}
           style={{ minWidth: tableMinWidth }}
         >
@@ -584,11 +590,12 @@ export function DataTable<Row, ColumnId extends string>({
             ) : (
               visibleRows.map((row, rowIndex) => {
                 const isInteractive = Boolean(onRowClick || onRowDoubleClick);
+                const expanded = Boolean(renderExpandedRow && isRowExpanded?.(row));
                 return (
-                  <tr
+                  <Fragment key={getRowId(row)}>
+                    <tr
                     className={`${rowIndex % 2 === 0 ? (strongZebra ? 'bg-[#10243b]/45' : 'bg-transparent') : (strongZebra ? 'bg-[#1a3048]/62' : 'bg-metro-panel/28')} border-b border-metro-border/55 transition-colors hover:bg-sky-400/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-metro-red/70 ${isInteractive ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
-                    key={getRowId(row)}
-                    aria-rowindex={rowIndex + 2}
+                    aria-rowindex={renderExpandedRow ? undefined : rowIndex + 2}
                     onClick={onRowClick ? (event) => handleRowClick(event, row) : undefined}
                     onDoubleClick={onRowDoubleClick ? (event) => handleRowDoubleClick(event, row) : undefined}
                     onKeyDown={isInteractive ? (event) => handleRowKeyDown(event, row) : undefined}
@@ -616,6 +623,14 @@ export function DataTable<Row, ColumnId extends string>({
                       );
                     })}
                   </tr>
+                    {expanded && (
+                      <tr className="border-b border-metro-border/55 bg-metro-panel/45" data-expanded-for={getRowId(row)}>
+                        <td className="p-0" colSpan={visibleColumns.length}>
+                          {renderExpandedRow?.(row)}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })
             )}
