@@ -21,9 +21,9 @@ describe('Sesiones: la desconexión no sustituye la última lectura válida', ()
       loadComiteSessionRecords: loader,
       saveComiteSessionRecordIfUnchanged: vi.fn(),
     } });
-    useCommitteeSessionStore.getState().reloadFromStorage();
-    await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(useCommitteeSessionStore.getState().reloadFromStorage())
+      .rejects.toThrow('SQLite no está disponible para leer las sesiones del módulo.');
+    expect(loader).toHaveBeenCalledOnce();
     expect(useCommitteeSessionStore.getState().sessions).toEqual([previous]);
   });
 });
