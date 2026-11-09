@@ -282,11 +282,22 @@ export function useTaskEditorController({
   const isCommitteeCircuit = normalizedDraftPhase === 'comite';
   const isParitariaCircuit = normalizedDraftPhase === 'paritaria';
 
-  const updateCoordinationTargets = (taskId: string) => setTaskTargets(taskId, {
-    direction: sendToDirection,
-    unionName: sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : null,
-    areaName: selectedAreaTarget || null,
-  });
+  const updateCoordinationTargets = (taskId: string) => {
+    // Guardar una tarea no equivale a modificar los circuitos de Coordinación.
+    // No escribir su índice si estos campos no se han tocado: evita conflictos
+    // OCC ajenos a la tarea y no restaura destinos cambiados por otra persona.
+    if (!isCreate &&
+      sendToDirection === recoveryBaseline.sendToDirection &&
+      sendToUnion === recoveryBaseline.sendToUnion &&
+      selectedAreaTarget === recoveryBaseline.selectedAreaTarget) {
+      return Promise.resolve({ ok: true, message: 'Circuitos de Coordinación sin cambios.' });
+    }
+    return setTaskTargets(taskId, {
+      direction: sendToDirection,
+      unionName: sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : null,
+      areaName: selectedAreaTarget || null,
+    });
+  };
 
   const recoveryStorageKey = buildRecoverableDraftKey('tareas', task?.id ?? 'new');
   const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
