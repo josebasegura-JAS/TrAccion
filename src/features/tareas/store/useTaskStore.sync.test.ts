@@ -111,6 +111,57 @@ describe('sincronización ligera de listados de Tareas', () => {
     expect(useTaskStore.getState().tasks[0].titulo).toBe('Nueva');
   });
 
+  it('mantiene y refresca el histórico cuando ya está cargado', async () => {
+    const active = task('a', 'Activa', '2026-11-09T08:01:00.000Z');
+    const closed = normalizeTask({
+      ...task('h', 'Histórica', '2026-11-09T08:01:00.000Z'),
+      estado: 'cerrada',
+      fase: 'cerrada',
+      closedAt: '2026-11-09T08:01:00.000Z',
+    });
+    const updatedHistorical = { ...closed, titulo: 'Histórica actualizada' };
+    const deleted = { ...task('deleted', 'Eliminada', '2026-11-09T08:01:00.000Z'), deletedAt: '2026-11-09T08:04:00.000Z' };
+    native.loadTaskRecords.mockResolvedValueOnce(snapshot(active))
+      .mockResolvedValueOnce(snapshot(closed))
+      .mockResolvedValueOnce(snapshot(active, updatedHistorical, deleted));
+
+    await useTaskStore.getState().reloadFromStorage();
+    await useTaskStore.getState().loadHistoricalTasks();
+    expect(useTaskStore.getState().historicalTasksLoaded).toBe(true);
+    expect(useTaskStore.getState().tasks).toHaveLength(2);
+
+    await useTaskStore.getState().reloadFromStorage();
+
+    const state = useTaskStore.getState();
+    expect(state.historicalTasksLoaded).toBe(true);
+    expect(state.tasks.find((entry) => entry.id === 'h')?.titulo).toBe('Histórica actualizada');
+    expect(state.tasks.some((entry) => entry.id === 'deleted')).toBe(false);
+    expect(native.loadTaskRecords).toHaveBeenLastCalledWith({ mode: 'all', id: undefined });
+  });
+
+  it('no oculta el histórico si una lectura de activas termina tras abrirlo', async () => {
+    const active = task('a', 'Activa', '2026-11-09T08:01:00.000Z');
+    const closed = normalizeTask({
+      ...task('h', 'Histórica', '2026-11-09T08:01:00.000Z'),
+      estado: 'cerrada',
+      fase: 'cerrada',
+      closedAt: '2026-11-09T08:01:00.000Z',
+    });
+    const delayedActive = deferred<ReturnType<typeof snapshot>>();
+    native.loadTaskRecords.mockImplementationOnce(() => delayedActive.promise)
+      .mockResolvedValueOnce(snapshot(closed));
+
+    const pending = useTaskStore.getState().reloadFromStorage();
+    await useTaskStore.getState().loadHistoricalTasks();
+    expect(useTaskStore.getState().historicalTasksLoaded).toBe(true);
+
+    delayedActive.resolve(snapshot(active));
+    await pending;
+
+    expect(useTaskStore.getState().historicalTasksLoaded).toBe(true);
+    expect(useTaskStore.getState().tasks.some((entry) => entry.id === 'h')).toBe(true);
+  });
+
   it('preserva la selección de tarea al actualizar el listado', async () => {
     native.loadTaskRecords.mockResolvedValueOnce(snapshot(
       task('a', 'A', '2026-11-09T08:01:00.000Z'),
