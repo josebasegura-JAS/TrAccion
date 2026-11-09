@@ -29,7 +29,7 @@ export function TaskQuickActionsPreview({ task }: { task: Task }) {
       <ul className="space-y-1.5">
         {actions.map((action) => {
           const completedAction = Boolean(action.completedAt);
-          const isOverdue = !completedAction && Boolean(action.fechaObjetivo) && action.fechaObjetivo < todayLocal;
+          const isOverdue = !completedAction && typeof action.fechaObjetivo === 'string' && action.fechaObjetivo.length > 0 && action.fechaObjetivo < todayLocal;
           return (
             <li
               className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-lg border border-metro-border/60 bg-metro-surface/55 px-3 py-2 text-xs"
