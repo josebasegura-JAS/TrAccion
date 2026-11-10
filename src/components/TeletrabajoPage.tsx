@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import { useTableViewPreferences } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
+import { getTeletrabajoOrdinaryDeadline, isTeletrabajoOrdinaryAdmissionClosed } from '../features/teletrabajo/domain/modalidadTramitacion';
+import { filterSolicitudesByTeletrabajoModalidad, type TeletrabajoOrdinaryClosure } from '../features/teletrabajo/domain/cierreOrdinario';
+import { loadTeletrabajoOrdinaryClosure, registerTeletrabajoOrdinaryClosure } from '../features/teletrabajo/store/teletrabajoClosureRepository';
 import { TeletrabajoFiltersBar } from '../features/teletrabajo/components/TeletrabajoFiltersBar';
 import { TeletrabajoPageHeader } from '../features/teletrabajo/components/TeletrabajoPageHeader';
 import { TeletrabajoWorkflow } from '../features/teletrabajo/components/TeletrabajoWorkflow';
@@ -98,6 +101,13 @@ export function TeletrabajoPage({
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [isPeriodoModalOpen, setIsPeriodoModalOpen] = useState(false);
+  const [modalidadTab, setModalidadTab] = useState<'ordinaria' | 'extraordinaria' | 'sin_clasificar'>(() => {
+    const month = new Date().getMonth();
+    return month >= 7 ? 'extraordinaria' : 'ordinaria';
+  });
+  const [ordinaryClosure, setOrdinaryClosure] = useState<TeletrabajoOrdinaryClosure | null>(null);
+  const [closureLoading, setClosureLoading] = useState(false);
+  const [closureStatus, setClosureStatus] = useState('');
   const [newPeriodoName, setNewPeriodoName] = useState('');
   const [sourcePeriodo, setSourcePeriodo] = useState('');
   const [copyFromPreviousPeriodo, setCopyFromPreviousPeriodo] = useState(true);
@@ -219,10 +229,44 @@ export function TeletrabajoPage({
 
   const currentPeriodo = periodos[0] ?? '';
   const mainPeriodo = filters.periodo || currentPeriodo;
+  useEffect(() => {
+    let cancelled = false;
+    setOrdinaryClosure(null);
+    setClosureStatus('');
+    if (!mainPeriodo) return;
+    void loadTeletrabajoOrdinaryClosure(mainPeriodo)
+      .then((snapshot) => { if (!cancelled) setOrdinaryClosure(snapshot); })
+      .catch((error: unknown) => {
+        if (!cancelled) setClosureStatus(error instanceof Error ? error.message : 'No se pudo consultar el cierre compartido.');
+      });
+    return () => { cancelled = true; };
+  }, [mainPeriodo]);
+  const handleRegisterOrdinaryClosure = async () => {
+    if (!mainPeriodo || closureLoading) return;
+    setClosureLoading(true);
+    setClosureStatus('');
+    try {
+      const registered = await registerTeletrabajoOrdinaryClosure(mainPeriodo);
+      setOrdinaryClosure(registered);
+      setClosureStatus('Fotografía de cierre registrada correctamente en la base compartida.');
+    } catch (error) {
+      setClosureStatus(error instanceof Error ? error.message : 'No se pudo registrar el cierre.');
+      try {
+        const actual = await loadTeletrabajoOrdinaryClosure(mainPeriodo);
+        setOrdinaryClosure(actual);
+      } catch { /* Se conserva el error original y no se crea un cierre local. */ }
+    } finally {
+      setClosureLoading(false);
+    }
+  };
   const mainFilters = useMemo(() => ({ ...filters, periodo: mainPeriodo }), [filters, mainPeriodo]);
-  const baseFilteredSolicitudes = useMemo(
+  const periodFilteredSolicitudes = useMemo(
     () => filterTeletrabajoSolicitudes(solicitudesWithPlantillaData, mainFilters),
     [mainFilters, solicitudesWithPlantillaData],
+  );
+  const baseFilteredSolicitudes = useMemo(
+    () => filterSolicitudesByTeletrabajoModalidad(periodFilteredSolicitudes, modalidadTab),
+    [periodFilteredSolicitudes, modalidadTab],
   );
   const filteredSolicitudes = useMemo(
     () =>
@@ -423,6 +467,7 @@ export function TeletrabajoPage({
     ['Búsqueda', filters.search],
     ['Estado', filters.estado],
     ['Tipo', filters.tipoSolicitud],
+    ['Tramitación', modalidadTab === 'ordinaria' ? 'Ordinaria' : modalidadTab === 'extraordinaria' ? 'Extraordinaria' : 'Sin clasificar'],
     ['Periodo', filters.periodo],
     ['Incidencias', incidentFilter ? TELETRABAJO_INCIDENT_FILTER_LABELS[incidentFilter] : ''],
   ]);
@@ -996,6 +1041,59 @@ export function TeletrabajoPage({
       />
 
       <TeletrabajoFiltersBar filters={filters} periodos={periodos} onSetFilter={setFilter} />
+      <div className="rounded-xl border border-metro-border bg-metro-panel/50 p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Modalidad de tramitación">
+          {([
+            ['extraordinaria', 'Extraordinarias'],
+            ['ordinaria', 'Campaña ordinaria'],
+            ['sin_clasificar', 'Sin clasificar'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={modalidadTab === value}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${modalidadTab === value
+                ? 'border-sky-400/60 bg-sky-400/15 text-metro-text'
+                : 'border-metro-border text-metro-muted hover:text-metro-text'}`}
+              onClick={() => setModalidadTab(value)}
+            >
+              {label} ({filterSolicitudesByTeletrabajoModalidad(periodFilteredSolicitudes, value).length})
+            </button>
+          ))}
+        </div>
+        {modalidadTab === 'ordinaria' && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-metro-muted">
+            <span>Admisión ordinaria hasta {getTeletrabajoOrdinaryDeadline(mainPeriodo) ?? 'fecha no disponible'}.</span>
+            {isTeletrabajoOrdinaryAdmissionClosed(mainPeriodo, new Date()) ? (
+              ordinaryClosure ? (
+                <span className="font-semibold text-emerald-300">
+                  Fotografía registrada el {new Date(ordinaryClosure.capturedAt).toLocaleString('es-ES')}:
+                  {' '}{ordinaryClosure.entries.length} expedientes ordinarios,
+                  {' '}{ordinaryClosure.unclassifiedCount} sin clasificar en la captura.
+                </span>
+              ) : (
+                <button
+                  className="rounded-md border border-amber-400/50 px-2.5 py-1 text-amber-200 disabled:opacity-50"
+                  disabled={closureLoading || !getTeletrabajoOrdinaryDeadline(mainPeriodo)}
+                  onClick={() => void handleRegisterOrdinaryClosure()}
+                  type="button"
+                >
+                  {closureLoading ? 'Registrando...' : 'Registrar fotografía de cierre'}
+                </button>
+              )
+            ) : <span>Admisión abierta.</span>}
+          </div>
+        )}
+        {ordinaryClosure && modalidadTab === 'ordinaria' && (
+          <p className="text-[11px] text-metro-muted">
+            La fotografía conserva los estados existentes en la fecha de captura; los expedientes siguen tramitándose.
+            {ordinaryClosure.capturedAt.slice(0, 10) > ordinaryClosure.deadline
+              ? ' Captura posterior al 31 de julio: no representa una reconstrucción certificada de aquella fecha.'
+              : ''}
+          </p>
+        )}
+        {closureStatus && <p role="status" className="text-xs text-amber-300">{closureStatus}</p>}
+      </div>
 
       <TeletrabajoIncidentSummaryBar
         activeFilter={incidentFilter}
@@ -1014,7 +1112,7 @@ export function TeletrabajoPage({
         employeesByEmpleado={employeesByEmpleado}
         filterLabel={teletrabajoFilterLabel ?? ''}
         gruposByIdMap={gruposByIdMap}
-        mainPeriodo={mainPeriodo}
+        mainPeriodo={`${mainPeriodo} · ${modalidadTab === 'ordinaria' ? 'Ordinarias' : modalidadTab === 'extraordinaria' ? 'Extraordinarias' : 'Sin clasificar'}`}
         onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
         onExportDireccion={() => void handleExportDireccion()}
