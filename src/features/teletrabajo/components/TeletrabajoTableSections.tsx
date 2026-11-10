@@ -5,6 +5,7 @@ import { reorderExportColumns } from '../../../shared/export/reorderExportColumn
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { getTeletrabajoIncidentMeta, getTeletrabajoRowClassName } from '../domain/incidentView';
 import type { TeletrabajoSolicitud } from '../domain/solicitud';
+import type { TeletrabajoDireccionExportScope } from '../domain/exportDireccionScope';
 import type { Employee } from '../../plantilla/domain/employee';
 import type { buildGruposCoberturaByIdMap } from '../domain/gruposCobertura';
 import type { buildPuestosByKey, buildSolicitudesByPeriodoPuestoCount } from '../domain/semaforo';
@@ -30,6 +31,8 @@ interface TeletrabajoMainTableSectionProps extends SharedTableProps {
   filterLabel: string;
   mainPeriodo: string;
   onExportDireccion: () => void;
+  direccionExportScope: TeletrabajoDireccionExportScope;
+  onDireccionExportScopeChange: (scope: TeletrabajoDireccionExportScope) => void;
   onResetColumnWidths: () => void;
   onResetPreferences: () => void;
   rows: TeletrabajoSolicitud[];
@@ -44,6 +47,8 @@ export function TeletrabajoMainTableSection({
   onColumnOrderChange,
   onColumnWidthChange,
   onExportDireccion,
+  direccionExportScope,
+  onDireccionExportScopeChange,
   onResetColumnWidths,
   onResetPreferences,
   onRowClick,
@@ -68,7 +73,21 @@ export function TeletrabajoMainTableSection({
               filterLabel,
             }}
           />
-          <ActionButton disabled={rows.length === 0} iconOnly={false} onClick={onExportDireccion} size="sm" title="Exportar a Dirección" variant="excel">Dirección</ActionButton>
+          <label className="flex items-center gap-1.5 text-xs font-normal text-metro-muted">
+            Exportar a Dirección
+            <select
+              aria-label="Alcance Excel Dirección"
+              className="h-8 rounded-md border border-metro-border bg-metro-surface px-2 text-xs text-metro-text"
+              onChange={(event) => onDireccionExportScopeChange(event.target.value as TeletrabajoDireccionExportScope)}
+              value={direccionExportScope}
+            >
+              <option value="vista">Vista actual</option>
+              <option value="ordinaria">Ordinarias del periodo</option>
+              <option value="extraordinaria">Extraordinarias del periodo</option>
+              <option value="todas">Todas las del periodo</option>
+            </select>
+          </label>
+          <ActionButton iconOnly={false} onClick={onExportDireccion} size="sm" title="Exportar a Dirección" variant="excel">Dirección</ActionButton>
         </div>
         <CountBadge>{rows.length} registros</CountBadge>
       </div>

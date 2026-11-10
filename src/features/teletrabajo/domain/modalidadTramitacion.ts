@@ -10,12 +10,14 @@ export interface TeletrabajoModalidadInput {
 
 /** La campaña empieza el 1 de septiembre y cierra admisión ordinaria el 31 de julio previo. */
 export function getTeletrabajoOrdinaryDeadline(periodo: string): string | null {
+  if (typeof periodo !== 'string') return null;
   const match = /^(\d{4})\s*[-/]\s*(\d{4})$/.exec(periodo.trim());
   if (!match || Number(match[2]) !== Number(match[1]) + 1) return null;
   return `${match[1]}-07-31`;
 }
 
 export function isValidTeletrabajoDate(value: string): boolean {
+  if (typeof value !== 'string') return false;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
   if (!match) return false;
   const year = Number(match[1]);
