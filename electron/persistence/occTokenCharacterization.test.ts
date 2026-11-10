@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createTaskRepository, type TaskRepositoryDeps } from './taskRepository';
 import { saveTaskRecordsInTransaction } from './taskBatchPersistence';
 import { getDirectStoreUpdatedAtSnapshot } from './directStoreUpdatedAt';
+import { applyMigrations } from './schemaMigrations';
 
 const require = createRequire(import.meta.url);
 const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
@@ -22,31 +23,9 @@ const status = {
 
 function createDb(): Database {
   const db = new BetterSqlite3(':memory:');
-  db.exec(`
-    CREATE TABLE task_records (
-      id TEXT PRIMARY KEY, value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
-    );
-    CREATE TABLE app_metadata (
-      key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
-    );
-    CREATE TABLE comite_session_records (
-      id TEXT PRIMARY KEY, value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
-    );
-    CREATE TABLE paritaria_session_records (
-      id TEXT PRIMARY KEY, value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
-    );
-    CREATE TABLE ticket_restaurante_person_records (
-      id TEXT PRIMARY KEY, value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
-    );
-    CREATE TABLE ticket_restaurante_manutencion_records (
-      id TEXT PRIMARY KEY, value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
-    );
-  `);
+  // Esquema íntegro: los tokens de polling consultan todas las tablas
+  // registradas, incluso cuando la prueba solo cambia Tareas o Sesiones.
+  applyMigrations(db);
   return db;
 }
 
