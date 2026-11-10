@@ -76,6 +76,7 @@ import {
   type DatabaseLockInfo,
 } from './persistence/sqliteLockLifecycle.js';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
+import { verifySqliteIntegrityReadOnly } from './persistence/sqliteIntegrityVerification.js';
 import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
 import { activateSqliteDatabase } from './persistence/databaseActivation.js';
 import { backupExistingDatabase } from './persistence/emergencyDatabaseBackup.js';
@@ -319,6 +320,9 @@ let status: DatabaseStatus | null = null;
 // Solo un health-check posterior a la finalización de la operación IPC fallida
 // puede cerrar y reabrir la conexión. Nunca repetir la sentencia que falló.
 let sqliteIoRecoveryRequired = false;
+// Los errores compatibles con corrupción requieren un preflight read-only.
+// Mientras no pase, no se habilitan escrituras ni se ordena restaurar backups.
+let sqliteSuspectedCorruption = false;
 
 export type { DatabaseConnectivityIssuePayload, DatabaseLockInfo } from './persistence/sqliteLockLifecycle.js';
 
@@ -469,17 +473,22 @@ function closeDatabase(): void {
   resetRepositoryMigrationState();
 }
 
-function suspendDatabaseAfterIoError(error: unknown): void {
+function suspendDatabaseAfterIoError(error: unknown, suspectedCorruption = false): void {
   if (sqliteIoRecoveryRequired) return;
   sqliteIoRecoveryRequired = true;
+  sqliteSuspectedCorruption = suspectedCorruption;
   const previous = getSqliteStatus();
   status = {
     ...previous,
     ready: false,
     phase: 'fallback',
-    message: `Se ha interrumpido el acceso a SQLite (${error instanceof Error ? error.message : String(error)}). Se bloquea la edición hasta reabrir y verificar la base compartida. No repitas operaciones de guardado cuyo resultado sea incierto.`,
+    message: suspectedCorruption
+      ? `SQLite ha devuelto un posible error de integridad (${error instanceof Error ? error.message : String(error)}). Edición bloqueada hasta comprobar de forma segura el archivo compartido. No restaures una copia ni repitas guardados inciertos sin verificarlo.`
+      : `Se ha interrumpido el acceso a SQLite (${error instanceof Error ? error.message : String(error)}). Se bloquea la edición hasta reabrir y verificar la base compartida. No repitas operaciones de guardado cuyo resultado sea incierto.`,
   };
-  console.error('[sqlite] Error de E/S: conexión suspendida hasta recuperación verificada.', error);
+  console.error(suspectedCorruption
+    ? '[sqlite] Posible corrupción: conexión suspendida hasta quick_check e identidad verificados.'
+    : '[sqlite] Error de E/S: conexión suspendida hasta recuperación verificada.', error);
 }
 
 async function recoverDatabaseAfterIoError(): Promise<void> {
@@ -488,6 +497,19 @@ async function recoverDatabaseAfterIoError(): Promise<void> {
   // Este método se llama únicamente desde database:health-check serializado
   // por sqliteIpcQueue. Si el cierre falla, NO abrimos otra conexión.
   closeDatabase();
+  // Antes de cualquier apertura normal (que ejecuta migraciones y limpieza),
+  // verificar en modo read-only el mismo fichero y la misma identidad.
+  if (sqliteSuspectedCorruption) {
+    if (!previous.databaseUuid || !previous.applicationId || !previous.environment) {
+      throw new Error('No hay identidad SQLite suficiente para una recuperación automática segura.');
+    }
+    verifySqliteIntegrityReadOnly(previous.path, {
+      databaseUuid: previous.databaseUuid,
+      applicationId: previous.applicationId,
+      environment: previous.environment,
+      schemaVersion: previous.schemaVersion,
+    });
+  }
   const recovered = await activateDatabase(path.dirname(previous.path), false, null);
   if (recovered.databaseUuid !== previous.databaseUuid ||
       recovered.applicationId !== previous.applicationId ||
@@ -497,6 +519,7 @@ async function recoverDatabaseAfterIoError(): Promise<void> {
     throw new Error('La identidad o el esquema de SQLite ha cambiado. No se reactivará la edición.');
   }
   sqliteIoRecoveryRequired = false;
+  sqliteSuspectedCorruption = false;
 }
 
 
@@ -576,29 +599,6 @@ function requireDatabase(): Database {
   return database;
 }
 
-function markDatabaseAsCorrupted(error: unknown): DatabaseStatus {
-  const previousStatus = getSqliteStatus();
-  const message =
-    error instanceof Error
-      ? `Base de datos SQLite dañada: ${error.message}. Restaura una copia de seguridad antes de seguir trabajando.`
-      : 'Base de datos SQLite dañada. Restaura una copia de seguridad antes de seguir trabajando.';
-
-  try {
-    closeDatabase();
-  } catch {
-    database = null;
-  }
-
-  status = {
-    ...previousStatus,
-    ready: false,
-    phase: 'error',
-    message,
-  };
-
-  return status;
-}
-
 async function safeDatabaseOperation<T>(
   operation: () => T,
   fallback: (status: DatabaseStatus, message: string) => T,
@@ -617,8 +617,12 @@ async function safeDatabaseOperation<T>(
         throw error;
       }
       if (isSqliteCorruptionError(error)) {
-        const nextStatus = markDatabaseAsCorrupted(error);
-        return fallback(nextStatus, nextStatus.message ?? 'Base de datos SQLite dañada.');
+        // Una interrupción SMB puede confundirse con corrupción: no dar por
+        // dañado el fichero sin un quick_check read-only y verificación de identidad.
+        // La sentencia fallida nunca se reintenta automáticamente.
+        suspendDatabaseAfterIoError(error, true);
+        const nextStatus = getSqliteStatus();
+        return fallback(nextStatus, nextStatus.message ?? 'Integridad SQLite pendiente de verificación.');
       }
 
       const isLastAttempt = attempt === SQLITE_BUSY_RETRY_DELAYS_MS.length;
@@ -665,7 +669,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       await recoverDatabaseAfterIoError();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      status = { ...getSqliteStatus(), ready: false, phase: 'fallback', message: `Recuperación SQLite pendiente: ${message}` };
+      status = { ...getSqliteStatus(), ready: false, phase: 'fallback', message: `Recuperación SQLite pendiente (edición bloqueada): ${message}` };
       return { ok: false, status: getSqliteStatus(), checkedAt, message: status.message ?? message };
     }
   }
