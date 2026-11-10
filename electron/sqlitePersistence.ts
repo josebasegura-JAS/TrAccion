@@ -1166,35 +1166,9 @@ export async function importSessionHistoryAtomically(
           };
         };
 
-        const taskIdsByExternalKey = new Map<string, string>();
-        const existingTaskRows = db.prepare(
-          'SELECT id, value_json FROM task_records WHERE deleted_at IS NULL',
-        ).all() as Array<{ id?: unknown; value_json?: unknown }>;
-        for (const row of existingTaskRows) {
-          if (typeof row.id !== 'string' || typeof row.value_json !== 'string') continue;
-          const parsed = parseObject(row.value_json);
-          const key = importKeyFrom(parsed.observaciones);
-          if (key) taskIdsByExternalKey.set(key, row.id);
-        }
-
-        let createdTaskCount = 0;
-        for (const task of payload.tasks) {
-          const knownId = taskIdsByExternalKey.get(task.externalKey);
-          if (knownId) continue;
-          const duplicateId = db.prepare('SELECT id FROM task_records WHERE id = ?').get(task.id) as { id?: unknown } | undefined;
-          if (duplicateId) {
-            throw new Error('Una tarea histórica generada ya existe con el mismo identificador. Reintenta la importación.');
-          }
-          const meta = recordMeta(task.value);
-          const inserted = db.prepare(
-            `INSERT INTO task_records (id, value_json, created_at, updated_at, deleted_at)
-             VALUES (?, ?, ?, ?, ?)`,
-          ).run(task.id, task.value, meta.createdAt, meta.updatedAt, meta.deletedAt);
-          if (inserted.changes !== 1) throw new Error('No se ha podido crear un punto histórico.');
-          taskIdsByExternalKey.set(task.externalKey, task.id);
-          createdTaskCount += 1;
-        }
-
+        // Decidir qué sesiones se insertarán a partir del estado REAL de SQLite,
+        // dentro de la misma transacción que las tareas. La UI puede tener un
+        // histórico parcial u obsoleto, por lo que su filtro no es autoritativo.
         const existingSessionImportKeys = new Set<string>();
         const existingSessionCodeDates = new Set<string>();
         const sessionRows = db.prepare(
@@ -1210,7 +1184,11 @@ export async function importSessionHistoryAtomically(
           if (code && date) existingSessionCodeDates.add(`${code}\u0000${date}`);
         }
 
-        let importedSessionCount = 0;
+        const importableSessions: Array<{
+          session: AtomicSessionHistoryImportSession;
+          parsed: Record<string, unknown>;
+        }> = [];
+        const neededTaskExternalKeys = new Set<string>();
         for (const session of payload.sessions) {
           const parsed = parseObject(session.value);
           const code = typeof parsed.code === 'string' ? parsed.code.trim().toLowerCase() : '';
@@ -1223,6 +1201,49 @@ export async function importSessionHistoryAtomically(
             continue;
           }
 
+          // Reservar aquí también las claves del propio lote para que dos
+          // sesiones duplicadas no puedan dejar puntos asociados a la descartada.
+          existingSessionImportKeys.add(session.externalKey);
+          if (code && date) existingSessionCodeDates.add(codeDate);
+          importableSessions.push({ session, parsed });
+          for (const key of session.taskExternalKeys) neededTaskExternalKeys.add(key);
+        }
+
+        const taskIdsByExternalKey = new Map<string, string>();
+        let createdTaskCount = 0;
+        if (importableSessions.length > 0) {
+          const existingTaskRows = db.prepare(
+            'SELECT id, value_json FROM task_records WHERE deleted_at IS NULL',
+          ).all() as Array<{ id?: unknown; value_json?: unknown }>;
+          for (const row of existingTaskRows) {
+            if (typeof row.id !== 'string' || typeof row.value_json !== 'string') continue;
+            const parsed = parseObject(row.value_json);
+            const key = importKeyFrom(parsed.observaciones);
+            if (key && neededTaskExternalKeys.has(key)) taskIdsByExternalKey.set(key, row.id);
+          }
+
+          for (const task of payload.tasks) {
+            // Una tarea solo puede crearse si la referencia una sesión que
+            // realmente se incorporará. No persistir tareas de duplicados.
+            if (!neededTaskExternalKeys.has(task.externalKey)) continue;
+            if (taskIdsByExternalKey.has(task.externalKey)) continue;
+            const duplicateId = db.prepare('SELECT id FROM task_records WHERE id = ?').get(task.id) as { id?: unknown } | undefined;
+            if (duplicateId) {
+              throw new Error('Una tarea histórica generada ya existe con el mismo identificador. Reintenta la importación.');
+            }
+            const meta = recordMeta(task.value);
+            const inserted = db.prepare(
+              `INSERT INTO task_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            ).run(task.id, task.value, meta.createdAt, meta.updatedAt, meta.deletedAt);
+            if (inserted.changes !== 1) throw new Error('No se ha podido crear un punto histórico.');
+            taskIdsByExternalKey.set(task.externalKey, task.id);
+            createdTaskCount += 1;
+          }
+        }
+
+        let importedSessionCount = 0;
+        for (const { session, parsed } of importableSessions) {
           const taskIds = session.taskExternalKeys.flatMap((externalKey) => {
             const id = taskIdsByExternalKey.get(externalKey);
             return id ? [id] : [];
@@ -1244,8 +1265,6 @@ export async function importSessionHistoryAtomically(
              VALUES (?, ?, ?, ?, ?)`,
           ).run(session.id, finalValue, meta.createdAt, meta.updatedAt, meta.deletedAt);
           if (inserted.changes !== 1) throw new Error('No se ha podido crear una sesión histórica.');
-          existingSessionImportKeys.add(session.externalKey);
-          if (code && date) existingSessionCodeDates.add(codeDate);
           importedSessionCount += 1;
         }
 
