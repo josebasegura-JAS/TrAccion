@@ -340,6 +340,18 @@ describe('presencialidad mínima del puesto acotada al periodo de cada solicitud
         employeesByEmpleado,
       ),
     ).not.toThrow();
+
+    const solicitudPeriodoNull = buildSolicitud({
+      id: 'sol-periodo-null',
+      empleado: '100',
+      periodo: null as unknown as string,
+    });
+    expect(() => getTeletrabajoSemaforo(
+      solicitudPeriodoNull,
+      puestosByKey,
+      buildSolicitudesByPeriodoPuestoCount([solicitudPeriodoNull]),
+      employeesByEmpleado,
+    )).not.toThrow();
   });
 
   it('no contagia el conflicto de un día a una solicitud que pide un día distinto sin problema (3 personas, mínimo 2)', () => {
