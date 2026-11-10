@@ -12,6 +12,7 @@ import {
   buildNewTask,
   buildSeguimiento,
   buildUpdatedTask,
+  registerTaskUpdateAudit,
   createTaskId,
 } from './taskMutations';
 import {
@@ -273,9 +274,11 @@ export async function updateTaskWithConcurrencyCheck(
         return { ok: false, message: 'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.' };
       }
 
-      const updatedTask = normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText, quickAction));
+      // Construir el borrador no implica persistencia confirmada: no auditar todavía.
+      const updatedTask = normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText, quickAction, { skipAudit: true }));
       const saveResult = await persistTaskDirectly(updatedTask, expectedUpdatedAt);
       if (!saveResult.ok) return saveResult;
+      registerTaskUpdateAudit(latestTask, draft);
       setState((state) => {
         const tasks = state.tasks.map((task) => (task.id === id ? updatedTask : task));
         return { tasks, selectedTaskId: isTaskClosed(updatedTask) ? firstActiveTaskId(tasks) : id };
@@ -283,6 +286,7 @@ export async function updateTaskWithConcurrencyCheck(
       return { ok: true, message: 'Tarea guardada.', recordId: id };
     }
 
+    let previousTaskForAudit: Task | null = null;
     const { records, updatedRecord } = await saveSharedArrayRecord<Task>({
       storageKey: TASKS_STORAGE_KEY,
       recordId: id,
@@ -290,10 +294,14 @@ export async function updateTaskWithConcurrencyCheck(
       parseRecords: parseTasksSnapshot,
       getRecordId: (record) => record.id,
       getRecordUpdatedAt: (record) => record.updatedAt,
-      updateRecord: (latestTask) => normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText, quickAction)),
+      updateRecord: (latestTask) => {
+        previousTaskForAudit = latestTask;
+        return normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText, quickAction, { skipAudit: true }));
+      },
       missingMessage: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
       conflictMessage: 'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
     });
+    if (previousTaskForAudit) registerTaskUpdateAudit(previousTaskForAudit, draft);
     const normalizedRecords = records.map(normalizeTask);
     setState({ tasks: normalizedRecords, selectedTaskId: isTaskClosed(updatedRecord) ? firstActiveTaskId(normalizedRecords) : id });
     return { ok: true, message: 'Tarea guardada.' };
@@ -336,12 +344,12 @@ export async function removeTaskWithConcurrencyCheck(
       getRecordUpdatedAt: (record) => record.updatedAt,
       updateRecord: (latestTask) => {
         const now = new Date().toISOString();
-        enqueueAuditEvent({ module: 'tareas', entityId: latestTask.id, action: 'deleted', summary: 'Registro eliminado', changes: [] });
         return normalizeTask({ ...latestTask, deletedAt: now, updatedAt: now });
       },
       missingMessage: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
       conflictMessage: 'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
     });
+    enqueueAuditEvent({ module: 'tareas', entityId: updatedRecord.id, action: 'deleted', summary: 'Registro eliminado', changes: [] });
     const normalizedRecords = records.map(normalizeTask);
     setState({ tasks: normalizedRecords, selectedTaskId: firstActiveTaskId(normalizedRecords) });
     return { ok: true, message: 'Tarea eliminada.', recordId: updatedRecord.id };
