@@ -32,7 +32,7 @@ src/
   services/                       persistencia, sincronización, locks y servicios transversales
 ```
 
-La mayor parte de los módulos funcionales ya vive en `src/features/`: Actas, Ayuda Escolar, Comité, Configuración, Coordinación, Criterios RRLL, Especiales, Huelgas, Licencias, Lotería, Paritaria, Plantilla, Presupuestos, Sorteos, Tareas, Teletrabajo, Ticket Restaurante y Vinculograma.
+La mayor parte de los módulos funcionales ya vive en `src/features/`: Actas, Actividades Externas, Ayuda Escolar, Comité, Configuración, Coordinación, Criterios RRLL, Especiales, Licencias sin sueldo, Lotería, Paritaria, Plantilla, Presupuestos, Sorteos, Tareas, Teletrabajo, Ticket Restaurante y Vinculograma. Además existe infraestructura transversal en `src/features/task-links/`.
 
 `src/components/` conserva principalmente el shell de la aplicación y algunos puntos de entrada/editores históricos (`AjustesPage`, `Header`, `Sidebar`, `DashboardCards`, etc.). La existencia de un wrapper histórico no justifica mover un módulo durante un cambio pequeño.
 
