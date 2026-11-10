@@ -1,5 +1,6 @@
 import type { Employee } from '../../plantilla/domain/employee';
 import type { TeletrabajoSolicitud } from './solicitud';
+import { getTeletrabajoModalidad, isValidTeletrabajoDate } from './modalidadTramitacion';
 
 export type TeletrabajoAntiguedadStatus = 'cumple' | 'no-cumple' | 'sin-dato';
 
@@ -53,20 +54,19 @@ function resolvePeriodoStartDate(periodo: string | null | undefined): string {
 }
 
 export function evaluateTeletrabajoAntiguedad(
-  solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'fechaSolicitud' | 'periodo' | 'tipoSolicitud'>,
+  solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'fechaSolicitud' | 'periodo' | 'tipoSolicitud' | 'modalidadTramitacion'>,
   employee: Pick<Employee, 'antiguedadPuesto'> | null | undefined,
 ): TeletrabajoAntiguedadEvaluation {
   const inicioPeriodo = resolvePeriodoStartDate(solicitud.periodo);
-  const fechaPresentacion = parseIsoDate(solicitud.fechaSolicitud);
-  // Una solicitud nueva presentada tras el comienzo del periodo adquiere
-  // derecho a ser evaluada con su antigüedad a la fecha de presentación.
-  // Las solicitudes ordinarias y las renovaciones mantienen el 1 de septiembre.
-  const fechaReferenciaValue = solicitud.tipoSolicitud === 'nueva'
-    && fechaPresentacion
-    && inicioPeriodo
-    && solicitud.fechaSolicitud > inicioPeriodo
-    ? solicitud.fechaSolicitud
-    : inicioPeriodo;
+  const modalidad = getTeletrabajoModalidad(solicitud);
+  // Ordinarias: inicio del periodo. Extraordinarias: fecha efectiva de
+  // presentación desde el 1 de agosto, también en renovaciones.
+  // Expedientes sin clasificación/fecha fiable: no asumir cumplimiento.
+  const fechaReferenciaValue = modalidad === 'ordinaria'
+    ? inicioPeriodo
+    : modalidad === 'extraordinaria' && isValidTeletrabajoDate(solicitud.fechaSolicitud)
+      ? solicitud.fechaSolicitud.trim()
+      : '';
 
   if (!employee) {
     return {
@@ -93,7 +93,7 @@ export function evaluateTeletrabajoAntiguedad(
   if (!fechaReferencia) {
     return {
       status: 'sin-dato',
-      title: 'Falta informar un periodo válido para comprobar la antigüedad.',
+      title: 'No se puede determinar la fecha de referencia de antigüedad: comprueba el periodo, la modalidad y la fecha de presentación.',
       antiguedadPuesto,
       fechaReferencia: fechaReferenciaValue,
     };
