@@ -314,6 +314,123 @@ describe('Coordinación granular — OCC real sobre persisted_records', () => {
     await persistence.closeSqlitePersistence();
   });
 
+  it('omite una reunión de Comité ya creada manualmente sin crear sus puntos huérfanos', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await import('./sqlitePersistence.js');
+    await persistence.initializeSqlitePersistence();
+
+    const now = new Date().toISOString();
+    const seeded = await persistence.saveComiteSessionRecordIfUnchanged({
+      id: 'manual-comite',
+      value: JSON.stringify({ id: 'manual-comite', code: 'CE-2025-07', date: '2025-07-10', notes: 'Creada a mano', createdAt: now, updatedAt: now, deletedAt: null }),
+      expectedUpdatedAt: null,
+    });
+    expect(seeded.ok).toBe(true);
+
+    const result = await persistence.importSessionHistoryAtomically({
+      module: 'comite',
+      tasks: [{ externalKey: 'SKIP-T', id: 'orphan-comite', value: JSON.stringify({ id: 'orphan-comite', observaciones: 'ImportKey:SKIP-T', createdAt: now, updatedAt: now, deletedAt: null }) }],
+      sessions: [{ externalKey: 'SKIP-S', id: 'ignored-comite', value: JSON.stringify({ id: 'ignored-comite', code: ' ce-2025-07 ', date: '2025-07-10', notes: 'ImportKey:SKIP-S', createdAt: now, updatedAt: now, deletedAt: null }), taskExternalKeys: ['SKIP-T'] }],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.importedSessionCount).toBe(0);
+    expect(result.createdTaskCount).toBe(0);
+    expect((await persistence.loadTaskRecordsSnapshot({ mode: 'all' })).records.some((record) => record.id === 'orphan-comite')).toBe(false);
+    expect((await persistence.loadComiteSessionRecordsSnapshot()).records.filter((record) => record.id === 'manual-comite')).toHaveLength(1);
+    await persistence.closeSqlitePersistence();
+  });
+
+  it('importa solo los puntos de la sesión admitida y no los de una Paritaria duplicada', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await import('./sqlitePersistence.js');
+    await persistence.initializeSqlitePersistence();
+
+    const now = new Date().toISOString();
+    const seeded = await persistence.saveParitariaSessionRecordIfUnchanged({
+      id: 'manual-paritaria',
+      value: JSON.stringify({ id: 'manual-paritaria', code: 'PAR-2025-01', date: '2025-01-15', notes: '', createdAt: now, updatedAt: now, deletedAt: null }),
+      expectedUpdatedAt: null,
+    });
+    expect(seeded.ok).toBe(true);
+
+    const result = await persistence.importSessionHistoryAtomically({
+      module: 'paritaria',
+      tasks: [
+        { externalKey: 'P-SKIP-T', id: 'orphan-paritaria', value: JSON.stringify({ id: 'orphan-paritaria', observaciones: 'ImportKey:P-SKIP-T', createdAt: now, updatedAt: now, deletedAt: null }) },
+        { externalKey: 'P-KEEP-T', id: 'kept-paritaria', value: JSON.stringify({ id: 'kept-paritaria', observaciones: 'ImportKey:P-KEEP-T', createdAt: now, updatedAt: now, deletedAt: null }) },
+      ],
+      sessions: [
+        { externalKey: 'P-SKIP-S', id: 'ignored-paritaria', value: JSON.stringify({ id: 'ignored-paritaria', code: 'PAR-2025-01', date: '2025-01-15', notes: 'ImportKey:P-SKIP-S', createdAt: now, updatedAt: now, deletedAt: null }), taskExternalKeys: ['P-SKIP-T'] },
+        { externalKey: 'P-KEEP-S', id: 'accepted-paritaria', value: JSON.stringify({ id: 'accepted-paritaria', code: 'PAR-2025-02', date: '2025-02-15', notes: 'ImportKey:P-KEEP-S', createdAt: now, updatedAt: now, deletedAt: null }), taskExternalKeys: ['P-KEEP-T'] },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.importedSessionCount).toBe(1);
+    expect(result.createdTaskCount).toBe(1);
+    const tasks = (await persistence.loadTaskRecordsSnapshot({ mode: 'all' })).records;
+    expect(tasks.some((record) => record.id === 'orphan-paritaria')).toBe(false);
+    expect(tasks.some((record) => record.id === 'kept-paritaria')).toBe(true);
+    const sessions = (await persistence.loadParitariaSessionRecordsSnapshot()).records;
+    expect((JSON.parse(sessions.find((record) => record.id === 'accepted-paritaria')!.value) as { items: string[] }).items).toEqual(['kept-paritaria']);
+    await persistence.closeSqlitePersistence();
+  });
+
+  it('deduplica dos sesiones del mismo lote sin crear puntos de la segunda y conserva los puntos compartidos', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await import('./sqlitePersistence.js');
+    await persistence.initializeSqlitePersistence();
+
+    const now = new Date().toISOString();
+    const result = await persistence.importSessionHistoryAtomically({
+      module: 'comite',
+      tasks: [
+        { externalKey: 'SHARED-T', id: 'shared-task', value: JSON.stringify({ id: 'shared-task', observaciones: 'ImportKey:SHARED-T', createdAt: now, updatedAt: now, deletedAt: null }) },
+        { externalKey: 'DUP-ONLY-T', id: 'duplicated-session-task', value: JSON.stringify({ id: 'duplicated-session-task', observaciones: 'ImportKey:DUP-ONLY-T', createdAt: now, updatedAt: now, deletedAt: null }) },
+        { externalKey: 'NEVER-USED-T', id: 'unreferenced-task', value: JSON.stringify({ id: 'unreferenced-task', observaciones: 'ImportKey:NEVER-USED-T', createdAt: now, updatedAt: now, deletedAt: null }) },
+      ],
+      sessions: [
+        { externalKey: 'BATCH-A', id: 'batch-a', value: JSON.stringify({ id: 'batch-a', code: 'CE-SAME', date: '2025-03-01', notes: 'ImportKey:BATCH-A', createdAt: now, updatedAt: now, deletedAt: null }), taskExternalKeys: ['SHARED-T'] },
+        { externalKey: 'BATCH-B', id: 'batch-b', value: JSON.stringify({ id: 'batch-b', code: 'CE-SAME', date: '2025-03-01', notes: 'ImportKey:BATCH-B', createdAt: now, updatedAt: now, deletedAt: null }), taskExternalKeys: ['DUP-ONLY-T', 'SHARED-T'] },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.importedSessionCount).toBe(1);
+    expect(result.createdTaskCount).toBe(1);
+    const tasks = (await persistence.loadTaskRecordsSnapshot({ mode: 'all' })).records;
+    expect(tasks.map((record) => record.id)).toContain('shared-task');
+    expect(tasks.map((record) => record.id)).not.toContain('duplicated-session-task');
+    expect(tasks.map((record) => record.id)).not.toContain('unreferenced-task');
+    const sessions = (await persistence.loadComiteSessionRecordsSnapshot()).records;
+    expect(sessions.some((record) => record.id === 'batch-b')).toBe(false);
+    expect((JSON.parse(sessions.find((record) => record.id === 'batch-a')!.value) as { items: string[] }).items).toEqual(['shared-task']);
+    await persistence.closeSqlitePersistence();
+  });
+
+  it('revierte todo el lote si falta una referencia de tarea de una sesión aceptada', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await import('./sqlitePersistence.js');
+    await persistence.initializeSqlitePersistence();
+
+    const now = new Date().toISOString();
+    const result = await persistence.importSessionHistoryAtomically({
+      module: 'comite',
+      tasks: [{ externalKey: 'VALID-T', id: 'valid-but-rolled-back', value: JSON.stringify({ id: 'valid-but-rolled-back', observaciones: 'ImportKey:VALID-T', createdAt: now, updatedAt: now, deletedAt: null }) }],
+      sessions: [{ externalKey: 'MISSING-S', id: 'missing-session', value: JSON.stringify({ id: 'missing-session', code: 'CE-MISSING', date: '2025-04-01', notes: 'ImportKey:MISSING-S', createdAt: now, updatedAt: now, deletedAt: null }), taskExternalKeys: ['VALID-T', 'MISSING-T'] }],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.importedSessionCount).toBe(0);
+    expect(result.createdTaskCount).toBe(0);
+    expect((await persistence.loadTaskRecordsSnapshot({ mode: 'all' })).records.some((record) => record.id === 'valid-but-rolled-back')).toBe(false);
+    expect((await persistence.loadComiteSessionRecordsSnapshot()).records.some((record) => record.id === 'missing-session')).toBe(false);
+    await persistence.closeSqlitePersistence();
+  });
+
   it('revierte también los puntos si falla la inserción de una sesión histórica', async () => {
     createSharedDatabase(layout.databasePath);
     writePreferences(layout.userData, layout.sharedDirectory);
