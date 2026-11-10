@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import { useTableViewPreferences } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
-import { getTeletrabajoModalidad, getTeletrabajoOrdinaryDeadline, isTeletrabajoOrdinaryAdmissionClosed } from '../features/teletrabajo/domain/modalidadTramitacion';
+import { getTeletrabajoOrdinaryDeadline, isTeletrabajoOrdinaryAdmissionClosed } from '../features/teletrabajo/domain/modalidadTramitacion';
 import { filterSolicitudesByTeletrabajoModalidad, type TeletrabajoOrdinaryClosure } from '../features/teletrabajo/domain/cierreOrdinario';
 import { loadTeletrabajoOrdinaryClosure, registerTeletrabajoOrdinaryClosure } from '../features/teletrabajo/store/teletrabajoClosureRepository';
 import { TeletrabajoFiltersBar } from '../features/teletrabajo/components/TeletrabajoFiltersBar';
