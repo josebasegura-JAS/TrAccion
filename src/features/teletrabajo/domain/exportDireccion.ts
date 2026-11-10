@@ -8,7 +8,7 @@ import type ExcelJS from 'exceljs';
 import type { Employee } from '../../plantilla/domain/employee';
 import { normalizeEmployeeNumber } from '../../plantilla/domain/employeeMaster';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
-import { getTeletrabajoModalidad } from './modalidadTramitacion';
+import { buildTeletrabajoDireccionAdministrativeFields } from './exportDireccionFields';
 import { buildGruposCoberturaByIdMap, type GrupoCobertura } from './gruposCobertura';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import { normalizeTeletrabajoPuesto } from './puestosTeletrabajo';
@@ -688,12 +688,12 @@ export async function exportTeletrabajoDireccionToExcel({
     rowValues[COL_APUNTES_RRLL - 1] = assessment.apuntesRrll;
     rowValues[COL_OBSERVACIONES - 1] = solicitud.observaciones;
     rowValues[COL_OBSERVACIONES_RRLL - 1] = solicitud.observacionesRrll ?? '';
-    const modalidad = getTeletrabajoModalidad(solicitud);
-    rowValues[COL_MODALIDAD - 1] = modalidad === 'sin_clasificar' ? 'Sin clasificar' : modalidad === 'ordinaria' ? 'Ordinaria' : 'Extraordinaria';
-    rowValues[COL_FECHA_SOLICITUD - 1] = solicitud.fechaSolicitud || '';
-    rowValues[COL_FECHA_REFERENCIA - 1] = evaluateTeletrabajoAntiguedad(solicitud, employee).fechaReferencia || '';
-    rowValues[COL_ESTADO_SOLICITUD - 1] = solicitud.estado;
-    rowValues[COL_TIPO_SOLICITUD - 1] = solicitud.tipoSolicitud;
+    const fields = buildTeletrabajoDireccionAdministrativeFields(solicitud, employee);
+    rowValues[COL_MODALIDAD - 1] = fields.modalidad;
+    rowValues[COL_FECHA_SOLICITUD - 1] = fields.fechaSolicitud;
+    rowValues[COL_FECHA_REFERENCIA - 1] = fields.referenciaAntiguedad;
+    rowValues[COL_ESTADO_SOLICITUD - 1] = fields.estado;
+    rowValues[COL_TIPO_SOLICITUD - 1] = fields.tipo;
     row.values = rowValues;
 
     const empleadoCell = row.getCell(2);
