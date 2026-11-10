@@ -66,6 +66,14 @@ const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Criterios vinculados a tareas',
+    items: [
+      'Cuando accedes a un criterio desde una tarea, conserva la relación con el asunto de origen para facilitar su consulta posterior.',
+      'Si la tarea tiene cambios pendientes, guarda o descarta primero la edición según el aviso del editor antes de abrir o crear el criterio vinculado. No debes cerrar definitivamente la tarea para poder documentar su criterio.',
+      'Al editar un criterio ya existente, TrAcción comprueba la disponibilidad de edición compartida y avisa de los conflictos antes de confirmar cambios.',
+    ],
+  },
+  {
     title: 'Flujo recomendado',
     ordered: true,
     items: [
