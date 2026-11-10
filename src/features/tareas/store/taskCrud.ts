@@ -286,7 +286,7 @@ export async function updateTaskWithConcurrencyCheck(
       return { ok: true, message: 'Tarea guardada.', recordId: id };
     }
 
-    let previousTaskForAudit: Task | null = null;
+    const auditSnapshot: { previousTask: Task | null } = { previousTask: null };
     const { records, updatedRecord } = await saveSharedArrayRecord<Task>({
       storageKey: TASKS_STORAGE_KEY,
       recordId: id,
@@ -295,13 +295,13 @@ export async function updateTaskWithConcurrencyCheck(
       getRecordId: (record) => record.id,
       getRecordUpdatedAt: (record) => record.updatedAt,
       updateRecord: (latestTask) => {
-        previousTaskForAudit = latestTask;
+        auditSnapshot.previousTask = latestTask;
         return normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText, quickAction, { skipAudit: true }));
       },
       missingMessage: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
       conflictMessage: 'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
     });
-    if (previousTaskForAudit) registerTaskUpdateAudit(previousTaskForAudit, draft);
+    if (auditSnapshot.previousTask) registerTaskUpdateAudit(auditSnapshot.previousTask, draft);
     const normalizedRecords = records.map(normalizeTask);
     setState({ tasks: normalizedRecords, selectedTaskId: isTaskClosed(updatedRecord) ? firstActiveTaskId(normalizedRecords) : id });
     return { ok: true, message: 'Tarea guardada.' };
