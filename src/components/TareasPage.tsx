@@ -90,6 +90,24 @@ const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Vista principal y edición compartida',
+    items: [
+      'Los botones Todas, Mías y Sin asignar filtran por responsable; la búsqueda también permite localizar texto del seguimiento. Puedes ordenar las columnas para priorizar lo que necesitas revisar.',
+      'La tabla principal muestra las tareas activas. El histórico se consulta por separado para no mezclar asuntos cerrados con trabajo pendiente.',
+      'Al abrir una tarea existente, TrAcción adquiere un bloqueo compartido y comprueba su última versión antes de permitir cambios. Si otra persona está editando, la ficha permanece en modo consulta.',
+      'Si pierdes la conexión o el bloqueo, no fuerces un guardado: conserva los cambios sin guardar y vuelve a abrir la ficha cuando se recupere la sincronización.',
+    ],
+  },
+  {
+    title: 'Guardado con resultado incierto',
+    items: [
+      'Si un guardado supera el tiempo de espera, no significa necesariamente que haya fallado: podría terminar después. TrAcción mantiene el borrador para que no pierdas el trabajo.',
+      'Si aparece el aviso de guardado incierto, vuelve a pulsar Guardar para comprobar primero si se completó la operación anterior. Esa comprobación no repite automáticamente el guardado.',
+      'Si otro usuario ha modificado el registro o no es posible confirmar el resultado, sigue el mensaje que aparece en la ficha; no copies ni reenvíes el seguimiento a ciegas.',
+      'Las acciones directas de seguimiento, como editar o completar una actuación pendiente, también comprueban los guardados cuyo resultado no se confirmó.',
+    ],
+  },
+  {
     title: 'Correo de origen',
     items: [
       'En la ficha de una tarea puedes arrastrar o seleccionar un correo de Outlook en formato .msg.',
