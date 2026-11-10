@@ -42,8 +42,10 @@ function state() {
 const save = vi.mocked(persistTaskDirectly);
 const read = vi.mocked(readTasksForStore);
 
+let sequence = 0;
 describe('Tareas: resolver un guardado de resultado incierto sin reintento', () => {
   beforeEach(() => {
+    task.id = `task-timeout-${++sequence}`;
     vi.resetAllMocks();
     vi.mocked(hasTaskSqliteRepository).mockReturnValue(true);
     read.mockResolvedValue([task]);
