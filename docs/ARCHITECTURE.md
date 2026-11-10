@@ -87,7 +87,7 @@ value
 expectedUpdatedAt
 ```
 
-`expectedUpdatedAt` implementa **optimistic concurrency control (OCC)**. Si el registro cambió desde que el usuario lo cargó, SQLite rechaza la escritura en vez de pisar el cambio de otra persona.
+`expectedUpdatedAt` implementa **optimistic concurrency control (OCC)** mediante comparación de fechas almacenadas. Rechaza cambios si el token temporal difiere, pero no es un número de revisión inequívoco: puede repetirse o retroceder por el reloj del cliente. Existen pruebas de caracterización de este límite en `electron/persistence/occTokenCharacterization.test.ts`. Por decisión de mantenimiento (noviembre de 2026) no se planifica una migración general de esquema sin una incidencia operativa que justifique su coste.
 
 Reglas:
 
