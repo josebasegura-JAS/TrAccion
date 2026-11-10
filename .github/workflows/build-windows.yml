@@ -1,6 +1,7 @@
 name: Build Windows EXE
 
 on:
+  pull_request:
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -12,16 +13,51 @@ on:
         default: Traccion-windows-portable
 
 permissions:
-  contents: write
+  contents: read
 
-# Compartido por EXE, Lite y ZIP. Nunca cancelar una distribución en curso.
+# Las PR solo se validan; generar EXE nunca reejecuta la batería de tests.
+# Los builds manuales siguen en cola sin cancelarse.
 concurrency:
-  group: traccion-distribucion
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('traccion-pr-{0}', github.event.pull_request.number) || 'traccion-distribucion' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  checks:
+    if: github.event_name == 'pull_request'
+    name: Comprobación / ${{ matrix.lane }}
+    runs-on: ${{ matrix.lane == 'electron' && 'windows-2022' || 'windows-latest' }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [calidad, vitest, web, electron]
+    env:
+      CI: 'true'
+      NODE_ENV: development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/validate
+        with:
+          lane: ${{ matrix.lane }}
+
+  validation:
+    name: Validación integral
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: [checks]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exigir éxito de todas las comprobaciones
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+        run: |
+          echo "Resultado de las cuatro comprobaciones: $CHECKS_RESULT"
+          test "$CHECKS_RESULT" = "success"
+
   distribution:
-    name: Validar y distribuir el mismo commit
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+    permissions:
+      contents: write
+    name: Generar EXE sin repetir tests
     runs-on: windows-latest
     timeout-minutes: 45
     env:
