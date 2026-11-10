@@ -106,7 +106,17 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       'Se gestionan dentro de Cómputo mensual para excepciones que no deben formar parte de la base ordinaria con calendario.',
       'Los tickets se almacenan específicamente para el mes de trabajo (AAAA-MM). Introducir tickets en un mes no los replica automáticamente en el siguiente.',
       'Si la persona existe en Plantilla, TrAcción puede completar nombre, DNI y área; los datos inexistentes se tratan como vacíos en lugar de bloquear el proceso.',
-      'Puedes decidir de forma independiente si una persona manual debe aparecer también en Cómputo cotización.',
+      'Puedes decidir de forma independiente si una persona manual debe aparecer también en Cómputo cotización. Estas personas se editan únicamente en su tabla específica, no en la tabla ordinaria superior.',
+      'La tabla de personas manuales permite ordenar las columnas y alterna el fondo de las filas para facilitar la lectura. Las personas con Cotización marcada se muestran primero, incluso al cambiar la ordenación.',
+    ],
+  },
+  {
+    title: 'Importación de manutenciones (Excel o PDF)',
+    items: [
+      'Abre Manutenciones y utiliza «Importar Excel / PDF» para seleccionar un fichero. También existe un modelo descargable.',
+      'Antes de guardar se muestra una revisión de las filas detectadas: persona, fecha, origen y si la manutención afecta o no al ticket; puedes comprobar errores y seleccionar las filas válidas.',
+      'Una fila que no cumpla las condiciones de elegibilidad no se debe forzar como descuento. Revisa la causa indicada en la vista previa.',
+      'Las manutenciones guardadas se consultan por mes imputado y muestran la columna «Afecta a ticket». También puedes añadirlas manualmente mediante número de empleado y fecha.',
     ],
   },
   {

@@ -36,14 +36,14 @@ export const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
       'Septiembre · Encargo: confirma los dos números, los décimos encargados, el precio y los datos del lotero; prepara o genera el correo del encargo.',
       'Octubre · Participantes: da de alta personas de Plantilla o externas, indica cuántos décimos solicita cada una y prepara el aviso por CCO.',
       'Seguimiento · Cobros: revisa las cantidades solicitadas y registra los pagos por efectivo, Bizum o transferencia con fecha y observaciones.',
-      'Cierre · Cuadre: comprueba sobrantes, pendientes de cobro, caja y Bizum. La app no permite cerrar si existen cobros pendientes o se han solicitado más décimos de los encargados.',
+      'Cierre · Cuadre: comprueba sobrantes, pendientes de cobro, caja, Bizum y transferencias. Si hay descuadres o importes pendientes, TrAcción muestra advertencias y solicita confirmación expresa; para cerrar es necesario haber marcado previamente el seguimiento como revisado.',
       'Si necesitas entrar directamente en otra fase, puedes hacerlo desde la barra de progreso. Guardar y exportar a Excel siguen disponibles en la cabecera.',
     ],
   },
   {
     title: 'Campaña y existencias',
     items: [
-      'La campaña que se carga corresponde automáticamente al año actual. Los datos de años anteriores quedan archivados y al cambiar de año se inicia una campaña nueva.',
+      'Cada campaña conserva su propio ejercicio e histórico. Al cerrar una campaña puedes abrir expresamente la siguiente; el sistema solicita confirmación y crea el nuevo ejercicio sin participantes, cobros ni arqueos.',
       'Al generar el Outlook del encargo al lotero, TrAcción adjunta automáticamente un Excel de Administración con todos los números consecutivos desde el 1 hasta el mayor nº de empleado activo de Plantilla, distribuido en tres bloques y con los dos números de lotería como cabeceras.',
       'Se controlan por separado los décimos encargados y disponibles de cada uno de los dos números.',
       'Cuando la disponibilidad baja de 30 décimos, el indicador se muestra en tono de aviso para llamar la atención.',
@@ -51,10 +51,19 @@ export const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Arqueos de caja fuerte',
+    items: [
+      'En Arqueos registra los recuentos de efectivo y las entradas o salidas justificadas para identificar diferencias con la caja teórica.',
+      'El efectivo forma parte de la caja física; los cobros por Bizum y transferencia se reflejan por separado y no deben sumarse como billetes en la caja fuerte.',
+      'Antes de registrar movimientos o arqueos, guarda los cambios pendientes de la campaña. Si hay ediciones sin guardar, el módulo bloquea esa operación y lo comunica.',
+      'Los arqueos se conservan vinculados al ejercicio, también cuando la campaña se cierra.',
+    ],
+  },
+  {
     title: 'Participantes y pagos',
     items: [
       'En el alta pueden seleccionarse personas de Plantilla o crearse participantes externos/jubilados con sus datos de contacto u observaciones.',
-      'En Seguimiento no se añaden participantes nuevos: se trabaja sobre los ya dados de alta, aunque sí pueden ajustarse sus cantidades.',
+      'En Seguimiento no se añaden participantes nuevos: se trabaja sobre los ya dados de alta, aunque sí pueden ajustarse sus cantidades. Para facilitar el control, se excluyen de esa tabla los participantes con cero décimos de ambos números.',
       'Al marcar un pago se registra su forma —efectivo, Bizum o transferencia— y puede anotarse información adicional.',
       'La exportación Excel incluye el detalle de participantes, cantidades, importes y pagos, además de una hoja de resumen de la campaña.',
     ],
