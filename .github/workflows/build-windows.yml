@@ -1,9 +1,6 @@
 name: Build Windows EXE
 
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/build-windows.yml']
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -23,32 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  cleanup_retired:
-    name: Limpiar historial de workflows retirados
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: Borrar ejecuciones completadas de workflows antiguos
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t retired < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" --jq '.workflows[] | select(.path != ".github/workflows/build-windows.yml") | .id')
-          for id in "${retired[@]}"; do
-            mapfile -t runs < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/$id/runs?per_page=100" --jq '.workflow_runs[] | select(.status == "completed") | .id')
-            for run in "${runs[@]}"; do
-              gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$run"
-              echo "Eliminada ejecución $run del workflow $id"
-            done
-          done
-          echo "Revisados ${#retired[@]} workflows retirados" >> "$GITHUB_STEP_SUMMARY"
-
   distribution:
-    if: github.event_name != 'push'
     name: Validar y distribuir el mismo commit
     runs-on: windows-latest
     timeout-minutes: 45
