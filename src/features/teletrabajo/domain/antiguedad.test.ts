@@ -73,6 +73,15 @@ describe('antigüedad teletrabajo: solicitudes fuera del inicio ordinario', () =
     expect(result.fechaReferencia).toBe('');
   });
 
+  it('acepta el formato de periodo legacy con barra sin alterar la fecha de referencia', () => {
+    const result = evaluateTeletrabajoAntiguedad(solicitud({
+      periodo: '2026/2027',
+      fechaSolicitud: '2026-07-30',
+    }), empleado);
+    expect(result.status).toBe('no-cumple');
+    expect(result.fechaReferencia).toBe('2026-09-01');
+  });
+
   it('respeta la modalidad persistida y no reinterpreta ordinarias históricas', () => {
     const result = evaluateTeletrabajoAntiguedad(solicitud({
       fechaSolicitud: '2026-07-31',
