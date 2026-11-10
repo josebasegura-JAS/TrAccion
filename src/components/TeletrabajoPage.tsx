@@ -548,7 +548,11 @@ export function TeletrabajoPage({
 
   const handleExportDireccion = useCallback(async () => {
     try {
-      const exportRows = selectTeletrabajoDireccionExportRows(periodFilteredSolicitudes, sortedSolicitudes, direccionExportScope);
+      const exportRows = selectTeletrabajoDireccionExportRows(
+        visibleSolicitudes.filter((solicitud) => solicitud.periodo === mainPeriodo),
+        sortedSolicitudes,
+        direccionExportScope,
+      );
       if (exportRows.length === 0) {
         setWordStatus('No hay solicitudes para el alcance elegido en el periodo seleccionado.');
         return;
@@ -571,7 +575,8 @@ export function TeletrabajoPage({
     }
   }, [
     direccionExportScope,
-    periodFilteredSolicitudes,
+    visibleSolicitudes,
+    mainPeriodo,
     employees,
     filters.periodo,
     gruposCobertura,
