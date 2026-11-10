@@ -1,4 +1,5 @@
 import type { Employee } from '../../plantilla/domain/employee';
+import { classifyTeletrabajoSolicitud } from './modalidadTramitacion';
 import {
   normalizeJobPosition,
   type JobPositionTranslation,
@@ -657,10 +658,13 @@ function upsertEncuestaSolicitudes(
     const existingIndex = indexByKey.get(key);
 
     if (existingIndex === undefined) {
+      const fechaSolicitud = draft.fechaSolicitud || nowDate.toISOString().slice(0, 10);
+      const modalidad = classifyTeletrabajoSolicitud({ periodo: draft.periodo, fechaSolicitud });
       const solicitud: TeletrabajoSolicitud = {
         id: createSolicitudId(),
         ...draft,
-        fechaSolicitud: draft.fechaSolicitud || nowDate.toISOString().slice(0, 10),
+        fechaSolicitud,
+        ...(modalidad !== 'sin_clasificar' ? { modalidadTramitacion: modalidad } : {}),
         createdAt: now,
         updatedAt: now,
         deletedAt: null,

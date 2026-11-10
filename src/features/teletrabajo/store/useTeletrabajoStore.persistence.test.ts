@@ -209,6 +209,81 @@ describe('useTeletrabajoStore persistence', () => {
     });
   });
 
+  it('fija la modalidad ordinaria al crear antes del cierre y la preserva al aprobar después', async () => {
+    const createdResult = await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft());
+    expect(createdResult.ok).toBe(true);
+    const initial = useTeletrabajoStore.getState().solicitudes[0];
+    expect(initial.modalidadTramitacion).toBe('ordinaria');
+
+    vi.setSystemTime(new Date('2026-11-09T12:00:00.000Z'));
+    const result = await useTeletrabajoStore.getState().updateWithConcurrencyCheck(
+      initial.id,
+      draft({ estado: 'aprobada' }),
+      initial.updatedAt,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(useTeletrabajoStore.getState().solicitudes[0]).toMatchObject({
+      estado: 'aprobada',
+      modalidadTramitacion: 'ordinaria',
+    });
+  });
+
+  it('impide nuevas ordinarias tras el 31 de julio sin escribir en SQLite', async () => {
+    vi.setSystemTime(new Date('2026-11-09T12:00:00.000Z'));
+    const result = await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft());
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('cerró el 2026-07-31');
+    expect(fakeBackend.solicitudes.size).toBe(0);
+  });
+
+  it('impide eliminar ordinarias tras el cierre sin impedir su aprobación', async () => {
+    await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft());
+    const original = useTeletrabajoStore.getState().solicitudes[0];
+    vi.setSystemTime(new Date('2026-11-09T12:00:00.000Z'));
+
+    const removed = await useTeletrabajoStore.getState().removeWithConcurrencyCheck(
+      original.id,
+      original.updatedAt,
+    );
+    expect(removed.ok).toBe(false);
+    expect(removed.message).toContain('requiere una rectificación justificada');
+    expect(fakeBackend.solicitudes.has(original.id)).toBe(true);
+
+    const updated = await useTeletrabajoStore.getState().updateWithConcurrencyCheck(
+      original.id,
+      draft({ estado: 'aprobada' }),
+      original.updatedAt,
+    );
+    expect(updated.ok).toBe(true);
+  });
+
+  it('permite solicitud extraordinaria desde el 1 de agosto y mantiene su modalidad en SQLite', async () => {
+    vi.setSystemTime(new Date('2026-11-09T12:00:00.000Z'));
+    const result = await useTeletrabajoStore.getState().createWithConcurrencyCheck(
+      draft({ fechaSolicitud: '2026-08-01' }),
+    );
+    expect(result.ok).toBe(true);
+    const item = useTeletrabajoStore.getState().solicitudes[0];
+    expect(item.modalidadTramitacion).toBe('extraordinaria');
+    expect(JSON.parse(fakeBackend.solicitudes.get(item.id)?.value ?? 'null').modalidadTramitacion)
+      .toBe('extraordinaria');
+  });
+
+  it('rechaza convertir ordinaria en extraordinaria alterando la fecha después de haberla guardado', async () => {
+    await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft());
+    const previous = useTeletrabajoStore.getState().solicitudes[0];
+    vi.setSystemTime(new Date('2026-11-09T12:00:00.000Z'));
+    const result = await useTeletrabajoStore.getState().updateWithConcurrencyCheck(
+      previous.id,
+      draft({ fechaSolicitud: '2026-11-05' }),
+      previous.updatedAt,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('No se puede cambiar la pertenencia');
+    expect(useTeletrabajoStore.getState().solicitudes[0].modalidadTramitacion).toBe('ordinaria');
+  });
+
   it('elimina de forma lógica y selecciona la siguiente solicitud visible', async () => {
     await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft({ empleado: '1001', nombreApellidos: 'Ana García' }));
     await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft({ empleado: '1002', nombreApellidos: 'Bea Ruiz' }));

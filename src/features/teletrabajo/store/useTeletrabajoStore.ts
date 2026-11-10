@@ -1,5 +1,11 @@
 import { create } from 'zustand';
 import type { Employee } from '../../plantilla/domain/employee';
+import {
+  validateNewTeletrabajoAdmission,
+  getTeletrabajoModalidad,
+  isTeletrabajoOrdinaryAdmissionClosed,
+  validateTeletrabajoClassificationChange,
+} from '../domain/modalidadTramitacion';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
 import {
   importEncuestaFromFile,
@@ -190,10 +196,15 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     }
   },
   createWithConcurrencyCheck: async (draft) => {
-    const now = new Date().toISOString();
+    const normalizedDraft = normalizeDraft(draft);
+    const nowDate = new Date();
+    const admission = validateNewTeletrabajoAdmission(normalizedDraft, nowDate);
+    if (!admission.ok) return { ok: false, message: admission.message };
+    const now = nowDate.toISOString();
     const solicitud: TeletrabajoSolicitud = {
       id: createSolicitudId(),
-      ...normalizeDraft(draft),
+      ...normalizedDraft,
+      modalidadTramitacion: admission.modalidad,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -269,10 +280,13 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
               );
             }
 
+            const classification = validateTeletrabajoClassificationChange(latestSolicitud, normalizedDraft);
+            if (!classification.ok) throw new Error(classification.message);
             registerTeletrabajoUpdateAudit(latestSolicitud, normalizedDraft);
             const updatedSolicitud: TeletrabajoSolicitud = {
               ...latestSolicitud,
               ...normalizedDraft,
+              ...(classification.modalidad ? { modalidadTramitacion: classification.modalidad } : {}),
               updatedAt: new Date().toISOString(),
             };
             const saveResult = await saveTeletrabajoSolicitudToSqlite(
@@ -302,6 +316,17 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   importEncuesta: async (file, employees, options = {}) => {
     const baseSolicitudes = await loadSolicitudesFromSqliteOrStorage();
     const result = await importEncuestaFromFile(file, employees, baseSolicitudes, options);
+
+    // Las importaciones ordinarias también respetan el cierre de admisión.
+    // No se bloquea la modificación posterior de expedientes existentes.
+    const existingIds = new Set(baseSolicitudes.map((item) => item.id));
+    for (const candidate of result.solicitudes) {
+      if (existingIds.has(candidate.id)) continue;
+      const admission = validateNewTeletrabajoAdmission(candidate, new Date());
+      if (!admission.ok) {
+        throw new Error(`No se puede incorporar una solicitud desde la encuesta: ${admission.message}`);
+      }
+    }
 
     if (result.diagnostics.unresolvedPuestos.length > 0) {
       return result;
@@ -703,6 +728,16 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
             if (expectedUpdatedAt && currentRecord.updatedAt !== expectedUpdatedAt) {
               throw new Error(
                 'Esta solicitud ha sido modificada por otro usuario. Recarga antes de eliminarla.',
+              );
+            }
+
+            // La pertenencia a la campaña ordinaria queda congelada al cerrar
+            // su admisión. No permitir borrar ordinarias desde la vía normal;
+            // las rectificaciones excepcionales requieren flujo auditado.
+            if (getTeletrabajoModalidad(latestSolicitud) === 'ordinaria'
+              && isTeletrabajoOrdinaryAdmissionClosed(latestSolicitud.periodo, new Date())) {
+              throw new Error(
+                'La campaña ordinaria está cerrada. No se puede eliminar este expediente desde la gestión habitual; requiere una rectificación justificada.',
               );
             }
 
