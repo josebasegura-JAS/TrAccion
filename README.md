@@ -15,7 +15,6 @@ TrAcción incluye actualmente, entre otros:
 - Ticket Restaurante.
 - Teletrabajo y Licencias sin sueldo.
 - Presupuestos.
-- Huelgas.
 - Ayuda Escolar.
 - Lotería y Sorteos.
 - Vinculograma y Actividades Externas.
@@ -44,7 +43,7 @@ La descripción técnica completa está en `docs/ARCHITECTURE.md`.
 
 La documentación se divide deliberadamente por finalidad:
 
-- `docs/FUNCIONAMIENTO.md` — contrato funcional: qué debe hacer TrAcción y reglas que deben conservarse.
+- `docs/FUNCIONAMIENTO.md` — **contrato funcional versionado**: finalidad, entradas, cálculos, estados, salidas y excepciones de cada módulo. Toda PR con cambios funcionales debe actualizar la sección afectada y contrastarla con sus pruebas.
 - `docs/DECISIONS.md` — decisiones de diseño y motivos por los que se adoptaron.
 - `docs/ARCHITECTURE.md` — arquitectura, persistencia, sincronización, Electron, stores y criterios técnicos.
 - Ayuda integrada en cada módulo — instrucciones operativas para los usuarios de la aplicación.
