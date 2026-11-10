@@ -1,6 +1,6 @@
 # Arquitectura de TrAcción
 
-> Estado contrastado con el repositorio de TrAcción 1.2.137 (octubre de 2026).
+> Referencia estructural revisada el 10 de noviembre de 2026 sobre `main` (`3f0f0d88`). El inventario de flujos no constituye una verificación funcional de cada módulo.
 >
 > Este documento describe la arquitectura técnica vigente. Las reglas de negocio pertenecen a `FUNCIONAMIENTO.md`; el motivo de las decisiones relevantes, a `DECISIONS.md`.
 
@@ -32,7 +32,7 @@ src/
   services/                       persistencia, sincronización, locks y servicios transversales
 ```
 
-La mayor parte de los módulos funcionales ya vive en `src/features/`: Actas, Ayuda Escolar, Comité, Configuración, Coordinación, Criterios RRLL, Especiales, Huelgas, Licencias, Lotería, Paritaria, Plantilla, Presupuestos, Sorteos, Tareas, Teletrabajo, Ticket Restaurante y Vinculograma.
+La mayor parte de los módulos funcionales ya vive en `src/features/`: Actas, Actividades Externas, Ayuda Escolar, Comité, Configuración, Coordinación, Criterios RRLL, Especiales, Licencias sin sueldo, Lotería, Paritaria, Plantilla, Presupuestos, Sorteos, Tareas, Teletrabajo, Ticket Restaurante y Vinculograma. Además existe infraestructura transversal en `src/features/task-links/`.
 
 `src/components/` conserva principalmente el shell de la aplicación y algunos puntos de entrada/editores históricos (`AjustesPage`, `Header`, `Sidebar`, `DashboardCards`, etc.). La existencia de un wrapper histórico no justifica mover un módulo durante un cambio pequeño.
 
@@ -87,7 +87,7 @@ value
 expectedUpdatedAt
 ```
 
-`expectedUpdatedAt` implementa **optimistic concurrency control (OCC)**. Si el registro cambió desde que el usuario lo cargó, SQLite rechaza la escritura en vez de pisar el cambio de otra persona.
+`expectedUpdatedAt` implementa **optimistic concurrency control (OCC)** mediante comparación de fechas almacenadas. Rechaza cambios si el token temporal difiere, pero no es un número de revisión inequívoco: puede repetirse o retroceder por el reloj del cliente. Existen pruebas de caracterización de este límite en `electron/persistence/occTokenCharacterization.test.ts`. Por decisión de mantenimiento (noviembre de 2026) no se planifica una migración general de esquema sin una incidencia operativa que justifique su coste.
 
 Reglas:
 
@@ -122,7 +122,7 @@ OCC evita sobrescrituras, pero no hace que otro puesto vea automáticamente el c
 
 `src/services/externalDataSync.ts` realiza el polling de cambios. Los stores sincronizables se registran en `syncableStoreRegistrations.ts`/`syncableStoreRegistry.ts`.
 
-Para tablas con repositorio propio, `electron/persistence/directStoreUpdatedAt.ts` consulta `MAX(updated_at)` y expone el token de actualización. Actualmente incluye, entre otros:
+Para tablas con repositorio propio, `electron/persistence/directStoreUpdatedAt.ts` consulta `MAX(updated_at)` y expone el token de actualización. Es una señal ligera, no una garantía matemática de detección de todas las escrituras: una actualización cuya fecha no supere el máximo anterior puede pasar inadvertida al polling hasta otra recarga. No introducir triggers ni nuevos contadores sin necesidad demostrada; conservar controles OCC, locks y pruebas. Actualmente incluye, entre otros:
 
 - Plantilla;
 - Teletrabajo;

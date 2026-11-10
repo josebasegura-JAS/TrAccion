@@ -1,8 +1,8 @@
 # Validación integral de TrAcción
 
 La única batería automática de PR es **TrAcción — Validación integral**, con el
-check **Validación integral**. No se dispara también por push. Un nuevo commit
-cancela la ejecución anterior de esa PR. No hay reintentos automáticos que
+check **Validación integral**. Se dispara en `pull_request`, en `push` a `main` y mediante `workflow_dispatch` (salvo el modo explícito de limpieza del historial). Un nuevo commit
+cancela la ejecución anterior del mismo grupo de concurrencia. No hay reintentos automáticos que
 conviertan un fallo intermitente en verde ni errores tolerados.
 
 ## Ejecución local
