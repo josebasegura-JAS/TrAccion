@@ -87,7 +87,7 @@ describe('auditoría de Tareas después de confirmar el guardado', () => {
   it('la ruta de almacenamiento compartido tampoco audita si se rechaza la actualización', async () => {
     vi.mocked(hasTaskSqliteRepository).mockReturnValue(false);
     vi.mocked(saveSharedArrayRecord).mockImplementation(async (options) => {
-      options.updateRecord(task);
+      options.updateRecord(task as never);
       throw new Error('Conflicto de almacenamiento');
     });
     const result = await updateTaskWithConcurrencyCheck(task.id, updatedDraft, undefined, task.updatedAt, buildState().setState);
@@ -98,8 +98,8 @@ describe('auditoría de Tareas después de confirmar el guardado', () => {
   it('la ruta compartida audita una sola vez después de confirmar la actualización', async () => {
     vi.mocked(hasTaskSqliteRepository).mockReturnValue(false);
     vi.mocked(saveSharedArrayRecord).mockImplementation(async (options) => {
-      const updatedRecord = options.updateRecord(task);
-      return { records: [updatedRecord], updatedRecord };
+      const updatedRecord = options.updateRecord(task as never);
+      return { records: [updatedRecord], updatedRecord } as never;
     });
     const result = await updateTaskWithConcurrencyCheck(task.id, updatedDraft, undefined, task.updatedAt, buildState().setState);
     expect(result.ok).toBe(true);
@@ -109,7 +109,7 @@ describe('auditoría de Tareas después de confirmar el guardado', () => {
   it('tampoco registra una eliminación fallida en la ruta compartida', async () => {
     vi.mocked(hasTaskSqliteRepository).mockReturnValue(false);
     vi.mocked(saveSharedArrayRecord).mockImplementation(async (options) => {
-      options.updateRecord(task);
+      options.updateRecord(task as never);
       throw new Error('Guardado rechazado');
     });
     const result = await removeTaskWithConcurrencyCheck(task.id, task.updatedAt, buildState().setState);
