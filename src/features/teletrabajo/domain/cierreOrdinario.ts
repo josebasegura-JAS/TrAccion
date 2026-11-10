@@ -32,7 +32,14 @@ export function parseTeletrabajoClosure(value: string): TeletrabajoOrdinaryClosu
       || !v.entries.every((entry) =>
         entry && typeof entry.id === 'string' && typeof entry.estado === 'string' && typeof entry.fechaSolicitud === 'string'
       )) return null;
-    return v as TeletrabajoOrdinaryClosure;
+    return {
+      kind: 'teletrabajo-ordinary-closure-v1',
+      periodo: v.periodo,
+      deadline: v.deadline,
+      capturedAt: v.capturedAt,
+      entries: v.entries,
+      unclassifiedCount: v.unclassifiedCount,
+    };
   } catch {
     return null;
   }
