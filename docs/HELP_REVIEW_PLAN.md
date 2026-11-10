@@ -43,3 +43,20 @@ Las prioridades son de **revisión**, no afirmaciones de que una ayuda concreta 
 - Reestructurar todo el registro de ayudas o introducir una segunda infraestructura.
 - Borrar ayudas de módulos que no se hayan inspeccionado.
 - Incorporar migraciones o cambios de rendimiento ajenos al objetivo.
+
+## Revisión ejecutada en noviembre de 2026
+
+La revisión contrastó los textos de ayuda con los componentes actuales de las pantallas. Cambios incluidos en la PR correspondiente:
+
+| Módulo | Archivo con ayuda | Ajuste contrastado |
+| --- | --- | --- |
+| Tareas | `src/components/TareasPage.tsx` | Filtros por responsable, búsqueda, bloqueo compartido y comprobación de guardado incierto |
+| Comité / Paritaria | `src/features/comite/components/comiteHelpSections.ts` | Histórico cargado bajo demanda, importación Word y cierre con control de versiones y aviso de fallo de Word |
+| Ticket Restaurante | `src/features/ticket-restaurante/components/ticketRestaurantePageConfig.ts` | Importación Excel/PDF con revisión, personas manuales separadas, tabla ordenable y prioridad de cotización |
+| Lotería | `src/features/loteria/components/loteriaPage.utils.ts` | Arqueos, caja física frente a Bizum/transferencias, filtros de cero décimos y cierre con advertencias |
+| Actas | `src/features/actas/components/actasPage.helpers.tsx` | Borrador Outlook, alegaciones y calendario recordatorio sin confundir creación de borrador con envío |
+| Criterios RRLL | `src/features/criterios-rrll/components/CriteriosRrllPage.tsx` | Apertura desde Tareas, borradores y edición compartida |
+
+Se inspeccionó además la presencia de ayuda contextual en Teletrabajo, Actividades Externas, Ayuda Escolar, Coordinación, Especiales, Licencias sin sueldo, Presupuestos, Sorteos, Vinculograma y Plantilla. No se cambian secciones sin confirmar un desajuste concreto; la ausencia de modificaciones no certifica exhaustivamente su contenido.
+
+**Alcance de esta entrega:** solo textos de ayuda y este inventario. No se cambian cálculos, reglas, persistencia ni presentación de componentes compartidos.
