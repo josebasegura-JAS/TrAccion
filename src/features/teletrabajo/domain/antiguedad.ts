@@ -1,6 +1,6 @@
 import type { Employee } from '../../plantilla/domain/employee';
 import type { TeletrabajoSolicitud } from './solicitud';
-import { getTeletrabajoModalidad, isValidTeletrabajoDate } from './modalidadTramitacion';
+import { getTeletrabajoModalidad, getTeletrabajoOrdinaryDeadline, isValidTeletrabajoDate } from './modalidadTramitacion';
 
 export type TeletrabajoAntiguedadStatus = 'cumple' | 'no-cumple' | 'sin-dato';
 
@@ -45,12 +45,8 @@ function formatIsoDate(date: Date): string {
 }
 
 function resolvePeriodoStartDate(periodo: string | null | undefined): string {
-  const match = /^(\d{4})\s*-\s*\d{4}$/.exec((periodo ?? '').trim());
-  if (!match) {
-    return '';
-  }
-
-  return `${match[1]}-09-01`;
+  const deadline = getTeletrabajoOrdinaryDeadline(periodo ?? '');
+  return deadline ? `${deadline.slice(0, 4)}-09-01` : '';
 }
 
 export function evaluateTeletrabajoAntiguedad(
