@@ -135,6 +135,7 @@ export function normalizeTask(task: Task): Task {
     phaseBeforeClose,
     createdAt: task.createdAt,
     updatedAt,
+    lastSaveAttemptId: typeof task.lastSaveAttemptId === 'string' && task.lastSaveAttemptId.trim() ? task.lastSaveAttemptId : undefined,
     deletedAt: task.deletedAt ?? null,
     closedAt: task.closedAt ?? (estado === 'cerrada' || fase === CLOSED_TASK_PHASE ? updatedAt : null),
   } satisfies Task;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import { useCoordinacionStore } from '../../features/coordinacion/store/useCoordinacionStore';
 import { parseOutlookMsg } from '../../features/especiales/domain/especiales';
@@ -119,6 +119,13 @@ export function useTaskEditorController({
   const [saveStatusIsError, setSaveStatusIsError] = useState(false);
   const [loadedIdentity, setLoadedIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState(task?.updatedAt ?? null);
+  const pendingTrackingSaveRef = useRef<{
+    taskId: string;
+    attemptId: string;
+    expectedUpdatedAt: string;
+    successMessage: string;
+    auditSummary: string;
+  } | null>(null);
   const [freshLockTaskId, setFreshLockTaskId] = useState<string | null>(null);
   const [freshLockError, setFreshLockError] = useState('');
   const [editingTrackingId, setEditingTrackingId] = useState<string | null>(null);
@@ -406,6 +413,11 @@ export function useTaskEditorController({
       return false;
     }
 
+    if (pendingTrackingSaveRef.current?.taskId === task.id) {
+      setSaveStatus('Comprueba primero el guardado incierto del seguimiento antes de cerrar esta tarea.');
+      setSaveStatusIsError(true);
+      return false;
+    }
     const closedDraft: TaskDraft = {
       ...draft,
       estado: 'cerrada',
@@ -424,6 +436,11 @@ export function useTaskEditorController({
   };
 
   const handleSubmit = async (): Promise<boolean> => {
+    if (task && pendingTrackingSaveRef.current?.taskId === task.id) {
+      setSaveStatus('Hay un guardado de seguimiento pendiente de verificar. Comprueba primero el seguimiento; no se enviará una nueva edición de la tarea.');
+      setSaveStatusIsError(true);
+      return false;
+    }
     if (!canSubmit) return false;
     if (quickActionEnabled && (!trackingText.trim() || !quickActionTitle.trim())) {
       setSaveStatus('Para crear una acción pendiente debes escribir el seguimiento y la actuación.');
@@ -595,7 +612,7 @@ export function useTaskEditorController({
       return null;
     }
 
-    if (latestTask.updatedAt !== loadedUpdatedAt) {
+    if (latestTask.updatedAt !== loadedUpdatedAt && pendingTrackingSaveRef.current?.taskId !== task.id) {
       setSaveStatus(
         'La tarea ha cambiado desde que abriste el detalle. Cierra y vuelve a abrirla antes de modificar el seguimiento.',
       );
@@ -619,10 +636,52 @@ export function useTaskEditorController({
       return false;
     }
 
+    const pending = pendingTrackingSaveRef.current;
+    if (pending?.taskId === latestTask.id) {
+      const loader = window.traccion?.loadTaskRecords;
+      try {
+        if (!loader) throw new Error('Lectura SQLite no disponible.');
+        const snapshot = await loader({ mode: 'all', id: latestTask.id });
+        if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+          throw new Error('SQLite todavía no está disponible.');
+        }
+        const row = snapshot.records.find((record) => record.id === latestTask.id);
+        const persisted = row ? JSON.parse(row.value) as Task : null;
+        if (persisted?.lastSaveAttemptId === pending.attemptId) {
+          pendingTrackingSaveRef.current = null;
+          useTaskStore.setState((state) => ({
+            tasks: state.tasks.map((candidate) => candidate.id === latestTask.id ? persisted : candidate),
+          }));
+          setLoadedUpdatedAt(persisted.updatedAt);
+          setSaveStatus('Se ha confirmado el guardado anterior del seguimiento. No se ha duplicado.');
+          setSaveStatusIsError(false);
+          enqueueAuditEvent({
+            module: 'tareas', entityId: latestTask.id, action: 'updated',
+            summary: pending.auditSummary, changes: [],
+          });
+          return true;
+        }
+        pendingTrackingSaveRef.current = null;
+        setSaveStatus(
+          persisted?.updatedAt === pending.expectedUpdatedAt
+            ? 'El seguimiento anterior no figura guardado. No se ha enviado otra operación. Revisa y vuelve a guardar.'
+            : 'El seguimiento no se ha confirmado: la tarea tiene otra versión o ya no existe. Recarga antes de continuar.',
+        );
+        setSaveStatusIsError(true);
+        return false;
+      } catch {
+        setSaveStatus('No se puede comprobar todavía el guardado del seguimiento. Conserva los cambios y vuelve a intentarlo después; no se ha enviado otro guardado.');
+        setSaveStatusIsError(true);
+        return false;
+      }
+    }
+
+    const attemptId = `tracking-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
     const updatedTask: Task = {
       ...latestTask,
       seguimiento: nextTracking,
       updatedAt: new Date().toISOString(),
+      lastSaveAttemptId: attemptId,
     };
 
     const feedbackKey = `task-tracking:${latestTask.id}`;
@@ -636,14 +695,27 @@ export function useTaskEditorController({
       });
     } catch (error) {
       clearPersistenceBusy(feedbackKey);
-      emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: feedbackKey, message: error instanceof Error ? error.message : 'No se ha podido actualizar el seguimiento.' });
-      setSaveStatus(error instanceof Error ? error.message : 'No se ha podido actualizar el seguimiento.');
+      const message = error instanceof Error ? error.message : 'No se ha podido actualizar el seguimiento.';
+      if (/resultado (?:es )?indeterminado|operación puede seguir en curso|superó el límite de \d+ ms/i.test(message)) {
+        pendingTrackingSaveRef.current = { taskId: latestTask.id, attemptId, expectedUpdatedAt: latestTask.updatedAt, successMessage, auditSummary };
+        setSaveStatus('El seguimiento puede haberse guardado tras el timeout. Vuelve a utilizar la misma acción para comprobarlo; no se enviará otra escritura.');
+        setSaveStatusIsError(true);
+        return false;
+      }
+      emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: feedbackKey, message });
+      setSaveStatus(message);
       setSaveStatusIsError(true);
       return false;
     }
 
     if (!result.ok) {
       clearPersistenceBusy(feedbackKey);
+      if (/resultado (?:es )?indeterminado|operación puede seguir en curso|superó el límite de \d+ ms/i.test(result.message)) {
+        pendingTrackingSaveRef.current = { taskId: latestTask.id, attemptId, expectedUpdatedAt: latestTask.updatedAt, successMessage, auditSummary };
+        setSaveStatus('El seguimiento puede haberse guardado tras el timeout. Vuelve a utilizar la misma acción para comprobarlo; no se enviará otra escritura.');
+        setSaveStatusIsError(true);
+        return false;
+      }
       emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: feedbackKey, message: result.message || 'No se ha podido actualizar el seguimiento.' });
       setSaveStatus(result.message || 'No se ha podido actualizar el seguimiento.');
       setSaveStatusIsError(true);

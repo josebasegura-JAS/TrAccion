@@ -24,6 +24,19 @@ import {
 } from './taskPersistence';
 import { hasTaskSqliteRepository, saveTasksToSqliteAtomically } from './taskSqliteRepository';
 
+interface PendingTaskSave {
+  attemptId: string;
+  previousTask: Task;
+  draft: TaskDraft;
+}
+
+// Solo en memoria: nunca se reenvía una escritura incierta automáticamente.
+const pendingTaskSaves = new Map<string, PendingTaskSave>();
+
+function isIndeterminateSave(message: string): boolean {
+  return /resultado (?:es )?indeterminado|operación puede seguir en curso|superó el límite de \d+ ms/i.test(message);
+}
+
 export interface TaskCrudState {
   tasks: Task[];
   selectedTaskId: string;
@@ -267,6 +280,32 @@ export async function updateTaskWithConcurrencyCheck(
 ): Promise<TaskUpdateResult> {
   try {
     if (hasTaskSqliteRepository()) {
+      // Una petición que agotó el timeout puede seguir ejecutándose en Electron.
+      // La siguiente pulsación verifica el resultado; NUNCA reenvía ese guardado.
+      const pending = pendingTaskSaves.get(id);
+      if (pending) {
+        let persisted: Task | undefined;
+        try {
+          persisted = (await readTasksForStore('all', id)).find((task) => task.id === id);
+        } catch {
+          return { ok: false, message: 'El resultado del guardado anterior sigue sin poder verificarse. Conserva el borrador y vuelve a comprobar cuando SQLite esté disponible. No se ha enviado otro guardado.' };
+        }
+        if (persisted?.lastSaveAttemptId === pending.attemptId) {
+          pendingTaskSaves.delete(id);
+          registerTaskUpdateAudit(pending.previousTask, pending.draft);
+          setState((state) => {
+            const tasks = state.tasks.map((task) => task.id === id ? persisted! : task);
+            return { tasks, selectedTaskId: isTaskClosed(persisted!) ? firstActiveTaskId(tasks) : id };
+          });
+          return { ok: true, message: 'Se ha confirmado el guardado anterior. No se ha duplicado la operación.', recordId: id };
+        }
+        pendingTaskSaves.delete(id);
+        if (persisted && persisted.updatedAt === pending.previousTask.updatedAt) {
+          return { ok: false, message: 'El guardado anterior no figura en SQLite. Se ha conservado el borrador y no se ha enviado otra escritura. Revisa los datos y vuelve a pulsar Guardar.' };
+        }
+        return { ok: false, message: 'No se ha podido confirmar el guardado anterior: la tarea ahora tiene otra versión o ya no existe. Conserva el borrador y recarga antes de continuar; no se ha repetido la escritura.' };
+      }
+
       const latestTasks = await readTasksForStore('all', id);
       const latestTask = latestTasks.find((task) => task.id === id);
       if (!latestTask) return { ok: false, message: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.' };
@@ -274,10 +313,31 @@ export async function updateTaskWithConcurrencyCheck(
         return { ok: false, message: 'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.' };
       }
 
-      // Construir el borrador no implica persistencia confirmada: no auditar todavía.
-      const updatedTask = normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText, quickAction, { skipAudit: true }));
-      const saveResult = await persistTaskDirectly(updatedTask, expectedUpdatedAt);
-      if (!saveResult.ok) return saveResult;
+      // Marcador inequívoco para distinguir el guardado propio de otra edición
+      // incluso cuando dos equipos generan el mismo updatedAt.
+      const attemptId = createTaskId();
+      const updatedTask = normalizeTask({
+        ...buildUpdatedTask(latestTask, draft, seguimientoText, quickAction, { skipAudit: true }),
+        lastSaveAttemptId: attemptId,
+      });
+      let saveResult: TaskUpdateResult;
+      try {
+        saveResult = await persistTaskDirectly(updatedTask, expectedUpdatedAt);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (isIndeterminateSave(message)) {
+          pendingTaskSaves.set(id, { attemptId, previousTask: latestTask, draft });
+          return { ok: false, message: 'El guardado agotó el tiempo de espera y puede terminar después. Conserva el borrador. Pulsa Guardar de nuevo solo para comprobar el resultado; no se enviará otra escritura.' };
+        }
+        throw error;
+      }
+      if (!saveResult.ok) {
+        if (isIndeterminateSave(saveResult.message)) {
+          pendingTaskSaves.set(id, { attemptId, previousTask: latestTask, draft });
+          return { ok: false, message: 'El guardado agotó el tiempo de espera y puede terminar después. Conserva el borrador. Pulsa Guardar de nuevo solo para comprobar el resultado; no se enviará otra escritura.' };
+        }
+        return saveResult;
+      }
       registerTaskUpdateAudit(latestTask, draft);
       setState((state) => {
         const tasks = state.tasks.map((task) => (task.id === id ? updatedTask : task));
