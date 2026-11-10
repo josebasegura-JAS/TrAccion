@@ -59,6 +59,15 @@ export const PARITARIA_HELP_SECTIONS: ModuleHelpSection[] = [
       'Mientras la sesión está abierta pueden añadirse, quitarse y reordenarse puntos.',
       'Una sesión cerrada pasa al histórico y ya no permite modificar sus puntos.',
       'La importación desde Word permite recuperar sesiones antiguas y evita duplicados por código y fecha.',
+      'El histórico se carga al acceder a su apartado o realizar búsquedas, para evitar cargar todas las sesiones en cada actualización.',
+    ],
+  },
+  {
+    title: 'Word y concurrencia',
+    items: [
+      'Antes de importar un resumen histórico en Word, comprueba la vista previa y los registros detectados. Si ya existe la sesión, el importador no debe crearla de nuevo ni generar tareas duplicadas.',
+      'Al cerrar la sesión se comprueban tanto la versión de la sesión como las tareas vinculadas; si otro puesto las ha modificado, TrAcción pide recargar en lugar de sobrescribir.',
+      'Si se guarda el cierre pero falla la actualización del resumen histórico Word, TrAcción avisa de la incidencia del archivo: no interpretes ese aviso como un cierre necesariamente fallido.',
     ],
   },
 ];
