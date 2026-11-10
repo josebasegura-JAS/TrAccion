@@ -56,25 +56,32 @@ Secciones sin fórmula exacta: describen una invariancia funcional o un flujo; n
 
 ## 3. Plantilla
 
-- Es el maestro principal de personas de TrAcción.
-- Permite mantenimiento manual e importación desde Excel.
-- El número de empleado es una referencia especialmente relevante para vincular información procedente de otros procesos.
-- Los datos importados deben normalizarse sin perder innecesariamente modificaciones válidas ya mantenidas en TrAcción.
-- Los módulos que consultan Plantilla deben hacerlo como referencia compartida, no mantener copias funcionalmente divergentes de una misma persona salvo que el proceso requiera una fotografía histórica.
+- **Entradas:** personas, número de empleado, datos organizativos, puesto, residencia, fechas de antigüedad y resto de campos editables; importación desde Excel corporativo o fichero de columnas mapeables.
+- **Identidad:** el número de empleado vincula registros de otros módulos y no debe alterarse arbitrariamente tras el alta.
+- **Importación:** para el fichero de Datos personales, analizar altas, cambios, reactivaciones y bajas antes de confirmar. La vista previa permite resolver diferencias conservando el dato actual o aceptando el del fichero. No borrar físicamente personas ausentes: marcar baja lógica e incluir posibilidad de reactivación cuando reaparezcan.
+- **Preservación:** no sobrescribir campos propios mantenidos en TrAcción, como `Antigüedad Puesto` o traducciones, si el fichero no los aporta. El modo de importación de solo antigüedad no crea nuevas personas.
+- **Salidas:** maestro compartido para Tareas, Teletrabajo, Ticket Restaurante, Ayuda Escolar y otros módulos; tabla exportable y traducciones de puestos castellano/euskera.
+- **Regla:** una modificación en Plantilla puede alterar cálculos posteriores de otros módulos, por lo que no se debe tratar su actualización como mera presentación de datos.
+- **Código y pruebas:** `src/features/plantilla/domain/importExcel.ts`, `src/features/plantilla/store/useEmployeeStore.ts`, `src/components/PlantillaPage.tsx`.
 
 ---
 
 ## 4. Tareas
 
-### 4.1. Concepto
+### 4.1. Concepto y entradas
 
-Una tarea representa trabajo pendiente o realizado, con responsable, prioridad, fechas, descripción y seguimiento.
+- Una tarea representa un asunto laboral interno o sindical, con tipo, origen, fase, estado, prioridad, responsable, fechas, descripción y seguimiento.
+- Las fases `comité` y `paritaria` determinan su disponibilidad para asociar como punto en esos módulos; la fase se configura en el catálogo de fases de Tareas.
+- El listado operativo utiliza filtros, responsables, búsqueda de texto en seguimiento y ordenación por columnas. Los registros cerrados se conservan en histórico.
+- Una tarea cerrada deja de ser elegible como nuevo punto pendiente, sin borrar sus vínculos históricos.
 
-### 4.2. Seguimiento
+### 4.2. Seguimiento y concurrencia
 
-- Una tarea puede acumular seguimientos sin sustituir el histórico anterior.
-- El detalle debe permitir comprender qué se pidió, qué ha ocurrido y cuál es la situación actual.
-- El refresco de la información no debe obligar al usuario a perder innecesariamente la posición de trabajo en listados largos.
+- Una tarea puede acumular seguimientos, actuaciones pendientes y anotaciones sin sustituir el histórico anterior.
+- Al editar, la aplicación obtiene bloqueo compartido y comprueba la versión vigente antes de guardar; un conflicto obliga a reconciliar en lugar de sobrescribir.
+- Si el guardado vence el plazo IPC, su resultado es **incierto**: al repetir la acción se debe comprobar el identificador de intento anterior antes de considerar una nueva escritura. El timeout por sí mismo no demuestra fallo de SQLite.
+- La recuperación de red no debe sustituir un borrador modificado sin informar ni perder innecesariamente la posición de tabla.
+- **Origen y pruebas:** `src/features/tareas/store/taskCrud.ts`, `src/components/task-editor/useTaskEditorController.ts`, `src/features/tareas/store/taskCrud.uncertainSave.test.ts`.
 
 ### 4.3. Correo
 
@@ -203,7 +210,10 @@ El calendario determina los días teóricos con derecho según las reglas config
 
 ### 8.7. Manutenciones / hoja de gastos
 
-Las cantidades procedentes de hoja de gastos se aplican conforme a las reglas del mes. Deben permanecer diferenciadas de las ausencias y de la deuda para que el usuario pueda explicar el resultado final.
+- Admite alta manual e **importación Excel o PDF**. Antes de incorporar filas se ofrece una revisión de persona, fecha, origen y si efectivamente afectan al ticket.
+- Solo debe descontarse la manutención elegible conforme a persona, calendario y día con derecho. Las filas no elegibles no pueden forzarse silenciosamente como descuento.
+- Las manutenciones guardadas conservan mes imputado y detalle de elegibilidad. **Afectan al pedido**, pero no restan tickets de Cotización.
+- Código y pruebas: `src/features/ticket-restaurante/domain/importManutenciones.ts`, `importManutencionesPdf.ts`, `ticketManutenciones.ts` y sus pruebas de regresión.
 
 ### 8.8. Deuda
 
@@ -213,13 +223,20 @@ Las cantidades procedentes de hoja de gastos se aplican conforme a las reglas de
 - Si toda la deuda no puede aplicarse en un mes, la parte pendiente continúa según las reglas de arrastre.
 - Una exclusión no debe borrar silenciosamente deuda previa.
 
-### 8.9. Fórmula explicativa
+### 8.9. Fórmulas y orden de aplicación
 
-A efectos de lectura del usuario, el pedido debe poder explicarse mediante sus componentes, de forma equivalente a:
+La **cotización mensual** y el **pedido al proveedor** son cálculos distintos, incluso para la misma persona y mes:
 
-`días teóricos − hoja de gastos aplicada − deuda aplicada = cálculo del pedido`
+- **Cotización:** `tickets = máximo(0, días teóricos del calendario − días únicos de ausencia del mes que descuentan)`. No aplica deuda arrastrada ni manutenciones. Un día sin derecho teórico no puede descontarse por ausencia.
+- **Pedido automático:** `tickets automáticos = máximo(0, días teóricos − descuentos efectivamente aplicados por el motor de deuda y manutenciones)`; el motor gestiona ausencias pendientes, cuotas manuales, regularizaciones, exclusiones y días ya descontados, evitando descontar un día dos veces.
+- **Pedido final:** si existe una exclusión mensual, es **0**; de lo contrario, si existe un ajuste manual validado, prevalece ese número; si no, se mantiene el automático.
+- **Importe:** `tickets finales × precio efectivo del mes`, con redondeo monetario.
+- **Personas manuales:** no entran en la población ordinaria calculada por calendario; sus tickets se almacenan por clave `AAAA-MM` y entran en Cotización únicamente si `includeContribution` está activo.
+- **Vigencia:** para cada mes se seleccionan las personas correspondientes al periodo, no la fotografía de personas activas en la fecha de consulta.
 
-Las reglas internas pueden requerir tratamiento adicional de arrastres, exclusiones y límites, pero la pantalla debe permitir reconstruir el resultado.
+No reducir el algoritmo interno de arrastre a una resta simple sin inspeccionar el desglose: una deuda no aplicada por falta de tickets continúa al periodo posterior. El cálculo de cotización ignora las manutenciones, aunque se conserven como desglose informativo.
+
+**Código fuente y pruebas:** `src/features/ticket-restaurante/domain/ticketCalculation.ts`, `ticketAbsences.ts`, `ticketDebt.ts`, `ticketManutenciones.ts`, `ticketCalculation.regression.test.ts` y pruebas de importación.
 
 ### 8.10. Ajuste manual previo al pedido
 
@@ -300,19 +317,21 @@ Implementación: `src/features/teletrabajo/domain/semaforo.ts`, `gruposCobertura
 
 ## 10. Licencias sin sueldo
 
-- Registra solicitudes y su evolución hasta resolución/cierre.
-- Deben mantenerse diferenciados solicitud, periodo solicitado, estado y resultado.
-- Las licencias pendientes alimentan los indicadores/avisos correspondientes del Dashboard.
-- Cerrar una solicitud no debe eliminar su histórico.
+- **Entradas:** persona, periodo/fechas solicitadas, datos justificativos y estado de tramitación.
+- **Operación:** registrar solicitudes, revisar su evolución, generar documentación Word cuando proceda y mantener las decisiones de resolución/cierre.
+- **Invariantes:** no confundir solicitud con autorización o disfrute efectivo; una licencia cerrada debe seguir consultable en histórico.
+- **Salidas:** listado operativo, histórico, documento de solicitud/resolución según plantillas disponibles y avisos en Dashboard.
+- **Origen:** `src/features/licencias-sin-sueldo/components/LicenciasSinSueldoPage.tsx` y dominio/store del módulo. No se fija aquí una fórmula de días por no haberse verificado una equivalencia universal para todos los tipos de licencia.
 
 ---
 
 ## 11. Presupuestos
 
-- Permite trabajar con partidas/conceptos y construir simulaciones.
-- Debe conservarse la diferencia entre escenarios simulados y la opción finalmente elegida.
-- La exportación a Excel es una salida del proceso, no la fuente maestra.
-- El detalle de Ticket Restaurante puede proyectarse por calendario/mes para apoyar el presupuesto sin modificar el cálculo operativo de Ticket Restaurante.
+- **Entradas:** ejercicio, partidas/conceptos, importes y parámetros editables de simulación; cuando procede, proyección de Ticket Restaurante por calendario y mes.
+- **Operación:** preparar alternativas, comparar resultados, elegir una propuesta y cerrar el proceso, sin convertir una simulación provisional en presupuesto aprobado automáticamente.
+- **Cálculos:** los importes proyectados se obtienen de los parámetros del escenario; nunca deben reescribir el pedido real ni las deudas operativas del módulo Ticket Restaurante.
+- **Salidas:** escenario elegido, comparaciones y Excel para uso externo; el registro de TrAcción sigue siendo la fuente maestra de la decisión.
+- **Origen:** `src/features/presupuestos/components/PresupuestosPage.tsx` y dominio/store de presupuestos. La fórmula detallada depende de cada partida y se debe contrastar en el motor de simulación antes de cambiarla.
 
 ---
 
