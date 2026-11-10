@@ -53,6 +53,7 @@ import { resolveTeletrabajoTipoSolicitud } from '../features/teletrabajo/domain/
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { exportTeletrabajoDireccionToExcel } from '../features/teletrabajo/domain/exportDireccion';
+import { selectTeletrabajoDireccionExportRows, type TeletrabajoDireccionExportScope } from '../features/teletrabajo/domain/exportDireccionScope';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import {
   applyPlantillaDataToTeletrabajoSolicitudes,
@@ -108,6 +109,7 @@ export function TeletrabajoPage({
   const [ordinaryClosure, setOrdinaryClosure] = useState<TeletrabajoOrdinaryClosure | null>(null);
   const [closureLoading, setClosureLoading] = useState(false);
   const [closureStatus, setClosureStatus] = useState('');
+  const [direccionExportScope, setDireccionExportScope] = useState<TeletrabajoDireccionExportScope>('vista');
   const [newPeriodoName, setNewPeriodoName] = useState('');
   const [sourcePeriodo, setSourcePeriodo] = useState('');
   const [copyFromPreviousPeriodo, setCopyFromPreviousPeriodo] = useState(true);
@@ -546,8 +548,13 @@ export function TeletrabajoPage({
 
   const handleExportDireccion = useCallback(async () => {
     try {
+      const exportRows = selectTeletrabajoDireccionExportRows(periodFilteredSolicitudes, sortedSolicitudes, direccionExportScope);
+      if (exportRows.length === 0) {
+        setWordStatus('No hay solicitudes para el alcance elegido en el periodo seleccionado.');
+        return;
+      }
       await exportTeletrabajoDireccionToExcel({
-        rows: sortedSolicitudes,
+        rows: exportRows,
         employees,
         puestosTeletrabajo,
         gruposCobertura,
@@ -563,6 +570,8 @@ export function TeletrabajoPage({
       );
     }
   }, [
+    direccionExportScope,
+    periodFilteredSolicitudes,
     employees,
     filters.periodo,
     gruposCobertura,
@@ -1116,6 +1125,8 @@ export function TeletrabajoPage({
         onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
         onExportDireccion={() => void handleExportDireccion()}
+        direccionExportScope={direccionExportScope}
+        onDireccionExportScopeChange={setDireccionExportScope}
         onResetColumnWidths={resetColumnWidths}
         onResetPreferences={resetPreferences}
         onRowClick={openEditor}
