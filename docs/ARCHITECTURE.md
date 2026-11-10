@@ -1,6 +1,6 @@
 # Arquitectura de TrAcción
 
-> Estado contrastado con el repositorio de TrAcción 1.2.137 (octubre de 2026).
+> Referencia estructural revisada el 10 de noviembre de 2026 sobre `main` (`3f0f0d88`). El inventario de flujos no constituye una verificación funcional de cada módulo.
 >
 > Este documento describe la arquitectura técnica vigente. Las reglas de negocio pertenecen a `FUNCIONAMIENTO.md`; el motivo de las decisiones relevantes, a `DECISIONS.md`.
 
