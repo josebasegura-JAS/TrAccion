@@ -685,6 +685,57 @@ describe('grupos de cobertura: puestos coordinados que comparten presencialidad 
 
 });
 
+describe('cobertura conjunta entre modalidades del mismo periodo', () => {
+  it('una extraordinaria y una ordinaria que piden el mismo martes computan conjuntamente', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1, dotacionComputable: 2 });
+    const puestos = buildPuestosByKey([puesto]);
+    const ordinary = buildSolicitud({
+      id: 'ordinaria',
+      empleado: '100',
+      modalidadTramitacion: 'ordinaria',
+      fechaSolicitud: '2026-07-20',
+      diasTeletrabajo: ['martes'],
+    });
+    const extraordinary = buildSolicitud({
+      id: 'extraordinaria',
+      empleado: '101',
+      modalidadTramitacion: 'extraordinaria',
+      fechaSolicitud: '2026-08-20',
+      diasTeletrabajo: ['martes'],
+    });
+    const employees = new Map([
+      ['100', buildEmployee({ empleado: '100', antiguedadPuesto: '2020-01-01' })],
+      ['101', buildEmployee({ empleado: '101', antiguedadPuesto: '2020-01-01' })],
+    ]);
+    const counts = buildSolicitudesByPeriodoPuestoCount([ordinary, extraordinary], puestos);
+    expect(getTeletrabajoSemaforo(extraordinary, puestos, counts, employees).status).toBe('review');
+    expect(getTeletrabajoSemaforo(ordinary, puestos, counts, employees).status).toBe('review');
+  });
+
+  it('una solicitud denegada no debe generar conflicto de cobertura en la extraordinaria', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1, dotacionComputable: 2 });
+    const puestos = buildPuestosByKey([puesto]);
+    const ordinary = buildSolicitud({
+      id: 'ordinaria',
+      empleado: '100',
+      modalidadTramitacion: 'ordinaria',
+      estado: 'denegada',
+      fechaSolicitud: '2026-07-20',
+      diasTeletrabajo: ['martes'],
+    });
+    const extraordinary = buildSolicitud({
+      id: 'extraordinaria',
+      empleado: '101',
+      modalidadTramitacion: 'extraordinaria',
+      fechaSolicitud: '2026-08-20',
+      diasTeletrabajo: ['martes'],
+    });
+    const employees = new Map([['101', buildEmployee({ empleado: '101' })]]);
+    const counts = buildSolicitudesByPeriodoPuestoCount([ordinary, extraordinary], puestos);
+    expect(getTeletrabajoSemaforo(extraordinary, puestos, counts, employees).status).toBe('ok');
+  });
+});
+
 describe('evaluateTeletrabajoPresencialidad — indicador aislado, sin antigüedad ni estado', () => {
   it('cumple presencialidad aunque la antigüedad sea insuficiente (motivos independientes)', () => {
     const puesto = buildPuesto({ maxSolicitudes: 0, dotacionComputable: 0 });
