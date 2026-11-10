@@ -122,7 +122,7 @@ OCC evita sobrescrituras, pero no hace que otro puesto vea automáticamente el c
 
 `src/services/externalDataSync.ts` realiza el polling de cambios. Los stores sincronizables se registran en `syncableStoreRegistrations.ts`/`syncableStoreRegistry.ts`.
 
-Para tablas con repositorio propio, `electron/persistence/directStoreUpdatedAt.ts` consulta `MAX(updated_at)` y expone el token de actualización. Actualmente incluye, entre otros:
+Para tablas con repositorio propio, `electron/persistence/directStoreUpdatedAt.ts` consulta `MAX(updated_at)` y expone el token de actualización. Es una señal ligera, no una garantía matemática de detección de todas las escrituras: una actualización cuya fecha no supere el máximo anterior puede pasar inadvertida al polling hasta otra recarga. No introducir triggers ni nuevos contadores sin necesidad demostrada; conservar controles OCC, locks y pruebas. Actualmente incluye, entre otros:
 
 - Plantilla;
 - Teletrabajo;
