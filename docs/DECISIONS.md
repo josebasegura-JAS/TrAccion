@@ -458,3 +458,26 @@ Tras la consolidación de 1.2 se decidió mantener tres niveles documentales:
 ### Documentación histórica no equivale a especificación vigente
 
 Auditorías y documentos de migraciones representan una fotografía de una fecha concreta. Se decidió conservarlos por trazabilidad, pero no deben usarse como definición automática del estado actual si contradicen `FUNCIONAMIENTO.md`, la arquitectura vigente o el código probado.
+
+
+## Cierre conservador de mantenimiento multiusuario (noviembre de 2026)
+
+### Conservar estabilidad SMB frente a refactorización preventiva
+
+Tras las correcciones de bloqueos, cola IPC, reconexión y guardados inciertos, se decide **no reabrir una refactorización general del motor SQLite** solo por riesgos teóricos de baja probabilidad para el uso habitual de pocos usuarios. Son componentes críticos para la integridad; cualquier modificación necesita defecto concreto, pruebas reproducibles y validación con dos puestos.
+
+- La cola IPC no cancela una operación nativa al agotar su timeout. Mantiene la serialización hasta que termina realmente; el resultado debe indicarse como incierto, nunca reintentarse ciegamente.
+- Las tareas guardadas con resultado incierto conservan el borrador y pueden correlacionar el intento posterior mediante `lastSaveAttemptId` (sin sustituir el control OCC).
+- Los bloqueos de edición y las transacciones siguen siendo necesarios: un resultado de lectura o una fecha no autorizan sobrescrituras.
+- La detección ligera de cambios utiliza máximos de `updated_at`. Las colisiones y las fechas fuera de orden están caracterizadas con SQLite real en `electron/persistence/occTokenCharacterization.test.ts`; **las pruebas describen la limitación actual**, no prueban pérdidas observadas en producción.
+- **Decisión:** aplazar contadores de revisión, triggers de sincronización y migración general del esquema mientras la sincronización operativa sea satisfactoria y no haya fallos concretos que compensen el riesgo de modificarla.
+
+### Documentación de auditoría y límites de la limpieza
+
+Los documentos con prefijos `PERF-`, `SQLITE-` y otras auditorías fechadas se conservan como **evidencia histórica**, sin declararlos vigentes ni borrarlos masivamente. Las fuentes para el comportamiento actual son el código probado y la documentación de contrato que se haya contrastado.
+
+No se eliminan pruebas por similitud de nombre ni piezas de compatibilidad `legacy` por parecer antiguas. Solo se retira código cuando existe inventario de referencias, prueba de no uso y comprobación integral.
+
+### Ayudas de usuario, intervención independiente
+
+Esta limpieza actualiza documentación **de desarrollo**. Los textos y capturas de ayuda integrados deben revisarse en una PR funcional/documental separada mediante comparación de la ayuda visible con el flujo real de cada módulo. Véase `docs/HELP_REVIEW_PLAN.md`.
