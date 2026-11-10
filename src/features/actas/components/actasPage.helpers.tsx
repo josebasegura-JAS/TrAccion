@@ -312,6 +312,15 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Outlook, alegaciones y calendario',
+    items: [
+      'Generar Outlook prepara un borrador para que lo revises y envíes desde Outlook; no equivale a enviar automáticamente un mensaje.',
+      'El plazo de alegaciones se asocia al borrador generado. Durante esa fase puedes registrar qué sindicatos han presentado alegaciones y consultar la fecha de finalización.',
+      'La cita de calendario «FIN ALEGACIONES» sirve para recordar el vencimiento; generar la cita no sustituye el registro del estado del acta.',
+      'Si un acta procede del cierre de una sesión de Comité o Paritaria, conserva su vinculación; consulta el estado del acta antes de intentar repetir el cierre de la sesión.',
+    ],
+  },
+  {
     title: 'Histórico y compatibilidad',
     items: [
       'Las actas cerradas quedan protegidas en modo consulta dentro del histórico.',
