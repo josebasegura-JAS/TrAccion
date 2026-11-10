@@ -22,10 +22,25 @@ describe('antigüedad teletrabajo: solicitudes fuera del inicio ordinario', () =
     expect(result.title).toContain('Referencia: 2026-11-05');
   });
 
-  it('mantiene el corte del 1 de septiembre en la campaña ordinaria', () => {
-    const result = evaluateTeletrabajoAntiguedad(solicitud({ fechaSolicitud: '2026-08-25' }), empleado);
+  it('mantiene el corte del 1 de septiembre para las ordinarias hasta el 31 de julio', () => {
+    const result = evaluateTeletrabajoAntiguedad(solicitud({ fechaSolicitud: '2026-07-31' }), empleado);
     expect(result.status).toBe('no-cumple');
     expect(result.fechaReferencia).toBe('2026-09-01');
+  });
+
+  it('usa fecha real desde el 1 de agosto, incluso si no ha llegado septiembre', () => {
+    const result = evaluateTeletrabajoAntiguedad(
+      solicitud({ fechaSolicitud: '2026-08-01' }),
+      { antiguedadPuesto: '2025-07-31' },
+    );
+    expect(result.status).toBe('cumple');
+    expect(result.fechaReferencia).toBe('2026-08-01');
+    const noCumple = evaluateTeletrabajoAntiguedad(
+      solicitud({ fechaSolicitud: '2026-08-25' }),
+      { antiguedadPuesto: '2025-09-01' },
+    );
+    expect(noCumple.status).toBe('no-cumple');
+    expect(noCumple.fechaReferencia).toBe('2026-08-25');
   });
 
   it('una nueva solicitud posterior al 1 de septiembre pero anterior al aniversario no cumple', () => {
@@ -34,15 +49,35 @@ describe('antigüedad teletrabajo: solicitudes fuera del inicio ordinario', () =
     expect(result.fechaReferencia).toBe('2026-10-20');
   });
 
-  it('las renovaciones siguen tomando el inicio ordinario del periodo', () => {
-    const result = evaluateTeletrabajoAntiguedad(solicitud({ tipoSolicitud: 'renovacion' }), empleado);
-    expect(result.status).toBe('no-cumple');
-    expect(result.fechaReferencia).toBe('2026-09-01');
+  it('las renovaciones extraordinarias usan fecha de presentación; ordinarias mantienen septiembre', () => {
+    const late = evaluateTeletrabajoAntiguedad(solicitud({ tipoSolicitud: 'renovacion' }), empleado);
+    expect(late.status).toBe('cumple');
+    expect(late.fechaReferencia).toBe('2026-11-05');
+    const ordinary = evaluateTeletrabajoAntiguedad(solicitud({
+      tipoSolicitud: 'renovacion',
+      fechaSolicitud: '2026-07-15',
+    }), empleado);
+    expect(ordinary.status).toBe('no-cumple');
+    expect(ordinary.fechaReferencia).toBe('2026-09-01');
   });
 
   it('con fecha de solicitud inválida no supone antigüedad cumplida', () => {
     const result = evaluateTeletrabajoAntiguedad(solicitud({ fechaSolicitud: '2026-13-45' }), empleado);
-    expect(result.status).toBe('no-cumple');
+    expect(result.status).toBe('sin-dato');
+    expect(result.fechaReferencia).toBe('');
+  });
+
+  it('sin fecha legacy no inventa cumplimiento del año', () => {
+    const result = evaluateTeletrabajoAntiguedad(solicitud({ fechaSolicitud: '' }), empleado);
+    expect(result.status).toBe('sin-dato');
+    expect(result.fechaReferencia).toBe('');
+  });
+
+  it('respeta la modalidad persistida y no reinterpreta ordinarias históricas', () => {
+    const result = evaluateTeletrabajoAntiguedad(solicitud({
+      fechaSolicitud: '2026-07-31',
+      modalidadTramitacion: 'ordinaria',
+    }), empleado);
     expect(result.fechaReferencia).toBe('2026-09-01');
   });
 });
