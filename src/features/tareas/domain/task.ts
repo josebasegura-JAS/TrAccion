@@ -77,6 +77,8 @@ export interface Task {
   phaseBeforeClose?: string;
   createdAt: string;
   updatedAt: string;
+  /** Identifica el último intento de guardado confirmado; opcional en históricos. */
+  lastSaveAttemptId?: string;
   deletedAt: string | null;
   closedAt: string | null;
 }
