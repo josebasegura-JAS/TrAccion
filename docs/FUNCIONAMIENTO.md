@@ -1,6 +1,6 @@
-# TrAcción — Funcionamiento funcional
+# TrAcción — Contrato de funcionamiento por módulo
 
-> Documento funcional de referencia. Revisado contra el código de TrAcción 1.2.137 (octubre de 2026).
+> Contrato funcional de referencia. Revisión selectiva contra el código de `main` (`1a70c9c5`, 10/11/2026). Las reglas que no se citan expresamente no se consideran revalidadas en esta revisión.
 >
 > Este documento describe **qué debe hacer la aplicación y qué reglas funcionales deben conservarse**. No sustituye a `ARCHITECTURE.md` (cómo está construida) ni a `DECISIONS.md` (por qué se adoptaron determinadas soluciones).
 
@@ -32,6 +32,16 @@ No se debe sustituir silenciosamente un dato histórico por un cálculo posterio
 
 Plantilla es el maestro de personas utilizado por distintos módulos para resolver identidad, número de empleado, residencia y otros datos laborales. Las modificaciones que un módulo persista expresamente en Plantilla deben quedar disponibles para el resto de módulos.
 
+### 1.5. Cómo mantener este contrato
+
+Este fichero es la **referencia funcional versionada en Git**: describe entradas, comportamientos, cálculos, estados, salidas y excepciones que deben conservarse. **No reemplaza las pruebas**; las reglas concretas deben contrastarse con la implementación y los tests de dominio antes de cambiarlas.
+
+En toda PR que altere comportamiento de usuario, estados, reglas, importadores, exportaciones, cálculos o persistencia observable debe revisarse **este mismo archivo** y actualizar las secciones afectadas. Si se trata únicamente de CI, documentación, estilo o refactor equivalente, indicar expresamente «sin cambios funcionales» en la plantilla de PR; no añadir cambios vacíos al fichero. Una PR no queda funcionalmente documentada solo por mencionar el archivo.
+
+Para cambios sensibles, registrar siempre: **entrada → regla/operación → resultado → excepciones → origen de la regla (ruta de código/test) → efecto en históricos**. Si se descubre discrepancia, corregir el contrato con evidencia o abrir una incidencia; no presentar una hipótesis como regla.
+
+Secciones sin fórmula exacta: describen una invariancia funcional o un flujo; no deben interpretarse como especificación de todos sus cálculos internos.
+
 ---
 
 ## 2. Dashboard
@@ -46,25 +56,32 @@ Plantilla es el maestro de personas utilizado por distintos módulos para resolv
 
 ## 3. Plantilla
 
-- Es el maestro principal de personas de TrAcción.
-- Permite mantenimiento manual e importación desde Excel.
-- El número de empleado es una referencia especialmente relevante para vincular información procedente de otros procesos.
-- Los datos importados deben normalizarse sin perder innecesariamente modificaciones válidas ya mantenidas en TrAcción.
-- Los módulos que consultan Plantilla deben hacerlo como referencia compartida, no mantener copias funcionalmente divergentes de una misma persona salvo que el proceso requiera una fotografía histórica.
+- **Entradas:** personas, número de empleado, datos organizativos, puesto, residencia, fechas de antigüedad y resto de campos editables; importación desde Excel corporativo o fichero de columnas mapeables.
+- **Identidad:** el número de empleado vincula registros de otros módulos y no debe alterarse arbitrariamente tras el alta.
+- **Importación:** para el fichero de Datos personales, analizar altas, cambios, reactivaciones y bajas antes de confirmar. La vista previa permite resolver diferencias conservando el dato actual o aceptando el del fichero. No borrar físicamente personas ausentes: marcar baja lógica e incluir posibilidad de reactivación cuando reaparezcan.
+- **Preservación:** no sobrescribir campos propios mantenidos en TrAcción, como `Antigüedad Puesto` o traducciones, si el fichero no los aporta. El modo de importación de solo antigüedad no crea nuevas personas.
+- **Salidas:** maestro compartido para Tareas, Teletrabajo, Ticket Restaurante, Ayuda Escolar y otros módulos; tabla exportable y traducciones de puestos castellano/euskera.
+- **Regla:** una modificación en Plantilla puede alterar cálculos posteriores de otros módulos, por lo que no se debe tratar su actualización como mera presentación de datos.
+- **Código y pruebas:** `src/features/plantilla/domain/importExcel.ts`, `src/features/plantilla/store/useEmployeeStore.ts`, `src/components/PlantillaPage.tsx`.
 
 ---
 
 ## 4. Tareas
 
-### 4.1. Concepto
+### 4.1. Concepto y entradas
 
-Una tarea representa trabajo pendiente o realizado, con responsable, prioridad, fechas, descripción y seguimiento.
+- Una tarea representa un asunto laboral interno o sindical, con tipo, origen, fase, estado, prioridad, responsable, fechas, descripción y seguimiento.
+- Las fases `comité` y `paritaria` determinan su disponibilidad para asociar como punto en esos módulos; la fase se configura en el catálogo de fases de Tareas.
+- El listado operativo utiliza filtros, responsables, búsqueda de texto en seguimiento y ordenación por columnas. Los registros cerrados se conservan en histórico.
+- Una tarea cerrada deja de ser elegible como nuevo punto pendiente, sin borrar sus vínculos históricos.
 
-### 4.2. Seguimiento
+### 4.2. Seguimiento y concurrencia
 
-- Una tarea puede acumular seguimientos sin sustituir el histórico anterior.
-- El detalle debe permitir comprender qué se pidió, qué ha ocurrido y cuál es la situación actual.
-- El refresco de la información no debe obligar al usuario a perder innecesariamente la posición de trabajo en listados largos.
+- Una tarea puede acumular seguimientos, actuaciones pendientes y anotaciones sin sustituir el histórico anterior.
+- Al editar, la aplicación obtiene bloqueo compartido y comprueba la versión vigente antes de guardar; un conflicto obliga a reconciliar en lugar de sobrescribir.
+- Si el guardado vence el plazo IPC, su resultado es **incierto**: al repetir la acción se debe comprobar el identificador de intento anterior antes de considerar una nueva escritura. El timeout por sí mismo no demuestra fallo de SQLite.
+- La recuperación de red no debe sustituir un borrador modificado sin informar ni perder innecesariamente la posición de tabla.
+- **Origen y pruebas:** `src/features/tareas/store/taskCrud.ts`, `src/components/task-editor/useTaskEditorController.ts`, `src/features/tareas/store/taskCrud.uncertainSave.test.ts`.
 
 ### 4.3. Correo
 
@@ -82,10 +99,13 @@ El detalle puede imprimirse o exportarse a Excel para uso externo sin modificar 
 
 ## 5. Actas
 
-- Actas centraliza documentos y seguimientos relacionados con actas.
-- Los tipos y estados deben mantenerse mediante los maestros y reglas previstos por el módulo.
-- La carga o vinculación de documentos no sustituye el seguimiento funcional asociado al acta.
-- Los registros históricos deben seguir siendo consultables aunque el trabajo operativo sobre ellos haya finalizado.
+- **Entradas:** alta manual o registro vinculado al cierre de una sesión; tipo de acta, fechas, documento, alegaciones y destinatarios de comunicación.
+- **Flujo ordinario:** `Pendiente de realizar` → `Pendiente de alegaciones` → `Pendiente de firma` → `Cerrada`. Una acta cerrada permanece en el histórico y puede reabrirse para corrección según las acciones disponibles.
+- **Generar Outlook (borrador):** prepara un correo bilingüe de borrador, sin enviarlo; al completarse el flujo de preparación, se establece el estado de alegaciones y una fecha de referencia de **21 días** desde la generación. La cita «FIN ALEGACIONES» es un recordatorio de calendario, no una alegación ni prueba de envío.
+- **Alegaciones:** se registran por sindicato, presentación, fecha y observación; el cierre del plazo y el cambio a firma no equivalen a que el documento ya esté firmado.
+- **Firma:** el correo definitivo de Outlook prepara el envío para firma. Solo cuando se completa el proceso debe registrarse la versión final y cerrarse.
+- **Salida:** documento/ruta vinculada, borradores y recordatorios Outlook, estados e histórico. La apertura del borrador no acredita envío de correo.
+- **Origen y pruebas:** `src/features/actas/components/actasPage.helpers.tsx`, `src/features/actas/components/ActasPage.tsx` y tests del dominio/store de Actas.
 
 ---
 
@@ -190,7 +210,10 @@ El calendario determina los días teóricos con derecho según las reglas config
 
 ### 8.7. Manutenciones / hoja de gastos
 
-Las cantidades procedentes de hoja de gastos se aplican conforme a las reglas del mes. Deben permanecer diferenciadas de las ausencias y de la deuda para que el usuario pueda explicar el resultado final.
+- Admite alta manual e **importación Excel o PDF**. Antes de incorporar filas se ofrece una revisión de persona, fecha, origen y si efectivamente afectan al ticket.
+- Solo debe descontarse la manutención elegible conforme a persona, calendario y día con derecho. Las filas no elegibles no pueden forzarse silenciosamente como descuento.
+- Las manutenciones guardadas conservan mes imputado y detalle de elegibilidad. **Afectan al pedido**, pero no restan tickets de Cotización.
+- Código y pruebas: `src/features/ticket-restaurante/domain/importManutenciones.ts`, `importManutencionesPdf.ts`, `ticketManutenciones.ts` y sus pruebas de regresión.
 
 ### 8.8. Deuda
 
@@ -200,13 +223,20 @@ Las cantidades procedentes de hoja de gastos se aplican conforme a las reglas de
 - Si toda la deuda no puede aplicarse en un mes, la parte pendiente continúa según las reglas de arrastre.
 - Una exclusión no debe borrar silenciosamente deuda previa.
 
-### 8.9. Fórmula explicativa
+### 8.9. Fórmulas y orden de aplicación
 
-A efectos de lectura del usuario, el pedido debe poder explicarse mediante sus componentes, de forma equivalente a:
+La **cotización mensual** y el **pedido al proveedor** son cálculos distintos, incluso para la misma persona y mes:
 
-`días teóricos − hoja de gastos aplicada − deuda aplicada = cálculo del pedido`
+- **Cotización:** `tickets = máximo(0, días teóricos del calendario − días únicos de ausencia del mes que descuentan)`. No aplica deuda arrastrada ni manutenciones. Un día sin derecho teórico no puede descontarse por ausencia.
+- **Pedido automático:** `tickets automáticos = máximo(0, días teóricos − descuentos efectivamente aplicados por el motor de deuda y manutenciones)`; el motor gestiona ausencias pendientes, cuotas manuales, regularizaciones, exclusiones y días ya descontados, evitando descontar un día dos veces.
+- **Pedido final:** si existe una exclusión mensual, es **0**; de lo contrario, si existe un ajuste manual validado, prevalece ese número; si no, se mantiene el automático.
+- **Importe:** `tickets finales × precio efectivo del mes`, con redondeo monetario.
+- **Personas manuales:** no entran en la población ordinaria calculada por calendario; sus tickets se almacenan por clave `AAAA-MM` y entran en Cotización únicamente si `includeContribution` está activo.
+- **Vigencia:** para cada mes se seleccionan las personas correspondientes al periodo, no la fotografía de personas activas en la fecha de consulta.
 
-Las reglas internas pueden requerir tratamiento adicional de arrastres, exclusiones y límites, pero la pantalla debe permitir reconstruir el resultado.
+No reducir el algoritmo interno de arrastre a una resta simple sin inspeccionar el desglose: una deuda no aplicada por falta de tickets continúa al periodo posterior. El cálculo de cotización ignora las manutenciones, aunque se conserven como desglose informativo.
+
+**Código fuente y pruebas:** `src/features/ticket-restaurante/domain/ticketCalculation.ts`, `ticketAbsences.ts`, `ticketDebt.ts`, `ticketManutenciones.ts`, `ticketCalculation.regression.test.ts` y pruebas de importación.
 
 ### 8.10. Ajuste manual previo al pedido
 
@@ -255,69 +285,59 @@ La diferencia es información de control y no debe convertirse automáticamente 
 
 ## 9. Teletrabajo
 
-- El módulo registra y sigue solicitudes/acuerdos de teletrabajo según sus estados.
-- Las fechas y estados determinan qué elementos requieren atención.
-- El histórico debe conservar las solicitudes finalizadas para consulta.
-- Las operaciones del módulo no deben alterar Plantilla salvo en aquellos campos para los que exista una integración explícita.
+### 9.1. Entradas y flujo
+
+- **Datos de entrada:** periodo/campaña, solicitudes (manuales o importadas), persona y puesto organizativo de Plantilla, días solicitados **martes, miércoles y jueves**, modalidad, antigüedad en el puesto, puestos teletrabajables, dotaciones y grupos de cobertura.
+- **Flujo:** configurar periodo → incorporar solicitudes → validar incidencias/estado administrativo → revisar cobertura → exportar a Dirección. Los periodos anteriores se conservan; la generación de renovaciones debe dejar las nuevas solicitudes pendientes de revisión.
+- **Regla de vínculo:** el puesto se resuelve en Plantilla; corregir el puesto debe realizarse allí, no inventando una equivalencia temporal en la solicitud.
+
+### 9.2. Antigüedad mínima
+
+Se requiere **un año en el puesto**. El cálculo utiliza la fecha `Antigüedad Puesto` de Plantilla y una referencia que **depende de la modalidad**:
+
+- **Ordinaria:** 1 de septiembre del año de inicio del periodo.
+- **Extraordinaria:** fecha válida de presentación de la solicitud.
+- **Modalidad o fecha no resolubles / persona ausente / antigüedad ausente:** `sin-dato`, no cumplimiento supuesto.
+- **Resultado:** `cumple` si la referencia es igual o posterior al primer aniversario de la fecha de antigüedad; en otro caso `no-cumple`.
+
+Implementación: `src/features/teletrabajo/domain/antiguedad.ts`, con pruebas `antiguedad.test.ts`.
+
+### 9.3. Peticiones y presencialidad
+
+- **Peticiones:** contar **solicitudes activas** del mismo periodo y puesto/grupo, no la suma de días solicitados. Excluir solicitudes eliminadas, denegadas o desistidas.
+- **Cobertura:** si el puesto pertenece a un grupo, utilizar la dotación y mínimo compartidos del grupo; de lo contrario, la configuración del propio puesto.
+- **Cálculo por día:** `personas presenciales = dotación computable (o personas activas de Plantilla cuando no hay dotación configurada) − solicitudes activas de ese día`.
+- **Comparación:** revisar si las personas presenciales quedan por debajo del mínimo exigido en cualquiera de los días solicitados. No basta comparar el total de solicitudes del periodo.
+- **Semáforo:** prioriza la evaluación de antigüedad y combina el resultado con la condición de puesto teletrabajable, días informados y cobertura. Es una ayuda a RRLL, no una concesión automática definitiva.
+- **Salida:** incidencias, estado de revisión, Excel para Dirección y datos históricos del periodo.
+
+Implementación: `src/features/teletrabajo/domain/semaforo.ts`, `gruposCobertura.ts` y `exportDireccion.ts`, con pruebas de semáforo, grupos y exportación.
 
 ---
 
 ## 10. Licencias sin sueldo
 
-- Registra solicitudes y su evolución hasta resolución/cierre.
-- Deben mantenerse diferenciados solicitud, periodo solicitado, estado y resultado.
-- Las licencias pendientes alimentan los indicadores/avisos correspondientes del Dashboard.
-- Cerrar una solicitud no debe eliminar su histórico.
+- **Entradas:** persona, periodo/fechas solicitadas, datos justificativos y estado de tramitación.
+- **Operación:** registrar solicitudes, revisar su evolución, generar documentación Word cuando proceda y mantener las decisiones de resolución/cierre.
+- **Invariantes:** no confundir solicitud con autorización o disfrute efectivo; una licencia cerrada debe seguir consultable en histórico.
+- **Salidas:** listado operativo, histórico, documento de solicitud/resolución según plantillas disponibles y avisos en Dashboard.
+- **Origen:** `src/features/licencias-sin-sueldo/components/LicenciasSinSueldoPage.tsx` y dominio/store del módulo. No se fija aquí una fórmula de días por no haberse verificado una equivalencia universal para todos los tipos de licencia.
 
 ---
 
 ## 11. Presupuestos
 
-- Permite trabajar con partidas/conceptos y construir simulaciones.
-- Debe conservarse la diferencia entre escenarios simulados y la opción finalmente elegida.
-- La exportación a Excel es una salida del proceso, no la fuente maestra.
-- El detalle de Ticket Restaurante puede proyectarse por calendario/mes para apoyar el presupuesto sin modificar el cálculo operativo de Ticket Restaurante.
+- **Entradas:** ejercicio, partidas/conceptos, importes y parámetros editables de simulación; cuando procede, proyección de Ticket Restaurante por calendario y mes.
+- **Operación:** preparar alternativas, comparar resultados, elegir una propuesta y cerrar el proceso, sin convertir una simulación provisional en presupuesto aprobado automáticamente.
+- **Cálculos:** los importes proyectados se obtienen de los parámetros del escenario; nunca deben reescribir el pedido real ni las deudas operativas del módulo Ticket Restaurante.
+- **Salidas:** escenario elegido, comparaciones y Excel para uso externo; el registro de TrAcción sigue siendo la fuente maestra de la decisión.
+- **Origen:** `src/features/presupuestos/components/PresupuestosPage.tsx` y dominio/store de presupuestos. La fórmula detallada depende de cada partida y se debe contrastar en el motor de simulación antes de cambiarla.
 
 ---
 
-## 12. Huelgas
+## 12. Huelgas — módulo retirado
 
-### 12.1. Convocatoria
-
-Cada huelga conserva sus datos básicos: fecha, sindicatos convocantes, tipo de jornada/paros y observaciones cuando proceda.
-
-### 12.2. Personal del día
-
-- Se importa el personal/turno correspondiente al día objeto de análisis.
-- La información importada se contrasta con Plantilla para completar datos disponibles, como residencia.
-- La importación de un día no debe modificar arbitrariamente el histórico de otra convocatoria.
-
-### 12.3. Puestos, áreas y zonas
-
-- **Área** representa la clasificación organizativa utilizada para agrupar personal.
-- **Zona** representa la agrupación operativa utilizada para la recogida/comunicación del proceso.
-- La relación área/zona puede disponer de reglas por defecto, pero debe poder revisarse.
-- Editar un área no debe borrar innecesariamente la zona ya asignada.
-- Cuando el usuario corrige una residencia y el flujo lo prevé, la corrección puede persistirse en Plantilla para futuras ocasiones.
-
-### 12.4. Responsables y comunicaciones
-
-- Las zonas pueden tener responsables/destinatarios configurados.
-- Los correos se generan por zona a partir de plantillas editables y variables del proceso.
-- La generación automática prepara la comunicación; el usuario debe poder revisar el resultado antes de su uso externo.
-
-### 12.5. Excel de recogida
-
-La exportación Excel resume la información necesaria para la recogida/gestión de la huelga, incluyendo agrupaciones por área según el diseño vigente. El Excel no sustituye el registro de la convocatoria en TrAcción.
-
----
-
-### 12.6. Recogida y validación de respuestas
-
-- La recogida admite ficheros Excel y correos Outlook cuando el circuito lo permite; la aplicación identifica el circuito y presenta los datos importados para revisión.
-- Los totales por sexo, colectivo y turno deben cuadrar con las reglas del proceso. Los servicios mínimos no se cuentan como personas que trabajan.
-- Los errores bloqueantes se explican en pantalla. Las celdas H/M implicadas y los totales discrepantes se destacan visualmente para facilitar la corrección.
-- La validación de un circuito no debe confundirse con la mera recepción de su fichero.
+**Estado: retirado del ejecutable.** Las funcionalidades históricas de gestión de huelgas que figuraban aquí **no describen la aplicación actual**. Su antigua especificación se conserva únicamente en el historial Git de este archivo. No crear incidencias ni nuevas pantallas suponiendo que esas funciones siguen disponibles. La gestión operativa de huelgas se realiza mediante un circuito externo al módulo retirado.
 
 ---
 
@@ -353,32 +373,42 @@ El módulo debe permitir distinguir y consultar la documentación ya enviada/reg
 
 ## 14. Lotería
 
-- Gestiona el proceso anual con su configuración y participantes.
-- Las rutas o ficheros dependientes del ejercicio deben respetar la parametrización anual.
-- El histórico de un año no debe quedar mezclado con el del siguiente por utilizar una ruta fija no parametrizada.
+- **Entradas:** ejercicio, dos números de décimo, cantidades encargadas, precio de campaña, participantes de Plantilla o externos, décimos asignados a cada persona y pagos (`efectivo`, `bizum`, `transferencia`).
+- **Fases:** encargo → participantes → seguimiento/cobros → cierre; cada campaña conserva sus datos y arqueos por ejercicio. La campaña siguiente se abre expresamente tras confirmación, sin trasladar participantes o cobros como si fueran nuevos.
+- **Cálculos:** `décimos solicitados = suma de décimos de ambos números de todos los participantes`; `disponibles por número = encargados − solicitados`; `importe de una persona = (décimos nº1 + décimos nº2) × precio por décimo`; `pendiente de cobro = suma de importes de participantes no pagados`.
+- **Seguimiento:** oculta de la tabla de pagos a los participantes con cero décimos de ambos números. Los cobros en efectivo integran la caja física; Bizum y transferencia son cobros registrados **fuera** de la caja física.
+- **Arqueo:** el primer esperado es `cobros en efectivo + entradas/salidas netas de caja`. En arqueos posteriores: `esperado = contado anterior + variación de cobros en efectivo desde el anterior arqueo + variación neta de movimientos de caja`. `diferencia = contado − esperado`. Guardar histórico de arqueos, movimientos y diferencias, sin confundirlo con la conciliación bancaria.
+- **Cierre:** requiere marcar Seguimiento como revisado; si hay descuadres de existencias o cobros pendientes, **advierte y exige confirmación**, pero no los bloquea automáticamente.
+- **Salidas:** correos de encargo y participantes, Excel de administración/campaña, seguimiento, arqueos e histórico anual.
+- **Origen y tests:** `src/features/loteria/domain/loteria.ts`, `arqueos.ts`, `arqueos.test.ts`, `src/features/loteria/components/LoteriaPage.tsx`.
 
 ---
 
 ## 15. Sorteos
 
-- Permite definir participantes y ejecutar sorteos según el flujo previsto por el módulo.
-- El resultado debe quedar claramente diferenciado de la lista previa de candidatos/participantes.
-- Repetir o modificar un sorteo debe ser una acción deliberada, no una consecuencia de refrescar la pantalla.
+- **Entradas:** personas activas de Plantilla, título, fecha, número de ganadores y exclusiones activas (manuales o por premios anteriores).
+- **Elegibilidad:** excluir del bombo a personas con exclusión activa. No ejecutar un sorteo si faltan datos obligatorios o se solicitan más ganadores que participantes disponibles.
+- **Operación:** selección aleatoria **sin repetición** de tantos ganadores como se haya indicado. Un ganador crea una exclusión que impide volver a participar mientras siga vigente.
+- **Resultado:** guardar título, fecha, ganadores y posiciones en histórico; borrar un sorteo permite decidir si se liberan o se conservan las exclusiones relacionadas. La visualización no vuelve a ejecutar el sorteo.
+- **Salida:** histórico, exportación/impresión de resultados y exclusiones.
+- **Origen y pruebas:** `src/features/sorteos/domain/sorteos.ts`, `src/features/sorteos/components/SorteosPage.tsx` y pruebas de dominio.
 
 ---
 
 ## 16. Vinculograma
 
-- Representa relaciones/vínculos entre personas o elementos según el modelo del módulo.
-- Las relaciones son información estructurada, no meramente visual: la representación gráfica debe derivarse de los datos almacenados.
-- Modificar la vista no debe alterar relaciones salvo que el usuario ejecute una acción de edición explícita.
+- **Entradas:** persona de Plantilla, persona vinculada, fecha de solicitud y datos de la relación.
+- **Vigencia:** `fecha de vencimiento = fecha de solicitud + 3 años`; no se edita manualmente. El vínculo es `Vigente` mientras no se haya superado el vencimiento y `Vencido` cuando se supera, salvo que conste revocación.
+- **Revocación:** exige fecha y motivo; no equivale a eliminar sin rastro el registro.
+- **Salidas:** consultas de vigentes/histórico, exportación e impresión; documento Word de declaración a partir de la plantilla configurada en Ajustes.
+- **Origen y pruebas:** `src/features/vinculograma/domain/vinculograma.ts`, `src/features/vinculograma/components/VinculogramaPage.tsx` y pruebas asociadas.
 
 ---
 
 ## 16 bis. Actividades Externas
 
-- El alta parte de una persona activa de Plantilla, localizable por número de empleado o nombre y apellidos. Se registran la actividad, la fecha de solicitud y si es remunerada.
-- La solicitud comienza pendiente y puede resolverse únicamente como **autorizada** o **denegada**. Las observaciones son opcionales al autorizar y obligatorias al denegar.
+- **Entrada:** persona activa de Plantilla, identificada por número de empleado, nombre/apellidos, descripción de la actividad, fecha de solicitud y condición remunerada.
+- **Estados:** `pendiente` → propuesta favorable a Comité de Dirección (`propuesta`) o rechazo por RRLL (`rechazada_rrll`); una propuesta pasa a autorización (`autorizada`) o denegación (`denegada`) por Comité. El rechazo/denegación necesita un motivo. **No** equiparar propuesta favorable con autorización final.
 - Editar permite corregir la actividad, la fecha y el carácter remunerado, manteniendo la identidad de la persona y el historial de resolución y comunicación. Eliminar requiere confirmación.
 - El borrador de Outlook incluye la resolución y las observaciones. Abrirlo no equivale a haberlo enviado: la confirmación de envío es una acción separada.
 - Las operaciones se guardan en SQLite compartida con comprobación de concurrencia para evitar sobrescribir una modificación ajena.
@@ -389,16 +419,22 @@ El módulo debe permitir distinguir y consultar la documentación ya enviada/reg
 
 ## 17. Especiales
 
-- Centraliza registros clasificados como especiales conforme a las categorías del módulo.
-- Debe conservar su histórico y permitir mantenimiento sin mezclar estos registros con tareas ordinarias salvo que exista un vínculo explícito.
+- **Finalidad:** gestionar destinatarios y comunicaciones especiales desde el módulo, con selección, plantillas y registros de envío.
+- **Entradas:** personas/destinatarios configurados, datos de comunicaciones, plantillas HTML y, cuando proceda, mensajes de Outlook `.msg`.
+- **Operación:** preparar y revisar comunicaciones a través de Outlook; la generación de un borrador no implica envío automático ni su confirmación.
+- **Conservación:** mantener registros y configuraciones compartidas que utiliza el módulo, sin equipararlos a tareas salvo vínculo funcional explícito.
+- **Origen:** `src/features/especiales/components/EspecialesPage.tsx` y servicios de importación/comunicación asociados.
 
 ---
 
 ## 18. Criterios RRLL
 
-- Funciona como repositorio estructurado de criterios de Relaciones Laborales.
-- Debe facilitar localizar el criterio vigente y su contexto sin depender de conocimiento informal del equipo.
-- La edición de un criterio debe ser deliberada y conservar la información necesaria para comprender el contenido aplicable.
+- **Entradas:** tema, texto del criterio, estado (`vigente`, `en revisión` o `archivado`), sentido (`aprobado`, `denegado` o sin clasificar), fecha, responsable y observaciones.
+- **Obligatorios:** tema y criterio; los demás campos aportan clasificación y contexto.
+- **Operación:** creación y edición con protección de concurrencia, consulta por filtros y búsqueda, importación de Excel/CSV/TSV/TXT con previsualización y selección de filas.
+- **Vínculo:** puede originarse desde una tarea; la tarea y el criterio siguen siendo entidades distintas y conservan la relación, sin que crear un criterio exija cerrar la tarea.
+- **Salida:** catálogo de criterios y precedentes para consultas posteriores.
+- **Origen y pruebas:** `src/features/criterios-rrll/components/CriteriosRrllPage.tsx`, dominio y pruebas del repositorio.
 
 ---
 
@@ -450,7 +486,38 @@ Las rutas de Excel automáticos, plantillas Word, actualizaciones y otros recurs
 
 ---
 
+## 21 bis. Mapa de fuentes y trazabilidad de cálculos
+
+La tabla orienta a quien mantenga una regla. **La ruta de código y los tests prevalecen como evidencia de comportamiento ejecutado; este documento registra el contrato esperado**, que debe actualizarse en la misma PR cuando cambie.
+
+| Área | Código de referencia | Qué se debe comprobar al modificarla |
+| --- | --- | --- |
+| Dashboard | `src/components/` y stores de módulos | Origen de indicadores, estados y fechas; no duplicar cálculos |
+| Plantilla | `src/features/plantilla/domain/importExcel.ts` | Altas, bajas lógicas, conflictos, antigüedad y datos preservados |
+| Tareas | `src/features/tareas/store/taskCrud.ts` | Seguimientos, cierre, OCC, bloqueo, guardado incierto y vínculos |
+| Actas | `src/features/actas/components/ActasPage.tsx` | Transiciones, alegaciones, plazos y borradores |
+| Comité / Paritaria | `src/shared/sessions/createSessionStore.ts` y `SessionManagementPage.tsx` | Puntos, cierre atómico, históricos e importaciones |
+| Coordinación | `src/features/coordinacion/` | Tareas vinculadas, puntos manuales y seguimiento de reuniones |
+| Ticket Restaurante | `src/features/ticket-restaurante/domain/ticketCalculation.ts` | Días de derecho, descuentos, cotización, deuda y ajustes |
+| Teletrabajo | `src/features/teletrabajo/domain/antiguedad.ts` y `semaforo.ts` | Fecha de referencia, grupos, dotación, presencialidad por día |
+| Licencias sin sueldo | `src/features/licencias-sin-sueldo/` | Estados, fechas, documentación e histórico |
+| Presupuestos | `src/features/presupuestos/` | Simulaciones frente a decisiones y resultados cerrados |
+| Ayuda Escolar | `src/features/ayuda-escolar/` | Identidad real, remitente en nombre ajeno, archivos y rutas |
+| Lotería | `src/features/loteria/domain/loteria.ts` y `arqueos.ts` | Décimos, importe, cobros, arqueo, cierre y campañas |
+| Sorteos | `src/features/sorteos/domain/sorteos.ts` | Universo elegible, aleatoriedad, exclusiones e histórico |
+| Vinculograma | `src/features/vinculograma/` | Vigencia, revocación y documentos |
+| Actividades Externas | `src/features/actividades-externas/domain/actividadExterna.ts` | Estados, resolución, comunicaciones y Excel espejo |
+| Especiales | `src/features/especiales/` | Destinatarios, plantilla y envíos |
+| Criterios RRLL | `src/features/criterios-rrll/` | Estados, importaciones y vínculos con Tareas |
+| Ajustes / Configuración | `src/components/AjustesPage.tsx`, `src/features/configuracion/` | Diferenciar preferencias locales, rutas compartidas y mantenimiento |
+
+**No inventar fórmulas faltantes**: antes de extender una sección, extraer la regla de la implementación y respaldarla con un test de dominio o integración. Mantener los casos límite y el comportamiento del histórico junto al cálculo principal.
+
+---
+
 ## 22. Regla para futuros cambios
+
+**Revisión obligatoria en cada PR con cambios funcionales**: el autor debe marcar en `.github/PULL_REQUEST_TEMPLATE.md` el módulo afectado, el apartado actualizado de este contrato y las pruebas correspondientes. Las PR sin cambios funcionales pueden declarar expresamente que no aplican; no se debe tocar este fichero solo para satisfacer una casilla.
 
 Antes de modificar una regla funcional existente:
 
