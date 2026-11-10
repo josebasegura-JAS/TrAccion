@@ -8,6 +8,7 @@ import type ExcelJS from 'exceljs';
 import type { Employee } from '../../plantilla/domain/employee';
 import { normalizeEmployeeNumber } from '../../plantilla/domain/employeeMaster';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
+import { getTeletrabajoModalidad } from './modalidadTramitacion';
 import { buildGruposCoberturaByIdMap, type GrupoCobertura } from './gruposCobertura';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import { normalizeTeletrabajoPuesto } from './puestosTeletrabajo';
@@ -50,6 +51,13 @@ const COL_PETICION_JUEVES = COL_PETICION_MARTES + 2;
 const COL_CAMBIOS_FUERA_PLAZO = COL_PETICION_JUEVES + 1;
 const COL_OBSERVACIONES = COL_CAMBIOS_FUERA_PLAZO + 1;
 const COL_OBSERVACIONES_RRLL = COL_OBSERVACIONES + 1;
+// Columnas añadidas al final, sin alterar las posiciones históricas del Excel.
+const COL_MODALIDAD = COL_OBSERVACIONES_RRLL + 1;
+const COL_FECHA_SOLICITUD = COL_MODALIDAD + 1;
+const COL_FECHA_REFERENCIA = COL_FECHA_SOLICITUD + 1;
+const COL_ESTADO_SOLICITUD = COL_FECHA_REFERENCIA + 1;
+const COL_TIPO_SOLICITUD = COL_ESTADO_SOLICITUD + 1;
+const COL_LAST = COL_TIPO_SOLICITUD;
 const ROTIS_FONT = 'TrueRotisSemiSansLightTwo';
 const SOFT_GREEN = '#E2F0D9';
 const SOFT_RED = '#FFC7CE';
@@ -434,7 +442,7 @@ function setStatusCellStyle({
 
 function applyRowFill(row: ExcelJS.Row, fillColor: string): void {
   row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    if (colNumber < 1 || colNumber > COL_OBSERVACIONES_RRLL) {
+    if (colNumber < 1 || colNumber > COL_LAST) {
       return;
     }
 
@@ -548,6 +556,11 @@ export async function exportTeletrabajoDireccionToExcel({
     { key: 'cambiosFueraPlazo', width: 52.09 },
     { key: 'observaciones', width: 40.73 },
     { key: 'observacionesRrll', width: 40.73 },
+    { key: 'modalidad', width: 20 },
+    { key: 'fechaSolicitud', width: 19 },
+    { key: 'fechaReferenciaAntiguedad', width: 26 },
+    { key: 'estadoSolicitud', width: 17 },
+    { key: 'tipoSolicitud', width: 17 },
   ];
 
   worksheet.mergeCells(2, 2, 2, 4);
@@ -591,8 +604,13 @@ export async function exportTeletrabajoDireccionToExcel({
   worksheet.getCell(4, COL_CAMBIOS_FUERA_PLAZO).value = 'Cambios fuera de plazo ordinario';
   worksheet.getCell(4, COL_OBSERVACIONES).value = 'Observaciones';
   worksheet.getCell(4, COL_OBSERVACIONES_RRLL).value = 'Observaciones RRLL';
+  worksheet.getCell(4, COL_MODALIDAD).value = 'Tramitación';
+  worksheet.getCell(4, COL_FECHA_SOLICITUD).value = 'Fecha solicitud';
+  worksheet.getCell(4, COL_FECHA_REFERENCIA).value = 'Referencia antigüedad';
+  worksheet.getCell(4, COL_ESTADO_SOLICITUD).value = 'Estado solicitud';
+  worksheet.getCell(4, COL_TIPO_SOLICITUD).value = 'Tipo solicitud';
 
-  const row5Values: string[] = new Array(COL_OBSERVACIONES_RRLL).fill('');
+  const row5Values: string[] = new Array(COL_LAST).fill('');
   row5Values[1] = 'Nº Empl';
   row5Values[2] = 'Nombre';
   row5Values[3] = 'Detalle';
@@ -658,7 +676,7 @@ export async function exportTeletrabajoDireccionToExcel({
       },
     );
 
-    const rowValues: Array<string | number> = new Array(COL_OBSERVACIONES_RRLL).fill('');
+    const rowValues: Array<string | number> = new Array(COL_LAST).fill('');
     rowValues[1] = toNumericEmployeeValue(solicitud.empleado);
     rowValues[2] = solicitud.nombreApellidos;
     rowValues[3] = solicitud.puestoNomina;
@@ -670,6 +688,12 @@ export async function exportTeletrabajoDireccionToExcel({
     rowValues[COL_APUNTES_RRLL - 1] = assessment.apuntesRrll;
     rowValues[COL_OBSERVACIONES - 1] = solicitud.observaciones;
     rowValues[COL_OBSERVACIONES_RRLL - 1] = solicitud.observacionesRrll ?? '';
+    const modalidad = getTeletrabajoModalidad(solicitud);
+    rowValues[COL_MODALIDAD - 1] = modalidad === 'sin_clasificar' ? 'Sin clasificar' : modalidad === 'ordinaria' ? 'Ordinaria' : 'Extraordinaria';
+    rowValues[COL_FECHA_SOLICITUD - 1] = solicitud.fechaSolicitud || '';
+    rowValues[COL_FECHA_REFERENCIA - 1] = evaluateTeletrabajoAntiguedad(solicitud, employee).fechaReferencia || '';
+    rowValues[COL_ESTADO_SOLICITUD - 1] = solicitud.estado;
+    rowValues[COL_TIPO_SOLICITUD - 1] = solicitud.tipoSolicitud;
     row.values = rowValues;
 
     const empleadoCell = row.getCell(2);
@@ -731,7 +755,7 @@ export async function exportTeletrabajoDireccionToExcel({
 
   worksheet.autoFilter = {
     from: { row: 5, column: 2 },
-    to: { row: 5, column: COL_OBSERVACIONES_RRLL },
+    to: { row: 5, column: COL_LAST },
   };
 
   const buffer = await workbook.xlsx.writeBuffer();
