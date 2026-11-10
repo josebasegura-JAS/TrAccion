@@ -486,6 +486,35 @@ Las rutas de Excel automáticos, plantillas Word, actualizaciones y otros recurs
 
 ---
 
+## 21 bis. Mapa de fuentes y trazabilidad de cálculos
+
+La tabla orienta a quien mantenga una regla. **La ruta de código y los tests prevalecen como evidencia de comportamiento ejecutado; este documento registra el contrato esperado**, que debe actualizarse en la misma PR cuando cambie.
+
+| Área | Código de referencia | Qué se debe comprobar al modificarla |
+| --- | --- | --- |
+| Dashboard | `src/components/` y stores de módulos | Origen de indicadores, estados y fechas; no duplicar cálculos |
+| Plantilla | `src/features/plantilla/domain/importExcel.ts` | Altas, bajas lógicas, conflictos, antigüedad y datos preservados |
+| Tareas | `src/features/tareas/store/taskCrud.ts` | Seguimientos, cierre, OCC, bloqueo, guardado incierto y vínculos |
+| Actas | `src/features/actas/components/ActasPage.tsx` | Transiciones, alegaciones, plazos y borradores |
+| Comité / Paritaria | `src/shared/sessions/createSessionStore.ts` y `SessionManagementPage.tsx` | Puntos, cierre atómico, históricos e importaciones |
+| Coordinación | `src/features/coordinacion/` | Tareas vinculadas, puntos manuales y seguimiento de reuniones |
+| Ticket Restaurante | `src/features/ticket-restaurante/domain/ticketCalculation.ts` | Días de derecho, descuentos, cotización, deuda y ajustes |
+| Teletrabajo | `src/features/teletrabajo/domain/antiguedad.ts` y `semaforo.ts` | Fecha de referencia, grupos, dotación, presencialidad por día |
+| Licencias sin sueldo | `src/features/licencias-sin-sueldo/` | Estados, fechas, documentación e histórico |
+| Presupuestos | `src/features/presupuestos/` | Simulaciones frente a decisiones y resultados cerrados |
+| Ayuda Escolar | `src/features/ayuda-escolar/` | Identidad real, remitente en nombre ajeno, archivos y rutas |
+| Lotería | `src/features/loteria/domain/loteria.ts` y `arqueos.ts` | Décimos, importe, cobros, arqueo, cierre y campañas |
+| Sorteos | `src/features/sorteos/domain/sorteos.ts` | Universo elegible, aleatoriedad, exclusiones e histórico |
+| Vinculograma | `src/features/vinculograma/` | Vigencia, revocación y documentos |
+| Actividades Externas | `src/features/actividades-externas/domain/actividadExterna.ts` | Estados, resolución, comunicaciones y Excel espejo |
+| Especiales | `src/features/especiales/` | Destinatarios, plantilla y envíos |
+| Criterios RRLL | `src/features/criterios-rrll/` | Estados, importaciones y vínculos con Tareas |
+| Ajustes / Configuración | `src/components/AjustesPage.tsx`, `src/features/configuracion/` | Diferenciar preferencias locales, rutas compartidas y mantenimiento |
+
+**No inventar fórmulas faltantes**: antes de extender una sección, extraer la regla de la implementación y respaldarla con un test de dominio o integración. Mantener los casos límite y el comportamiento del histórico junto al cálculo principal.
+
+---
+
 ## 22. Regla para futuros cambios
 
 **Revisión obligatoria en cada PR con cambios funcionales**: el autor debe marcar en `.github/PULL_REQUEST_TEMPLATE.md` el módulo afectado, el apartado actualizado de este contrato y las pruebas correspondientes. Las PR sin cambios funcionales pueden declarar expresamente que no aplican; no se debe tocar este fichero solo para satisfacer una casilla.
