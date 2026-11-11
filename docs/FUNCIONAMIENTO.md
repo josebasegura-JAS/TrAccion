@@ -414,6 +414,9 @@ El módulo debe permitir distinguir y consultar la documentación ya enviada/reg
 - Las operaciones se guardan en SQLite compartida con comprobación de concurrencia para evitar sobrescribir una modificación ajena.
 - En Ajustes se configura la carpeta del Excel espejo `Actividades_Externas.xlsx`. Se regenera al crear, editar, eliminar, resolver o cambiar la comunicación y puede actualizarse manualmente.
 - El Excel es una representación secundaria de los registros, no la fuente de verdad. Si falla su escritura, se informa sin revertir un cambio confirmado en SQLite.
+- **Formato del Excel espejo:** una única hoja con título corporativo rojo, resumen de totales, siete columnas, filtros, encabezados inmovilizados, filas alternas blancas/grises y colores diferenciados solo en la celda **Estado**: naranja claro para pendiente de RRLL/Comité, verde claro para autorizada y rojo claro para rechazada por RRLL/denegada. Las observaciones RRLL y Comité se mantienen identificadas.
+- **Orden y fechas:** registros en orden descendente de creación. Una fecha de solicitud ISO válida se exporta como fecha real de Excel con formato `aaaa-mm-dd` para permitir ordenación cronológica; si no es válida se conserva el texto original para no fabricar fechas. La altura de las filas se estima según la longitud de actividad y observaciones, con ajuste de texto activo.
+- **Origen y prueba de formato:** `src/features/actividades-externas/services/actividadesExternasExcelBackup.ts` y `actividadesExternasExcelBackup.test.ts`. Los colores y el diseño del Excel no alteran estados, conteos ni registros de SQLite.
 
 ---
 
