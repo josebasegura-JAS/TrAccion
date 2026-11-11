@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
-import { copyFile, mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { publishOperationalExcelBackup } from '../operationalExcelPublication.js';
 
 export function registerOperationalExcelBackupIpc(): void {
   ipcMain.handle('operational-backup:select-directory', async (event) => {
@@ -36,32 +37,25 @@ export function registerOperationalExcelBackupIpc(): void {
       await mkdir(directory, { recursive: true });
       const safeFileName = path.basename(candidate.fileName);
       const safePrefix = path.basename(candidate.cleanupPrefix);
-      const filePath = path.join(directory, safeFileName);
-      const tempPath = path.join(
+      if (
+        safeFileName !== candidate.fileName ||
+        !safeFileName.toLowerCase().endsWith('.xlsx') ||
+        safeFileName.startsWith('.') ||
+        !safePrefix ||
+        safePrefix !== candidate.cleanupPrefix ||
+        candidate.buffer.byteLength === 0
+      ) {
+        return { ok: false, message: 'Nombre o contenido del respaldo Excel no válido.', path: null };
+      }
+
+      // El temporal se escribe en la carpeta de destino y se publica con
+      // rename. No se vuelve a sobrescribir un Excel existente con copyFile.
+      const filePath = await publishOperationalExcelBackup(
         directory,
-        `.${safePrefix}.${process.pid}.${Date.now()}.tmp.xlsx`,
+        safeFileName,
+        safePrefix,
+        Buffer.from(candidate.buffer),
       );
-
-      // Escritura segura: primero se genera un temporal. Solo si puede copiarse al
-      // destino definitivo se eliminan los espejos antiguos. Si Excel mantiene el
-      // fichero abierto, copyFile falla y se conserva intacta la última copia válida.
-      await writeFile(tempPath, Buffer.from(candidate.buffer));
-      try {
-        await copyFile(tempPath, filePath);
-      } finally {
-        await unlink(tempPath).catch(() => undefined);
-      }
-
-      const existingFiles = await readdir(directory);
-      const previousBackups = existingFiles.filter(
-        (name) =>
-          name !== safeFileName &&
-          name.startsWith(safePrefix) &&
-          name.toLowerCase().endsWith('.xlsx'),
-      );
-      for (const previousFile of previousBackups) {
-        await unlink(path.join(directory, previousFile)).catch(() => undefined);
-      }
 
       return { ok: true, message: `Excel automático actualizado en ${filePath}.`, path: filePath };
     } catch (error) {
