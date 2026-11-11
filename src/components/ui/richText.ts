@@ -8,12 +8,14 @@
 const ALLOWED_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'UL', 'OL', 'LI', 'DIV']);
 
 /** Etiquetas cuyo contenido se descarta entero, no solo la etiqueta — no queremos que el texto de un <script> o un <style> se cuele como si fuera texto normal. */
-const STRIP_ENTIRELY_TAGS = new Set(['SCRIPT', 'STYLE']);
+const STRIP_ENTIRELY_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'TEMPLATE', 'NOSCRIPT']);
 
 /** Reduce un HTML arbitrario (p. ej. pegado desde Word) al pequeño subconjunto de etiquetas que soporta RichTextEditor. */
 export function sanitizeRichText(html: string): string {
-  const container = document.createElement('div');
-  container.innerHTML = html;
+  // DOMParser crea un documento separado e inerte: los manejadores de eventos
+  // del HTML pegado no se activan en el documento vivo antes de sanearlo.
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const container = parsed.body;
 
   // Recorrido plano sobre TODOS los descendientes (querySelectorAll('*') no
   // se ve afectado por las reubicaciones que hace el "unwrap" de abajo,
@@ -21,12 +23,15 @@ export function sanitizeRichText(html: string): string {
   // funciona igual de bien con HTML anidado a cualquier profundidad,
   // a diferencia de un recorrido recursivo sobre una foto fija de hijos).
   for (const element of Array.from(container.querySelectorAll('*'))) {
-    if (STRIP_ENTIRELY_TAGS.has(element.tagName)) {
+    // SVG y MathML conservan tagName en minúsculas al parsearse como HTML.
+    // Normalizar impide que sus nodos se desenvuelvan y filtren texto interno.
+    const tagName = element.tagName.toUpperCase();
+    if (STRIP_ENTIRELY_TAGS.has(tagName)) {
       element.parentNode?.removeChild(element);
       continue;
     }
 
-    if (!ALLOWED_TAGS.has(element.tagName)) {
+    if (!ALLOWED_TAGS.has(tagName)) {
       const parent = element.parentNode;
       if (parent) {
         while (element.firstChild) {

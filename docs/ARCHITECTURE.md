@@ -327,3 +327,12 @@ Las auditorías puntuales (`*-audit.md` y documentos equivalentes) son fotograf�
 - Esta intervención no modifica OCC, `MAX(updated_at)`, el esquema SQLite, backups ni la política de sincronización. Sus riesgos de igualdad de tokens y reloj retrasado siguen pendientes de otra actuación específica.
 
 **Pruebas:** `src/services/databaseLockView.test.ts` y `electron/persistence/databaseLockRecovery.clockSkew.test.ts`. Ninguna representa dos equipos conectados a SMB real.
+
+
+## Seguridad HTML del renderer (PR2, 11/11/2026)
+
+- El HTML de producción generado mediante Vite incorpora una **Content Security Policy** con `script-src 'self'`, `object-src 'none'`, restricciones de conexiones y permisos para imágenes locales/`data:`/`blob:`. Se conserva `style-src 'unsafe-inline'` para estilos dinámicos de la interfaz; no se permiten scripts inline en la versión empaquetada.
+- En desarrollo no se inyecta esa política desde Vite porque el preámbulo de React Refresh necesita código inline. Esta excepción **no se aplica al ejecutable de producción**.
+- Los fragmentos HTML pegados en el editor enriquecido se analizan con `DOMParser(..., 'text/html')` en un documento separado e inerte, se eliminan elementos activos y solo se conservan etiquetas de formato permitidas sin atributos. También se sanea el contenido almacenado antes de insertarlo en el editor.
+- La CSP y el sanitizador son capas complementarias, no sustituyen la revisión de otros puntos de inserción HTML ni los controles IPC existentes.
+- **Pruebas:** `src/components/ui/richText.test.ts`, más los jobs CI de compilación, web y Electron. Verificar manualmente pegado desde Word, estilos y generación de actas en el ejecutable.

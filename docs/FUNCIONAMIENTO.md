@@ -532,3 +532,8 @@ Antes de modificar una regla funcional existente:
 6. actualizar la ayuda visible si el cambio afecta al flujo del usuario.
 
 Una nueva funcionalidad no se considera completamente cerrada si el código, los tests, la ayuda visible y la documentación funcional describen comportamientos distintos.
+
+
+### Pegado seguro de contenido enriquecido (11/11/2026)
+
+En los campos de edición enriquecida (incluidos los utilizados para actas), el texto pegado desde Word conserva párrafos, negrita, cursiva y listas, pero elimina estilos y atributos externos, imágenes, scripts, elementos embebidos y otras etiquetas no admitidas. Al abrir contenido previamente guardado, el editor también lo sanea antes de introducirlo en el DOM. No cambia los datos almacenados de forma automática ni los cálculos, estados o históricos de los módulos. Código: `src/components/ui/richText.ts`, `src/components/ui/RichTextEditor.tsx`. Pruebas: `src/components/ui/richText.test.ts`.

@@ -31,7 +31,8 @@ export function RichTextEditor({
   useEffect(() => {
     const editor = editorRef.current;
     if (editor && editor.innerHTML !== value) {
-      editor.innerHTML = value;
+      // Nunca insertar HTML almacenado sin validar; puede proceder de versiones anteriores.
+      editor.innerHTML = sanitizeRichText(value);
     }
   }, [value]);
 
