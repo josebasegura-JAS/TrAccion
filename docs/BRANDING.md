@@ -1,26 +1,30 @@
 # Identidad visual de TrAcción
 
-## Recursos activos
+## Dos versiones del logotipo según el tamaño
 
-El logotipo aprobado (engranajes rojos, plateados, tren, personal y flecha sobre fondo azul oscuro) se utiliza en estos archivos:
+El logotipo **anterior, simplificado** se utiliza donde la imagen es pequeña: iconos de Windows, pestaña del navegador y barra lateral. El logotipo **nuevo, completo** —con tres engranajes superpuestos, personas, tren, vías y flecha— se utiliza en las pantallas grandes de arranque y cierre.
 
-| Ubicación | Archivo | Consumidor |
-| --- | --- | --- |
-| Barra lateral | `assets/logo/traccion-logo.png` | `src/components/Sidebar.tsx` |
-| Arranque | `build/icon/traccion-logo.png` | `build/icon/splash.html` |
-| Cierre | `build/icon/traccion-splash.png` | `build/icon/shutdown.html` |
-| Ejecutable / ventana / barra de tareas | `build/icon/traccion-icon-256.ico` | `package.json` y `electron/main.ts` |
-| Navegador durante desarrollo | `public/favicon.ico` | `index.html` |
+| Ubicación | Versión | Recurso | Consumidor |
+| --- | --- | --- | --- |
+| Barra lateral | Anterior (compacta) | `assets/logo/traccion-logo.png` | `src/components/Sidebar.tsx` |
+| Icono del EXE / ventana / barra de tareas | Anterior (compacta) | `build/icon/traccion-icon-256.ico` | `package.json`, `electron/main.ts` |
+| Favicon en navegador de desarrollo | Anterior (compacta) | `public/favicon.ico` | `index.html` |
+| Arranque | Nueva (completa) | `build/icon/traccion-logo.png` | `build/icon/splash.html` |
+| Cierre | Nueva (completa) | `build/icon/traccion-splash.png` | `build/icon/shutdown.html` |
 
-El archivo `build/icon/traccion-portable-splash.bmp` es un recurso anterior de distribución: **no se ha encontrado referencia activa** en la configuración portable vigente. No se cambia ni se presupone que forma parte del arranque.
+**Origen de los iconos compactos:** restaurados byte a byte desde Git, commit `0e428e25e74539d14f86e7c29a38999dd0d0018a`, anterior al cambio de identidad visual de la PR #404. No se han rediseñado, recortado ni recomprimido.
 
-Las imágenes PNG activas se distribuyen en tamaño 512 × 512, suficiente para los tamaños actuales de la interfaz; el ICO contiene el mismo logotipo en recursos de icono de Windows. El arte aprobado de mayor resolución se conserva por separado en el paquete de origen.
+**Origen del logotipo completo:** recursos introducidos por la PR #404, conservados sin alteración.
 
-## Para futuras actualizaciones
+## Recurso histórico sin uso confirmado
 
-1. Cambiar todos los PNG e ICO activos en una única PR; mantener coherentes los recursos Windows y los de la interfaz.
-2. Revisar `Sidebar.tsx`, `splash.html`, `shutdown.html`, `electron/main.ts`, `package.json` e `index.html` por si han cambiado las rutas.
-3. Compilar un EXE nuevo: Windows incrusta el icono en el ejecutable; sustituir solo el PNG no basta.
-4. Comprobar barra lateral, pantalla de arranque, pantalla de cierre, archivo EXE en Explorador, barra de tareas y pestaña del navegador; examinar el resultado a 16, 32 y 48 px.
-5. Si un acceso directo o icono anclado mantiene la imagen antigua tras actualizar, comprobar la caché de iconos de Windows y volver a anclar.
-6. Al tratarse de un cambio solo gráfico, documentar en la PR `sin cambios funcionales`; no modificar `docs/FUNCIONAMIENTO.md` salvo que cambie un comportamiento de usuario.
+`build/icon/traccion-portable-splash.bmp` se mantiene sin cambios. No se ha localizado una referencia activa en la configuración de distribución portable vigente; no asumir que es el splash de arranque de Electron.
+
+## Mantenimiento futuro
+
+1. Mantener las dos variantes, sin reducir el logotipo completo para tamaños pequeños.
+2. Cuando cambien los iconos, revisar en conjunto EXE, barra de tareas, ventana, favicon y barra lateral.
+3. Cuando cambie la identidad principal, revisar en conjunto arranque y cierre.
+4. Generar el EXE para actualizar su icono incrustado; Windows puede requerir refrescar caché de iconos o volver a anclar el acceso directo.
+5. Verificar visualmente en Windows a 16, 24, 32, 48 y 256 px, y comprobar la presentación de arranque y cierre.
+6. Documentar como PR exclusivamente visual, sin cambios funcionales. No alterar `docs/FUNCIONAMIENTO.md` si no cambia el comportamiento de la aplicación.
