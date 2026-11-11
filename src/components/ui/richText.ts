@@ -23,12 +23,15 @@ export function sanitizeRichText(html: string): string {
   // funciona igual de bien con HTML anidado a cualquier profundidad,
   // a diferencia de un recorrido recursivo sobre una foto fija de hijos).
   for (const element of Array.from(container.querySelectorAll('*'))) {
-    if (STRIP_ENTIRELY_TAGS.has(element.tagName)) {
+    // SVG y MathML conservan tagName en minúsculas al parsearse como HTML.
+    // Normalizar impide que sus nodos se desenvuelvan y filtren texto interno.
+    const tagName = element.tagName.toUpperCase();
+    if (STRIP_ENTIRELY_TAGS.has(tagName)) {
       element.parentNode?.removeChild(element);
       continue;
     }
 
-    if (!ALLOWED_TAGS.has(element.tagName)) {
+    if (!ALLOWED_TAGS.has(tagName)) {
       const parent = element.parentNode;
       if (parent) {
         while (element.firstChild) {
