@@ -40,6 +40,20 @@ export async function forceReleaseDatabaseLockWithRecovery<
   const lockPath = currentStatus.lockPath;
   const previousLock = await deps.readLock(lockPath);
 
+  // Un timestamp de otro equipo en el futuro (o inválido) impide considerar
+  // fiable la liberación administrativa. Esta comprobación NO demuestra que
+  // los relojes estén sincronizados cuando la marca parece correcta.
+  if (previousLock) {
+    const remoteTimestamp = Date.parse(previousLock.updatedAt);
+    if (!Number.isFinite(remoteTimestamp) || remoteTimestamp > Date.now() + 5_000) {
+      return {
+        ok: false,
+        status: currentStatus,
+        message: 'No se libera el bloqueo SQLite: su fecha es inválida o está en el futuro respecto a este equipo. Comprueba la hora de los equipos y confirma que el propietario no sigue trabajando.',
+      };
+    }
+  }
+
   if (previousLock) {
     const lockInfoPath = deps.getLockInfoPath(lockPath);
     await unlink(lockInfoPath).catch((error: unknown) => {
