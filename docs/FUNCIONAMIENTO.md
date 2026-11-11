@@ -537,3 +537,8 @@ Una nueva funcionalidad no se considera completamente cerrada si el código, los
 ### Pegado seguro de contenido enriquecido (11/11/2026)
 
 En los campos de edición enriquecida (incluidos los utilizados para actas), el texto pegado desde Word conserva párrafos, negrita, cursiva y listas, pero elimina estilos y atributos externos, imágenes, scripts, elementos embebidos y otras etiquetas no admitidas. Al abrir contenido previamente guardado, el editor también lo sanea antes de introducirlo en el DOM. No cambia los datos almacenados de forma automática ni los cálculos, estados o históricos de los módulos. Código: `src/components/ui/richText.ts`, `src/components/ui/RichTextEditor.tsx`. Pruebas: `src/components/ui/richText.test.ts`.
+
+
+### Respaldos automáticos Excel — publicación y limpieza segura (11/11/2026)
+
+**Entrada:** libro Excel calculado por cada módulo, carpeta y nombre configurados. **Operación:** escribir temporal único y publicar por cambio de nombre en la misma carpeta, sin copiar parcialmente encima del Excel vigente. **Resultado:** el nombre y formato visibles son los de siempre. **Excepciones:** si falla la publicación se informa y conserva el Excel anterior; los módulos de nombre fijo no borran ficheros similares, y solo se podan versiones fechadas exactas de Licencias y Vinculograma después de guardar correctamente. **Históricos:** no cambia ningún registro SQLite ni se eliminan documentos con otros nombres. **Código y pruebas:** `electron/ipc/registerOperationalExcelBackupIpc.ts`, `electron/operationalExcelPublication.ts` y `electron/operationalExcelPublication.test.ts`.

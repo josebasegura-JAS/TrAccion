@@ -336,3 +336,13 @@ Las auditorías puntuales (`*-audit.md` y documentos equivalentes) son fotograf�
 - Los fragmentos HTML pegados en el editor enriquecido se analizan con `DOMParser(..., 'text/html')` en un documento separado e inerte, se eliminan elementos activos y solo se conservan etiquetas de formato permitidas sin atributos. También se sanea el contenido almacenado antes de insertarlo en el editor.
 - La CSP y el sanitizador son capas complementarias, no sustituyen la revisión de otros puntos de inserción HTML ni los controles IPC existentes.
 - **Pruebas:** `src/components/ui/richText.test.ts`, más los jobs CI de compilación, web y Electron. Verificar manualmente pegado desde Word, estilos y generación de actas en el ejecutable.
+
+
+## Publicación segura de Excel operativos (PR3, 11/11/2026)
+
+- El IPC `operational-backup:save-excel` escribe el libro completo en un temporal único en la **misma carpeta** y publica con `rename`. No usa `copyFile` encima del destino, que podía dejar un Excel parcialmente copiado si la operación se interrumpía.
+- Si falla la generación del temporal o su publicación (incluido un Excel abierto que Windows no permita reemplazar), se comunica un error y no se elimina el Excel anterior ni se borran históricos. La limpieza del temporal es best-effort.
+- La poda de antiguos Excel se limita a nombres **exactamente** reconocidos y fechados de `Licencias_y_Excedencias_DD-MM-YYYY.xlsx` y `Vinculograma_DD-MM-YYYY.xlsx`. Los respaldos de nombre fijo de Coordinación, Criterios RRLL, Actividades Externas y Ticket Restaurante **no** eliminan archivos por coincidencia de prefijo.
+- Si falla la poda tras una publicación correcta, el Excel nuevo permanece publicado y se conservan las copias anteriores. La limpieza no forma parte del éxito de la actualización.
+- Se preservan carpetas, nombres y contratos IPC para el resto de la app. No modifica el contenido Excel, su formato, SQLite ni los protocolos de locks.
+- Tests: `electron/operationalExcelPublication.test.ts` verifica sustitución, conservación ante errores, poda limitada y protección de otros nombres.
