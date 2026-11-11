@@ -69,7 +69,7 @@ describe('Excel espejo de Actividades Externas: formato de referencia', () => {
     const sheet = workbook.getWorksheet('Actividades Externas');
     expect(sheet).toBeDefined();
     expect(sheet!.getCell('A1').value).toBe('Actividades externas');
-    expect(sheet!.autoFilter).toEqual({ from: 'A4', to: 'G4' });
+    expect(sheet!.autoFilter).toBe('A4:G4');
     expect(String(sheet!.getCell('A2').value)).toContain('Total: 4');
     expect(sheet!.getCell('D5').value).toBeInstanceOf(Date);
     expect(sheet!.getCell('D5').numFmt).toBe('yyyy-mm-dd');
