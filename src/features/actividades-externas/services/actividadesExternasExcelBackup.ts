@@ -2,6 +2,37 @@ import { saveExcelBackupWithRetry } from '../../../shared/export/saveExcelBackup
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import type { ActividadExterna } from '../domain/actividadExterna';
 
+/** Convierte fechas ISO válidas en fechas de Excel, sin aplicar un huso horario local. */
+function excelDate(value: string): Date | string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+    ? date
+    : value;
+}
+
+/** ExcelJS no autoajusta la altura al activar wrapText: estimamos líneas por columna. */
+function rowHeight(record: ActividadExterna, observations: string): number {
+  const fields: Array<[string, number]> = [
+    [record.empleado, 13],
+    [record.nombre, 32],
+    [record.actividad, 46],
+    [record.fechaSolicitud, 15],
+    [record.remunerada ? 'Sí' : 'No', 11],
+    [({ pendiente: 'Pendiente de RRLL', propuesta: 'Pendiente de Comité', rechazada_rrll: 'Rechazada por RRLL', autorizada: 'Autorizada', denegada: 'Denegada' } as const)[record.estado], 15],
+    [observations, 49],
+  ];
+  const lines = Math.max(1, ...fields.map(([value, width]) =>
+    value.split(/\r?\n/).reduce((total, paragraph) =>
+      total + Math.max(1, Math.ceil(paragraph.length / width)), 0),
+  ));
+  return Math.min(210, Math.max(32, lines * 17 + 9));
+}
+
 export async function syncActividadesExternasExcelBackup(records: ActividadExterna[]): Promise<string | null> {
   const directory = useConfiguracionStore.getState().rutaExportacionActividadesExternas.trim();
   if (!directory) return 'Configura en Ajustes la carpeta del Excel espejo de Actividades Externas.';
@@ -59,7 +90,7 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
         empleado: safe(record.empleado),
         nombre: safe(record.nombre),
         actividad: safe(record.actividad),
-        fechaSolicitud: record.fechaSolicitud,
+        fechaSolicitud: excelDate(record.fechaSolicitud),
         remunerada: record.remunerada ? 'Sí' : 'No',
         estado: ({ pendiente: 'Pendiente de RRLL', propuesta: 'Pendiente de Comité', rechazada_rrll: 'Rechazada por RRLL', autorizada: 'Autorizada', denegada: 'Denegada' } as const)[record.estado],
         observaciones: safe(exportNotes(record)),
@@ -79,18 +110,28 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
     sheet.eachRow((row, index) => {
       if (index <= 4) return;
       const record = sortedRecords[index - 5];
-      const denied = record?.estado === 'denegada' || record?.estado === 'rechazada_rrll';
-      const background = denied ? 'FFFEE2E2' : index % 2 === 0 ? 'FFF3F4F6' : 'FFFFFFFF';
-      row.height = 32;
+      if (!record) return;
+      const denied = record.estado === 'denegada' || record.estado === 'rechazada_rrll';
+      // El cebreado se aplica a las columnas ordinarias; únicamente Estado
+      // tiene color semántico, como en el Excel de referencia.
+      const background = index % 2 === 0 ? 'FFF3F4F6' : 'FFFFFFFF';
+      row.height = rowHeight(record, exportNotes(record));
       row.eachCell({ includeEmpty: true }, (cell) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: background } };
-        cell.font = { name: 'Calibri', size: 11, color: { argb: denied ? 'FF991B1B' : 'FF1F2937' }, bold: false };
+        cell.font = { name: 'Calibri', size: 11, color: { argb: 'FF1F2937' }, bold: false };
         cell.alignment = { vertical: 'middle', wrapText: true, indent: 1 };
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } };
       });
-      if (denied) {
-        row.getCell(6).font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFB91C1C' } };
-      }
+      const date = row.getCell(4);
+      if (date.value instanceof Date) date.numFmt = 'yyyy-mm-dd';
+      const status = row.getCell(6);
+      const statusColor = denied
+        ? { fill: 'FFFEE2E2', text: 'FF991B1B' }
+        : record.estado === 'autorizada'
+          ? { fill: 'FFEAF2DD', text: 'FF1F2937' }
+          : { fill: 'FFFCE4D6', text: 'FF1F2937' };
+      status.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusColor.fill } };
+      status.font = { name: 'Calibri', size: 11, bold: denied, color: { argb: statusColor.text } };
     });
     sheet.pageSetup.horizontalCentered = true;
     sheet.pageSetup.printArea = `A1:G${Math.max(4, sheet.rowCount)}`;
