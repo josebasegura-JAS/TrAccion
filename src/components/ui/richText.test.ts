@@ -43,3 +43,25 @@ describe('sanitizeRichText', () => {
     expect(sanitizeRichText('')).toBe('');
   });
 });
+
+
+describe('sanitizeRichText — HTML activo o malicioso', () => {
+  it('elimina manejadores inline, URLs activas e imágenes conservando el texto seguro', () => {
+    const html = '<p onclick="alert(1)">Acta <strong onmouseover="alert(1)">aprobada</strong></p>' +
+      '<img src="x" onerror="alert(1)"><a href="javascript:alert(1)">consulta</a>';
+    expect(sanitizeRichText(html)).toBe('<p>Acta <strong>aprobada</strong></p>consulta');
+  });
+
+  it('elimina completamente iframe, SVG, MathML, scripts y su contenido', () => {
+    const html = '<p>Antes</p><iframe src="https://example.invalid">secreto</iframe>' +
+      '<svg onload="alert(1)"><text>oculto</text></svg>' +
+      '<math><mi>invisible</mi></math><script>alert(1)</script><p>Después</p>';
+    expect(sanitizeRichText(html)).toBe('<p>Antes</p><p>Después</p>');
+  });
+
+  it('mantiene la estructura de Word sin estilos, atributos ni etiquetas activas', () => {
+    const html = '<div class="MsoNormal"><p style="color:red">Punto <b>uno</b></p>' +
+      '<ol><li>Acuerdo</li></ol></div>';
+    expect(sanitizeRichText(html)).toBe('<div><p>Punto <b>uno</b></p><ol><li>Acuerdo</li></ol></div>');
+  });
+});
