@@ -23,3 +23,25 @@ export function formatLockAge(updatedAt: string): string {
   const ageHours = Math.round(ageMinutes / 60);
   return `hace ${ageHours} h`;
 }
+
+
+/** Margen para pequeñas diferencias horarias y el tiempo de propagación SMB. */
+export const LOCK_CLOCK_FUTURE_TOLERANCE_MS = 5_000;
+
+/**
+ * Solo detecta una marca del OTRO equipo en el futuro o inválida.
+ * No certifica sincronización: un PC local adelantado no se puede identificar
+ * de forma fiable con esta observación y requiere comprobación horaria externa.
+ */
+export function getLockClockWarning(updatedAt: string, nowMs = Date.now()): string | null {
+  const remoteMs = Date.parse(updatedAt);
+  if (!Number.isFinite(remoteMs)) {
+    return 'La fecha del bloqueo es inválida. No fuerces la liberación: comprueba los relojes y el estado de la red.';
+  }
+
+  const futureMs = remoteMs - nowMs;
+  if (futureMs <= LOCK_CLOCK_FUTURE_TOLERANCE_MS) return null;
+
+  const seconds = Math.ceil(futureMs / 1000);
+  return `El bloqueo indica una hora ${seconds} s posterior a la de este equipo. Puede existir un desfase horario entre equipos. No fuerces la liberación; verifica la sincronización horaria y que el otro equipo no esté trabajando.`;
+}

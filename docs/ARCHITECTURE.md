@@ -315,3 +315,15 @@ Antes de crear o modificar un módulo:
 ## 19. Documentos históricos
 
 Las auditorías puntuales (`*-audit.md` y documentos equivalentes) son fotografías de una fecha. Pueden explicar el origen de una decisión, pero **no sustituyen** a `FUNCIONAMIENTO.md`, `DECISIONS.md` ni a este documento para conocer el estado vigente.
+
+
+## Diagnóstico conservador de reloj entre equipos (PR1, 11/11/2026)
+
+- El lock de operación SQLite sigue usando `owner.json`, TTL de 30 segundos y heartbeat de 10 segundos. **No se altera el protocolo**, las revalidaciones automáticas ni el tiempo de recuperación normal.
+- En Ajustes > Base de datos, cuando se consulta un lock existente, TrAcción avisa si su `updatedAt` está más de 5 segundos por delante del reloj local o no puede interpretarse.
+- La liberación **manual** de un lock con fecha futura/inválida se rechaza también en Electron, aunque se intente invocar el IPC sin pasar por el botón de Ajustes. Se evita una intervención administrativa potencialmente peligrosa.
+- **Límite importante:** comparar un timestamp de otro cliente con la hora local **no determina el desfase exacto** respecto al servidor ni detecta de forma fiable si el reloj de este equipo está adelantado. Que no aparezca aviso **no garantiza** sincronización horaria. Se debe verificar NTP/hora en los equipos y servidor corporativo por medios independientes.
+- Un aviso no identifica corrupción SQLite. Antes de intentar una liberación forzada hay que comprobar que el propietario no continúa trabajando.
+- Esta intervención no modifica OCC, `MAX(updated_at)`, el esquema SQLite, backups ni la política de sincronización. Sus riesgos de igualdad de tokens y reloj retrasado siguen pendientes de otra actuación específica.
+
+**Pruebas:** `src/services/databaseLockView.test.ts` y `electron/persistence/databaseLockRecovery.clockSkew.test.ts`. Ninguna representa dos equipos conectados a SMB real.

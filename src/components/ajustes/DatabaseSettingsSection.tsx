@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Database, RotateCcw } from 'lucide-react';
-import { formatLockAge } from '../../services/databaseLockView';
+import { formatLockAge, getLockClockWarning } from '../../services/databaseLockView';
 import type { DatabaseStatusBadgeViewModel } from '../../services/databaseStatusView';
 import {
   databaseContextSwitchBlockReason,
@@ -115,6 +115,7 @@ export function DatabaseSettingsSection({
   handleVacuumNow,
 }: DatabaseSettingsSectionProps) {
   const [databaseSwitchSafetyMessage, setDatabaseSwitchSafetyMessage] = useState('');
+  const lockClockWarning = currentDatabaseLock ? getLockClockWarning(currentDatabaseLock.updatedAt) : null;
 
   const runDatabaseContextChange = async (action: () => void | Promise<void>): Promise<void> => {
     const blockedReason = databaseContextSwitchBlockReason();
@@ -215,6 +216,11 @@ export function DatabaseSettingsSection({
             Bloqueo activo de {currentDatabaseLock.username}@{currentDatabaseLock.hostname} · PID{' '}
             {currentDatabaseLock.pid} · {formatLockAge(currentDatabaseLock.updatedAt)}
           </Notice>
+          {lockClockWarning && (
+            <Notice className="mt-2" tone="warning">
+              {lockClockWarning}
+            </Notice>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
               className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
@@ -226,7 +232,7 @@ export function DatabaseSettingsSection({
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isForcingLockRelease}
+              disabled={isForcingLockRelease || Boolean(lockClockWarning)}
               onClick={() => void handleForceReleaseDatabaseLock()}
               type="button"
             >

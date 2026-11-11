@@ -32,3 +32,24 @@ describe('formatLockAge', () => {
     expect(formatLockAge('2026-06-23T12:00:05.000Z')).toBe('hace 0 s');
   });
 });
+
+
+describe('aviso conservador de desfase horario en bloqueos', () => {
+  const now = Date.parse('2026-11-11T12:00:00.000Z');
+
+  it('avisa cuando la fecha de otro equipo supera el margen de 5 segundos', async () => {
+    const { getLockClockWarning } = await import('./databaseLockView');
+    expect(getLockClockWarning('2026-11-11T12:00:06.000Z', now)).toContain('desfase horario');
+  });
+
+  it('no avisa ante diferencias pequeñas; no las presenta como sincronización certificada', async () => {
+    const { getLockClockWarning } = await import('./databaseLockView');
+    expect(getLockClockWarning('2026-11-11T12:00:05.000Z', now)).toBeNull();
+    expect(getLockClockWarning('2026-11-11T11:59:00.000Z', now)).toBeNull();
+  });
+
+  it('avisa de una fecha ilegible y evita una liberación basada en datos inválidos', async () => {
+    const { getLockClockWarning } = await import('./databaseLockView');
+    expect(getLockClockWarning('fecha rota', now)).toContain('inválida');
+  });
+});
