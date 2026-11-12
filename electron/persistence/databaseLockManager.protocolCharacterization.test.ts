@@ -274,6 +274,30 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     expect(manager.isLockStale(heartbeat)).toBe(true);
   });
 
+  it('PR7D: límite exacto TTL sin adelanto de reloj y caducidad posterior', () => {
+    vi.useFakeTimers();
+    const base = new Date('2026-11-12T10:00:00.000Z');
+    vi.setSystemTime(base);
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    const remote = makeOwner('equipo-b', new Date(base.getTime() - 30_000).toISOString());
+    expect(manager.isLockStale(remote)).toBe(false);
+    vi.setSystemTime(new Date(base.getTime() + 1));
+    expect(manager.isLockStale(remote)).toBe(true);
+  });
+
+  it('PR7D: documenta explícitamente que un adelanto local puede provocar caducidad prematura', () => {
+    vi.useFakeTimers();
+    const baseline = new Date('2026-11-12T10:00:00.000Z').getTime();
+    vi.setSystemTime(baseline);
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    // El heartbeat remoto tiene solo 11 s de antigüedad real.
+    const remote = makeOwner('equipo-b', new Date(baseline - 11_000).toISOString());
+    expect(manager.isLockStale(remote)).toBe(false);
+    // Un puesto local adelantado 20 s lo considera de 31 s y caducado.
+    vi.setSystemTime(baseline + 20_000);
+    expect(manager.isLockStale(remote)).toBe(true);
+  });
+
   it('un timestamp de heartbeat en el futuro no se considera caducado inmediatamente', () => {
     vi.useFakeTimers();
     const now = Date.now();
