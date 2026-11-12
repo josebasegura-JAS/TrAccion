@@ -128,19 +128,54 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     expect(existsSync(lockPath)).toBe(true);
   });
 
-  it('CARACTERIZACIÓN E5: la reentrada propia no cuenta referencias de adquisición', async () => {
+  it('E5: conserva exclusividad hasta liberar todas las adquisiciones del mismo gestor', async () => {
     const manager = createDatabaseLockManager({ getOwnerId: () => 'mismo-proceso' });
     const first = await manager.acquireLock(dbPath, 150);
     const second = await manager.acquireLock(dbPath, 150);
     const lockPath = manager.getLockPath(dbPath);
+    expect(first).not.toBe(second);
     expect(first.ownerId).toBe(second.ownerId);
 
-    // Liberar el primer uso deja al segundo sin exclusividad. En las
-    // operaciones IPC ordinarias la cola evita este intercalado, pero no se
-    // ha verificado que todas las rutas externas tengan esa garantía.
     await manager.releaseLock(lockPath, first);
-    expect(existsSync(lockPath)).toBe(false);
+    expect(existsSync(lockPath)).toBe(true);
+    expect((await manager.readLock(lockPath))?.ownerId).toBe('mismo-proceso');
+
+    // Una liberación repetida de la misma adquisición no descuenta dos veces.
+    await manager.releaseLock(lockPath, first);
+    expect(existsSync(lockPath)).toBe(true);
+
     await manager.releaseLock(lockPath, second);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it('E5: los gestores del mismo proceso comparten el recuento de adquisiciones', async () => {
+    const firstManager = createDatabaseLockManager({ getOwnerId: () => 'mismo-proceso' });
+    const secondManager = createDatabaseLockManager({ getOwnerId: () => 'mismo-proceso' });
+    const first = await firstManager.acquireLock(dbPath, 150);
+    const second = await secondManager.acquireLock(dbPath, 150);
+    const lockPath = firstManager.getLockPath(dbPath);
+
+    await firstManager.releaseLock(lockPath, first);
+    expect(existsSync(lockPath)).toBe(true);
+    await secondManager.releaseLock(lockPath, second);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it('E5: un propietario distinto no puede entrar durante la reentrada', async () => {
+    const firstManager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    const other = createDatabaseLockManager({ getOwnerId: () => 'equipo-b' });
+    const first = await firstManager.acquireLock(dbPath, 150);
+    const second = await firstManager.acquireLock(dbPath, 150);
+    const lockPath = firstManager.getLockPath(dbPath);
+    try {
+      await firstManager.releaseLock(lockPath, first);
+      await expect(other.acquireLock(dbPath, 120)).rejects.toThrow();
+      expect(existsSync(lockPath)).toBe(true);
+    } finally {
+      await firstManager.releaseLock(lockPath, second);
+    }
+    const acquiredByOther = await other.acquireLock(dbPath, 300);
+    await other.releaseLock(lockPath, acquiredByOther);
   });
 
   it('CARACTERIZACIÓN E2: 25 s de adelanto local invalidan un heartbeat remoto de 10 s', () => {

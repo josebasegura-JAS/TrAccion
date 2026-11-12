@@ -118,6 +118,38 @@ function createErrorWithCause(message: string, cause: unknown): Error {
   return error;
 }
 
+// El registro vive en el proceso Electron, no en cada instancia del gestor:
+// dos adaptadores con la misma identidad y PID comparten las adquisiciones.
+const activeLocalLeases = new Map<string, {
+  ownerId: string;
+  pid: number;
+  createdAt: string;
+  count: number;
+}>();
+const leasePaths = new WeakMap<DatabaseLockInfo, string>();
+const completedLeases = new WeakSet<DatabaseLockInfo>();
+
+function registerLocalLease(lockPath: string, lock: DatabaseLockInfo): DatabaseLockInfo {
+  const existing = activeLocalLeases.get(lockPath);
+  if (existing &&
+      existing.ownerId === lock.ownerId &&
+      existing.pid === lock.pid &&
+      existing.createdAt === lock.createdAt) {
+    existing.count += 1;
+  } else {
+    activeLocalLeases.set(lockPath, {
+      ownerId: lock.ownerId,
+      pid: lock.pid,
+      createdAt: lock.createdAt,
+      count: 1,
+    });
+  }
+  // Cada adquisición recibe un objeto distinto: su liberación es idempotente.
+  const lease = { ...lock };
+  leasePaths.set(lease, lockPath);
+  return lease;
+}
+
 export function createDatabaseLockManager(
   dependencies: DatabaseLockManagerDependencies,
 ): DatabaseLockManager {
@@ -394,7 +426,7 @@ export function createDatabaseLockManager(
         existingLock?.ownerId === dependencies.getOwnerId() &&
         existingLock.pid === process.pid
       ) {
-        return existingLock;
+        return registerLocalLease(lockPath, existingLock);
       }
 
       if (existingLock && isLockStale(existingLock)) {
@@ -413,7 +445,7 @@ export function createDatabaseLockManager(
         const lock = createLockInfo();
         try {
           await writeLock(lockPath, lock);
-          return lock;
+          return registerLocalLease(lockPath, lock);
         } catch (error) {
           lastReadError = error;
           try {
@@ -465,6 +497,19 @@ export function createDatabaseLockManager(
   }
 
   async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
+    // Solo se puede liberar una adquisición emitida por este proceso.
+    // El contador impide que una reentrada deje desprotegida otra operación.
+    if (leasePaths.get(lock) !== lockPath || completedLeases.has(lock)) return;
+    completedLeases.add(lock);
+    const active = activeLocalLeases.get(lockPath);
+    if (!active ||
+        active.ownerId !== lock.ownerId ||
+        active.pid !== lock.pid ||
+        active.createdAt !== lock.createdAt) return;
+    active.count -= 1;
+    if (active.count > 0) return;
+    activeLocalLeases.delete(lockPath);
+
     let currentLock: DatabaseLockInfo | null;
 
     try {
@@ -480,7 +525,9 @@ export function createDatabaseLockManager(
       return;
     }
 
-    if (currentLock?.ownerId !== lock.ownerId) {
+    if (currentLock?.ownerId !== lock.ownerId ||
+        currentLock.pid !== lock.pid ||
+        currentLock.createdAt !== lock.createdAt) {
       return;
     }
 
