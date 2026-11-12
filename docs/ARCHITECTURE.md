@@ -346,3 +346,10 @@ Las auditorías puntuales (`*-audit.md` y documentos equivalentes) son fotograf�
 - Si falla la poda tras una publicación correcta, el Excel nuevo permanece publicado y se conservan las copias anteriores. La limpieza no forma parte del éxito de la actualización.
 - Se preservan carpetas, nombres y contratos IPC para el resto de la app. No modifica el contenido Excel, su formato, SQLite ni los protocolos de locks.
 - Tests: `electron/operationalExcelPublication.test.ts` verifica sustitución, conservación ante errores, poda limitada y protección de otros nombres.
+
+
+### Caracterización de riesgos del protocolo SMB (PR3, 2026-11-12)
+
+`electron/persistence/databaseLockManager.protocolCharacterization.test.ts` incorpora escenarios de laboratorio **sin servidor SMB real**. Documenta el comportamiento actual ante una sustitución concurrente de `owner.json` durante el borrado de un lock caducado (E1), reentrada del mismo propietario sin contador de referencias (E5) y diferencia entre relojes de equipos (E2). Las pruebas de caracterización **no demuestran seguridad**: las que exhiben el comportamiento problemático deberán convertirse en pruebas de regresión con la garantía contraria antes de corregir el protocolo.
+
+No se modifica el gestor de locks de producción, el TTL de 30 s, los heartbeats, ni el modo de diario SQLite. Antes de proponer cambios se debe comprobar dónde se permiten adquisiciones reentrantes fuera de la cola IPC, probar en dos clientes con la base compartida real y verificar desconexión/reconexión de red y cierre inesperado.
