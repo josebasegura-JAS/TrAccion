@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   existsSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   unlinkSync,
+  renameSync,
   writeFileSync,
 } from 'node:fs';
-import { unlink } from 'node:fs/promises';
+import { rename, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createDatabaseLockManager, type DatabaseLockInfo } from './databaseLockManager.js';
@@ -16,7 +16,7 @@ import { createDatabaseLockManager, type DatabaseLockInfo } from './databaseLock
 // temporización dependientes de la carga de CI ni requerir un servidor real.
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, unlink: vi.fn(actual.unlink) };
+  return { ...actual, unlink: vi.fn(actual.unlink), rename: vi.fn(actual.rename) };
 });
 
 describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
@@ -27,11 +27,13 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     directory = mkdtempSync(path.join(tmpdir(), 'traccion-lock-protocol-'));
     dbPath = path.join(directory, 'traccion.sqlite');
     vi.mocked(unlink).mockImplementation(async (target) => { unlinkSync(target); });
+    vi.mocked(rename).mockImplementation(async (oldPath, newPath) => { renameSync(oldPath, newPath); });
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.mocked(unlink).mockReset();
+    vi.mocked(rename).mockReset();
     rmSync(directory, { recursive: true, force: true });
   });
 
@@ -59,38 +61,71 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     }
   });
 
-  it('CARACTERIZACIÓN E1: la limpieza de un lock caducado puede borrar al nuevo propietario', async () => {
+  it('E1 regresión: preserva al nuevo propietario al recuperar un lock caducado', async () => {
     const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
     const lockPath = manager.getLockPath(dbPath);
     const ownerPath = manager.getLockInfoPath(lockPath);
     const stale = makeOwner('equipo-viejo', new Date(Date.now() - 90_000).toISOString());
     const fresh = makeOwner('equipo-nuevo', new Date().toISOString());
 
-    // Crear el lock caducado directamente, preservando un ownerId diferente.
     const { mkdirSync } = await import('node:fs');
     mkdirSync(lockPath);
     writeFileSync(ownerPath, JSON.stringify(stale), 'utf8');
 
-    let concurrentReplacementObserved = false;
-    vi.mocked(unlink).mockImplementation(async (target) => {
-      if (String(target) === ownerPath && !concurrentReplacementObserved) {
-        // Entre readLock(stale) y unlink(owner.json), otro equipo ha
-        // sustituido los metadatos por los de su lock vivo.
+    let swapped = false;
+    vi.mocked(rename).mockImplementation(async (from, to) => {
+      if (String(from) === ownerPath && !swapped) {
+        // El nuevo dueño aparece exactamente entre la comprobación previa y
+        // el renombrado atómico; la lectura posterior debe salvar sus datos.
         writeFileSync(ownerPath, JSON.stringify(fresh), 'utf8');
-        concurrentReplacementObserved = true;
+        swapped = true;
       }
-      unlinkSync(target);
+      renameSync(from, to);
     });
 
-    const acquired = await manager.acquireLock(dbPath, 300);
-    expect(concurrentReplacementObserved).toBe(true);
-    expect(acquired.ownerId).toBe('equipo-a');
+    await expect(manager.acquireLock(dbPath, 220)).rejects.toThrow();
+    expect(swapped).toBe(true);
+    expect((await manager.readLock(lockPath))?.ownerId).toBe('equipo-nuevo');
+    expect(existsSync(lockPath)).toBe(true);
+  });
 
-    // Este resultado documenta una debilidad del protocolo ACTUAL, no la
-    // garantiza como correcta. Una futura corrección debe invertir la prueba:
-    // impedir que el nuevo propietario pierda el lock.
-    expect(readFileSync(ownerPath, 'utf8')).toContain('equipo-a');
+  it('E1: recupera un lock realmente caducado y permite adquirirlo', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    const lockPath = manager.getLockPath(dbPath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    const stale = makeOwner('equipo-antiguo', new Date(Date.now() - 90_000).toISOString());
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(lockPath);
+    writeFileSync(ownerPath, JSON.stringify(stale), 'utf8');
+
+    const acquired = await manager.acquireLock(dbPath, 300);
+    expect(acquired.ownerId).toBe('equipo-a');
     await manager.releaseLock(lockPath, acquired);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it('E1: preserva el heartbeat renovado durante el cambio de nombre', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    const lockPath = manager.getLockPath(dbPath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    const stale = makeOwner('equipo-antiguo', new Date(Date.now() - 90_000).toISOString());
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(lockPath);
+    writeFileSync(ownerPath, JSON.stringify(stale), 'utf8');
+
+    let refreshed = false;
+    vi.mocked(rename).mockImplementation(async (from, to) => {
+      if (String(from) === ownerPath && !refreshed) {
+        writeFileSync(ownerPath, JSON.stringify({ ...stale, updatedAt: new Date().toISOString() }), 'utf8');
+        refreshed = true;
+      }
+      renameSync(from, to);
+    });
+
+    await expect(manager.acquireLock(dbPath, 220)).rejects.toThrow();
+    expect(refreshed).toBe(true);
+    expect((await manager.readLock(lockPath))?.ownerId).toBe('equipo-antiguo');
+    expect(existsSync(lockPath)).toBe(true);
   });
 
   it('CARACTERIZACIÓN E5: la reentrada propia no cuenta referencias de adquisición', async () => {
