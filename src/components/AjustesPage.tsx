@@ -18,6 +18,7 @@ import { TaskCatalogSettings } from './ajustes/TaskCatalogSettings';
 import { buildDatabaseStatusBadge } from '../services/databaseStatusView';
 import { publishDatabaseStatus, refreshDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
 import { PerformanceDiagnostics } from './ajustes/PerformanceDiagnostics';
+import { DataIntegrityAuditSection } from './ajustes/DataIntegrityAuditSection';
 import { measurePerformance } from '../services/performanceMetrics';
 import { runBackgroundActivity } from '../services/backgroundActivity';
 import { FloatingSaveAction } from './ui/FloatingSaveAction';
@@ -313,6 +314,10 @@ export function AjustesPage() {
   const [vacuumStatusError, setVacuumStatusError] = useState('');
   const [isVacuuming, setIsVacuuming] = useState(false);
   const [vacuumActionStatus, setVacuumActionStatus] = useState('');
+  const [integrityReport, setIntegrityReport] = useState<TraccionDataIntegrityReport | null>(null);
+  const [isRunningIntegrityAudit, setIsRunningIntegrityAudit] = useState(false);
+  const integrityAuditInProgress = useRef(false);
+  const [integrityAuditStatus, setIntegrityAuditStatus] = useState('');
 
   const refreshCurrentDatabaseLock = useCallback(async () => {
     if (!window.traccion?.getCurrentDatabaseLock) return;
@@ -533,6 +538,43 @@ export function AjustesPage() {
       await refreshVacuumStatus();
     } catch (error) { setVacuumActionStatus(error instanceof Error ? error.message : 'No se ha podido compactar la base de datos.'); }
     finally { setIsVacuuming(false); }
+  };
+
+  const handleRunIntegrityAudit = async () => {
+    if (integrityAuditInProgress.current) return;
+    integrityAuditInProgress.current = true;
+    setIsRunningIntegrityAudit(true);
+    setIntegrityAuditStatus('');
+    setIntegrityReport(null);
+    try {
+      if (!window.traccion?.runDataIntegrityAudit) {
+        throw new Error('El diagnóstico de integridad solo está disponible en la aplicación de escritorio.');
+      }
+      const report = await window.traccion.runDataIntegrityAudit();
+      setIntegrityReport(report);
+    } catch (error) {
+      setIntegrityAuditStatus(error instanceof Error ? error.message : 'No se ha podido completar el diagnóstico de integridad.');
+    } finally {
+      integrityAuditInProgress.current = false;
+      setIsRunningIntegrityAudit(false);
+    }
+  };
+
+  const handleExportIntegrityReport = () => {
+    if (!integrityReport) return;
+    const blob = new Blob([JSON.stringify(integrityReport, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `traccion-diagnostico-integridad-${integrityReport.generatedAt.slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    try {
+      link.click();
+    } finally {
+      link.remove();
+      // Permite que el navegador resuelva la descarga antes de liberar la URL.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    }
   };
 
   useEffect(() => {
@@ -870,6 +912,13 @@ export function AjustesPage() {
             isVacuuming={isVacuuming}
             vacuumActionStatus={vacuumActionStatus}
             handleVacuumNow={handleVacuumNow}
+          />
+          <DataIntegrityAuditSection
+            integrityReport={integrityReport}
+            isRunningIntegrityAudit={isRunningIntegrityAudit}
+            integrityAuditStatus={integrityAuditStatus}
+            handleRunIntegrityAudit={handleRunIntegrityAudit}
+            handleExportIntegrityReport={handleExportIntegrityReport}
           />
         </div>
       </details>

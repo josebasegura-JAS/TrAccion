@@ -542,3 +542,9 @@ En los campos de edición enriquecida (incluidos los utilizados para actas), el 
 ### Respaldos automáticos Excel — publicación y limpieza segura (11/11/2026)
 
 **Entrada:** libro Excel calculado por cada módulo, carpeta y nombre configurados. **Operación:** escribir temporal único y publicar por cambio de nombre en la misma carpeta, sin copiar parcialmente encima del Excel vigente. **Resultado:** el nombre y formato visibles son los de siempre. **Excepciones:** si falla la publicación se informa y conserva el Excel anterior; los módulos de nombre fijo no borran ficheros similares, y solo se podan versiones fechadas exactas de Licencias y Vinculograma después de guardar correctamente. **Históricos:** no cambia ningún registro SQLite ni se eliminan documentos con otros nombres. **Código y pruebas:** `electron/ipc/registerOperationalExcelBackupIpc.ts`, `electron/operationalExcelPublication.ts` y `electron/operationalExcelPublication.test.ts`.
+
+### Diagnóstico de integridad (Ajustes)
+
+En **Ajustes > Base de datos y protecciones > Diagnóstico de integridad** puede ejecutarse manualmente la auditoría de solo lectura. La consulta muestra la comprobación SQLite, la versión del esquema, las copias de seguridad, los bloqueos caducados y las referencias huérfanas detectadas por el motor existente. No se inicia automáticamente al entrar en Ajustes y **no repara, desbloquea ni modifica datos**.
+
+El botón **Exportar informe** descarga el resultado en JSON al equipo local. El fichero puede contener identificadores de registros y nombres de propietarios de bloqueos, por lo que debe tratarse como información interna. Si la base de datos no está disponible, la pantalla muestra el error de la comprobación, sin presentar como vigente un resultado antiguo.
