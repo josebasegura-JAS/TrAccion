@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { rename, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import { createDatabaseLockManager, type DatabaseLockInfo } from './databaseLockManager.js';
 
@@ -62,7 +63,8 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
   });
 
   it('E1 regresión: preserva al nuevo propietario al recuperar un lock caducado', async () => {
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    let observedMs = 0;
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs + performance.now() });
     const lockPath = manager.getLockPath(dbPath);
     const ownerPath = manager.getLockInfoPath(lockPath);
     const stale = makeOwner('equipo-viejo', new Date(Date.now() - 90_000).toISOString());
@@ -71,6 +73,8 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     const { mkdirSync } = await import('node:fs');
     mkdirSync(lockPath);
     writeFileSync(ownerPath, JSON.stringify(stale), 'utf8');
+    expect(manager.isLockStale(stale)).toBe(false);
+    observedMs = 30_001;
 
     let swapped = false;
     vi.mocked(rename).mockImplementation(async (from, to) => {
@@ -90,13 +94,16 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
   });
 
   it('E1: recupera un lock realmente caducado y permite adquirirlo', async () => {
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    let observedMs = 0;
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs + performance.now() });
     const lockPath = manager.getLockPath(dbPath);
     const ownerPath = manager.getLockInfoPath(lockPath);
     const stale = makeOwner('equipo-antiguo', new Date(Date.now() - 90_000).toISOString());
     const { mkdirSync } = await import('node:fs');
     mkdirSync(lockPath);
     writeFileSync(ownerPath, JSON.stringify(stale), 'utf8');
+    expect(manager.isLockStale(stale)).toBe(false);
+    observedMs = 30_001;
 
     const acquired = await manager.acquireLock(dbPath, 300);
     expect(acquired.ownerId).toBe('equipo-a');
@@ -105,13 +112,16 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
   });
 
   it('E1: preserva el heartbeat renovado durante el cambio de nombre', async () => {
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    let observedMs = 0;
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs + performance.now() });
     const lockPath = manager.getLockPath(dbPath);
     const ownerPath = manager.getLockInfoPath(lockPath);
     const stale = makeOwner('equipo-antiguo', new Date(Date.now() - 90_000).toISOString());
     const { mkdirSync } = await import('node:fs');
     mkdirSync(lockPath);
     writeFileSync(ownerPath, JSON.stringify(stale), 'utf8');
+    expect(manager.isLockStale(stale)).toBe(false);
+    observedMs = 30_001;
 
     let refreshed = false;
     vi.mocked(rename).mockImplementation(async (from, to) => {
@@ -265,37 +275,59 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     expect((await manager.readLock(lockPath))?.updatedAt).toBe(refreshed.updatedAt);
   });
 
-  it('CARACTERIZACIÓN E2: 25 s de adelanto local invalidan un heartbeat remoto de 10 s', () => {
+  it('PR8A: un reloj adelantado 25 s no caduca un heartbeat de 10 s', () => {
+    let monotonicMs = 0;
+    const manager = createDatabaseLockManager({
+      getOwnerId: () => 'equipo-a', monotonicNowMs: () => monotonicMs,
+    });
+    const baseline = new Date('2026-11-12T10:00:00.000Z').getTime();
+    const heartbeat = makeOwner('equipo-b', new Date(baseline - 10_000).toISOString());
     vi.useFakeTimers();
-    const realNow = Date.now();
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
-    const heartbeat = makeOwner('equipo-b', new Date(realNow - 10_000).toISOString());
-    vi.setSystemTime(realNow + 25_000);
+    vi.setSystemTime(baseline + 25_000);
+    expect(manager.isLockStale(heartbeat)).toBe(false);
+    monotonicMs += 20_000;
+    expect(manager.isLockStale(heartbeat)).toBe(false);
+  });
+
+  it('PR8A: solo caduca tras observar el mismo heartbeat más de 30 s monotónicos', () => {
+    let monotonicMs = 0;
+    const manager = createDatabaseLockManager({
+      getOwnerId: () => 'equipo-a', monotonicNowMs: () => monotonicMs,
+    });
+    const heartbeat = makeOwner('equipo-b', '2026-11-12T09:00:00.000Z');
+    expect(manager.isLockStale(heartbeat)).toBe(false);
+    monotonicMs = 30_000;
+    expect(manager.isLockStale(heartbeat)).toBe(false);
+    monotonicMs = 30_001;
     expect(manager.isLockStale(heartbeat)).toBe(true);
   });
 
-  it('PR7D: límite exacto TTL sin adelanto de reloj y caducidad posterior', () => {
-    vi.useFakeTimers();
-    const base = new Date('2026-11-12T10:00:00.000Z');
-    vi.setSystemTime(base);
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
-    const remote = makeOwner('equipo-b', new Date(base.getTime() - 30_000).toISOString());
-    expect(manager.isLockStale(remote)).toBe(false);
-    vi.setSystemTime(new Date(base.getTime() + 1));
-    expect(manager.isLockStale(remote)).toBe(true);
+  it('PR8A: heartbeat nuevo y reloj local que retrocede reinician observación', () => {
+    let monotonicMs = 0;
+    const manager = createDatabaseLockManager({
+      getOwnerId: () => 'equipo-a', monotonicNowMs: () => monotonicMs,
+    });
+    const heartbeat = makeOwner('equipo-b', '2026-11-12T09:00:00.000Z');
+    expect(manager.isLockStale(heartbeat)).toBe(false);
+    monotonicMs = 31_000;
+    expect(manager.isLockStale({ ...heartbeat, updatedAt: '2026-11-12T09:00:10.000Z' })).toBe(false);
+    monotonicMs = 40_000;
+    expect(manager.isLockStale(heartbeat)).toBe(false);
+    monotonicMs = 20_000;
+    expect(manager.isLockStale(heartbeat)).toBe(false);
   });
 
-  it('PR7D: documenta explícitamente que un adelanto local puede provocar caducidad prematura', () => {
-    vi.useFakeTimers();
-    const baseline = new Date('2026-11-12T10:00:00.000Z').getTime();
-    vi.setSystemTime(baseline);
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
-    // El heartbeat remoto tiene solo 11 s de antigüedad real.
-    const remote = makeOwner('equipo-b', new Date(baseline - 11_000).toISOString());
-    expect(manager.isLockStale(remote)).toBe(false);
-    // Un puesto local adelantado 20 s lo considera de 31 s y caducado.
-    vi.setSystemTime(baseline + 20_000);
-    expect(manager.isLockStale(remote)).toBe(true);
+  it('PR8A: un equipo atrasado y timestamps futuros tampoco dan permiso de borrado inmediato', () => {
+    let monotonicMs = 0;
+    const manager = createDatabaseLockManager({
+      getOwnerId: () => 'equipo-a', monotonicNowMs: () => monotonicMs,
+    });
+    const future = makeOwner('equipo-b', '2099-11-11T12:00:00.000Z');
+    expect(manager.isLockStale(future)).toBe(false);
+    monotonicMs = 30_001;
+    // La fecha absoluta no es un criterio de caducidad: la observación sí.
+    expect(manager.isLockStale(future)).toBe(true);
+    expect(manager.isLockStale({ ...future, updatedAt: 'sin-fecha' })).toBe(false);
   });
 
   it('un timestamp de heartbeat en el futuro no se considera caducado inmediatamente', () => {

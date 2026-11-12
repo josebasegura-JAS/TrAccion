@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { hostname, userInfo } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
 import {
@@ -61,6 +62,8 @@ export interface DatabaseConnectivityIssuePayload {
 export interface DatabaseLockManagerDependencies {
   /** Id estable del propietario (ver `resolveStableOwnerId` en stableOwnerIdentity.ts). */
   getOwnerId: () => string;
+  /** Reloj monotónico inyectable para ensayar desfases sin tocar la hora de Windows. */
+  monotonicNowMs?: () => number;
 }
 
 export interface DatabaseLockManager {
@@ -165,6 +168,13 @@ export function createDatabaseLockManager(
   let databaseWriteBlockedByHeartbeat = false;
   let heartbeatConsecutiveFailureCount = 0;
   let heartbeatOperationsInFlight = 0;
+  // PR8A: observar inmovilidad del heartbeat con un reloj monotónico LOCAL.
+  // No usar Date.now() para decidir cuándo puede recuperarse un lock remoto:
+  // un Windows adelantado podría considerar caducada una escritura viva.
+  // El mapa se limita para evitar crecimiento sin límite en sesiones largas.
+  const staleObservations = new Map<string, { updatedAt: string; firstSeenMs: number }>();
+  const monotonicNowMs = dependencies.monotonicNowMs ?? (() => performance.now());
+
 
   function getLockPath(databasePath: string): string {
     return `${databasePath}.lockdir`;
@@ -232,8 +242,22 @@ export function createDatabaseLockManager(
   }
 
   function isLockStale(lock: DatabaseLockInfo): boolean {
-    const updatedAt = Date.parse(lock.updatedAt);
-    return Number.isNaN(updatedAt) || Date.now() - updatedAt > LOCK_TTL_MS;
+    // Un timestamp inválido no autoriza a borrar una reserva ajena.
+    if (!Number.isFinite(Date.parse(lock.updatedAt))) return false;
+    const key = `${lock.ownerId}|\u0000|${lock.hostname}|\u0000|${lock.pid}|\u0000|${lock.createdAt}`;
+    const now = monotonicNowMs();
+    if (!Number.isFinite(now)) return false;
+    const previous = staleObservations.get(key);
+    if (!previous || previous.updatedAt !== lock.updatedAt || now < previous.firstSeenMs) {
+      // Una primera lectura o un heartbeat renovado reinicia la observación.
+      staleObservations.delete(key);
+      if (staleObservations.size >= 256) {
+        staleObservations.delete(staleObservations.keys().next().value!);
+      }
+      staleObservations.set(key, { updatedAt: lock.updatedAt, firstSeenMs: now });
+      return false;
+    }
+    return now - previous.firstSeenMs > LOCK_TTL_MS;
   }
 
   /**
@@ -380,7 +404,7 @@ export function createDatabaseLockManager(
   ): Promise<DatabaseLockInfo> {
     const lockPath = getLockPath(databasePath);
     await mkdir(path.dirname(lockPath), { recursive: true });
-    const startedAt = Date.now();
+    const startedAt = monotonicNowMs();
     let lastLock: DatabaseLockInfo | null = null;
     let lastReadError: unknown = null;
     let retryAttempt = 0;
@@ -390,7 +414,7 @@ export function createDatabaseLockManager(
       await new Promise<void>((resolve) => { setTimeout(resolve, retryMs); });
     };
 
-    while (Date.now() - startedAt <= waitMs) {
+    while (monotonicNowMs() - startedAt <= waitMs) {
       // La liberación final puede seguir comprobando/retirando el archivo
       // mientras otra petición del mismo proceso intenta reentrar.
       const releasePending = localReleasesInFlight.get(lockPath);
@@ -470,10 +494,10 @@ export function createDatabaseLockManager(
   }
 
   async function acquireStartupLock(databasePath: string): Promise<DatabaseLockInfo> {
-    const startedAt = Date.now();
+    const startedAt = monotonicNowMs();
     let lastError: unknown = null;
 
-    while (Date.now() - startedAt <= STARTUP_LOCK_WAIT_MS) {
+    while (monotonicNowMs() - startedAt <= STARTUP_LOCK_WAIT_MS) {
       try {
         return await acquireLock(databasePath);
       } catch (error) {
