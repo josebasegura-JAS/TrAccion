@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { rename, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import { createDatabaseLockManager, type DatabaseLockInfo } from './databaseLockManager.js';
 
@@ -63,7 +64,7 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
 
   it('E1 regresión: preserva al nuevo propietario al recuperar un lock caducado', async () => {
     let observedMs = 0;
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs });
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs + performance.now() });
     const lockPath = manager.getLockPath(dbPath);
     const ownerPath = manager.getLockInfoPath(lockPath);
     const stale = makeOwner('equipo-viejo', new Date(Date.now() - 90_000).toISOString());
@@ -94,7 +95,7 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
 
   it('E1: recupera un lock realmente caducado y permite adquirirlo', async () => {
     let observedMs = 0;
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs });
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs + performance.now() });
     const lockPath = manager.getLockPath(dbPath);
     const ownerPath = manager.getLockInfoPath(lockPath);
     const stale = makeOwner('equipo-antiguo', new Date(Date.now() - 90_000).toISOString());
@@ -112,7 +113,7 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
 
   it('E1: preserva el heartbeat renovado durante el cambio de nombre', async () => {
     let observedMs = 0;
-    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs });
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a', monotonicNowMs: () => observedMs + performance.now() });
     const lockPath = manager.getLockPath(dbPath);
     const ownerPath = manager.getLockInfoPath(lockPath);
     const stale = makeOwner('equipo-antiguo', new Date(Date.now() - 90_000).toISOString());
