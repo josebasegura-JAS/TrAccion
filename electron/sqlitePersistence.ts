@@ -447,6 +447,7 @@ export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLo
     getStatus: getSqliteStatus,
     readLock,
     getLockInfoPath,
+    isLockStale,
     isDatabaseActive: () => database !== null,
     getConfiguredDirectory: getConfiguredDatabaseDirectory,
     activateDatabase,
