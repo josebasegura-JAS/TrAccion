@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@kenjiuno/msgreader": "^1.15.0",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "13.1.1",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
