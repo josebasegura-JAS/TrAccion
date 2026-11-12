@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from 'better-sqlite3';
+import { createDatabaseLockManager } from './databaseLockManager.js';
 
 const testPaths = vi.hoisted(() => ({ userData: '' }));
 
@@ -226,5 +227,56 @@ describe('localBackupService - cierre sin backup redundante', () => {
     await second.flushPendingLocalBackup();
     expect(secondAcquire).toHaveBeenCalledTimes(2);
   });
+
+  it.each(['vivo', 'cierre'] as const)(
+    'PR8B: el backup %s no puede solaparse con una escritura exclusiva local',
+    async (kind) => {
+      const manager = createDatabaseLockManager({ getOwnerId: () => 'test-pr8b' });
+      const events: string[] = [];
+      let signalBackupInnerAcquire!: () => void;
+      let finishBackupInnerAcquire!: () => void;
+      const backupInnerAcquireStarted = new Promise<void>((resolve) => {
+        signalBackupInnerAcquire = resolve;
+      });
+      const holdBackup = new Promise<void>((resolve) => {
+        finishBackupInnerAcquire = resolve;
+      });
+      const original = buildDependencies(databasePath);
+      const service = createLocalBackupService({
+        ...original,
+        withDatabaseOperationLock: (file, operation, waitMs) =>
+          manager.withDatabaseOperationLock(file, operation, waitMs),
+        acquireLock: async () => {
+          events.push('backup-inicia');
+          signalBackupInnerAcquire();
+          await holdBackup;
+          return original.acquireLock(databasePath);
+        },
+        releaseLock: async () => { events.push('backup-libera'); },
+      });
+      service.enqueueLocalBackup('save:pr8b');
+      const backupPromise = kind === 'vivo'
+        ? service.flushPendingLocalBackup()
+        : service.createShutdownLocalBackup().then(() => undefined);
+
+      await backupInnerAcquireStarted;
+      let writeCompleted = false;
+      const concurrentWrite = manager.withDatabaseOperationLock(databasePath, async () => {
+        events.push('escritura-entra');
+        writeCompleted = true;
+      });
+
+      // No depender de timers: esperar microtareas garantiza que la segunda
+      // operación haya solicitado el lock antes de liberar el respaldo.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeCompleted).toBe(false);
+      expect(events).toEqual(['backup-inicia']);
+
+      finishBackupInnerAcquire();
+      await Promise.all([backupPromise, concurrentWrite]);
+      expect(events).toEqual(['backup-inicia', 'backup-libera', 'escritura-entra']);
+    },
+  );
 
 });
