@@ -45,9 +45,20 @@ jobs:
           npx electron-builder --win --x64 --dir --publish never
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Test-Path 'release\win-unpacked\TrAccion.exe')) { throw 'No se ha generado TrAccion.exe en directorio.' }
-      - name: Verificar módulo nativo empaquetado
+      - name: Verificar addon y contenidos del paquete
         shell: pwsh
         run: |
-          $addon = 'release\win-unpacked\resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node'
-          if (-not (Test-Path $addon)) { throw 'Falta better_sqlite3.node dentro del directorio empaquetado.' }
-          Write-Host "Addon nativo: $((Get-Item $addon).Length) bytes"
+          $resources = 'release\win-unpacked\resources'
+          Write-Host 'Archivos .node fuera de app.asar:'
+          $addons = @(Get-ChildItem -Path $resources -Recurse -Filter '*.node' -File -ErrorAction SilentlyContinue)
+          $addons | ForEach-Object { Write-Host $_.FullName }
+          $sqliteAddons = @($addons | Where-Object { $_.Name -eq 'better_sqlite3.node' })
+          if ($sqliteAddons.Count -gt 0) {
+            Write-Host "Modulo SQLite nativo empaquetado: $($sqliteAddons[0].FullName)"
+          } else {
+            Write-Host 'No existe better_sqlite3.node fuera del asar. Comprobando el contenido del asar:'
+            $asar = 'release\win-unpacked\resources\app.asar'
+            if (-not (Test-Path -LiteralPath $asar)) { throw 'Falta app.asar.' }
+            node -e "const asar=require('@electron/asar');const files=asar.listPackage(process.argv[1]); console.log(files.filter(x=>x.includes('better-sqlite3')).slice(0,30).join('\n')); if(!files.some(x=>x.endsWith('better_sqlite3.node')))process.exit(3)" $asar
+            if ($LASTEXITCODE -ne 0) { throw 'No se ha localizado better_sqlite3.node en el paquete.' }
+          }
