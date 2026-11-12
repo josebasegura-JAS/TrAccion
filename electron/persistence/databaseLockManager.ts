@@ -404,7 +404,7 @@ export function createDatabaseLockManager(
   ): Promise<DatabaseLockInfo> {
     const lockPath = getLockPath(databasePath);
     await mkdir(path.dirname(lockPath), { recursive: true });
-    const startedAt = Date.now();
+    const startedAt = monotonicNowMs();
     let lastLock: DatabaseLockInfo | null = null;
     let lastReadError: unknown = null;
     let retryAttempt = 0;
@@ -414,7 +414,7 @@ export function createDatabaseLockManager(
       await new Promise<void>((resolve) => { setTimeout(resolve, retryMs); });
     };
 
-    while (Date.now() - startedAt <= waitMs) {
+    while (monotonicNowMs() - startedAt <= waitMs) {
       // La liberación final puede seguir comprobando/retirando el archivo
       // mientras otra petición del mismo proceso intenta reentrar.
       const releasePending = localReleasesInFlight.get(lockPath);
@@ -494,10 +494,10 @@ export function createDatabaseLockManager(
   }
 
   async function acquireStartupLock(databasePath: string): Promise<DatabaseLockInfo> {
-    const startedAt = Date.now();
+    const startedAt = monotonicNowMs();
     let lastError: unknown = null;
 
-    while (Date.now() - startedAt <= STARTUP_LOCK_WAIT_MS) {
+    while (monotonicNowMs() - startedAt <= STARTUP_LOCK_WAIT_MS) {
       try {
         return await acquireLock(databasePath);
       } catch (error) {
