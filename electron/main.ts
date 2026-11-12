@@ -6,6 +6,8 @@ import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics
 import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { isAllowedAppNavigation } from './navigationPolicy.js';
 import { tmpdir } from 'node:os';
 import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -265,12 +267,15 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     event.preventDefault();
     if (!mainWindow.isDestroyed()) mainWindow.setTitle(mainWindowTitle);
   });
+  // Mantener cerradas las ventanas emergentes y la navegación a otros documentos.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  const trustedMainDocument = isDev
+    ? devServerUrl
+    : pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
-    const parsedUrl = new URL(navigationUrl);
-    const isAllowedDevNavigation = isDev && navigationUrl.startsWith(devServerUrl);
-    const isAllowedPackagedNavigation = !isDev && parsedUrl.protocol === 'file:';
-    if (!isAllowedDevNavigation && !isAllowedPackagedNavigation) event.preventDefault();
+    if (!isAllowedAppNavigation(navigationUrl, trustedMainDocument)) {
+      event.preventDefault();
+    }
   });
   mainWindow.on('close', (event) => {
     if (isRendererCloseApproved || isShutdownInProgress || isQuitAfterSqlitePersistenceClosed) return;
