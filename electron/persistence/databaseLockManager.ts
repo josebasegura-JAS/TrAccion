@@ -1,4 +1,5 @@
-import { mkdir, readFile, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
@@ -246,34 +247,68 @@ export function createDatabaseLockManager(
     }
   }
 
+  /**
+   * Limpieza de locks caducados sin borrar a ciegas el owner.json actual.
+   *
+   * Mover únicamente owner.json dentro del MISMO lockdir mantiene ocupado
+   * el directorio exclusivo. Mientras el fichero está apartado, nadie puede
+   * adquirir ese lock mediante mkdir(lockPath). Tras el rename se verifica
+   * de nuevo el propietario y su heartbeat antes de eliminar nada.
+   *
+   * Ante dudas de red se deja el directorio bloqueado (fail closed).
+   */
   async function removeStaleLock(lockPath: string, staleLock: DatabaseLockInfo): Promise<void> {
+    const ownerPath = getLockInfoPath(lockPath);
     const currentLock = await readLock(lockPath);
-    if (currentLock?.ownerId !== staleLock.ownerId || !isLockStale(currentLock)) {
+    if (!currentLock || currentLock.ownerId !== staleLock.ownerId || !isLockStale(currentLock)) {
       return;
     }
 
-    let unlinkFailed = false;
-    let rmdirFailed = false;
+    const quarantinePath = path.join(lockPath, `owner.json.reclaim-${randomUUID()}`);
+    try {
+      await rename(ownerPath, quarantinePath);
+    } catch (error) {
+      // Otro proceso puede haber renovado o retirado el lock. Nunca borrar
+      // metadatos sin haber conseguido apartar el fichero de forma atómica.
+      if (!isMissingPathError(error)) {
+        console.warn('No se ha podido apartar el lock SQLite caducado para comprobar su titularidad.', error);
+      }
+      return;
+    }
 
-    await unlink(getLockInfoPath(lockPath)).catch((error: unknown) => {
-      unlinkFailed = true;
-      console.warn(
-        `No se ha podido borrar el fichero del lock SQLite caducado (${getLockInfoPath(lockPath)}). Propietario anterior: ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}).`,
-        error,
-      );
-    });
-    await rmdir(lockPath).catch((error: unknown) => {
-      rmdirFailed = true;
-      console.warn(
-        `No se ha podido borrar el directorio del lock SQLite caducado (${lockPath}). Propietario anterior: ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}).`,
-        error,
-      );
-    });
+    let canDelete = false;
+    try {
+      const payload = await readFile(quarantinePath, 'utf8');
+      const captured = parseLockPayload(payload, quarantinePath);
+      const unchanged =
+        captured.ownerId === currentLock.ownerId &&
+        captured.pid === currentLock.pid &&
+        captured.createdAt === currentLock.createdAt &&
+        captured.updatedAt === currentLock.updatedAt;
+      canDelete = unchanged && isLockStale(captured);
 
-    if (unlinkFailed || rmdirFailed) {
+      if (!canDelete) {
+        // Preservar un propietario nuevo o un heartbeat renovado. 'wx' impide
+        // sobrescribir otro owner.json aparecido mientras se restauraba.
+        try {
+          await writeFile(ownerPath, payload, { encoding: 'utf8', flag: 'wx' });
+          await unlink(quarantinePath);
+        } catch (error) {
+          // Si falla una restauración o hay metadatos nuevos, conservar la
+          // cuarentena y el directorio. No asumir nunca que el lock está libre.
+          console.warn('No se ha podido restaurar con seguridad el propietario del lock SQLite.', error);
+        }
+        return;
+      }
+
+      // Un heartbeat que reaparezca crea owner.json; en tal caso rmdir fallará
+      // por directorio no vacío. No se elimina jamás el fichero nuevo.
+      await unlink(quarantinePath);
+      await rmdir(lockPath);
+    } catch (error) {
       console.warn(
-        `El lock SQLite de ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}) está caducado pero no se ha podido limpiar automáticamente. ` +
-          'Puede requerir liberación manual desde Ajustes o borrado manual del directorio .lockdir en la carpeta compartida.',
+        `No se ha podido completar la recuperación segura del lock SQLite caducado de ${staleLock.username}@${staleLock.hostname}. Se conserva el directorio si sigue ocupado.`,
+        error,
       );
     }
   }

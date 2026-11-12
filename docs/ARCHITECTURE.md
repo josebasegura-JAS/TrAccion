@@ -353,3 +353,10 @@ Las auditorías puntuales (`*-audit.md` y documentos equivalentes) son fotograf�
 `electron/persistence/databaseLockManager.protocolCharacterization.test.ts` incorpora escenarios de laboratorio **sin servidor SMB real**. Documenta el comportamiento actual ante una sustitución concurrente de `owner.json` durante el borrado de un lock caducado (E1), reentrada del mismo propietario sin contador de referencias (E5) y diferencia entre relojes de equipos (E2). Las pruebas de caracterización **no demuestran seguridad**: las que exhiben el comportamiento problemático deberán convertirse en pruebas de regresión con la garantía contraria antes de corregir el protocolo.
 
 No se modifica el gestor de locks de producción, el TTL de 30 s, los heartbeats, ni el modo de diario SQLite. Antes de proponer cambios se debe comprobar dónde se permiten adquisiciones reentrantes fuera de la cola IPC, probar en dos clientes con la base compartida real y verificar desconexión/reconexión de red y cierre inesperado.
+
+
+### PR4 · Recuperación conservadora de locks caducados (2026-11-12)
+
+La limpieza automática de un `.lockdir` caducado aparta `owner.json` dentro del mismo directorio mediante `rename`, vuelve a comprobar el propietario y la fecha de heartbeat, y solo lo elimina si sigue correspondiendo al bloqueo caducado. Si otro cliente lo ha sustituido o renovado, se restaura con creación exclusiva (`wx`) sin sobrescribir metadatos nuevos. Una interrupción SMB durante el proceso puede dejar un fichero temporal `owner.json.reclaim-*` y requerir intervención manual; se prioriza conservar el bloqueo sobre suprimir una protección válida. El directorio `.lockdir` continúa siendo la exclusión entre procesos. No se cambian TTL, frecuencia de heartbeat, reentrada ni configuración SQLite.
+
+Las pruebas E1 son ahora regresiones; las caracterizaciones de reentrada E5 y desfase de relojes E2 continúan abiertas. Ejecutar una prueba de integración con dos puestos sobre SMB real antes de considerar el protocolo plenamente validado.
