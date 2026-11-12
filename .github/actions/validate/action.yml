@@ -19,11 +19,6 @@ runs:
       with:
         node-version: '24'
         cache: npm
-    - name: Comprobar ABI SQLite nativo antes de Vitest
-      if: ${{ inputs.lane == 'vitest' }}
-      shell: pwsh
-      run: |
-        node -e "const Sqlite=require('better-sqlite3');const db=new Sqlite(':memory:');console.log('SQLite disponible en Node '+process.version+': '+db.prepare('select sqlite_version() as version').get().version);db.close()"
     - uses: actions/setup-python@v5
       if: ${{ inputs.lane == 'electron' }}
       with:
@@ -61,6 +56,11 @@ runs:
           Write-Warning "Descarga transitoria fallida; nuevo intento en $delaySeconds segundos."
           Start-Sleep -Seconds $delaySeconds
         }
+    - name: Comprobar ABI SQLite nativo antes de Vitest
+      if: ${{ inputs.lane == 'vitest' }}
+      shell: pwsh
+      run: |
+        node -e "const Sqlite=require('better-sqlite3');const db=new Sqlite(':memory:');console.log('SQLite disponible en Node '+process.version+': '+db.prepare('select sqlite_version() as version').get().version);db.close()"
     - name: TypeScript de pruebas, Electron y E2E
       if: ${{ inputs.lane == 'calidad' }}
       shell: pwsh
