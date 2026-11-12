@@ -45,20 +45,15 @@ jobs:
           npx electron-builder --win --x64 --dir --publish never
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not (Test-Path 'release\win-unpacked\TrAccion.exe')) { throw 'No se ha generado TrAccion.exe en directorio.' }
-      - name: Verificar addon y contenidos del paquete
+      - name: Comprobar binario Windows x64 dentro del paquete
         shell: pwsh
         run: |
-          $resources = 'release\win-unpacked\resources'
-          Write-Host 'Archivos .node fuera de app.asar:'
-          $addons = @(Get-ChildItem -Path $resources -Recurse -Filter '*.node' -File -ErrorAction SilentlyContinue)
-          $addons | ForEach-Object { Write-Host $_.FullName }
-          $sqliteAddons = @($addons | Where-Object { $_.Name -eq 'better_sqlite3.node' })
-          if ($sqliteAddons.Count -gt 0) {
-            Write-Host "Modulo SQLite nativo empaquetado: $($sqliteAddons[0].FullName)"
-          } else {
-            Write-Host 'No existe better_sqlite3.node fuera del asar. Comprobando el contenido del asar:'
-            $asar = 'release\win-unpacked\resources\app.asar'
-            if (-not (Test-Path -LiteralPath $asar)) { throw 'Falta app.asar.' }
-            node -e "const asar=require('@electron/asar');const files=asar.listPackage(process.argv[1]); console.log(files.filter(x=>x.includes('better-sqlite3')).slice(0,30).join('\n')); if(!files.some(x=>x.endsWith('better_sqlite3.node')))process.exit(3)" $asar
-            if ($LASTEXITCODE -ne 0) { throw 'No se ha localizado better_sqlite3.node en el paquete.' }
-          }
+          $asar = 'release\win-unpacked\resources\app.asar'
+          $native = 'release\win-unpacked\resources\app.asar.unpacked\node_modules\better-sqlite3\prebuilds\win32-x64.node'
+          if (-not (Test-Path -LiteralPath $asar)) { throw 'Falta el archivo app.asar.' }
+          if (-not (Test-Path -LiteralPath $native)) { throw 'Falta el binario better-sqlite3/prebuilds/win32-x64.node.' }
+          $bytes = (Get-Item -LiteralPath $native).Length
+          if ($bytes -lt 100000) { throw "Binario SQLite demasiado pequeño: $bytes bytes." }
+          node -e "const asar=require('@electron/asar');const files=asar.listPackage(process.argv[1]);if(!files.some(p=>p.endsWith('node_modules\\better-sqlite3\\lib\\database.js'))) {console.error('Falta el loader JS de SQLite');process.exit(1)}" $asar
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "Paquete Windows contiene loader SQLite y addon nativo x64 ($bytes bytes)."
