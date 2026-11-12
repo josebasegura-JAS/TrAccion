@@ -130,6 +130,12 @@ const leasePaths = new WeakMap<DatabaseLockInfo, string>();
 const completedLeases = new WeakSet<DatabaseLockInfo>();
 // Un release físico en curso no puede solaparse con una nueva reentrada local.
 const localReleasesInFlight = new Map<string, Promise<void>>();
+/**
+ * Exclusión por ruta de operaciones completas, compartida por gestores del
+ * mismo proceso. El contador de leases solo impide liberaciones prematuras;
+ * no impide que dos callbacks de escritura se solapen.
+ */
+const localOperationTails = new Map<string, Promise<void>>();
 
 function registerLocalLease(lockPath: string, lock: DatabaseLockInfo): DatabaseLockInfo {
   const existing = activeLocalLeases.get(lockPath);
@@ -572,32 +578,52 @@ export function createDatabaseLockManager(
       return operation();
     }
 
-    // Solo registrar la operación IPC (nombre fijo), nunca la ruta SMB.
-    const operationName = getCurrentSqliteIpcOperationName() ?? 'background:exclusive';
-    const waitStartedAt = Date.now();
+    // No cambiar el lock de lectores: solo serializar callbacks exclusivos.
+    // La cola IPC cubre las llamadas ordinarias, pero hay caminos de
+    // mantenimiento/arranque que pueden invocar directamente este gestor.
     const lockPath = getLockPath(databasePath);
-    let operationLock: DatabaseLockInfo;
-    try {
-      operationLock = await acquireLock(databasePath, waitMs);
-      recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt);
-    } catch (error) {
-      recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt, true);
-      throw error;
-    }
-    const heldStartedAt = Date.now();
-    let operationFailed = false;
-    try {
-      return await operation();
-    } catch (error) {
-      operationFailed = true;
-      throw error;
-    } finally {
-      await releaseLock(lockPath, operationLock).catch((error: unknown) => {
+    async function runExclusiveOperation(): Promise<T> {
+      // Solo registrar la operación IPC (nombre fijo), nunca la ruta SMB.
+      const operationName = getCurrentSqliteIpcOperationName() ?? 'background:exclusive';
+      const waitStartedAt = Date.now();
+      let operationLock: DatabaseLockInfo;
+      try {
+        operationLock = await acquireLock(databasePath, waitMs);
+        recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt);
+      } catch (error) {
+        recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt, true);
+        throw error;
+      }
+      const heldStartedAt = Date.now();
+      let operationFailed = false;
+      try {
+        return await operation();
+      } catch (error) {
         operationFailed = true;
-        console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
-      });
-      recordMultiuserMetric('smb-lock-held', operationName, Date.now() - heldStartedAt, operationFailed);
+        throw error;
+      } finally {
+        await releaseLock(lockPath, operationLock).catch((error: unknown) => {
+          operationFailed = true;
+          console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
+        });
+        recordMultiuserMetric('smb-lock-held', operationName, Date.now() - heldStartedAt, operationFailed);
+      }
     }
+    const predecessor = localOperationTails.get(lockPath);
+    let finishLocal!: () => void;
+    const localGate = new Promise<void>((resolve) => { finishLocal = resolve; });
+    localOperationTails.set(lockPath, localGate);
+    try {
+      if (predecessor) await predecessor;
+      return await runExclusiveOperation();
+    } finally {
+      finishLocal();
+      if (localOperationTails.get(lockPath) === localGate) {
+        localOperationTails.delete(lockPath);
+      }
+    }
+
+
   }
 
   function publishConnectivityIssue(payload: DatabaseConnectivityIssuePayload): void {
