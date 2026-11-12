@@ -414,6 +414,7 @@ const {
   isDatabaseWriteBlockedByHeartbeat,
   clearHeartbeatBlock,
   readLock,
+  isLockStale,
   releaseLock,
   startDatabaseLockHeartbeat,
   withDatabaseOperationLock,
@@ -431,22 +432,17 @@ export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | n
 }
 
 /**
- * Borra manualmente el lock de sesión SQLite de la carpeta compartida y
- * reintenta activar la base inmediatamente después.
- *
- * Esta es una acción explícita y destructiva pensada para el caso en que el
- * lock automático (TTL de 30s, ver `isLockStale`) no se ha podido limpiar
- * solo —por ejemplo, por un fallo de borrado en el recurso SMB— y se queda
- * bloqueando a todo el resto de usuarios indefinidamente. El frontend debe
- * pedir confirmación explícita antes de llamarla, ya que si el propietario
- * del lock sigue realmente trabajando, esto puede provocar una escritura
- * concurrente sin coordinación durante unos segundos.
+ * Libera administrativamente únicamente un lock de sesión CADUCADO.
+ * Vuelve a validar su identidad y heartbeat antes de eliminar metadatos.
+ * Ante cambios o errores SMB conserva el directorio y rechaza la liberación.
+ * La acción sigue requiriendo confirmación del usuario en Ajustes.
  */
 export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLockResult> {
   return forceReleaseDatabaseLockWithRecovery({
     getStatus: getSqliteStatus,
     readLock,
     getLockInfoPath,
+    isLockStale,
     isDatabaseActive: () => database !== null,
     getConfiguredDirectory: getConfiguredDatabaseDirectory,
     activateDatabase,
