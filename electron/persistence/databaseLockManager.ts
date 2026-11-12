@@ -128,6 +128,8 @@ const activeLocalLeases = new Map<string, {
 }>();
 const leasePaths = new WeakMap<DatabaseLockInfo, string>();
 const completedLeases = new WeakSet<DatabaseLockInfo>();
+// Un release físico en curso no puede solaparse con una nueva reentrada local.
+const localReleasesInFlight = new Map<string, Promise<void>>();
 
 function registerLocalLease(lockPath: string, lock: DatabaseLockInfo): DatabaseLockInfo {
   const existing = activeLocalLeases.get(lockPath);
@@ -346,44 +348,22 @@ export function createDatabaseLockManager(
   }
 
   async function removeCorruptStaleLock(lockPath: string): Promise<void> {
+    // Un mtime antiguo del directorio no demuestra que owner.json siga
+    // corrupto: otro equipo podría haberlo renovado justo después del stat.
+    // Nunca borrar metadatos sin poder demostrar identidad y caducidad.
+    // Los locks con propietario válido se recuperan por removeStaleLock.
     try {
       const metadata = await stat(lockPath);
-      if (Date.now() - metadata.mtimeMs <= LOCK_TTL_MS) {
-        return;
-      }
-
-      let cleanupFailed = false;
-      await unlink(getLockInfoPath(lockPath)).catch((error: unknown) => {
-        if (!isMissingPathError(error)) {
-          cleanupFailed = true;
-          console.warn(
-            `No se ha podido borrar el fichero de un lock SQLite corrupto/caducado (${getLockInfoPath(lockPath)}).`,
-            error,
-          );
-        }
-      });
-      await rmdir(lockPath).catch((error: unknown) => {
-        if (!isMissingPathError(error)) {
-          cleanupFailed = true;
-          console.warn(
-            `No se ha podido borrar el directorio de un lock SQLite corrupto/caducado (${lockPath}).`,
-            error,
-          );
-        }
-      });
-
-      if (cleanupFailed) {
+      if (Date.now() - metadata.mtimeMs > LOCK_TTL_MS) {
         console.warn(
-          `El directorio de lock ${lockPath} parece corrupto o caducado pero no se ha podido limpiar automáticamente. ` +
-            'Puede requerir liberación manual desde Ajustes o borrado manual en la carpeta compartida.',
+          `El directorio de lock SQLite ${lockPath} parece antiguo, pero sus metadatos no son verificables. ` +
+          'Se conserva el directorio para evitar borrar el bloqueo de otro equipo. ' +
+          'Comprueba la conexión y solicita revisión administrativa si persiste.',
         );
       }
     } catch (error) {
       if (!isMissingPathError(error)) {
-        console.warn(
-          `No se ha podido comprobar si el lock SQLite incompleto está caducado (${lockPath}).`,
-          error,
-        );
+        console.warn(`No se ha podido comprobar el lock SQLite incompleto (${lockPath}).`, error);
       }
     }
   }
@@ -405,6 +385,13 @@ export function createDatabaseLockManager(
     };
 
     while (Date.now() - startedAt <= waitMs) {
+      // La liberación final puede seguir comprobando/retirando el archivo
+      // mientras otra petición del mismo proceso intenta reentrar.
+      const releasePending = localReleasesInFlight.get(lockPath);
+      if (releasePending) {
+        await releasePending;
+        continue;
+      }
       let existingLock: DatabaseLockInfo | null;
 
       try {
@@ -497,8 +484,8 @@ export function createDatabaseLockManager(
   }
 
   async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-    // Solo se puede liberar una adquisición emitida por este proceso.
-    // El contador impide que una reentrada deje desprotegida otra operación.
+    // Las adquisiciones se liberan una sola vez. La última conserva una
+    // barrera local hasta finalizar el borrado físico en SMB.
     if (leasePaths.get(lock) !== lockPath || completedLeases.has(lock)) return;
     completedLeases.add(lock);
     const active = activeLocalLeases.get(lockPath);
@@ -510,29 +497,64 @@ export function createDatabaseLockManager(
     if (active.count > 0) return;
     activeLocalLeases.delete(lockPath);
 
-    let currentLock: DatabaseLockInfo | null;
+    const physicalRelease = (async (): Promise<void> => {
+      const ownerPath = getLockInfoPath(lockPath);
+      let current: DatabaseLockInfo | null;
+      try {
+        current = await readLock(lockPath);
+      } catch (error) {
+        console.warn(`No se puede comprobar el propietario para liberar ${lockPath}; se conserva hasta TTL.`, error);
+        return;
+      }
+      if (!current || current.ownerId !== lock.ownerId ||
+          current.pid !== lock.pid || current.createdAt !== lock.createdAt) return;
 
+      // El rename es atómico dentro del directorio exclusivo. Leer DESPUÉS
+      // impide borrar un owner.json sustituido entre la primera lectura y
+      // la operación sobre el archivo (carrera TOCTOU).
+      const quarantinePath = path.join(lockPath, `owner.json.release-${randomUUID()}`);
+      try {
+        await rename(ownerPath, quarantinePath);
+      } catch (error) {
+        console.warn('No se ha podido apartar de forma segura el propietario antes de liberar.', error);
+        return;
+      }
+      try {
+        const payload = await readFile(quarantinePath, 'utf8');
+        const captured = parseLockPayload(payload, quarantinePath);
+        const same =
+          captured.ownerId === current.ownerId &&
+          captured.pid === current.pid &&
+          captured.createdAt === current.createdAt &&
+          captured.updatedAt === current.updatedAt;
+        if (!same) {
+          // El archivo puede haberse actualizado mientras se estaba
+          // renombrando; no eliminar ni sobrescribir la nueva identidad.
+          try {
+            await writeFile(ownerPath, payload, { encoding: 'utf8', flag: 'wx' });
+            await unlink(quarantinePath);
+          } catch (error) {
+            console.warn('El lock cambió durante la liberación; se conserva el directorio.', error);
+          }
+          return;
+        }
+
+        await unlink(quarantinePath);
+        // Si otro heartbeat creó owner.json entretanto, rmdir falla con
+        // ENOTEMPTY y preserva los metadatos nuevos.
+        await rmdir(lockPath);
+      } catch (error) {
+        console.warn('No se ha podido completar la liberación del lock SQLite; no se presume libre.', error);
+      }
+    })();
+    localReleasesInFlight.set(lockPath, physicalRelease);
     try {
-      currentLock = await readLock(lockPath);
-    } catch (error) {
-      // Si la red no permite confirmar quién es el propietario, es más seguro
-      // NO borrar nada. No propagamos el error porque convertir una incidencia
-      // al liberar el lock en un fallo de toda la operación sería peor.
-      console.warn(
-        `No se ha podido confirmar la propiedad del lock SQLite antes de liberarlo (${lockPath}). Se conserva el lock y caducará por TTL.`,
-        error,
-      );
-      return;
+      await physicalRelease;
+    } finally {
+      if (localReleasesInFlight.get(lockPath) === physicalRelease) {
+        localReleasesInFlight.delete(lockPath);
+      }
     }
-
-    if (currentLock?.ownerId !== lock.ownerId ||
-        currentLock.pid !== lock.pid ||
-        currentLock.createdAt !== lock.createdAt) {
-      return;
-    }
-
-    await unlink(getLockInfoPath(lockPath)).catch(() => undefined);
-    await rmdir(lockPath).catch(() => undefined);
   }
 
   async function withDatabaseOperationLock<T>(
