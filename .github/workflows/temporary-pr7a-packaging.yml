@@ -1,0 +1,47 @@
+name: Temporal PR7A - empaquetado Windows sin publicar
+
+on:
+  push:
+    branches: [fix/pr7a-windows-distribution-20261112]
+
+permissions:
+  contents: read
+
+jobs:
+  package-smoke:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      NODE_ENV: development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Herramientas C++ para addon SQLite
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsInstall = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vsInstall) { throw 'Faltan herramientas C++ de Visual Studio.' }
+          Write-Host "Compilador localizado en: $vsInstall"
+      - name: Dependencias desde el lockfile
+        shell: pwsh
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Compilar Electron y React
+        shell: pwsh
+        run: npm run build
+      - name: Empaquetar en directorio (sin publicar ni cambiar version)
+        shell: pwsh
+        run: |
+          npx electron-builder --win --x64 --dir --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path 'release\win-unpacked\TrAccion.exe')) { throw 'No se ha generado TrAccion.exe en directorio.' }
+      - name: Verificar módulo nativo empaquetado
+        shell: pwsh
+        run: |
+          $addon = 'release\win-unpacked\resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node'
+          if (-not (Test-Path $addon)) { throw 'Falta better_sqlite3.node dentro del directorio empaquetado.' }
+          Write-Host "Addon nativo: $((Get-Item $addon).Length) bytes"
