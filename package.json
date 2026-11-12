@@ -35,17 +35,17 @@
   },
   "dependencies": {
     "@kenjiuno/msgreader": "^1.15.0",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "13.1.1",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
+    "pdfjs-dist": "4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zustand": "^5.0.2",
-    "pdfjs-dist": "4.10.38"
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "@electron/rebuild": "3.6.1",
+    "@electron/rebuild": "4.2.1",
     "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.49.1",
     "@testing-library/jest-dom": "^6.6.3",
@@ -57,7 +57,7 @@
     "@vitest/coverage-v8": "2.1.9",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
-    "electron": "^33.2.1",
+    "electron": "43.8.8",
     "electron-builder": "^25.1.8",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",

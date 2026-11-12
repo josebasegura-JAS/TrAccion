@@ -8,8 +8,16 @@ runs:
   using: composite
   steps:
     - uses: actions/setup-node@v4
+      if: ${{ inputs.lane != 'vitest' }}
       with:
         node-version-file: .nvmrc
+        cache: npm
+    # better-sqlite3 13.1.1 provoca un acceso inválido nativo bajo Node 22.13.1
+    # en Windows; Node 24 supera la prueba de apertura SQLite y sus tests.
+    - uses: actions/setup-node@v4
+      if: ${{ inputs.lane == 'vitest' }}
+      with:
+        node-version: '24'
         cache: npm
     - uses: actions/setup-python@v5
       if: ${{ inputs.lane == 'electron' }}
@@ -48,6 +56,11 @@ runs:
           Write-Warning "Descarga transitoria fallida; nuevo intento en $delaySeconds segundos."
           Start-Sleep -Seconds $delaySeconds
         }
+    - name: Comprobar ABI SQLite nativo antes de Vitest
+      if: ${{ inputs.lane == 'vitest' }}
+      shell: pwsh
+      run: |
+        node -e "const Sqlite=require('better-sqlite3');const db=new Sqlite(':memory:');console.log('SQLite disponible en Node '+process.version+': '+db.prepare('select sqlite_version() as version').get().version);db.close()"
     - name: TypeScript de pruebas, Electron y E2E
       if: ${{ inputs.lane == 'calidad' }}
       shell: pwsh
