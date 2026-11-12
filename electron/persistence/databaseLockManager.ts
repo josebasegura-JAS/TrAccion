@@ -582,6 +582,33 @@ export function createDatabaseLockManager(
     // La cola IPC cubre las llamadas ordinarias, pero hay caminos de
     // mantenimiento/arranque que pueden invocar directamente este gestor.
     const lockPath = getLockPath(databasePath);
+    async function runExclusiveOperation(): Promise<T> {
+      // Solo registrar la operación IPC (nombre fijo), nunca la ruta SMB.
+      const operationName = getCurrentSqliteIpcOperationName() ?? 'background:exclusive';
+      const waitStartedAt = Date.now();
+      let operationLock: DatabaseLockInfo;
+      try {
+        operationLock = await acquireLock(databasePath, waitMs);
+        recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt);
+      } catch (error) {
+        recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt, true);
+        throw error;
+      }
+      const heldStartedAt = Date.now();
+      let operationFailed = false;
+      try {
+        return await operation();
+      } catch (error) {
+        operationFailed = true;
+        throw error;
+      } finally {
+        await releaseLock(lockPath, operationLock).catch((error: unknown) => {
+          operationFailed = true;
+          console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
+        });
+        recordMultiuserMetric('smb-lock-held', operationName, Date.now() - heldStartedAt, operationFailed);
+      }
+    }
     const predecessor = localOperationTails.get(lockPath);
     let finishLocal!: () => void;
     const localGate = new Promise<void>((resolve) => { finishLocal = resolve; });
@@ -596,33 +623,7 @@ export function createDatabaseLockManager(
       }
     }
 
-    async function runExclusiveOperation(): Promise<T> {
-    // Solo registrar la operación IPC (nombre fijo), nunca la ruta SMB.
-    const operationName = getCurrentSqliteIpcOperationName() ?? 'background:exclusive';
-    const waitStartedAt = Date.now();
-    let operationLock: DatabaseLockInfo;
-    try {
-      operationLock = await acquireLock(databasePath, waitMs);
-      recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt);
-    } catch (error) {
-      recordMultiuserMetric('smb-lock-wait', operationName, Date.now() - waitStartedAt, true);
-      throw error;
-    }
-    const heldStartedAt = Date.now();
-    let operationFailed = false;
-    try {
-      return await operation();
-    } catch (error) {
-      operationFailed = true;
-      throw error;
-    } finally {
-      await releaseLock(lockPath, operationLock).catch((error: unknown) => {
-        operationFailed = true;
-        console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
-      });
-      recordMultiuserMetric('smb-lock-held', operationName, Date.now() - heldStartedAt, operationFailed);
-    }
-    }
+
   }
 
   function publishConnectivityIssue(payload: DatabaseConnectivityIssuePayload): void {
