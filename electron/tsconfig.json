@@ -16,8 +16,5 @@
     "*.ts",
     "*.cts",
     "*.d.ts"
-  ],
-  "exclude": [
-    "preload.ts"
   ]
 }

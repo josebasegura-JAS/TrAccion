@@ -30,7 +30,6 @@ export default defineConfig({
       ['src/features/tareas/domain/tareas.filters-sort-historico.test.ts', 'node'],
       ['src/features/presupuestos/domain/presupuestos.test.ts', 'node'],
       ['src/features/configuracion/domain/taskCatalogIntegrity.test.ts', 'node'],
-      ['src/features/huelgas/components/huelgasZones.test.ts', 'node'],
       ['src/shared/import/delimitedText.test.ts', 'node'],
       ['src/utils/dateOnly.test.ts', 'node'],
       ['src/shared/sessions/session.test.ts', 'node'],

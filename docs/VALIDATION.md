@@ -1,99 +1,44 @@
-# Validación integral de TrAcción
+# Validación y distribución de TrAcción
 
-La única batería automática de PR es **TrAcción — Validación integral**, con el
-check **Validación integral**. Se dispara en `pull_request`, en `push` a `main` y mediante `workflow_dispatch` (salvo el modo explícito de limpieza del historial). Un nuevo commit
-cancela la ejecución anterior del mismo grupo de concurrencia. No hay reintentos automáticos que
-conviertan un fallo intermitente en verde ni errores tolerados.
+## Validación automática de PR
+
+El workflow vigente es `.github/workflows/build-windows.yml`. En cada `pull_request` ejecuta cuatro grupos de calidad en paralelo: **calidad**, **vitest**, **web** y **electron**, definidos mediante `.github/actions/validate/action.yml`. El job final **Validación integral** exige que todos terminen correctamente.
+
+Actualmente no se ejecuta esta batería automáticamente por cada `push` a `main`. La distribución manual (`workflow_dispatch`) y la reutilizable (`workflow_call`) generan los artefactos sin repetir los tests completos. Por ello, **la validación de una PR debe hacerse antes de fusionarla**; generar un EXE no equivale a volver a ejecutar los tests.
 
 ## Ejecución local
 
-Usar Node de `.nvmrc` (22.13.1), Python 3.11 y herramientas nativas necesarias
-para better-sqlite3. Windows es la plataforma obligatoria de CI y distribución.
+Usar Node indicado en `.nvmrc` y herramientas nativas necesarias para `better-sqlite3`. Windows es la plataforma obligatoria para la distribución.
 
 ```sh
 npm ci --include=dev
-npm run playwright:install -- chromium
-npm run validate
+npm run typecheck:tests
+npm run lint
+npm run build
+npm run test:coverage
+npm run test:e2e
+npm run electron:rebuild
+npm run test:e2e:electron
 ```
 
-`validate` ejecuta tipos de pruebas (incluido E2E), ESLint sin advertencias,
-Vitest completo con cobertura, build de producción (incluye TypeScript de app
-+ Electron), interfaz web, reconstrucción SQLite para Electron y todos los
-specs Electron. `test:all` es un alias. No ejecuta bump ni genera distribuciones.
+La reconstrucción de `better-sqlite3` cambia su ABI entre Node y Electron: realizar la prueba Vitest antes de reconstruir para Electron, o restaurar el ABI Node antes de volver a ejecutarla. Los grupos de CI emplean instalaciones independientes para evitar esa contaminación.
 
-Para ejecutar solamente la parte Node/build:
-
-```sh
-npm run validate:node
-```
-
-Después de ejecutar Electron, antes de volver a Vitest:
-
-```sh
-npm rebuild better-sqlite3
-npm run test
-```
-
-`electron:rebuild` fuerza el ABI Electron: la detección incremental del antiguo
-`electron-builder install-app-deps` no bastaba tras reconstruir para Node. Se
-usa @electron/rebuild como dependencia explícita, fijada en el lockfile.
-No compartir node_modules entre sistemas o runtimes.
-
-En Linux, Electron necesita un servidor X. En un contenedor sin sandbox SUID
-configurable puede usarse `TRACCION_E2E_NO_SANDBOX=1` **solo para el proceso de
-pruebas**. No cambia el ejecutable distribuido. Si se usa Chromium del sistema,
-`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e` evita
-una descarga, pero no acredita el Chromium fijado por Playwright en Windows.
+También existen scripts agregados de validación en `package.json`; el workflow de PR se rige por las fases descritas arriba.
 
 ## Evidencia y cobertura
 
-Vitest genera `audit-results/vitest.json`, `coverage/coverage-summary.json`,
-`coverage/coverage-final.json` e informe HTML. Se incluyen módulos no importados
-por los tests; se excluyen tests, declaraciones de tipos y fixtures/setup de
-`src/test`. El suelo global inicial procede de la referencia medida: líneas
-40 %, funciones 49 %, ramas 70 %, statements 40 %. No equivale a cobertura
-suficiente de comportamientos críticos. Subirlo exige métricas comparables y
-nuevas pruebas, no excluir código del denominador.
+Vitest genera informes en `coverage/` y `audit-results/`; Playwright conserva trazas en `playwright-report-web`, `playwright-report-electron` y `test-results`. GitHub Actions conserva los artefactos de las cuatro fases incluso ante fallos (según `.github/actions/validate/action.yml`).
 
-Los informes Playwright se separan en `playwright-report-web` y
-`playwright-report-electron`; trazas/resultados viven en `test-results`.
-La acción local `.github/actions/validate/action.yml` registra cada fase y SHA
-local en el resumen de Actions y conserva informes incluso al fallar.
+El umbral actual de `vitest.config.ts` es: líneas 40 %, statements 40 %, funciones 49 % y ramas 70 %. Un umbral superado no garantiza por sí mismo cobertura de los escenarios reales de concurrencia SMB.
 
-## Distribución y commit exacto
+## Distribución
 
-Se conservan las tres entradas manuales EXE, EXE Lite y ZIP. Lite comparte todas
-las garantías de calidad. EXE es además el workflow reutilizable llamado por
-Lite y ZIP. Todos se serializan en el grupo `traccion-distribucion`; no se
-cancela una ejecución activa. GitHub puede reemplazar una ejecución pendiente
-por otra nueva en ese grupo; no es una cola FIFO de todas las solicitudes.
+La distribución EXE/ZIP solo puede realizarse desde `main` mediante sus workflows manuales o reutilizables. El workflow comprueba el formato solicitado, compila, empaqueta y registra el origen del paquete. La numeración de distribución se calcula con el historial de etiquetas `traccion-build/*` y `.build-version`, sin ejecutar otra vez la batería integral dentro del job de distribución. Consultar la implementación de `.github/workflows/build-windows.yml` como fuente de verdad para los detalles operativos.
 
-Desde main, se incrementa el contador y se crea **localmente** el commit final.
-A continuación se ejecuta la misma acción de calidad, se empaqueta ese árbol y
-se comprueba que ningún archivo rastreado cambió. Solo después se intenta
-publicar el mismo SHA en main mediante push fast-forward, sin pull/rebase.
-Si main avanzó o la política de protección rechaza al bot, falla antes de
-subir el paquete. No se altera la política de protección para permitirlo.
-`validated-commit.txt` acompaña al artefacto; `.piz`, `version.json` y nombres
-MAJOR.MINOR mantienen su formato y SHA-256 actuales. No se reutilizan checks de
-otro SHA ni se consultan ejecuciones independientes.
+No activar una distribución para comprobar cambios de una PR. Tampoco asumir que la ejecución en CI reproduce las condiciones de la red SMB, el antivirus o la instalación de Excel/Outlook de los puestos.
 
-No lanzar workflows de distribución para validar una PR: además de generar
-paquetes, actualizan el contador en main. La revisión estática con actionlint
-no sustituye una prueba real del empaquetado Windows.
+## Límites
 
-## Protección de main y límites
+Las pruebas de CI no sustituyen la verificación en los equipos reales, ni la simulación de desconexión cable/Wi-Fi o el trabajo simultáneo contra la misma base SQLite compartida.
 
-Exigir el check **Validación integral**, PR actualizada y ausencia de bypass es
-una tarea del administrador. La API de protección clásica respondió 403; la
-consulta de rulesets accesibles devolvió cero. Eso no prueba ausencia de reglas
-clásicas o de organización. No se han modificado reglas remotas. Si la política
-requiere PR también para el contador, el distribuidor fallará de forma segura;
-se necesitará diseñar esa PR de versión antes de publicar.
-
-SMB real, cable/Wi-Fi, Excel/Outlook instalados, antivirus y actualizaciones
-entre versiones necesitan comprobaciones de integración en su infraestructura.
-Los mocks de red y SQLite local no acreditan esos entornos.
-
-Véanse [auditoría y resultados](TEST_AUDIT.md) e
-[inventario por archivo](TEST_INVENTORY.md).
+Véanse también [auditoría y resultados](TEST_AUDIT.md) e [inventario por archivo](TEST_INVENTORY.md).
