@@ -1,1 +1,0 @@
-Corrección incremental sobre el anterior informe agrupado. Sustituir exclusivamente src/features/huelgas/components/huelgasGroupedReport.ts. Se elimina replaceAll (target ES2020) y se resuelve la unión string | Uint8Array mediante la variable xml tipada como string.
