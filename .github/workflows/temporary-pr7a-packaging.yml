@@ -54,6 +54,6 @@ jobs:
           if (-not (Test-Path -LiteralPath $native)) { throw 'Falta el binario better-sqlite3/prebuilds/win32-x64.node.' }
           $bytes = (Get-Item -LiteralPath $native).Length
           if ($bytes -lt 100000) { throw "Binario SQLite demasiado pequeño: $bytes bytes." }
-          node -e "const asar=require('@electron/asar');const files=asar.listPackage(process.argv[1]);if(!files.some(p=>p.endsWith('node_modules\\better-sqlite3\\lib\\database.js'))) {console.error('Falta el loader JS de SQLite');process.exit(1)}" $asar
+          node -e "const asar=require('@electron/asar');const files=asar.listPackage(process.argv[1]);if(!files.some(p=>p.includes('better-sqlite3')&&p.endsWith('database.js'))) {console.error('Falta el loader JS de SQLite');process.exit(1)}" $asar
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host "Paquete Windows contiene loader SQLite y addon nativo x64 ($bytes bytes)."
