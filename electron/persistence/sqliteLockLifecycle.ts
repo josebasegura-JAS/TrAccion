@@ -11,6 +11,7 @@ export interface SqliteLockLifecycle {
   getLockPath(databasePath: string): string;
   getLockInfoPath(lockPath: string): string;
   readLock(lockPath: string): Promise<DatabaseLockInfo | null>;
+  isLockStale(lock: DatabaseLockInfo): boolean;
   withDatabaseOperationLock<T>(
     databasePath: string,
     operation: () => Promise<T>,
@@ -45,6 +46,7 @@ export function createSqliteLockLifecycle(getOwnerId: () => string): SqliteLockL
     getLockPath: (databasePath) => getManager().getLockPath(databasePath),
     getLockInfoPath: (lockPath) => getManager().getLockInfoPath(lockPath),
     readLock: (lockPath) => getManager().readLock(lockPath),
+    isLockStale: (lock) => getManager().isLockStale(lock),
     withDatabaseOperationLock: (databasePath, operation, waitMs) =>
       getManager().withDatabaseOperationLock(databasePath, operation, waitMs),
     acquireLock: (databasePath, waitMs) => getManager().acquireLock(databasePath, waitMs),
