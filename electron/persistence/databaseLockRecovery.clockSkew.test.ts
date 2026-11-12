@@ -23,6 +23,7 @@ describe('liberación manual de lock con relojes potencialmente desfasados', () 
       getStatus: () => status,
       readLock: async () => ({ ...baseLock, updatedAt }),
       getLockInfoPath: (lockPath) => `${lockPath}/owner.json`,
+      isLockStale: () => true,
       isDatabaseActive: () => false,
       getConfiguredDirectory: async () => ({ directoryPath: '/inexistente', isDefaultPath: false }),
       activateDatabase,
