@@ -20,6 +20,12 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      # electron-builder usa node-gyp interno que aún requiere distutils.
+      # Fijar Python 3.11, ya probado en lane Electron, y no usar el Python
+      # predeterminado del runner (puede ser 3.12+).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Herramientas C++ para addon SQLite
         shell: pwsh
         run: |
