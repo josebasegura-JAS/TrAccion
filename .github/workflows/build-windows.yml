@@ -58,7 +58,9 @@ jobs:
     permissions:
       contents: write
     name: Generar EXE sin repetir tests
-    runs-on: windows-latest
+    # Electron 43 + better-sqlite3: utilizar la imagen con toolchain C++
+    # verificada por las pruebas de escritorio (matrix.lane == electron).
+    runs-on: windows-2022
     timeout-minutes: 45
     env:
       CI: 'true'
@@ -79,9 +81,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      # electron-builder usa node-gyp interno que aún requiere distutils.
+      # Fijar Python 3.11, ya probado en lane Electron, y no usar el Python
+      # predeterminado del runner (puede ser 3.12+).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Instalar dependencias para la distribución
         shell: pwsh
         run: npm ci --include=dev --no-audit --no-fund
+      - name: Verificar Visual Studio C++ antes de empaquetar
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path -LiteralPath $vswhere)) { throw 'No se encuentra vswhere: falta Visual Studio Installer en el runner Windows.' }
+          $vsInstall = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vsInstall) {
+            throw 'Faltan herramientas C++ x64 de Visual Studio necesarias para reconstruir better-sqlite3.'
+          }
+          Write-Host "Visual Studio C++ disponible: $vsInstall"
       - name: Incrementar versión sin commits en main
         shell: pwsh
         run: |
