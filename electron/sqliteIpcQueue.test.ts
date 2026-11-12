@@ -322,6 +322,68 @@ describe('enqueueSqliteIpc', () => {
     expect(check).toHaveBeenCalledTimes(1);
   });
 
+  it('PR6A: tras timeout, una cola de lecturas y escrituras espera sin adelantar ni repetir el guardado', async () => {
+    const events: string[] = [];
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const firstCallback = vi.fn(async () => {
+      events.push('save:start');
+      await pending;
+      events.push('save:finish');
+    });
+    const first = enqueueSqliteIpc('tasks:save-record-if-unchanged', firstCallback);
+    const observed = first.then(() => 'ok', () => 'timeout');
+    const readCallback = vi.fn(async () => {
+      events.push('read');
+      return 'latest';
+    });
+    const writeCallback = vi.fn(async () => {
+      events.push('next-save');
+      return 'saved';
+    });
+    const nextRead = enqueueSqliteIpc('tasks:load-records', readCallback);
+    const nextWrite = enqueueSqliteIpc('tasks:save-record-if-unchanged', writeCallback);
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await observed).toBe('timeout');
+    expect(events).toEqual(['save:start']);
+    expect(firstCallback).toHaveBeenCalledTimes(1);
+    expect(readCallback).not.toHaveBeenCalled();
+    expect(writeCallback).not.toHaveBeenCalled();
+    expect(getSqliteIpcQueueDiagnostics().queuedOperations).toBe(2);
+
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(nextRead).resolves.toBe('latest');
+    await expect(nextWrite).resolves.toBe('saved');
+    expect(events).toEqual(['save:start', 'save:finish', 'read', 'next-save']);
+    expect(firstCallback).toHaveBeenCalledTimes(1);
+    expect(getSqliteIpcQueueDiagnostics()).toMatchObject({
+      queuedOperations: 0, runningOperation: null, timedOut: false,
+    });
+  });
+
+  it('PR6A: un fallo tardío tras timeout libera la cola únicamente después del resultado real', async () => {
+    let rejectOriginal!: (error: Error) => void;
+    const pending = new Promise<void>((_resolve, reject) => { rejectOriginal = reject; });
+    const firstCallback = vi.fn(() => pending);
+    const first = enqueueSqliteIpc('tasks:save-record-if-unchanged', firstCallback);
+    const observed = first.catch((error: unknown) => error);
+    const nextCallback = vi.fn(async () => 'read-recovered');
+    const queued = enqueueSqliteIpc('tasks:load-records', nextCallback);
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect((await observed as Error).message).toContain('resultado es indeterminado');
+    expect(nextCallback).not.toHaveBeenCalled();
+
+    rejectOriginal(new Error('EIO: red perdida'));
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(queued).resolves.toBe('read-recovered');
+    expect(firstCallback).toHaveBeenCalledTimes(1);
+    expect(nextCallback).toHaveBeenCalledTimes(1);
+    expect(getSqliteIpcQueueDiagnostics().runningOperation).toBeNull();
+  });
+
   it('health-check dispone de tiempo de recuperación sin ampliar los guardados ordinarios', () => {
     expect(resolveSqliteIpcTimeoutMs('database:health-check')).toBe(25_000);
     expect(resolveSqliteIpcTimeoutMs('tasks:save-record-if-unchanged')).toBe(12_000);
