@@ -81,6 +81,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      # electron-builder usa node-gyp interno que aún requiere distutils.
+      # Fijar Python 3.11, ya probado en lane Electron, y no usar el Python
+      # predeterminado del runner (puede ser 3.12+).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Instalar dependencias para la distribución
         shell: pwsh
         run: npm ci --include=dev --no-audit --no-fund
