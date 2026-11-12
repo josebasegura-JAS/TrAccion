@@ -178,6 +178,93 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     await other.releaseLock(lockPath, acquiredByOther);
   });
 
+  it('PR7C: no borra un owner.json corrupto aunque el directorio parezca viejo', async () => {
+    const { mkdirSync, utimesSync } = await import('node:fs');
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    const lockPath = manager.getLockPath(dbPath);
+    mkdirSync(lockPath);
+    writeFileSync(manager.getLockInfoPath(lockPath), '{"ownerId":', 'utf8');
+    const old = new Date(Date.now() - 90_000);
+    utimesSync(lockPath, old, old);
+
+    await expect(manager.acquireLock(dbPath, 110)).rejects.toThrow();
+    expect(existsSync(lockPath)).toBe(true);
+    expect(existsSync(manager.getLockInfoPath(lockPath))).toBe(true);
+  });
+
+  it('PR7C: liberación normal preserva otro propietario que aparece antes del rename', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    const held = await manager.acquireLock(dbPath, 150);
+    const lockPath = manager.getLockPath(dbPath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    const newer = { ...makeOwner('equipo-b', new Date().toISOString()), createdAt: new Date().toISOString() };
+    let replaced = false;
+    vi.mocked(rename).mockImplementation(async (from, to) => {
+      if (!replaced && String(from) === ownerPath) {
+        writeFileSync(ownerPath, JSON.stringify(newer), 'utf8');
+        replaced = true;
+      }
+      renameSync(from, to);
+    });
+    await manager.releaseLock(lockPath, held);
+    expect(replaced).toBe(true);
+    expect((await manager.readLock(lockPath))?.ownerId).toBe('equipo-b');
+    expect(existsSync(lockPath)).toBe(true);
+  });
+
+  it('PR7C: una adquisición local espera al último release físico antes de entrar', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'mismo-proceso' });
+    const held = await manager.acquireLock(dbPath, 200);
+    const lockPath = manager.getLockPath(dbPath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    let allowRename!: () => void;
+    const gate = new Promise<void>((resolve) => { allowRename = resolve; });
+    let renameStarted!: () => void;
+    const started = new Promise<void>((resolve) => { renameStarted = resolve; });
+    vi.mocked(rename).mockImplementation(async (from, to) => {
+      if (String(from) === ownerPath) {
+        renameStarted();
+        await gate;
+      }
+      renameSync(from, to);
+    });
+
+    const releasing = manager.releaseLock(lockPath, held);
+    await started;
+    let acquired = false;
+    const next = manager.acquireLock(dbPath, 600).then((value) => {
+      acquired = true;
+      return value;
+    });
+    await Promise.resolve();
+    expect(acquired).toBe(false);
+
+    allowRename();
+    await releasing;
+    const second = await next;
+    expect(acquired).toBe(true);
+    expect(existsSync(lockPath)).toBe(true);
+    await manager.releaseLock(lockPath, second);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it('PR7C: si el owner se renueva tras el rename, release no borra el directorio vivo', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
+    const held = await manager.acquireLock(dbPath, 200);
+    const lockPath = manager.getLockPath(dbPath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    const refreshed = { ...held, updatedAt: new Date(Date.now() + 1_000).toISOString() };
+    vi.mocked(rename).mockImplementation(async (from, to) => {
+      renameSync(from, to);
+      if (String(from) === ownerPath) {
+        writeFileSync(ownerPath, JSON.stringify(refreshed), 'utf8');
+      }
+    });
+    await manager.releaseLock(lockPath, held);
+    expect(existsSync(lockPath)).toBe(true);
+    expect((await manager.readLock(lockPath))?.updatedAt).toBe(refreshed.updatedAt);
+  });
+
   it('CARACTERIZACIÓN E2: 25 s de adelanto local invalidan un heartbeat remoto de 10 s', () => {
     vi.useFakeTimers();
     const realNow = Date.now();
