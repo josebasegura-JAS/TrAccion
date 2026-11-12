@@ -172,127 +172,140 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     const backupDirectory = getLocalBackupDirectory();
     await mkdir(backupDirectory, { recursive: true });
 
-    let backupLock: DatabaseLockInfo;
+    // PR8B: compartir la misma cola exclusiva por ruta que las escrituras
+    // normales. La adquisición reentrante interior mantiene el heartbeat del
+    // backup prolongado sin permitir solapamiento entre callbacks locales.
     try {
-      backupLock = await dependencies.acquireLock(currentStatus.path);
+      return await dependencies.withDatabaseOperationLock(currentStatus.path, async () => {
+        let backupLock: DatabaseLockInfo;
+        try {
+          backupLock = await dependencies.acquireLock(currentStatus.path);
+        } catch (error) {
+          if (dependencies.isLockContentionError(error)) {
+            console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
+            return false;
+          }
+          throw error;
+        }
+
+        const acquiredAfterMs = Date.now() - startedAt;
+        const backupLockPath = dependencies.getLockPath(currentStatus.path);
+        const sharedMarkerPath = `${currentStatus.path}${SHARED_BACKUP_MARKER_SUFFIX}`;
+        const backupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(backupLockPath, backupLock);
+
+        try {
+          // El lock es global entre ordenadores. Si otro equipo ya respaldó
+          // exactamente esta revisión de la base, no se duplica la copia.
+          if (!force && await isSharedSnapshotCurrent(currentStatus.path, sharedMarkerPath)) {
+            recordMultiuserMetric('backup', 'periodic:covered-by-peer', Date.now() - startedAt);
+            recordMultiuserMetric('backup', 'periodic:lock-wait', acquiredAfterMs);
+            console.info(`[backup-perf] Copia cubierta por otro equipo: esperaLock=${acquiredAfterMs} ms.`);
+            return true;
+          }
+          const now = new Date().toISOString();
+          const backupTimestamp = backupTimestampForFileName();
+          const records = dependencies.readAllPersistedRecords(currentDatabase);
+          const payload = {
+            createdAt: now,
+            sourceDatabasePath: currentStatus.path,
+            reason,
+            recordCount: records.length,
+            records,
+          };
+          const serializedPayload = JSON.stringify(payload, null, 2);
+
+          const shouldRotateBackup = await shouldCreateRotatedLocalBackup(reason);
+
+          await writeFile(getLocalBackupJsonPath(), serializedPayload, 'utf8');
+          if (shouldRotateBackup) {
+            await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+          }
+          await pruneRotatedLocalBackups('json');
+
+          let coreSqliteBackupOk = true;
+          const liveSnapshotPath = getLocalBackupDatabasePath();
+          try {
+            await backupSqliteDatabase(currentDatabase, currentStatus.path, liveSnapshotPath);
+            if (shouldRotateBackup) {
+              await copyFile(liveSnapshotPath, getRotatedLocalBackupDatabasePath(backupTimestamp));
+            }
+            await pruneRotatedLocalBackups('sqlite');
+          } catch (error) {
+            coreSqliteBackupOk = false;
+            console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
+          }
+
+          try {
+            await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, liveSnapshotPath);
+          } catch (error) {
+            coreSqliteBackupOk = false;
+            console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
+          }
+
+          try {
+            const dailyBackupPreferences = await readDatabasePreferences();
+            await writeDailyLocalBackup(
+              currentStatus.path,
+              dailyBackupPreferences,
+              getDailyLocalBackupWeekdayName,
+              liveSnapshotPath,
+            );
+          } catch (error) {
+            console.warn('No se ha podido crear la copia diaria local SQLite.', error);
+          }
+
+          try {
+            const secondaryDir = (await readDatabasePreferences()).secondaryBackupDirectoryPath;
+            if (secondaryDir) {
+              await mkdir(secondaryDir, { recursive: true });
+              await writeFile(path.join(secondaryDir, LOCAL_BACKUP_JSON_FILE_NAME), serializedPayload, 'utf8');
+              if (shouldRotateBackup) {
+                await writeFile(path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.json`), serializedPayload, 'utf8');
+              }
+              await copyFile(liveSnapshotPath, path.join(secondaryDir, LOCAL_BACKUP_DATABASE_FILE_NAME));
+              if (shouldRotateBackup) {
+                await copyFile(
+                  liveSnapshotPath,
+                  path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.sqlite`),
+                );
+              }
+            }
+          } catch (error) {
+            console.warn('No se ha podido crear la copia de respaldo secundaria.', error);
+          }
+
+          if (coreSqliteBackupOk) {
+            // Solo se publica la marca tras existir copia SQLite local y compartida.
+            // El lock impide escrituras concurrentes entre la huella y la marca.
+            try {
+              const source = await stat(currentStatus.path);
+              const marker: SharedBackupMarker = {
+                databaseSize: source.size,
+                databaseMtimeMs: source.mtimeMs,
+                databaseCtimeMs: source.ctimeMs,
+              };
+              await writeFile(sharedMarkerPath, JSON.stringify(marker), 'utf8');
+            } catch (error) {
+              console.warn('No se ha podido publicar la coordinación de copias SQLite; el siguiente equipo hará su propia copia.', error);
+            }
+          }
+          recordMultiuserMetric('backup', 'periodic:total', Date.now() - startedAt, !coreSqliteBackupOk);
+          recordMultiuserMetric('backup', 'periodic:lock-wait', acquiredAfterMs);
+          console.info(`[backup-perf] copiaViva=${Date.now() - startedAt} ms, esperaLock=${acquiredAfterMs} ms, éxito=${coreSqliteBackupOk}.`);
+          return coreSqliteBackupOk;
+        } finally {
+          clearInterval(backupLockHeartbeat);
+          await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
+            console.warn('No se ha podido liberar el bloqueo SQLite de respaldo local.', error);
+          });
+        }
+      });
     } catch (error) {
       if (dependencies.isLockContentionError(error)) {
-        console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
+        console.info('Copia local SQLite omitida: lock ocupado al esperar la cola exclusiva.');
         return false;
       }
       throw error;
-    }
-
-    const acquiredAfterMs = Date.now() - startedAt;
-    const backupLockPath = dependencies.getLockPath(currentStatus.path);
-    const sharedMarkerPath = `${currentStatus.path}${SHARED_BACKUP_MARKER_SUFFIX}`;
-    const backupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(backupLockPath, backupLock);
-
-    try {
-      // El lock es global entre ordenadores. Si otro equipo ya respaldó
-      // exactamente esta revisión de la base, no se duplica la copia.
-      if (!force && await isSharedSnapshotCurrent(currentStatus.path, sharedMarkerPath)) {
-        recordMultiuserMetric('backup', 'periodic:covered-by-peer', Date.now() - startedAt);
-        recordMultiuserMetric('backup', 'periodic:lock-wait', acquiredAfterMs);
-        console.info(`[backup-perf] Copia cubierta por otro equipo: esperaLock=${acquiredAfterMs} ms.`);
-        return true;
-      }
-      const now = new Date().toISOString();
-      const backupTimestamp = backupTimestampForFileName();
-      const records = dependencies.readAllPersistedRecords(currentDatabase);
-      const payload = {
-        createdAt: now,
-        sourceDatabasePath: currentStatus.path,
-        reason,
-        recordCount: records.length,
-        records,
-      };
-      const serializedPayload = JSON.stringify(payload, null, 2);
-
-      const shouldRotateBackup = await shouldCreateRotatedLocalBackup(reason);
-
-      await writeFile(getLocalBackupJsonPath(), serializedPayload, 'utf8');
-      if (shouldRotateBackup) {
-        await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
-      }
-      await pruneRotatedLocalBackups('json');
-
-      let coreSqliteBackupOk = true;
-      const liveSnapshotPath = getLocalBackupDatabasePath();
-      try {
-        await backupSqliteDatabase(currentDatabase, currentStatus.path, liveSnapshotPath);
-        if (shouldRotateBackup) {
-          await copyFile(liveSnapshotPath, getRotatedLocalBackupDatabasePath(backupTimestamp));
-        }
-        await pruneRotatedLocalBackups('sqlite');
-      } catch (error) {
-        coreSqliteBackupOk = false;
-        console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
-      }
-
-      try {
-        await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, liveSnapshotPath);
-      } catch (error) {
-        coreSqliteBackupOk = false;
-        console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
-      }
-
-      try {
-        const dailyBackupPreferences = await readDatabasePreferences();
-        await writeDailyLocalBackup(
-          currentStatus.path,
-          dailyBackupPreferences,
-          getDailyLocalBackupWeekdayName,
-          liveSnapshotPath,
-        );
-      } catch (error) {
-        console.warn('No se ha podido crear la copia diaria local SQLite.', error);
-      }
-
-      try {
-        const secondaryDir = (await readDatabasePreferences()).secondaryBackupDirectoryPath;
-        if (secondaryDir) {
-          await mkdir(secondaryDir, { recursive: true });
-          await writeFile(path.join(secondaryDir, LOCAL_BACKUP_JSON_FILE_NAME), serializedPayload, 'utf8');
-          if (shouldRotateBackup) {
-            await writeFile(path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.json`), serializedPayload, 'utf8');
-          }
-          await copyFile(liveSnapshotPath, path.join(secondaryDir, LOCAL_BACKUP_DATABASE_FILE_NAME));
-          if (shouldRotateBackup) {
-            await copyFile(
-              liveSnapshotPath,
-              path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.sqlite`),
-            );
-          }
-        }
-      } catch (error) {
-        console.warn('No se ha podido crear la copia de respaldo secundaria.', error);
-      }
-
-      if (coreSqliteBackupOk) {
-        // Solo se publica la marca tras existir copia SQLite local y compartida.
-        // El lock impide escrituras concurrentes entre la huella y la marca.
-        try {
-          const source = await stat(currentStatus.path);
-          const marker: SharedBackupMarker = {
-            databaseSize: source.size,
-            databaseMtimeMs: source.mtimeMs,
-            databaseCtimeMs: source.ctimeMs,
-          };
-          await writeFile(sharedMarkerPath, JSON.stringify(marker), 'utf8');
-        } catch (error) {
-          console.warn('No se ha podido publicar la coordinación de copias SQLite; el siguiente equipo hará su propia copia.', error);
-        }
-      }
-      recordMultiuserMetric('backup', 'periodic:total', Date.now() - startedAt, !coreSqliteBackupOk);
-      recordMultiuserMetric('backup', 'periodic:lock-wait', acquiredAfterMs);
-      console.info(`[backup-perf] copiaViva=${Date.now() - startedAt} ms, esperaLock=${acquiredAfterMs} ms, éxito=${coreSqliteBackupOk}.`);
-      return coreSqliteBackupOk;
-    } finally {
-      clearInterval(backupLockHeartbeat);
-      await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
-        console.warn('No se ha podido liberar el bloqueo SQLite de respaldo local.', error);
-      });
     }
   };
 
@@ -371,110 +384,123 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     const backupDirectory = getLocalShutdownBackupDirectory();
     await mkdir(backupDirectory, { recursive: true });
 
-    let backupLock: DatabaseLockInfo;
+    // PR8B: compartir la misma cola exclusiva por ruta que las escrituras
+    // normales. La adquisición reentrante interior mantiene el heartbeat del
+    // backup prolongado sin permitir solapamiento entre callbacks locales.
     try {
-      backupLock = await dependencies.acquireLock(currentStatus.path);
+      return await dependencies.withDatabaseOperationLock(currentStatus.path, async () => {
+        let backupLock: DatabaseLockInfo;
+        try {
+          backupLock = await dependencies.acquireLock(currentStatus.path);
+        } catch (error) {
+          if (dependencies.isLockContentionError(error)) {
+            console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
+            return emptyMetrics();
+          }
+          throw error;
+        }
+
+        const backupLockPath = dependencies.getLockPath(currentStatus.path);
+        const backupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(backupLockPath, backupLock);
+
+        try {
+          const prepareStartedAt = Date.now();
+          const now = new Date().toISOString();
+          const backupTimestamp = backupTimestampForFileName();
+          const records = dependencies.readAllPersistedRecords(currentDatabase);
+          const payload = {
+            createdAt: now,
+            sourceDatabasePath: currentStatus.path,
+            reason: 'shutdown',
+            recordCount: records.length,
+            records,
+          };
+          const serializedPayload = JSON.stringify(payload, null, 2);
+          const prepareMs = Date.now() - prepareStartedAt;
+
+          // Se crea una única instantánea SQLite consistente. El resto de copias de
+          // cierre se derivan de ella para no lanzar varios backups nativos simultáneos
+          // sobre la misma conexión. El JSON puede escribirse en paralelo.
+          const jsonTask = (async () => {
+            const startedAt = Date.now();
+            await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+            await pruneShutdownLocalBackups('json');
+            return Date.now() - startedAt;
+          })();
+
+          const shutdownSnapshotPath = getShutdownLocalBackupDatabasePath(backupTimestamp);
+          const localSqliteTask = (async () => {
+            const startedAt = Date.now();
+            try {
+              await backupSqliteDatabase(currentDatabase, currentStatus.path, shutdownSnapshotPath);
+              await pruneShutdownLocalBackups('sqlite');
+              return { durationMs: Date.now() - startedAt, ok: true };
+            } catch (error) {
+              console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
+              return { durationMs: Date.now() - startedAt, ok: false };
+            }
+          })();
+
+          const sharedSqliteTask = (async () => {
+            const startedAt = Date.now();
+            const localSnapshot = await localSqliteTask;
+            if (localSnapshot.ok) {
+              try {
+                await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, shutdownSnapshotPath);
+              } catch (error) {
+                console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
+              }
+            }
+            return Date.now() - startedAt;
+          })();
+
+          const dailySqliteTask = (async () => {
+            const startedAt = Date.now();
+            const localSnapshot = await localSqliteTask;
+            if (localSnapshot.ok) {
+              try {
+                const dailyBackupPreferences = await readDatabasePreferences();
+                await writeDailyLocalBackup(
+                  currentStatus.path,
+                  dailyBackupPreferences,
+                  getDailyLocalBackupWeekdayName,
+                  shutdownSnapshotPath,
+                );
+              } catch (error) {
+                console.warn('No se ha podido crear la copia diaria local SQLite de cierre.', error);
+              }
+            }
+            return Date.now() - startedAt;
+          })();
+
+          const [jsonMs, localSqliteResult, sharedSqliteMs, dailySqliteMs] = await Promise.all([
+            jsonTask,
+            localSqliteTask,
+            sharedSqliteTask,
+            dailySqliteTask,
+          ]);
+
+          return {
+            totalMs: Date.now() - totalStartedAt,
+            prepareMs,
+            jsonMs,
+            localSqliteMs: localSqliteResult.durationMs,
+            sharedSqliteMs,
+            dailySqliteMs,
+          };
+        } finally {
+          clearInterval(backupLockHeartbeat);
+          await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
+            console.warn('No se ha podido liberar el bloqueo SQLite de respaldo de cierre.', error);
+          });
+        }
+      });
     } catch (error) {
       if (dependencies.isLockContentionError(error)) {
-        console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
+        console.info('Copia de cierre omitida: lock ocupado al esperar la cola exclusiva.');
         return emptyMetrics();
       }
       throw error;
-    }
-
-    const backupLockPath = dependencies.getLockPath(currentStatus.path);
-    const backupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(backupLockPath, backupLock);
-
-    try {
-      const prepareStartedAt = Date.now();
-      const now = new Date().toISOString();
-      const backupTimestamp = backupTimestampForFileName();
-      const records = dependencies.readAllPersistedRecords(currentDatabase);
-      const payload = {
-        createdAt: now,
-        sourceDatabasePath: currentStatus.path,
-        reason: 'shutdown',
-        recordCount: records.length,
-        records,
-      };
-      const serializedPayload = JSON.stringify(payload, null, 2);
-      const prepareMs = Date.now() - prepareStartedAt;
-
-      // Se crea una única instantánea SQLite consistente. El resto de copias de
-      // cierre se derivan de ella para no lanzar varios backups nativos simultáneos
-      // sobre la misma conexión. El JSON puede escribirse en paralelo.
-      const jsonTask = (async () => {
-        const startedAt = Date.now();
-        await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
-        await pruneShutdownLocalBackups('json');
-        return Date.now() - startedAt;
-      })();
-
-      const shutdownSnapshotPath = getShutdownLocalBackupDatabasePath(backupTimestamp);
-      const localSqliteTask = (async () => {
-        const startedAt = Date.now();
-        try {
-          await backupSqliteDatabase(currentDatabase, currentStatus.path, shutdownSnapshotPath);
-          await pruneShutdownLocalBackups('sqlite');
-          return { durationMs: Date.now() - startedAt, ok: true };
-        } catch (error) {
-          console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
-          return { durationMs: Date.now() - startedAt, ok: false };
-        }
-      })();
-
-      const sharedSqliteTask = (async () => {
-        const startedAt = Date.now();
-        const localSnapshot = await localSqliteTask;
-        if (localSnapshot.ok) {
-          try {
-            await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, shutdownSnapshotPath);
-          } catch (error) {
-            console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
-          }
-        }
-        return Date.now() - startedAt;
-      })();
-
-      const dailySqliteTask = (async () => {
-        const startedAt = Date.now();
-        const localSnapshot = await localSqliteTask;
-        if (localSnapshot.ok) {
-          try {
-            const dailyBackupPreferences = await readDatabasePreferences();
-            await writeDailyLocalBackup(
-              currentStatus.path,
-              dailyBackupPreferences,
-              getDailyLocalBackupWeekdayName,
-              shutdownSnapshotPath,
-            );
-          } catch (error) {
-            console.warn('No se ha podido crear la copia diaria local SQLite de cierre.', error);
-          }
-        }
-        return Date.now() - startedAt;
-      })();
-
-      const [jsonMs, localSqliteResult, sharedSqliteMs, dailySqliteMs] = await Promise.all([
-        jsonTask,
-        localSqliteTask,
-        sharedSqliteTask,
-        dailySqliteTask,
-      ]);
-
-      return {
-        totalMs: Date.now() - totalStartedAt,
-        prepareMs,
-        jsonMs,
-        localSqliteMs: localSqliteResult.durationMs,
-        sharedSqliteMs,
-        dailySqliteMs,
-      };
-    } finally {
-      clearInterval(backupLockHeartbeat);
-      await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
-        console.warn('No se ha podido liberar el bloqueo SQLite de respaldo de cierre.', error);
-      });
     }
   };
 
