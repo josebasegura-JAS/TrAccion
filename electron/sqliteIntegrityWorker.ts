@@ -28,3 +28,5 @@ port.on('message', (event: { data: unknown }) => {
     port.postMessage({ kind: 'integrity:rejected' });
   }
 });
+
+port.postMessage({ kind: 'integrity:ready' });
