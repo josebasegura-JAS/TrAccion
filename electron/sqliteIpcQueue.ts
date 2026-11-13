@@ -1,4 +1,5 @@
 import { beginSqliteWrite, finishSqliteWrite } from './sqliteIncidentJournal.js';
+import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { recordMultiuserMetric } from './multiuserPerformanceDiagnostics.js';
 import { notifyMainWatchdogOperation } from './mainWatchdogBridge.js';
@@ -178,6 +179,10 @@ export function enqueueSqliteIpc<T>(
   operation: QueuedIpcOperation<T>,
   singleFlight = false,
 ): Promise<Awaited<T>> {
+  // PR9D-3: no aceptar nuevos IPC una vez solicitada la cesión del motor.
+  // El guard es síncrono para que no se cuele una operación en la ventana de traspaso.
+  try { sqliteEngineOwnershipFence.assertMayEnterMain(); }
+  catch (error) { return Promise.reject(error); }
   if (singleFlight) {
     const existing = singleFlightOperations.get(operationName);
     if (existing) {
