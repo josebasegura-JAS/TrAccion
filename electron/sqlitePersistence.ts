@@ -1,5 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
+import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
+import { isIsolatedJsonTable } from './persistence/isolatedJsonTables.js';
 import { readSessionsInUtilityProcess } from './sessionReadWorkerBridge.js';
 import { readTasksInUtilityProcess } from './taskReadWorkerBridge.js';
 import path from 'node:path';
@@ -971,6 +973,23 @@ function createJsonModuleRepository(
       enqueueLocalBackup,
       assertDatabaseWritesAllowed,
       isDatabaseWriteBlockedByHeartbeat,
+      isolatedJsonRead: async (tableName, currentStatus) => {
+        if (!isIsolatedJsonTable(tableName)) {
+          throw new Error('Tabla JSON no incluida en el catálogo seguro.');
+        }
+        const liveStatus = getSqliteStatus();
+        if (!liveStatus.databaseUuid || !liveStatus.applicationId || !liveStatus.environment ||
+            liveStatus.path !== currentStatus.path || liveStatus.schemaVersion !== currentStatus.schemaVersion ||
+            !liveStatus.ready || liveStatus.phase !== 'active') {
+          throw new Error('No hay identidad SQLite validada para lectura aislada.');
+        }
+        return readJsonModuleInUtilityProcess(liveStatus.path, {
+          databaseUuid: liveStatus.databaseUuid,
+          applicationId: liveStatus.applicationId,
+          environment: liveStatus.environment,
+          schemaVersion: liveStatus.schemaVersion,
+        }, tableName);
+      },
     },
   );
 }
