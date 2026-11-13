@@ -1,4 +1,5 @@
 import { stat } from 'node:fs/promises';
+import { shouldUseIsolatedSqliteHealth } from './sqliteHealthIsolationPolicy.js';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
@@ -811,9 +812,11 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       throw new Error('La ruta configurada ya no apunta a un fichero SQLite.');
     }
 
-    // PR9D-2: despliegue opt-in para observar latencia y comportamiento real
-    // antes de sustituir la conexión principal de los módulos.
-    if (process.env.TRACCION_SQLITE_ISOLATED_HEALTH === '1') {
+    // Los logs reales (13/11/2026) muestran bloqueos de Electron de más de
+    // 20 s al consultar esquema con SQLITE_BUSY. Por defecto, toda la
+    // consulta nativa de salud pasa al utilityProcess readonly; el opt-out
+    // explícito permite diagnóstico de regresiones sin fallback automático.
+    if (shouldUseIsolatedSqliteHealth(process.env.TRACCION_SQLITE_ISOLATED_HEALTH)) {
       requireDatabase(); // comprueba estado local, sin realizar E/S nativa
       if (!currentStatus.databaseUuid || !currentStatus.applicationId || !currentStatus.environment) {
         throw new Error('La identidad SQLite validada no está disponible.');
