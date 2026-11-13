@@ -158,7 +158,7 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
       if (!(await saveButton.isEnabled())) {
         const reason = await saveButton.evaluate((button) => {
           const chain: Array<{ tag: string; id: string; disabled: boolean; ariaDisabled: string | null; inert: boolean }> = [];
-          let element: HTMLElement | null = button;
+          let element: Element | null = button;
           while (element) {
             chain.push({
               tag: element.tagName.toLowerCase(),
