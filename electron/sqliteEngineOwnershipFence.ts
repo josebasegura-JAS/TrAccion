@@ -26,6 +26,7 @@ function assertIdleQueue(queue: SqliteQueueState): void {
 export function createSqliteEngineOwnershipFence() {
   let owner: SqliteEngineOwner = 'main';
   let generation = 0;
+  let workerExitConfirmed = false;
 
   return {
     snapshot(): SqliteEngineOwnerSnapshot {
@@ -40,6 +41,7 @@ export function createSqliteEngineOwnershipFence() {
       if (owner !== 'main') throw new Error('La cesión de SQLite ya está iniciada o suspendida.');
       assertIdleQueue(queue);
       owner = 'draining';
+      workerExitConfirmed = false;
       generation += 1;
       return generation;
     },
@@ -68,17 +70,20 @@ export function createSqliteEngineOwnershipFence() {
       // El proceso puede haber tenido un guardado de resultado incierto.
       // Mantener quarantine, incluso si exit(0), hasta reconciliación.
       owner = 'quarantine';
+      workerExitConfirmed = true;
     },
     restoreMainAfterVerification(ticket: number, queue: SqliteQueueState, identityVerified: boolean,
       uncertainWritesReconciled: boolean): void {
       if (owner !== 'quarantine' || ticket !== generation) {
         throw new Error('Se requiere terminación confirmada y cuarentena del worker actual.');
       }
+      if (!workerExitConfirmed) throw new Error('No se ha confirmado la salida del worker anterior.');
       assertIdleQueue(queue);
       if (!identityVerified || !uncertainWritesReconciled) {
         throw new Error('SQLite no puede rehabilitarse sin identidad y escrituras inciertas reconciliadas.');
       }
       owner = 'main';
+      workerExitConfirmed = false;
     },
   };
 }
