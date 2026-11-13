@@ -632,7 +632,7 @@ function requireDatabase(): Database {
 }
 
 async function safeDatabaseOperation<T>(
-  operation: () => T,
+  operation: () => T | Promise<T>,
   fallback: (status: DatabaseStatus, message: string) => T,
 ): Promise<T> {
   if (sqliteIoRecoveryRequired) {
