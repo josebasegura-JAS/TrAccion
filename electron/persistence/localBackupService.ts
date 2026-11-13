@@ -384,6 +384,14 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
+    backupWorkRunning += 1;
+    try {
+      return await writeShutdownLocalBackupArtifactsTracked();
+    } finally {
+      backupWorkRunning -= 1;
+    }
+  };
+  const writeShutdownLocalBackupArtifactsTracked = async (): Promise<ShutdownBackupMetrics> => {
     const totalStartedAt = Date.now();
     const emptyMetrics = (): ShutdownBackupMetrics => ({
       totalMs: Date.now() - totalStartedAt,
@@ -726,6 +734,12 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   return {
+    getActivitySnapshot: () => ({
+      timerScheduled: localBackupTimer !== null,
+      pendingReason: pendingLocalBackupReason !== null,
+      pendingRevision: backupRevision > backedUpRevision,
+      workRunning: backupWorkRunning > 0,
+    }),
     enqueueLocalBackup,
     flushPendingLocalBackup,
     createShutdownLocalBackup,
