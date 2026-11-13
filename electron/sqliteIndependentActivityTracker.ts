@@ -47,6 +47,11 @@ export function createSqliteIndependentActivityTracker() {
      * Reserva la exclusividad ANTES del primer await. No es un lock
      * distribuido: los demás equipos siguen coordinándose por .lockdir.
      */
+    assertFrozenTicket(ticket: number): void {
+      if (frozenGeneration !== ticket) {
+        throw new Error('Ticket de cesión SQLite inválido u obsoleto.');
+      }
+    },
     beginFreeze(): number {
       assertAdmitting();
       frozenGeneration = ++generation;
