@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
+import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
 import { isIsolatedJsonTable } from './persistence/isolatedJsonTables.js';
 import { readSessionsInUtilityProcess } from './sessionReadWorkerBridge.js';
@@ -403,6 +404,35 @@ function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies 
   };
 }
 
+/**
+ * PR9D-5B: informe conservador de preparación, NO autorización de handoff.
+ * La conexión escritora sigue en main. El heartbeat y otras rutas extracola
+ * todavía necesitan barrera de admisión antes de iniciar una cesión real.
+ */
+export function getSqliteWriterHandoffReadiness(): {
+  ready: boolean;
+  blockers: string[];
+  independentActive: number;
+} {
+  const blockers: string[] = [];
+  const queue = getSqliteIpcQueueDiagnostics();
+  if (queue.queuedOperations > 0 || queue.runningOperation !== null || queue.timedOut) {
+    blockers.push('Cola SQLite activa, pendiente o con timeout incierto.');
+  }
+  const activity = sqliteIndependentActivityTracker.snapshot();
+  if (activity.active > 0) blockers.push('Operaciones SQLite/SMB en curso.');
+  const backups = localBackupServiceInstance?.getActivitySnapshot();
+  if (backups && (backups.workRunning || backups.timerScheduled || backups.pendingReason || backups.pendingRevision)) {
+    blockers.push('Copias SQLite activas o pendientes.');
+  }
+  if (sqliteEngineOwnershipFence.snapshot().owner !== 'main') {
+    blockers.push('El proceso principal no es propietario activo de SQLite.');
+  }
+  // No habilitar cesión sin cobertura de TODOS los accesos extracola.
+  blockers.push('Cesión del escritor deshabilitada: heartbeat, mantenimiento y cierre todavía no integrados en la barrera global.');
+  return { ready: false, blockers, independentActive: activity.active };
+}
+
 function getLocalBackupService(): LocalBackupService {
   if (!localBackupServiceInstance) {
     localBackupServiceInstance = createLocalBackupService(createLocalBackupServiceDependencies());
@@ -429,8 +459,24 @@ const {
   isLockStale,
   releaseLock,
   startDatabaseLockHeartbeat,
-  withDatabaseOperationLock,
+  withDatabaseOperationLock: untrackedDatabaseOperationLock,
 } = sqliteLockLifecycle;
+
+/**
+ * PR9D-5B: contar tanto la espera por el lock SMB como la operación
+ * posterior. Solo se libera el contador tras resolver/rechazar de verdad.
+ * La cola IPC mantiene su semántica previa.
+ */
+function withDatabaseOperationLock<T>(
+  databasePath: string,
+  operation: () => Promise<T>,
+  waitMs?: number,
+): Promise<T> {
+  sqliteEngineOwnershipFence.assertMayEnterMain();
+  return sqliteIndependentActivityTracker.run('sqlite:shared-operation-lock', () =>
+    untrackedDatabaseOperationLock(databasePath, operation, waitMs));
+}
+
 
 export function setDatabaseConnectivityIssueNotifier(
   notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
