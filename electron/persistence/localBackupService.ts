@@ -113,7 +113,15 @@ export interface ShutdownBackupMetrics {
   dailySqliteMs: number;
 }
 
+export interface LocalBackupActivitySnapshot {
+  timerScheduled: boolean;
+  pendingReason: boolean;
+  pendingRevision: boolean;
+  workRunning: boolean;
+}
+
 export interface LocalBackupService {
+  getActivitySnapshot: () => LocalBackupActivitySnapshot;
   enqueueLocalBackup: (reason: string) => void;
   flushPendingLocalBackup: () => Promise<void>;
   createShutdownLocalBackup: () => Promise<ShutdownBackupMetrics>;
@@ -153,6 +161,7 @@ async function isSharedSnapshotCurrent(databasePath: string, markerPath: string)
 
 export function createLocalBackupService(dependencies: LocalBackupServiceDependencies): LocalBackupService {
   let localBackupQueue: Promise<void> = Promise.resolve();
+  let backupWorkRunning = 0;
   let localBackupTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingLocalBackupReason: string | null = null;
   // Revisión de cambios de esta sesión. Si todos los cambios ya están incluidos
@@ -162,6 +171,15 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   let backedUpRevision = 0;
 
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
+    backupWorkRunning += 1;
+    try {
+      return await writeLocalBackupArtifactsTracked(reason, force);
+    } finally {
+      backupWorkRunning -= 1;
+    }
+  };
+
+  const writeLocalBackupArtifactsTracked = async (reason: string, force = false): Promise<boolean> => {
     const currentDatabase = dependencies.getDatabase();
     const currentStatus = dependencies.getStatus();
     if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
