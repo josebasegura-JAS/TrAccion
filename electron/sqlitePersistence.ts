@@ -76,7 +76,7 @@ import {
   type DatabaseLockInfo,
 } from './persistence/sqliteLockLifecycle.js';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
-import { verifySqliteIntegrityReadOnly } from './persistence/sqliteIntegrityVerification.js';
+import { verifySqliteIntegrityInUtilityProcess } from './sqliteIntegrityWorkerBridge.js';
 import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
 import {
   describeSqliteRecoveryError,
@@ -521,7 +521,7 @@ async function recoverDatabaseAfterIoError(): Promise<void> {
       if (!previous.databaseUuid || !previous.applicationId || !previous.environment) {
         throw new Error('No hay identidad SQLite suficiente para una recuperación automática segura.');
       }
-      verifySqliteIntegrityReadOnly(previous.path, {
+      await verifySqliteIntegrityInUtilityProcess(previous.path, {
         databaseUuid: previous.databaseUuid,
         applicationId: previous.applicationId,
         environment: previous.environment,
