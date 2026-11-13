@@ -33,9 +33,11 @@ function setup() {
 describe('Escritura SQL transaccional: motor separado de criterios', () => {
   it('escribe realmente en archivo SQLite y se conserva tras cerrar/reabrir', () => {
     const f = setup();
+    let initialConnectionClosed = false;
     try {
       expect(saveDetachedCriteriaRecord(f.db, f.record('v1', null))).toEqual({ ok: true, updatedAt: 'v1' });
       f.db.close();
+      initialConnectionClosed = true;
       const reopened = new SqliteDatabase(f.filename, { fileMustExist: true });
       try {
         const saved = reopened.prepare('SELECT value_json, updated_at FROM criterios_rrll_records WHERE id = ?')
@@ -44,7 +46,7 @@ describe('Escritura SQL transaccional: motor separado de criterios', () => {
         expect(JSON.parse(saved.value_json).title).toBe('Consulta');
         expect(saveDetachedCriteriaRecord(reopened, f.record('v2', 'v1'))).toEqual({ ok: true, updatedAt: 'v2' });
       } finally { reopened.close(); }
-    } finally { if (f.db.open) f.db.close(); }
+    } finally { if (!initialConnectionClosed) f.db.close(); }
   });
 
   it('rechaza alta duplicada y revisión obsoleta sin modificar datos', () => {
