@@ -638,6 +638,9 @@ async function safeDatabaseOperation<T>(
   operation: () => T | Promise<T>,
   fallback: (status: DatabaseStatus, message: string) => T,
 ): Promise<T> {
+  // PR9D-5A: impedir incluso accesos que no llamen a requireDatabase()
+  // si en el futuro se cede la propiedad del motor escritor al auxiliar.
+  sqliteEngineOwnershipFence.assertMayEnterMain();
   if (sqliteIoRecoveryRequired) {
     throw new Error('SQLite suspendida tras un error de E/S. Espera la recuperación verificada de la base compartida.');
   }
