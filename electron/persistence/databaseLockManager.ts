@@ -718,7 +718,7 @@ export function createDatabaseLockManager(
 
   // El identificador del intervalo no cambia durante una pausa.
   // clearInterval(timer) del llamador sigue siendo eficaz tras reanudar.
-  const heartbeatSessions = new Map<ReturnType<typeof setInterval>, {
+  const heartbeatSessions = new WeakMap<ReturnType<typeof setInterval>, {
     paused: boolean;
     inFlight: boolean;
     drainWaiters: Set<() => void>;
@@ -760,10 +760,8 @@ export function createDatabaseLockManager(
         .finally(() => {
           heartbeatOperationsInFlight -= 1;
           session.inFlight = false;
-          if (session.paused) {
-            for (const resolve of session.drainWaiters) resolve();
-            session.drainWaiters.clear();
-          }
+          for (const resolve of session.drainWaiters) resolve();
+          session.drainWaiters.clear();
         });
     }, LOCK_HEARTBEAT_MS);
     heartbeatSessions.set(timer, session);
