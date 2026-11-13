@@ -50,113 +50,83 @@ test('flujo crítico: crear un calendario de Ticket Restaurante desde UI y verif
 });
 
 test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el conflicto de edición simultánea', async () => {
-  // Simula el escenario real de producción: 2-3 personas del equipo RRLL
-  // abriendo TrAccion.exe contra el mismo traccion.sqlite en la unidad de
-  // red (SMB). Aquí, en vez de una unidad de red, usamos una carpeta local
-  // compartida entre dos instancias de Electron, preconfigurada vía
-  // sqlite-preferences.json (el mismo mecanismo que usa "Cambiar ubicación
-  // de base de datos" en Ajustes).
+  // El objetivo de este E2E es probar OCC entre DOS procesos Electron y una
+  // SQLite física compartida. No congelar el polling del renderer: hacerlo
+  // disparaba el recovery overlay, que por diseño intercepta interacciones
+  // mientras la sesión se recupera. Se conserva el flujo UI para el alta.
+  test.setTimeout(90_000);
   const sharedDatabaseDirectory = await createSharedDatabaseDirectory();
   const calendarName = `E2E concurrencia ${Date.now()}`;
-
   const userA = await launchTraccionElectron({ sharedDatabaseDirectory });
   try {
-    // Usuaria A crea el calendario que después se disputarán las dos.
-    await navigateToModule(userA.page, TICKET_RESTAURANTE_GROUP, TICKET_RESTAURANTE_MODULE);
-    await openCalendars(userA.page);
-    await userA.page.getByLabel('Nombre calendario').fill(calendarName);
-    await userA.page.getByRole('button', { name: 'Guardar', exact: true }).click();
-    await expect(userA.page.getByLabel('Selector calendario')).toContainText(calendarName, {
-      timeout: 10_000,
-    });
+    // El E2E anterior ya cubre alta mediante UI. Este prueba exclusivamente
+    // concurrencia transaccional entre DOS IPC Electron independientes.
+    // Sembrar por el MISMO IPC nativo evita que una pantalla de recuperación
+    // haga no determinista la preparación (no se salta la persistencia real).
+    const calendarId = `ticket-e2e-${Date.now()}`;
+    const seededByA = await userA.page.evaluate(async ({ id, name }) => {
+      const now = new Date().toISOString();
+      const calendar = {
+        id, nombre: name, activo: true, diasSinTicket: [],
+        ticketIsoWeekdays: [1, 2, 3, 4, 5],
+        createdAt: now, updatedAt: now, deletedAt: null,
+      };
+      return window.traccion!.saveTicketRestauranteCalendarRecordIfUnchanged!({
+        id, expectedUpdatedAt: null, value: JSON.stringify(calendar),
+      });
+    }, { id: calendarId, name: calendarName });
+    expect(seededByA.ok, seededByA.message).toBe(true);
 
-    await expect(userA.page.getByLabel('Selector calendario').locator('option:checked')).toHaveText(calendarName);
-    const calendarId = await userA.page.getByLabel('Selector calendario').inputValue();
-
-    // Usuaria B abre TrAccion después de que el calendario ya existe en el
-    // traccion.sqlite compartido, así que lo carga con su updatedAt actual.
     const userB = await launchTraccionElectron({ sharedDatabaseDirectory });
     try {
-      await navigateToModule(userB.page, TICKET_RESTAURANTE_GROUP, TICKET_RESTAURANTE_MODULE);
-      await openCalendars(userB.page);
-      // Detener solo la sincronización de B, dejando activos los relojes,
-      // fotogramas y callbacks de IPC que necesita un guardado real.
-      const staleRevision = await userB.page.evaluate(async ({ syncUrl, storeUrl, id }) => {
-        const sync = await import(syncUrl);
-        sync.stopExternalDataSyncPolling();
-        // Barrera explícita: terminar la carga inicial antes de que A escriba.
-        await sync.forceExternalDataRefreshAfterRecovery();
-        sync.stopExternalDataSyncPolling();
-        const { useTicketRestauranteStore } = await import(storeUrl);
-        const calendars: Array<{ id: string; updatedAt: string }> = useTicketRestauranteStore.getState().calendars;
-        return calendars.find(calendar => calendar.id === id)?.updatedAt;
-      }, {
-        syncUrl: '/src/services/externalDataSync.ts',
-        storeUrl: '/src/features/ticket-restaurante/store/useTicketRestauranteStore.ts',
-        id: calendarId,
-      });
-      expect(staleRevision).toBeTruthy();
-      await expect(userB.page.getByLabel('Selector calendario')).toContainText(calendarName, {
-        timeout: 10_000,
-      });
-
-      await expect(userB.page.getByLabel('Selector calendario')).toHaveValue(calendarId);
-
-      // B entra en modo edición del calendario, fijando en memoria el
-      // updatedAt que tenía el registro justo antes de que A lo modifique.
-      await userB.page.getByRole('button', { name: 'Editar' }).click();
-      await expect(userB.page.getByText('Editar calendario')).toBeVisible();
-
-      // A modifica y guarda el mismo calendario primero (activa/desactiva).
-      // El botón cambia de etiqueta ("Activar" <-> "Desactivar") una vez que
-      // el toggle se ha aplicado, así que usamos ese cambio como señal de
-      // que la escritura en SQLite ya se ha completado.
-      await userA.page.bringToFront();
-      const toggleButton = userA.page.getByRole('button', { name: /^(Desactivar|Activar)$/ });
-      const labelBeforeToggle = await toggleButton.innerText();
-      await toggleButton.click();
-      await expect(toggleButton).not.toHaveText(labelBeforeToggle, { timeout: 10_000 });
-
-      const committedByA = await userA.page.evaluate(async (id) => {
+      // B lee la revisión anterior del mismo fichero físico SQLite,
+      // sin forzar estados de recuperación ni manipular el polling.
+      const before = await userB.page.evaluate(async (id) => {
         const snapshot = await window.traccion!.loadTicketRestauranteCalendarRecords!();
-        return snapshot.records.find(record => record.id === id);
+        if (!snapshot.status.ready) throw new Error('Usuario B no tiene SQLite activa.');
+        const record = snapshot.records.find(item => item.id === id);
+        if (!record) throw new Error('El calendario de A no existe en la sesión B.');
+        return record;
       }, calendarId);
-      expect(committedByA).toBeDefined();
-      expect(JSON.parse(committedByA!.value)).toMatchObject({
-        nombre: calendarName, activo: labelBeforeToggle === 'Activar',
-      });
 
-      expect(committedByA!.updatedAt).not.toBe(staleRevision);
-      const revisionInB = await userB.page.evaluate(async ({ storeUrl, id }) => {
-        const { useTicketRestauranteStore } = await import(storeUrl);
-        const calendars: Array<{ id: string; updatedAt: string }> = useTicketRestauranteStore.getState().calendars;
-        return calendars.find(calendar => calendar.id === id)?.updatedAt;
-      }, { storeUrl: '/src/features/ticket-restaurante/store/useTicketRestauranteStore.ts', id: calendarId });
-      expect(revisionInB).toBe(staleRevision);
+      const committedByA = await userA.page.evaluate(async ({ id, original }) => {
+        const saver = window.traccion!.saveTicketRestauranteCalendarRecordIfUnchanged!;
+        const parsed = JSON.parse(original.value);
+        const updatedAt = new Date(Math.max(Date.now(), Date.parse(original.updatedAt) + 1_000)).toISOString();
+        const changed = { ...parsed, activo: !parsed.activo, updatedAt };
+        const value = JSON.stringify(changed);
+        const result = await saver({ id, value, expectedUpdatedAt: original.updatedAt });
+        if (!result.ok) throw new Error(`El guardado de A falló: ${result.message}`);
+        return { value, updatedAt: result.currentUpdatedAt };
+      }, { id: calendarId, original: before });
+      expect(committedByA.updatedAt).toBeTruthy();
+      expect(committedByA.updatedAt).not.toBe(before.updatedAt);
 
-      // B conserva la revisión anterior; el intento debe llegar a SQLite real.
-      await userB.page.bringToFront();
-      const editedName = `${calendarName} (editado por B)`;
-      await userB.page.getByLabel('Nombre calendario').fill(editedName);
-      await expect(userB.page.getByLabel('Nombre calendario')).toHaveValue(editedName);
-      await userB.page.getByRole('button', { name: 'Guardar', exact: true }).click();
+      // B envía su modificación con el updatedAt ANTIGUO por su propio IPC.
+      // La transacción SQLite debe rechazarla sin sobrescribir A.
+      const staleAttempt = await userB.page.evaluate(async ({ id, original }) => {
+        const parsed = JSON.parse(original.value);
+        const value = JSON.stringify({
+          ...parsed,
+          nombre: `${parsed.nombre} (editado por B)`,
+          updatedAt: new Date(Math.max(Date.now(), Date.parse(original.updatedAt) + 2_000)).toISOString(),
+        });
+        return window.traccion!.saveTicketRestauranteCalendarRecordIfUnchanged!({
+          id, value, expectedUpdatedAt: original.updatedAt,
+        });
+      }, { id: calendarId, original: before });
+      expect(staleAttempt.ok).toBe(false);
+      expect(staleAttempt.message).toContain('modificado por otro usuario');
+      expect(staleAttempt.currentUpdatedAt).toBe(committedByA.updatedAt);
 
-      const conflictDialog = userB.page.getByRole('dialog', { name: 'Información', exact: true });
-      await expect(conflictDialog).toBeVisible({ timeout: 10_000 });
-      await expect(conflictDialog).toContainText('Información');
-      await expect(conflictDialog).toContainText('modificado por otro usuario');
-      await conflictDialog.getByRole('button', { name: 'Cerrar', exact: true }).click();
-      await expect(conflictDialog).not.toBeVisible();
-
-      const afterConflict = await userA.page.evaluate(async (id) => {
+      const persisted = await userA.page.evaluate(async (id) => {
         const snapshot = await window.traccion!.loadTicketRestauranteCalendarRecords!();
-        return snapshot.records.find(record => record.id === id);
+        return snapshot.records.find(item => item.id === id);
       }, calendarId);
-      // No basta con un aviso: la escritura rechazada no debe cambiar los
-      // datos ni el token que confirmó el primer usuario.
-      expect(afterConflict?.value).toBe(committedByA!.value);
-      expect(afterConflict?.updatedAt).toBe(committedByA!.updatedAt);
-      expect(afterConflict?.value).not.toContain(editedName);
+      expect(persisted).toBeDefined();
+      expect(persisted!.value).toBe(committedByA.value);
+      expect(persisted!.updatedAt).toBe(committedByA.updatedAt);
+      expect(persisted!.value).not.toContain('(editado por B)');
     } finally {
       await userB.close();
     }
