@@ -47,16 +47,9 @@ export function createSqliteWriterDrainPreflight(
       }
     },
     assertPrepared(ticket: number): void {
-      if (!tracker.snapshot().frozen) {
-        throw new Error('No se ha detenido la admisión de E/S SQLite.');
-      }
-      // waitForDrain valida que el ticket corresponde a la congelación actual.
-      // Este método se llama desde un coordinador que debe mantener el ticket.
+      tracker.assertFrozenTicket(ticket);
       tracker.assertIdle();
       assertOtherSourcesIdle();
-      if (!Number.isSafeInteger(ticket) || ticket < 1) {
-        throw new Error('Ticket de preparación SQLite inválido.');
-      }
     },
     abortBeforeClose(ticket: number): void {
       tracker.abortFreeze(ticket);
