@@ -32,12 +32,15 @@ export interface SqliteLockLifecycle {
   releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void>;
 }
 
-export function createSqliteLockLifecycle(getOwnerId: () => string): SqliteLockLifecycle {
+export function createSqliteLockLifecycle(
+  getOwnerId: () => string,
+  observeHeartbeat?: (operation: () => Promise<void>) => Promise<void>,
+): SqliteLockLifecycle {
   let managerInstance: DatabaseLockManager | null = null;
 
   const getManager = (): DatabaseLockManager => {
     if (!managerInstance) {
-      managerInstance = createDatabaseLockManager({ getOwnerId });
+      managerInstance = createDatabaseLockManager({ getOwnerId, observeHeartbeat });
     }
     return managerInstance;
   };

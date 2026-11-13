@@ -64,6 +64,8 @@ export interface DatabaseLockManagerDependencies {
   getOwnerId: () => string;
   /** Reloj monotónico inyectable para ensayar desfases sin tocar la hora de Windows. */
   monotonicNowMs?: () => number;
+  /** Instrumentación de E/S del heartbeat sin cambiar sus reintentos. */
+  observeHeartbeat?: (operation: () => Promise<void>) => Promise<void>;
 }
 
 export interface DatabaseLockManager {
@@ -719,7 +721,12 @@ export function createDatabaseLockManager(
       if (inFlight) return;
       inFlight = true;
       heartbeatOperationsInFlight += 1;
-      void heartbeatDatabaseLock(lockPath, lock)
+      // PR9D-5C: contar hasta que la E/S SMB haya terminado realmente.
+      // La instrumentación no detiene el heartbeat ni cambia su cadencia.
+      const heartbeatOperation = dependencies.observeHeartbeat
+        ? dependencies.observeHeartbeat(() => heartbeatDatabaseLock(lockPath, lock))
+        : heartbeatDatabaseLock(lockPath, lock);
+      void heartbeatOperation
         .then(() => markHeartbeatRecovered())
         .catch((error: unknown) => markHeartbeatFailure(error))
         .finally(() => {
