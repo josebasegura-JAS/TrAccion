@@ -50,6 +50,11 @@ test('flujo crítico: crear un calendario de Ticket Restaurante desde UI y verif
 });
 
 test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el conflicto de edición simultánea', async () => {
+  // Dos arranques Electron, carga/sincronización y dos escrituras reales.
+  // La traza CI #43422104660 confirmó el commit de A y el conflicto OCC
+  // de B; el límite genérico de 45 s agotó el test al cerrar el diálogo.
+  // Acotar el presupuesto SOLO a este E2E sin relajar ninguna aserción.
+  test.setTimeout(90_000);
   // Simula el escenario real de producción: 2-3 personas del equipo RRLL
   // abriendo TrAccion.exe contra el mismo traccion.sqlite en la unidad de
   // red (SMB). Aquí, en vez de una unidad de red, usamos una carpeta local
