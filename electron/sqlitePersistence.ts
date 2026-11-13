@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
+import { readSessionsInUtilityProcess } from './sessionReadWorkerBridge.js';
 import { readTasksInUtilityProcess } from './taskReadWorkerBridge.js';
 import path from 'node:path';
 import { getSqliteIpcQueueDiagnostics, runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
@@ -1004,6 +1005,17 @@ const sesionesModule = createSesionesRepository({
   enqueueLocalBackup,
   assertDatabaseWritesAllowed,
   isDatabaseWriteBlockedByHeartbeat,
+  isolatedSessionRead: async (module, id, currentStatus) => {
+    if (!currentStatus.databaseUuid || !currentStatus.applicationId || !currentStatus.environment) {
+      throw new Error('No existe identidad validada para lectura aislada de sesiones.');
+    }
+    return readSessionsInUtilityProcess(currentStatus.path, {
+      databaseUuid: currentStatus.databaseUuid,
+      applicationId: currentStatus.applicationId,
+      environment: currentStatus.environment,
+      schemaVersion: currentStatus.schemaVersion,
+    }, module, id);
+  },
 });
 const {
   loadComiteSessionRecordsSnapshot,

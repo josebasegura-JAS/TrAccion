@@ -56,7 +56,7 @@ export type ConditionalSqliteActaRecord = ConditionalSqliteComiteSessionRecord;
  */
 export interface SesionesRepositoryDeps {
   safeDatabaseOperation: <T>(
-    operation: () => T,
+    operation: () => T | Promise<T>,
     fallback: (status: DatabaseStatus, message: string) => T,
   ) => Promise<T>;
   getSqliteStatus: () => DatabaseStatus;
@@ -66,6 +66,7 @@ export interface SesionesRepositoryDeps {
   enqueueLocalBackup: (reason: string) => void;
   assertDatabaseWritesAllowed: () => void;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
+  isolatedSessionRead?: (module: 'comite' | 'paritaria', id: string | undefined, status: DatabaseStatus) => Promise<SqliteComiteSessionRecord[]>;
 }
 
 export interface SesionesRepositoryApi {
@@ -129,6 +130,20 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
   }
 
   async function loadComiteSessionRecordsSnapshot(id?: string): Promise<SqliteComiteSessionRecordsSnapshot> {
+    if (deps.isolatedSessionRead && process.env.TRACCION_SQLITE_ISOLATED_SESSIONS_READ === '1') {
+      return safeDatabaseOperation(async () => {
+        const currentStatus = getSqliteStatus();
+        if (!currentStatus.ready || currentStatus.phase !== 'active') {
+          return { status: currentStatus, records: [] };
+        }
+        // La migración legacy puede escribir; se conserva en la conexión original,
+        // con bloqueo y cola existentes. Solo aislar la consulta posterior.
+        const db = requireDatabase();
+        db.transaction(() => maybeMigrateComiteSessionsFromPersistedRecord(db))();
+        const records = await deps.isolatedSessionRead!('comite', id, currentStatus);
+        return { status: currentStatus, records };
+      }, (nextStatus) => ({ status: nextStatus, records: [] }));
+    }
     return safeDatabaseOperation(
       () => {
         const currentStatus = getSqliteStatus();
@@ -161,6 +176,20 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
   }
 
   async function loadParitariaSessionRecordsSnapshot(id?: string): Promise<SqliteParitariaSessionRecordsSnapshot> {
+    if (deps.isolatedSessionRead && process.env.TRACCION_SQLITE_ISOLATED_SESSIONS_READ === '1') {
+      return safeDatabaseOperation(async () => {
+        const currentStatus = getSqliteStatus();
+        if (!currentStatus.ready || currentStatus.phase !== 'active') {
+          return { status: currentStatus, records: [] };
+        }
+        // La migración legacy puede escribir; se conserva en la conexión original,
+        // con bloqueo y cola existentes. Solo aislar la consulta posterior.
+        const db = requireDatabase();
+        db.transaction(() => maybeMigrateParitariaSessionsFromPersistedRecord(db))();
+        const records = await deps.isolatedSessionRead!('paritaria', id, currentStatus);
+        return { status: currentStatus, records };
+      }, (nextStatus) => ({ status: nextStatus, records: [] }));
+    }
     return safeDatabaseOperation(
       () => {
         const currentStatus = getSqliteStatus();
