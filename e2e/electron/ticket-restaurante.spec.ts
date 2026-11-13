@@ -151,7 +151,34 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
       const editedName = `${calendarName} (editado por B)`;
       await userB.page.getByLabel('Nombre calendario').fill(editedName);
       await expect(userB.page.getByLabel('Nombre calendario')).toHaveValue(editedName);
-      await userB.page.getByRole('button', { name: 'Guardar', exact: true }).click();
+      const saveButton = userB.page.getByRole('button', { name: 'Guardar', exact: true });
+      // La acción puede quedar inhabilitada por un ancestro (fieldset,
+      // aria-disabled o inert), aunque el botón no tenga disabled propio.
+      // Detectar la causa EXACTA antes de esperar 30 s sin información.
+      if (!(await saveButton.isEnabled())) {
+        const reason = await saveButton.evaluate((button) => {
+          const chain: Array<{ tag: string; id: string; disabled: boolean; ariaDisabled: string | null; inert: boolean }> = [];
+          let element: HTMLElement | null = button;
+          while (element) {
+            chain.push({
+              tag: element.tagName.toLowerCase(),
+              id: element.id,
+              disabled: element.hasAttribute('disabled'),
+              ariaDisabled: element.getAttribute('aria-disabled'),
+              inert: element.hasAttribute('inert'),
+            });
+            element = element.parentElement;
+          }
+          return {
+            chain,
+            buttonText: button.textContent,
+            inputValue: (document.querySelector('[aria-label="Nombre calendario"]') as HTMLInputElement | null)?.value,
+            activeElement: document.activeElement?.tagName,
+          };
+        });
+        throw new Error(`Guardar inhabilitado en usuario B: ${JSON.stringify(reason)}`);
+      }
+      await saveButton.click();
 
       const conflictDialog = userB.page.getByRole('dialog', { name: 'Información', exact: true });
       await expect(conflictDialog).toBeVisible({ timeout: 10_000 });
