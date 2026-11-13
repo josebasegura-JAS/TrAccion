@@ -60,4 +60,16 @@ describe('PR9A · diagnósticos SQLite sin información personal', () => {
     expect(event.durationMs).toBe(21_000);
     expect(event.errorCode).toBe('SQLITE_IOERR');
   });
+  it('PR9B: conserva errno y syscall de fs.stat sin divulgar la ruta UNC', () => {
+    const error = Object.assign(new Error('UNKNOWN: \\\\servidor\\recursos\\personas.sqlite'), {
+      code: 'UNKNOWN', errno: -4094, syscall: 'stat', path: '\\\\servidor\\recursos',
+    });
+    const diagnostic = describeSqliteRecoveryError(error);
+    expect(diagnostic.errorCode).toBe('UNKNOWN');
+    expect(diagnostic.errorErrno).toBe(-4094);
+    expect(diagnostic.errorSyscall).toBe('stat');
+    expect(JSON.stringify(diagnostic)).not.toContain('servidor');
+    expect(JSON.stringify(diagnostic)).not.toContain('personas');
+  });
+
 });
