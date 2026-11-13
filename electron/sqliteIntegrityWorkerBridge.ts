@@ -14,12 +14,31 @@ export function verifySqliteIntegrityInUtilityProcess(
   databasePath: string,
   expected: ExpectedSqliteIdentity,
 ): Promise<void> {
+  return runSqliteReadonlyWorker(databasePath, expected, 'integrity');
+}
+
+/** PR9D-2: health-check en proceso aislado, sin quick_check ni escrituras. */
+export function verifySqliteHealthInUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+): Promise<void> {
+  return runSqliteReadonlyWorker(databasePath, expected, 'health');
+}
+
+function runSqliteReadonlyWorker(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  mode: 'integrity' | 'health',
+): Promise<void> {
   return runSqliteIntegrityWorker({
     databasePath,
     expected,
+    mode,
     createChild: () => {
       const child = utilityProcess.fork(path.join(__dirname, 'sqliteIntegrityWorker.js'), [], {
-        serviceName: 'TrAcción SQLite readonly integrity verification',
+        serviceName: mode === 'health'
+          ? 'TrAcción SQLite readonly health-check'
+          : 'TrAcción SQLite readonly integrity verification',
       });
       return {
         postMessage: (message) => child.postMessage(message),
