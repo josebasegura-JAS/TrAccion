@@ -58,7 +58,7 @@ export function describeSqliteRecoveryError(error: unknown): Pick<SqliteRecovery
     : raw.startsWith('La ruta configurada') ? 'Fichero SQLite no válido'
     : raw.startsWith('SQLite no está inicializado') ? 'Conexión SQLite no inicializada'
     : raw ? 'Error sin código normalizado' : 'Sin mensaje';
-  return { errorCode, errorName, errorMessage: errorMessage.slice(0, MAX_MESSAGE_LENGTH), errorErrno, errorSyscall };
+  return { errorCode, errorName, errorMessage: errorMessage.slice(0, MAX_MESSAGE_LENGTH), ...(errorErrno === undefined ? {} : { errorErrno }), ...(errorSyscall === undefined ? {} : { errorSyscall }) };
 }
 
 /** Muestrea operaciones saludables para evitar ruido; conserva todos los fallos y lentas. */
