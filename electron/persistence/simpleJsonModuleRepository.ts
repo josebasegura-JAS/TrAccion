@@ -1,4 +1,5 @@
 import type { Database } from 'better-sqlite3';
+import { isIsolatedJsonTable } from './isolatedJsonTables.js';
 import {
   extractJsonRecordTimestamps,
   maybeMigrateJsonArrayRecordsFromPersistedRecord,
@@ -44,7 +45,7 @@ export interface SimpleJsonSaveResult {
 
 export interface SimpleJsonModuleRepositoryDependencies {
   safeDatabaseOperation: <T>(
-    operation: () => T,
+    operation: () => T | Promise<T>,
     fallback: (status: SimpleDatabaseStatus, message: string) => T,
   ) => Promise<T>;
   safeDatabaseMigrationOperation: <T>(
@@ -58,6 +59,7 @@ export interface SimpleJsonModuleRepositoryDependencies {
   enqueueLocalBackup: (reason: string) => void;
   assertDatabaseWritesAllowed: () => void;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
+  isolatedJsonRead?: (tableName: string, status: SimpleDatabaseStatus) => Promise<SimpleJsonRecord[]>;
 }
 
 export interface SimpleJsonModuleRepositoryOptions {
@@ -256,6 +258,21 @@ export function createSimpleJsonModuleRepository(
         if (!migrationStatus.ready || migrationStatus.phase !== 'active') {
           return { status: migrationStatus, records: [] };
         }
+      }
+
+      if (deps.isolatedJsonRead && isIsolatedJsonTable(options.tableName)
+          && process.env.TRACCION_SQLITE_ISOLATED_JSON_READ === '1') {
+        return deps.safeDatabaseOperation(
+          async () => {
+            const currentStatus = deps.getSqliteStatus();
+            if (!currentStatus.ready || currentStatus.phase !== 'active') {
+              return { status: currentStatus, records: [] };
+            }
+            const records = await deps.isolatedJsonRead!(options.tableName, currentStatus);
+            return { status: currentStatus, records };
+          },
+          (nextStatus) => ({ status: nextStatus, records: [] }),
+        );
       }
 
       return deps.safeDatabaseOperation(
