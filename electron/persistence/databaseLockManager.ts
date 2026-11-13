@@ -85,6 +85,11 @@ export interface DatabaseLockManager {
     lockPath: string,
     lock: DatabaseLockInfo,
   ): ReturnType<typeof setInterval>;
+  /** Suspende nuevos ticks y espera la E/S SMB ya iniciada. No libera el lock. */
+  pauseDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): Promise<void>;
+  /** Reactiva ticks solo si la misma sesión conserva su timer. */
+  resumeDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): void;
+
   setConnectivityIssueNotifier(
     notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
   ): void;
@@ -711,15 +716,38 @@ export function createDatabaseLockManager(
     );
   }
 
+  // El identificador del intervalo no cambia durante una pausa.
+  // clearInterval(timer) del llamador sigue siendo eficaz tras reanudar.
+  const heartbeatSessions = new Map<ReturnType<typeof setInterval>, {
+    paused: boolean;
+    inFlight: boolean;
+    drainWaiters: Set<() => void>;
+  }>();
+
+  function pauseDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): Promise<void> {
+    const session = heartbeatSessions.get(timer);
+    if (!session) return Promise.reject(new Error('Temporizador heartbeat SQLite no registrado.'));
+    session.paused = true; // barrera síncrona antes del primer await
+    if (!session.inFlight) return Promise.resolve();
+    return new Promise<void>(resolve => { session.drainWaiters.add(resolve); });
+  }
+
+  function resumeDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): void {
+    const session = heartbeatSessions.get(timer);
+    if (!session) throw new Error('Temporizador heartbeat SQLite no registrado.');
+    session.paused = false;
+  }
+
   function startDatabaseLockHeartbeat(
     lockPath: string,
     lock: DatabaseLockInfo,
   ): ReturnType<typeof setInterval> {
-    let inFlight = false;
-    return setInterval(() => {
+    const session = { paused: false, inFlight: false, drainWaiters: new Set<() => void>() };
+    const timer = setInterval(() => {
+      if (session.paused) return;
       // Un SMB bloqueado no debe acumular nuevos readFile/writeFile en libuv.
-      if (inFlight) return;
-      inFlight = true;
+      if (session.inFlight) return;
+      session.inFlight = true;
       heartbeatOperationsInFlight += 1;
       // PR9D-5C: contar hasta que la E/S SMB haya terminado realmente.
       // La instrumentación no detiene el heartbeat ni cambia su cadencia.
@@ -731,9 +759,15 @@ export function createDatabaseLockManager(
         .catch((error: unknown) => markHeartbeatFailure(error))
         .finally(() => {
           heartbeatOperationsInFlight -= 1;
-          inFlight = false;
+          session.inFlight = false;
+          if (session.paused) {
+            for (const resolve of session.drainWaiters) resolve();
+            session.drainWaiters.clear();
+          }
         });
     }, LOCK_HEARTBEAT_MS);
+    heartbeatSessions.set(timer, session);
+    return timer;
   }
 
   function setConnectivityIssueNotifier(
@@ -764,6 +798,8 @@ export function createDatabaseLockManager(
     releaseLock,
     withDatabaseOperationLock,
     startDatabaseLockHeartbeat,
+    pauseDatabaseLockHeartbeat,
+    resumeDatabaseLockHeartbeat,
     setConnectivityIssueNotifier,
     isDatabaseWriteBlockedByHeartbeat,
     clearHeartbeatBlock,
