@@ -20,6 +20,7 @@ export interface SqliteIntegrityRunOptions {
   createChild: () => SqliteIntegrityChild;
   databasePath: string;
   expected: ExpectedSqliteIdentity;
+  mode?: 'integrity' | 'health';
   timeoutMs?: number;
 }
 
@@ -67,6 +68,7 @@ export function runSqliteIntegrityWorker(options: SqliteIntegrityRunOptions): Pr
             kind: 'integrity:verify',
             databasePath: options.databasePath,
             expected: options.expected,
+            ...(options.mode === 'health' ? { mode: 'health' as const } : {}),
           });
         } catch {
           outcome = 'send-error';
