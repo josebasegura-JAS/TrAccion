@@ -107,15 +107,22 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
       await userB.page.getByRole('button', { name: 'Editar' }).click();
       await expect(userB.page.getByText('Editar calendario')).toBeVisible();
 
-      // A modifica y guarda el mismo calendario primero (activa/desactiva).
-      // El botón cambia de etiqueta ("Activar" <-> "Desactivar") una vez que
-      // el toggle se ha aplicado, así que usamos ese cambio como señal de
-      // que la escritura en SQLite ya se ha completado.
+      // A guarda primero. Comprobar la revisión REAL en SQLite, no un
+      // cambio de etiqueta del botón: la UI puede tardar en renderizar
+      // después de una escritura SMB o mostrar el estado de otra selección.
+      // Un fallo de guardado sigue haciendo fallar esta aserción.
       await userA.page.bringToFront();
       const toggleButton = userA.page.getByRole('button', { name: /^(Desactivar|Activar)$/ });
       const labelBeforeToggle = await toggleButton.innerText();
       await toggleButton.click();
-      await expect(toggleButton).not.toHaveText(labelBeforeToggle, { timeout: 10_000 });
+      await expect.poll(async () => {
+        const current = await userA.page.evaluate(async (id) => {
+          const snapshot = await window.traccion!.loadTicketRestauranteCalendarRecords!();
+          return snapshot.records.find(record => record.id === id)?.updatedAt ?? null;
+        }, calendarId);
+        return current;
+      }, { timeout: 20_000, message: 'El cambio de A debe quedar confirmado en SQLite antes de que B intente guardar' })
+        .not.toBe(staleRevision);
 
       const committedByA = await userA.page.evaluate(async (id) => {
         const snapshot = await window.traccion!.loadTicketRestauranteCalendarRecords!();
