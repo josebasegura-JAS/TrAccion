@@ -5,6 +5,9 @@ import { utilityProcess } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DetachedWriterRequest } from './detachedCriteriaWriterProtocol.js';
+import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
+import type { DetachedCriteriaSave, DetachedCriteriaSaveResult } from './detachedCriteriaWriterCore.js';
+import { saveCriteriaViaDetachedWriter } from './detachedCriteriaWriterRunner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,4 +28,24 @@ export function forkDetachedCriteriaWriter(): DetachedCriteriaWriterChild {
     onExit: handler => { child.on('exit', handler); },
     kill: () => { child.kill(); },
   };
+}
+
+/**
+ * Ruta real de ejecución del primer guardado auxiliar.
+ * No invocar contra producción hasta completar propiedad única, cola,
+ * locks distribuidos y migración de todos los módulos escritores.
+ */
+export function saveCriteriaInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  record: DetachedCriteriaSave,
+): Promise<DetachedCriteriaSaveResult> {
+  return saveCriteriaViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath,
+    expected,
+    operationId,
+    record,
+  });
 }
