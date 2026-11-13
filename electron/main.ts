@@ -1,5 +1,6 @@
 import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
 import { registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
+import { startSqliteWorkerProbeSupervisor } from './sqliteWorkerProbeSupervisor.js';
 import { startLocalInstanceUpdateListener } from './localUpdateInstances.js';
 import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
 import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics.js';
@@ -405,6 +406,32 @@ if (!app.requestSingleInstanceLock()) {
       });
     } catch (error) {
       console.warn('[main-watchdog] No se pudo iniciar el supervisor independiente.', error);
+    }
+    // PR9C: prueba del aislamiento, desactivada en producción por defecto.
+    // Este proceso NO abre SQLite ni participa en los bloqueos SMB.
+    // Activación explícita: TRACCION_SQLITE_WORKER_PROBE=1
+    if (process.env.TRACCION_SQLITE_WORKER_PROBE === '1') {
+      try {
+        const probe = startSqliteWorkerProbeSupervisor({
+          createChild: () => {
+            const child = utilityProcess.fork(path.join(__dirname, 'sqliteWorkerProbe.js'), [], {
+              serviceName: 'TrAcción SQLite isolation probe',
+            });
+            return {
+              postMessage: (message) => child.postMessage(message),
+              kill: () => { child.kill(); return true; },
+              onMessage: (handler) => { child.on('message', (event) => handler(event.data)); },
+              onExit: (handler) => { child.on('exit', handler); },
+            };
+          },
+          onState: (probeState) => {
+            console.info(`[sqlite-worker-probe] estado=${probeState}`);
+          },
+        });
+        app.on('will-quit', () => probe.stop());
+      } catch (error) {
+        console.warn('[sqlite-worker-probe] No se pudo iniciar el proceso auxiliar de prueba.', error);
+      }
     }
     Menu.setApplicationMenu(null);
     const splashStartedAt = Date.now();
