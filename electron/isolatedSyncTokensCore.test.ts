@@ -12,6 +12,9 @@ describe('Tokens multiusuario readonly', () => {
     const db = new Database(':memory:');
     try {
       const tables = new Set(Object.values(DIRECT_STORE_UPDATED_AT_TABLES).flat());
+      // Sorteos consulta también la tabla de exclusiones, aunque no figure
+      // entre los módulos directos de polling.
+      tables.add('sorteos_exclusion_records');
       tables.add('persisted_records');
       for (const name of tables) db.exec(`CREATE TABLE ${name} (updated_at TEXT)`);
       db.exec('CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT)');
