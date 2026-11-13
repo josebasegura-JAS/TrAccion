@@ -55,7 +55,7 @@ export function startSqliteWorkerProbeSupervisor(options: SqliteProbeSupervisorO
     if (pending?.id === data.id) pending = null;
   });
 
-  child.onExit((_code) => {
+  child.onExit(() => {
     exited = true;
     clearInterval(interval);
     pending = null;
