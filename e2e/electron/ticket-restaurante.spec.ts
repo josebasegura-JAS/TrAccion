@@ -59,14 +59,23 @@ test('flujo crítico: dos usuarios sobre el mismo traccion.sqlite detectan el co
   const calendarName = `E2E concurrencia ${Date.now()}`;
   const userA = await launchTraccionElectron({ sharedDatabaseDirectory });
   try {
-    await navigateToModule(userA.page, TICKET_RESTAURANTE_GROUP, TICKET_RESTAURANTE_MODULE);
-    await openCalendars(userA.page);
-    await userA.page.getByLabel('Nombre calendario').fill(calendarName);
-    await userA.page.getByRole('button', { name: 'Guardar', exact: true }).click();
-    await expect(userA.page.getByLabel('Selector calendario')).toContainText(calendarName, {
-      timeout: 10_000,
-    });
-    const calendarId = await userA.page.getByLabel('Selector calendario').inputValue();
+    // El E2E anterior ya cubre alta mediante UI. Este prueba exclusivamente
+    // concurrencia transaccional entre DOS IPC Electron independientes.
+    // Sembrar por el MISMO IPC nativo evita que una pantalla de recuperación
+    // haga no determinista la preparación (no se salta la persistencia real).
+    const calendarId = `ticket-e2e-${Date.now()}`;
+    const seededByA = await userA.page.evaluate(async ({ id, name }) => {
+      const now = new Date().toISOString();
+      const calendar = {
+        id, nombre: name, activo: true, diasSinTicket: [],
+        ticketIsoWeekdays: [1, 2, 3, 4, 5],
+        createdAt: now, updatedAt: now, deletedAt: null,
+      };
+      return window.traccion!.saveTicketRestauranteCalendarRecordIfUnchanged!({
+        id, expectedUpdatedAt: null, value: JSON.stringify(calendar),
+      });
+    }, { id: calendarId, name: calendarName });
+    expect(seededByA.ok, seededByA.message).toBe(true);
 
     const userB = await launchTraccionElectron({ sharedDatabaseDirectory });
     try {
