@@ -29,6 +29,8 @@ export interface SqliteLockLifecycle {
     lockPath: string,
     lock: DatabaseLockInfo,
   ): ReturnType<typeof setInterval>;
+  pauseDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): Promise<void>;
+  resumeDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): void;
   releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void>;
 }
 
@@ -60,6 +62,8 @@ export function createSqliteLockLifecycle(
     clearHeartbeatBlock: () => getManager().clearHeartbeatBlock(),
     startDatabaseLockHeartbeat: (lockPath, lock) =>
       getManager().startDatabaseLockHeartbeat(lockPath, lock),
+    pauseDatabaseLockHeartbeat: (timer) => getManager().pauseDatabaseLockHeartbeat(timer),
+    resumeDatabaseLockHeartbeat: (timer) => getManager().resumeDatabaseLockHeartbeat(timer),
     releaseLock: (lockPath, lock) => getManager().releaseLock(lockPath, lock),
   };
 }
