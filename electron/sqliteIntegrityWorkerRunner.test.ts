@@ -88,6 +88,24 @@ describe('PR9D · fin de vida y reconexión fail-closed', () => {
     expect(settled).toHaveBeenCalledWith('error');
   });
 
+  it('PR9D-2: envía modo health sin SQL arbitrario y no completa antes de exit', async () => {
+    const fake = fakeChild();
+    let settled = false;
+    const job = runSqliteIntegrityWorker({
+      createChild: () => fake.child, databasePath: 'Z:/traccion.sqlite', expected, mode: 'health',
+    }).then(() => { settled = true; });
+    fake.send({ kind: 'integrity:ready' });
+    expect(fake.postMessage).toHaveBeenCalledWith({
+      kind: 'integrity:verify', databasePath: 'Z:/traccion.sqlite', expected, mode: 'health',
+    });
+    fake.send({ kind: 'integrity:verified' });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    fake.exit(0);
+    await job;
+    expect(settled).toBe(true);
+  });
+
   it('si termina sin respuesta, bloquea aunque exit code sea 0', async () => {
     const fake = fakeChild();
     const job = runSqliteIntegrityWorker({
