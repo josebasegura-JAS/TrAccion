@@ -10,7 +10,7 @@ function fixture() {
   });
   const resumeHeartbeat = vi.fn(() => { events.push('resume'); });
   const freezeAndDrainOtherActivity = vi.fn(async () => { events.push('freeze'); return 7; });
-  const abortOtherActivityFreeze = vi.fn((_ticket: number) => { events.push('abort'); });
+  const abortOtherActivityFreeze = vi.fn((ticket: number) => { expect(ticket).toBe(7); events.push('abort'); });
   const controller = createSqliteHeartbeatHandoffPreparation({
     pauseHeartbeatAndDrain, resumeHeartbeat, freezeAndDrainOtherActivity, abortOtherActivityFreeze,
   });
