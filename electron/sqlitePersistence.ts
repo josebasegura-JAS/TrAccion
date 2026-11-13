@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
+import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
 import { isIsolatedJsonTable } from './persistence/isolatedJsonTables.js';
 import { readSessionsInUtilityProcess } from './sessionReadWorkerBridge.js';
@@ -429,8 +430,24 @@ const {
   isLockStale,
   releaseLock,
   startDatabaseLockHeartbeat,
-  withDatabaseOperationLock,
+  withDatabaseOperationLock: untrackedDatabaseOperationLock,
 } = sqliteLockLifecycle;
+
+/**
+ * PR9D-5B: contar tanto la espera por el lock SMB como la operación
+ * posterior. Solo se libera el contador tras resolver/rechazar de verdad.
+ * La cola IPC mantiene su semántica previa.
+ */
+function withDatabaseOperationLock<T>(
+  databasePath: string,
+  operation: () => Promise<T>,
+  waitMs?: number,
+): Promise<T> {
+  sqliteEngineOwnershipFence.assertMayEnterMain();
+  return sqliteIndependentActivityTracker.run('sqlite:shared-operation-lock', () =>
+    untrackedDatabaseOperationLock(databasePath, operation, waitMs));
+}
+
 
 export function setDatabaseConnectivityIssueNotifier(
   notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
