@@ -1,5 +1,6 @@
 import { AlertTriangle, Check, Info, X, CircleHelp } from 'lucide-react';
 import { useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 import { notificationLayout, notificationToneStyles } from './notificationStyles';
 
@@ -92,7 +93,7 @@ export function AppDialog({
     ? 'border-red-400/30 bg-red-950/20 shadow-red-950/20'
     : 'border-metro-border bg-metro-surface shadow-black/40';
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
       data-block-editor-shortcuts="true">
       <div
@@ -137,6 +138,7 @@ export function AppDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
