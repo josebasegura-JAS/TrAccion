@@ -76,7 +76,7 @@ import {
   type DatabaseLockInfo,
 } from './persistence/sqliteLockLifecycle.js';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
-import { verifySqliteIntegrityInUtilityProcess } from './sqliteIntegrityWorkerBridge.js';
+import { verifySqliteIntegrityInUtilityProcess, verifySqliteHealthInUtilityProcess } from './sqliteIntegrityWorkerBridge.js';
 import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
 import {
   describeSqliteRecoveryError,
@@ -746,21 +746,36 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       throw new Error('La ruta configurada ya no apunta a un fichero SQLite.');
     }
 
-    const db = requireDatabase();
-    diagnostic.stage('consulta', () => db.prepare('SELECT 1 AS ok').get());
-    const schemaVersion = diagnostic.stage('esquema', () => readCurrentSchemaVersion(db));
-    if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
-      throw new Error(
-        `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
-      );
-    }
+    // PR9D-2: despliegue opt-in para observar latencia y comportamiento real
+    // antes de sustituir la conexión principal de los módulos.
+    if (process.env.TRACCION_SQLITE_ISOLATED_HEALTH === '1') {
+      requireDatabase(); // comprueba estado local, sin realizar E/S nativa
+      if (!currentStatus.databaseUuid || !currentStatus.applicationId || !currentStatus.environment) {
+        throw new Error('La identidad SQLite validada no está disponible.');
+      }
+      await diagnostic.stageAsync('consulta', () => verifySqliteHealthInUtilityProcess(currentStatus.path, {
+        databaseUuid: currentStatus.databaseUuid!,
+        applicationId: currentStatus.applicationId!,
+        environment: currentStatus.environment!,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+      }));
+    } else {
+      const db = requireDatabase();
+      diagnostic.stage('consulta', () => db.prepare('SELECT 1 AS ok').get());
+      const schemaVersion = diagnostic.stage('esquema', () => readCurrentSchemaVersion(db));
+      if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
+        throw new Error(
+          `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
+        );
+      }
 
-    const identity = diagnostic.stage('identidad', () => readDatabaseIdentity(db));
-    if (!identity || !currentStatus.databaseUuid || identity.databaseUuid !== currentStatus.databaseUuid) {
-      throw new Error('La identidad de la base SQLite ha cambiado durante la sesión.');
-    }
-    if (identity.applicationId !== currentStatus.applicationId || identity.environment !== currentStatus.environment) {
-      throw new Error('Los metadatos de la base SQLite ya no coinciden con la base validada al iniciar.');
+      const identity = diagnostic.stage('identidad', () => readDatabaseIdentity(db));
+      if (!identity || !currentStatus.databaseUuid || identity.databaseUuid !== currentStatus.databaseUuid) {
+        throw new Error('La identidad de la base SQLite ha cambiado durante la sesión.');
+      }
+      if (identity.applicationId !== currentStatus.applicationId || identity.environment !== currentStatus.environment) {
+        throw new Error('Los metadatos de la base SQLite ya no coinciden con la base validada al iniciar.');
+      }
     }
 
     // Esta comprobación se ejecuta dentro de la cola IPC, después de

@@ -4,6 +4,7 @@
  * termina al recibir shutdown DESPUÉS de completar quick_check e identidad.
  */
 import { verifySqliteIntegrityReadOnly } from './persistence/sqliteIntegrityVerification.js';
+import { verifySqliteHealthReadOnly } from './persistence/sqliteHealthVerification.js';
 import { isSqliteIntegrityWorkerRequest } from './sqliteIntegrityWorkerProtocol.js';
 
 const port = process.parentPort;
@@ -20,7 +21,11 @@ port.on('message', (event: { data: unknown }) => {
   if (completed) return;
   completed = true;
   try {
-    verifySqliteIntegrityReadOnly(message.databasePath, message.expected);
+    if (message.mode === 'health') {
+      verifySqliteHealthReadOnly(message.databasePath, message.expected);
+    } else {
+      verifySqliteIntegrityReadOnly(message.databasePath, message.expected);
+    }
     port.postMessage({ kind: 'integrity:verified' });
   } catch {
     // Un mensaje nativo de SQLite/Node puede exponer rutas UNC o SQL.

@@ -5,7 +5,7 @@
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
 
 export type SqliteIntegrityWorkerRequest =
-  | { kind: 'integrity:verify'; databasePath: string; expected: ExpectedSqliteIdentity }
+  | { kind: 'integrity:verify'; databasePath: string; expected: ExpectedSqliteIdentity; mode?: 'health' | 'integrity' }
   | { kind: 'integrity:shutdown' };
 
 export type SqliteIntegrityWorkerResponse =
@@ -18,6 +18,7 @@ export function isSqliteIntegrityWorkerRequest(value: unknown): value is SqliteI
   const message = value as Record<string, unknown>;
   if (message.kind === 'integrity:shutdown') return true;
   if (message.kind !== 'integrity:verify') return false;
+  if (message.mode !== undefined && message.mode !== 'health' && message.mode !== 'integrity') return false;
   if (typeof message.databasePath !== 'string' || !message.databasePath.trim()) return false;
   const expected = message.expected;
   if (!expected || typeof expected !== 'object') return false;
