@@ -788,9 +788,12 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     // SOLO errores de stat compatibles con red caída: tras tres fallos
     // consecutivos activar la recuperación existente (en el siguiente check).
     // Una comprobación exitosa reinicia el contador antes de tocar SQLite.
-    const recurrentFileFailure = failedStage === 'archivo'
-      ? healthFileFailureTracker.observe(error)
-      : (healthFileFailureTracker.reset(), false);
+    let recurrentFileFailure = false;
+    if (failedStage === 'archivo') {
+      recurrentFileFailure = healthFileFailureTracker.observe(error);
+    } else {
+      healthFileFailureTracker.reset();
+    }
     if (isSqliteIoError(error) || recurrentFileFailure) suspendDatabaseAfterIoError(error);
     writeHealthDiagnostic('failed', (failedStage as SqliteRecoveryStage | null) ?? 'sin-etapa', error);
     const message =
