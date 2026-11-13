@@ -428,8 +428,10 @@ export function getSqliteWriterHandoffReadiness(): {
   if (sqliteEngineOwnershipFence.snapshot().owner !== 'main') {
     blockers.push('El proceso principal no es propietario activo de SQLite.');
   }
-  // No habilitar cesión sin cobertura de TODOS los accesos extracola.
-  blockers.push('Cesión del escritor deshabilitada: heartbeat, mantenimiento y cierre todavía no integrados en la barrera global.');
+  // El heartbeat, activación y cierre normal se observan, pero siguen existiendo
+  // caminos de mantenimiento y callbacks directos sin barrera de admisión global.
+  // Evitar un falso positivo: monitorizar no equivale a detener nuevas entradas.
+  blockers.push('Cesión aún deshabilitada: faltan barrera global de admisión y cobertura exhaustiva de restauración/mantenimiento.');
   return { ready: false, blockers, independentActive: activity.active };
 }
 
@@ -445,7 +447,10 @@ function getLocalBackupService(): LocalBackupService {
 // Aquí se mantienen únicamente las operaciones que dependen del estado vivo
 // de sqlitePersistence (p. ej. liberación manual + reactivación de la base).
 
-const sqliteLockLifecycle = createSqliteLockLifecycle(() => ownerId);
+const sqliteLockLifecycle = createSqliteLockLifecycle(
+  () => ownerId,
+  (operation) => sqliteIndependentActivityTracker.run('sqlite:heartbeat-smb', operation),
+);
 
 const {
   acquireLock,
@@ -603,7 +608,9 @@ async function recoverDatabaseAfterIoError(): Promise<void> {
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
-  closeDatabase();
+  await sqliteIndependentActivityTracker.run('sqlite:close-handle', () => {
+    closeDatabase();
+  });
 }
 
 async function activateDatabase(
@@ -612,18 +619,20 @@ async function activateDatabase(
   sourceDatabasePath: string | null,
 ): Promise<DatabaseStatus> {
   sqliteEngineOwnershipFence.assertMayEnterMain();
-  const activated = await activateSqliteDatabase(
-    directoryPath,
-    isDefaultPath,
-    sourceDatabasePath,
-    {
-      ownerId,
-      busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS,
-      getLockPath,
-      acquireStartupLock,
-      startDatabaseLockHeartbeat,
-      releaseLock,
-    },
+  const activated = await sqliteIndependentActivityTracker.run('sqlite:activate', () =>
+    activateSqliteDatabase(
+      directoryPath,
+      isDefaultPath,
+      sourceDatabasePath,
+      {
+        ownerId,
+        busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS,
+        getLockPath,
+        acquireStartupLock,
+        startDatabaseLockHeartbeat,
+        releaseLock,
+      },
+    ),
   );
   database = activated.database;
   status = activated.status;
