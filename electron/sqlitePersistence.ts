@@ -104,6 +104,7 @@ import {
   isSqliteCorruptionError,
   isSqliteLockContentionError,
   isSqliteIoError,
+  createSqliteHealthFileFailureTracker,
 } from './persistence/sqliteOperationGuard.js';
 import {
   isCountRow,
@@ -678,6 +679,10 @@ async function safeDatabaseMigrationOperation<T>(
   return runCurrentSqliteIpcAsWrite(() => safeDatabaseOperation(operation, fallback));
 }
 
+// PR9B: el contador es local al proceso y solo decide si solicitar una reapertura
+// ya serializada. Nunca reintenta automáticamente escrituras inciertas.
+const healthFileFailureTracker = createSqliteHealthFileFailureTracker();
+
 export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   const checkedAt = new Date().toISOString();
   const healthStartedAt = Date.now();
@@ -736,6 +741,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   const diagnostic = createSqliteStageDiagnostic('health');
   try {
     const databaseStats = await diagnostic.stageAsync('archivo', () => stat(currentStatus.path));
+    healthFileFailureTracker.reset();
     if (!databaseStats.isFile()) {
       throw new Error('La ruta configurada ya no apunta a un fichero SQLite.');
     }
@@ -779,7 +785,13 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     };
   } catch (error) {
     const failedStage = diagnostic.snapshot().failedStage;
-    if (isSqliteIoError(error)) suspendDatabaseAfterIoError(error);
+    // SOLO errores de stat compatibles con red caída: tras tres fallos
+    // consecutivos activar la recuperación existente (en el siguiente check).
+    // Una comprobación exitosa reinicia el contador antes de tocar SQLite.
+    const recurrentFileFailure = failedStage === 'archivo'
+      ? healthFileFailureTracker.observe(error)
+      : (healthFileFailureTracker.reset(), false);
+    if (isSqliteIoError(error) || recurrentFileFailure) suspendDatabaseAfterIoError(error);
     writeHealthDiagnostic('failed', (failedStage as SqliteRecoveryStage | null) ?? 'sin-etapa', error);
     const message =
       error instanceof Error
