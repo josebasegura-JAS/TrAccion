@@ -24,7 +24,8 @@ function setup(tableName: string) {
       getMigrationDone: () => false, setMigrationDone: () => undefined,
     },
     {
-      safeDatabaseOperation: async <T>(operation: () => T) => operation(),
+      safeDatabaseOperation: <T>(operation: () => T | Promise<T>): Promise<T> =>
+          Promise.resolve(operation()) as Promise<T>,
       safeDatabaseMigrationOperation: async <T>(operation: () => T) => operation(),
       getSqliteStatus: () => status,
       requireDatabase: () => db,
