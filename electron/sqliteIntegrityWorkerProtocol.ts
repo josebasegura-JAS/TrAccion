@@ -9,6 +9,7 @@ export type SqliteIntegrityWorkerRequest =
   | { kind: 'integrity:shutdown' };
 
 export type SqliteIntegrityWorkerResponse =
+  | { kind: 'integrity:ready' }
   | { kind: 'integrity:verified' }
   | { kind: 'integrity:rejected' };
 
@@ -30,5 +31,5 @@ export function isSqliteIntegrityWorkerRequest(value: unknown): value is SqliteI
 export function isSqliteIntegrityWorkerResponse(value: unknown): value is SqliteIntegrityWorkerResponse {
   if (!value || typeof value !== 'object') return false;
   const kind = (value as { kind?: unknown }).kind;
-  return kind === 'integrity:verified' || kind === 'integrity:rejected';
+  return kind === 'integrity:ready' || kind === 'integrity:verified' || kind === 'integrity:rejected';
 }
