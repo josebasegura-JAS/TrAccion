@@ -8,7 +8,7 @@ describe('PR9D-5B · barrera observable de E/S fuera de IPC', () => {
     const first = tracker.run('backup:shared', () => new Promise<void>(resolve => { resolveFirst = resolve; }));
     let resolveSecond!: () => void;
     const second = tracker.run('sqlite:lock', () => new Promise<void>(resolve => { resolveSecond = resolve; }));
-    expect(tracker.snapshot()).toEqual({ active: 2, labels: ['backup:shared', 'sqlite:lock'] });
+    expect(tracker.snapshot()).toEqual({ active: 2, labels: ['backup:shared', 'sqlite:lock'], frozen: false });
     expect(() => tracker.assertIdle()).toThrow('E/S independiente');
     resolveFirst();
     await first;
