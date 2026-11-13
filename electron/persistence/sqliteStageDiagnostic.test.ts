@@ -53,4 +53,22 @@ describe('instrumentación por etapas SQLite', () => {
     diagnostic.finish();
     expect(record).toHaveBeenCalledWith('sqlite-stage', 'test:error:archivo', 7, true);
   });
+  it('PR9A: expone etapa activa, fallida y duraciones sin alterar la propagación', async () => {
+    const diagnostic = createSqliteStageDiagnostic('test:pr9a', { record: vi.fn() });
+    expect(diagnostic.snapshot()).toEqual({ currentStage: null, failedStage: null, stages: [] });
+    diagnostic.stage('consulta', () => {
+      expect(diagnostic.snapshot().currentStage).toBe('consulta');
+      return 1;
+    });
+    await expect(diagnostic.stageAsync('archivo', async () => {
+      expect(diagnostic.snapshot().currentStage).toBe('archivo');
+      throw new Error('fallo de red');
+    })).rejects.toThrow('fallo de red');
+    expect(diagnostic.snapshot().currentStage).toBeNull();
+    expect(diagnostic.snapshot().failedStage).toBe('archivo');
+    expect(diagnostic.snapshot().stages.map((item) => [item.name, item.failed])).toEqual([
+      ['consulta', false], ['archivo', true],
+    ]);
+  });
+
 });

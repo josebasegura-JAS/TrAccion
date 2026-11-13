@@ -32,30 +32,38 @@ export function createSqliteStageDiagnostic(
   const startedAt = now();
   const stages: Array<{ name: StageName; elapsedMs: number; failed: boolean }> = [];
   let finished = false;
+  let currentStage: StageName | null = null;
+  let failedStage: StageName | null = null;
 
   function stage<T>(name: StageName, action: () => T): T {
     const started = now();
+    currentStage = name;
     let failed = false;
     try {
       return action();
     } catch (error) {
       failed = true;
+      failedStage = name;
       throw error;
     } finally {
       stages.push({ name, elapsedMs: now() - started, failed });
+      currentStage = null;
     }
   }
 
   async function stageAsync<T>(name: StageName, action: () => Promise<T>): Promise<T> {
     const started = now();
+    currentStage = name;
     let failed = false;
     try {
       return await action();
     } catch (error) {
       failed = true;
+      failedStage = name;
       throw error;
     } finally {
       stages.push({ name, elapsedMs: now() - started, failed });
+      currentStage = null;
     }
   }
 
@@ -71,5 +79,9 @@ export function createSqliteStageDiagnostic(
     }
   }
 
-  return { stage, stageAsync, finish };
+  function snapshot(): { currentStage: string | null; failedStage: string | null; stages: Array<{ name: string; elapsedMs: number; failed: boolean }> } {
+    return { currentStage, failedStage, stages: stages.map((item) => ({ ...item })) };
+  }
+
+  return { stage, stageAsync, finish, snapshot };
 }

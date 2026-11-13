@@ -78,6 +78,12 @@ import {
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { verifySqliteIntegrityReadOnly } from './persistence/sqliteIntegrityVerification.js';
 import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
+import {
+  describeSqliteRecoveryError,
+  shouldWriteSqliteHealthDiagnostic,
+  writeSqliteRecoveryDiagnostic,
+  type SqliteRecoveryStage,
+} from './persistence/sqliteRecoveryDiagnostics.js';
 import { activateSqliteDatabase } from './persistence/databaseActivation.js';
 import { backupExistingDatabase } from './persistence/emergencyDatabaseBackup.js';
 import { forceReleaseDatabaseLockWithRecovery } from './persistence/databaseLockRecovery.js';
@@ -490,34 +496,59 @@ function suspendDatabaseAfterIoError(error: unknown, suspectedCorruption = false
 async function recoverDatabaseAfterIoError(): Promise<void> {
   if (!sqliteIoRecoveryRequired) return;
   const previous = getSqliteStatus();
-  // Este método se llama únicamente desde database:health-check serializado
-  // por sqliteIpcQueue. Si el cierre falla, NO abrimos otra conexión.
-  closeDatabase();
-  // Antes de cualquier apertura normal (que ejecuta migraciones y limpieza),
-  // verificar en modo read-only el mismo fichero y la misma identidad.
-  if (sqliteSuspectedCorruption) {
-    if (!previous.databaseUuid || !previous.applicationId || !previous.environment) {
-      throw new Error('No hay identidad SQLite suficiente para una recuperación automática segura.');
-    }
-    verifySqliteIntegrityReadOnly(previous.path, {
-      databaseUuid: previous.databaseUuid,
-      applicationId: previous.applicationId,
-      environment: previous.environment,
-      schemaVersion: previous.schemaVersion,
+  const startedAt = Date.now();
+  let stage: SqliteRecoveryStage = 'cierre';
+  const queue = getSqliteIpcQueueDiagnostics();
+  const log = (outcome: 'started' | 'ok' | 'failed', error?: unknown): void => {
+    writeSqliteRecoveryDiagnostic({
+      event: 'recovery', outcome, stage, durationMs: Date.now() - startedAt,
+      recoveryRequired: sqliteIoRecoveryRequired, queue,
+      ...(error === undefined ? {} : describeSqliteRecoveryError(error)),
     });
-  }
-  const recovered = await activateDatabase(path.dirname(previous.path), false, null);
-  if (recovered.databaseUuid !== previous.databaseUuid ||
-      recovered.applicationId !== previous.applicationId ||
-      recovered.environment !== previous.environment ||
-      recovered.schemaVersion !== previous.schemaVersion) {
+  };
+  // Registrar el inicio ANTES de cualquier llamada síncrona potencialmente
+  // bloqueante: si Electron no vuelve, quedará identificada la última etapa.
+  try {
+    log('started');
+    // La cola IPC garantiza que ninguna escritura anterior siga en curso.
+    // No modificar aquí el protocolo de cierre y reapertura existente.
     closeDatabase();
-    throw new Error('La identidad o el esquema de SQLite ha cambiado. No se reactivará la edición.');
-  }
-  sqliteIoRecoveryRequired = false;
-  sqliteSuspectedCorruption = false;
-}
 
+    if (sqliteSuspectedCorruption) {
+      stage = 'verificacion';
+      log('started');
+      if (!previous.databaseUuid || !previous.applicationId || !previous.environment) {
+        throw new Error('No hay identidad SQLite suficiente para una recuperación automática segura.');
+      }
+      verifySqliteIntegrityReadOnly(previous.path, {
+        databaseUuid: previous.databaseUuid,
+        applicationId: previous.applicationId,
+        environment: previous.environment,
+        schemaVersion: previous.schemaVersion,
+      });
+    }
+
+    stage = 'reapertura';
+    log('started');
+    const recovered = await activateDatabase(path.dirname(previous.path), false, null);
+    stage = 'validacion-identidad';
+    log('started');
+    if (recovered.databaseUuid !== previous.databaseUuid ||
+        recovered.applicationId !== previous.applicationId ||
+        recovered.environment !== previous.environment ||
+        recovered.schemaVersion !== previous.schemaVersion) {
+      closeDatabase();
+      throw new Error('La identidad o el esquema de SQLite ha cambiado. No se reactivará la edición.');
+    }
+
+    sqliteIoRecoveryRequired = false;
+    sqliteSuspectedCorruption = false;
+    log('ok');
+  } catch (error) {
+    log('failed', error);
+    throw error;
+  }
+}
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
   closeDatabase();
@@ -649,10 +680,23 @@ async function safeDatabaseMigrationOperation<T>(
 
 export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   const checkedAt = new Date().toISOString();
+  const healthStartedAt = Date.now();
+  const healthQueue = getSqliteIpcQueueDiagnostics();
+  const writeHealthDiagnostic = (outcome: 'ok' | 'failed' | 'skipped', stage: SqliteRecoveryStage, error?: unknown) => {
+    const durationMs = Date.now() - healthStartedAt;
+    if (!shouldWriteSqliteHealthDiagnostic(outcome, durationMs)) return;
+    writeSqliteRecoveryDiagnostic({
+      event: 'health', outcome, stage, durationMs,
+      recoveryRequired: sqliteIoRecoveryRequired,
+      queue: healthQueue,
+      ...(error === undefined ? {} : describeSqliteRecoveryError(error)),
+    });
+  };
   const queue = getSqliteIpcQueueDiagnostics();
   // El health-check debe ejecutarse en la cola IPC: una escritura que agotó
   // el timeout sigue activa y no puede coexistir con el cierre/reapertura.
   if (queue.timedOut) {
+    writeHealthDiagnostic('skipped', 'sin-etapa');
     return {
       ok: false,
       status: getSqliteStatus(),
@@ -665,6 +709,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       await recoverDatabaseAfterIoError();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      writeHealthDiagnostic('failed', 'sin-etapa', error);
       status = { ...getSqliteStatus(), ready: false, phase: 'fallback', message: `Recuperación SQLite pendiente (edición bloqueada): ${message}` };
       return { ok: false, status: getSqliteStatus(), checkedAt, message: status.message ?? message };
     }
@@ -672,6 +717,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   const currentStatus = getSqliteStatus();
 
   if (!currentStatus.ready || currentStatus.phase !== 'active' || currentStatus.isDefaultPath) {
+    writeHealthDiagnostic('skipped', 'sin-etapa');
     return {
       ok: false,
       status: currentStatus,
@@ -715,6 +761,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     // comprobar fichero, SELECT, esquema e identidad. Nunca rehabilitar
     // escrituras si sigue pendiente una E/S de heartbeat anterior.
     if (!diagnostic.stage('bloqueo-heartbeat', () => clearHeartbeatBlock())) {
+      writeHealthDiagnostic('failed', 'bloqueo-heartbeat');
       return {
         ok: false,
         status: getSqliteStatus(),
@@ -723,6 +770,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       };
     }
 
+    writeHealthDiagnostic('ok', 'bloqueo-heartbeat');
     return {
       ok: true,
       status: getSqliteStatus(),
@@ -730,7 +778,9 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       message: 'Conexión con la base compartida verificada.',
     };
   } catch (error) {
+    const failedStage = diagnostic.snapshot().failedStage;
     if (isSqliteIoError(error)) suspendDatabaseAfterIoError(error);
+    writeHealthDiagnostic('failed', (failedStage as SqliteRecoveryStage | null) ?? 'sin-etapa', error);
     const message =
       error instanceof Error
         ? `No se puede verificar la base SQLite compartida: ${error.message}`
