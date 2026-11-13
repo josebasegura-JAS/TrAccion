@@ -65,7 +65,7 @@ function mapTaskRecordRow(row: TaskRecordRow): SqliteTaskRecord {
   };
 }
 
-function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecord[] {
+export function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecord[] {
   if (filter.ids !== undefined) {
     if (filter.ids.length === 0) return [];
     // Los identificadores son valores parametrizados, nunca SQL interpolado.
@@ -105,7 +105,7 @@ function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): Sq
  */
 export interface TaskRepositoryDeps {
   safeDatabaseOperation: <T>(
-    operation: () => T,
+    operation: () => T | Promise<T>,
     fallback: (status: DatabaseStatus, message: string) => T,
   ) => Promise<T>;
   getSqliteStatus: () => DatabaseStatus;
@@ -121,6 +121,7 @@ export interface TaskRepositoryDeps {
   assertDatabaseWritesAllowed: () => void;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
   findForeignTaskEditingLock: (db: Database, taskId: string) => { ownerName: string; machineName: string } | null;
+  isolatedTaskRead?: (filter: SqliteTaskRecordsFilter, status: DatabaseStatus) => Promise<SqliteTaskRecord[]>;
 }
 
 export interface TaskRepositoryApi {
@@ -207,6 +208,20 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
   async function loadTaskRecordsSnapshot(
     filter: SqliteTaskRecordsFilter = {},
   ): Promise<SqliteTaskRecordsSnapshot> {
+    if (deps.isolatedTaskRead && process.env.TRACCION_SQLITE_ISOLATED_TASK_READ === '1') {
+      return safeDatabaseOperation(async () => {
+        const currentStatus = getSqliteStatus();
+        if (!currentStatus.ready || currentStatus.phase !== 'active') {
+          return { status: currentStatus, records: [] };
+        }
+        // Preservar migración legacy exactamente como antes; puede escribir.
+        // Se hace dentro de la misma cola IPC y del bloqueo de operación.
+        const db = requireDatabase();
+        db.transaction(() => maybeMigrateTasksFromPersistedRecord(db))();
+        const records = await deps.isolatedTaskRead!(filter, currentStatus);
+        return { status: currentStatus, records };
+      }, (nextStatus) => ({ status: nextStatus, records: [] }));
+    }
     return safeDatabaseOperation(
       () => {
         const currentStatus = getSqliteStatus();
