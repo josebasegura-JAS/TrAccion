@@ -1,4 +1,5 @@
 import { stat } from 'node:fs/promises';
+import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 import path from 'node:path';
 import { getSqliteIpcQueueDiagnostics, runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import {
@@ -560,6 +561,7 @@ async function activateDatabase(
   isDefaultPath: boolean,
   sourceDatabasePath: string | null,
 ): Promise<DatabaseStatus> {
+  sqliteEngineOwnershipFence.assertMayEnterMain();
   const activated = await activateSqliteDatabase(
     directoryPath,
     isDefaultPath,
@@ -620,6 +622,7 @@ export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
 }
 
 function requireDatabase(): Database {
+  sqliteEngineOwnershipFence.assertMayEnterMain();
   if (!database) {
     throw new Error('SQLite no está inicializado.');
   }
