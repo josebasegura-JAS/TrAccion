@@ -5,6 +5,8 @@ import {
   isSqliteCorruptionError,
   isSqliteLockContentionError,
   isSqliteIoError,
+  isRecoverableSqliteHealthFileError,
+  createSqliteHealthFileFailureTracker,
 } from './sqliteOperationGuard';
 
 describe('sqliteOperationGuard — isSqliteCorruptionError', () => {
@@ -102,5 +104,41 @@ describe('sqliteOperationGuard — isSqliteIoError', () => {
     expect(isSqliteIoError(Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' }))).toBe(false);
     expect(isSqliteIoError(new Error('database disk image is malformed'))).toBe(false);
     expect(isSqliteIoError(undefined)).toBe(false);
+  });
+});
+
+describe('PR9B · fallos de acceso SMB en el health-check', () => {
+  const fsError = (code: string, syscall = 'stat') =>
+    Object.assign(new Error('mensaje arbitrario'), { code, syscall, errno: -4094 });
+
+  it('reconoce UNKNOWN de fs.stat y los cortes típicos de red, sin afectar escrituras', () => {
+    expect(isRecoverableSqliteHealthFileError(fsError('UNKNOWN'))).toBe(true);
+    expect(isRecoverableSqliteHealthFileError(fsError('ETIMEDOUT'))).toBe(true);
+    expect(isRecoverableSqliteHealthFileError(fsError('ENETUNREACH'))).toBe(true);
+    expect(isRecoverableSqliteHealthFileError(fsError('UNKNOWN', 'write'))).toBe(false);
+    expect(isRecoverableSqliteHealthFileError(fsError('UNKNOWN', 'mkdir'))).toBe(false);
+    expect(isRecoverableSqliteHealthFileError(fsError('ENOENT'))).toBe(false);
+    expect(isRecoverableSqliteHealthFileError(fsError('EACCES'))).toBe(false);
+    expect(isRecoverableSqliteHealthFileError({ code: 'SQLITE_BUSY' })).toBe(false);
+  });
+
+  it('solicita recuperación solo a partir del tercer fallo consecutivo', () => {
+    const tracker = createSqliteHealthFileFailureTracker();
+    expect(tracker.observe(fsError('UNKNOWN'))).toBe(false);
+    expect(tracker.observe(fsError('UNKNOWN'))).toBe(false);
+    expect(tracker.count()).toBe(2);
+    tracker.reset(); // stat correcto
+    expect(tracker.observe(fsError('UNKNOWN'))).toBe(false);
+    expect(tracker.observe(fsError('ETIMEDOUT'))).toBe(false);
+    expect(tracker.observe(fsError('UNKNOWN'))).toBe(true);
+  });
+
+  it('reinicia el contador cuando aparece un error de archivo no recuperable', () => {
+    const tracker = createSqliteHealthFileFailureTracker();
+    tracker.observe(fsError('UNKNOWN'));
+    tracker.observe(fsError('UNKNOWN'));
+    expect(tracker.observe(fsError('ENOENT'))).toBe(false);
+    expect(tracker.count()).toBe(0);
+    expect(tracker.observe(fsError('UNKNOWN'))).toBe(false);
   });
 });

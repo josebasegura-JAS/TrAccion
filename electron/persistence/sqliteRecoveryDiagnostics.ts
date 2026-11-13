@@ -19,6 +19,8 @@ export interface SqliteRecoveryDiagnosticEvent {
   errorCode?: string;
   errorName?: string;
   errorMessage?: string;
+  errorErrno?: number;
+  errorSyscall?: string;
   recoveryRequired?: boolean;
   queue?: {
     queuedOperations: number;
@@ -33,11 +35,15 @@ const MAX_FILE_BYTES = 512 * 1024;
 const MAX_MESSAGE_LENGTH = 160;
 let healthyChecks = 0;
 
-export function describeSqliteRecoveryError(error: unknown): Pick<SqliteRecoveryDiagnosticEvent, 'errorCode' | 'errorName' | 'errorMessage'> {
+export function describeSqliteRecoveryError(error: unknown): Pick<SqliteRecoveryDiagnosticEvent, 'errorCode' | 'errorName' | 'errorMessage' | 'errorErrno' | 'errorSyscall'> {
   if (!error || typeof error !== 'object') return { errorName: 'Unknown' };
-  const candidate = error as { code?: unknown; name?: unknown; message?: unknown };
+  const candidate = error as { code?: unknown; name?: unknown; message?: unknown; errno?: unknown; syscall?: unknown };
   const errorCode = typeof candidate.code === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(candidate.code)
     ? candidate.code : undefined;
+  const errorErrno = typeof candidate.errno === 'number' && Number.isSafeInteger(candidate.errno)
+    ? candidate.errno : undefined;
+  const errorSyscall = typeof candidate.syscall === 'string' && /^(?:stat|lstat|open|read|write|close|access|rename|unlink|mkdir|rmdir|scandir|fstat)$/.test(candidate.syscall)
+    ? candidate.syscall : undefined;
   const errorName = typeof candidate.name === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(candidate.name)
     ? candidate.name : 'Error';
   // En las excepciones de fs/SQLite el mensaje puede incluir UNC, usuarios o
@@ -52,7 +58,7 @@ export function describeSqliteRecoveryError(error: unknown): Pick<SqliteRecovery
     : raw.startsWith('La ruta configurada') ? 'Fichero SQLite no válido'
     : raw.startsWith('SQLite no está inicializado') ? 'Conexión SQLite no inicializada'
     : raw ? 'Error sin código normalizado' : 'Sin mensaje';
-  return { errorCode, errorName, errorMessage: errorMessage.slice(0, MAX_MESSAGE_LENGTH) };
+  return { errorCode, errorName, errorMessage: errorMessage.slice(0, MAX_MESSAGE_LENGTH), ...(errorErrno === undefined ? {} : { errorErrno }), ...(errorSyscall === undefined ? {} : { errorSyscall }) };
 }
 
 /** Muestrea operaciones saludables para evitar ruido; conserva todos los fallos y lentas. */
