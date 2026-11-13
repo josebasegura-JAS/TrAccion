@@ -8,7 +8,7 @@
  * en un instante solo puede existir un propietario lógico. Una salida incierta
  * del worker entra en quarantine y NUNCA hace fallback automático a main.
  */
-export type SqliteEngineOwner = 'main' | 'draining' | 'worker' | 'quarantine';
+export type SqliteEngineOwner = 'main' | 'draining' | 'main-closed' | 'worker' | 'quarantine';
 export type SqliteEngineOwnerSnapshot = Readonly<{ owner: SqliteEngineOwner; generation: number }>;
 
 export interface SqliteQueueState {
@@ -51,9 +51,15 @@ export function createSqliteEngineOwnershipFence() {
       }
       owner = 'main'; // solo antes de cerrar main y antes de crear worker
     },
-    confirmMainClosedAndWorkerStarted(ticket: number): void {
+    confirmMainHandleClosed(ticket: number): void {
       if (owner !== 'draining' || ticket !== generation) {
-        throw new Error('No se puede activar el worker sin cerrar primero el handle principal.');
+        throw new Error('La confirmación de cierre no coincide con la cesión actual.');
+      }
+      owner = 'main-closed';
+    },
+    confirmWorkerStarted(ticket: number): void {
+      if (owner !== 'main-closed' || ticket !== generation) {
+        throw new Error('No se puede activar worker sin cierre confirmado del handle principal.');
       }
       owner = 'worker';
     },
