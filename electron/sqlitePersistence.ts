@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
+import { readTasksInUtilityProcess } from './taskReadWorkerBridge.js';
 import path from 'node:path';
 import { getSqliteIpcQueueDiagnostics, runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import {
@@ -631,7 +632,7 @@ function requireDatabase(): Database {
 }
 
 async function safeDatabaseOperation<T>(
-  operation: () => T,
+  operation: () => T | Promise<T>,
   fallback: (status: DatabaseStatus, message: string) => T,
 ): Promise<T> {
   if (sqliteIoRecoveryRequired) {
@@ -1561,6 +1562,17 @@ const taskModule = createTaskRepository({
   assertDatabaseWritesAllowed,
   isDatabaseWriteBlockedByHeartbeat,
   findForeignTaskEditingLock: (db, taskId) => findForeignTaskEditingLock(db, taskId, ownerId),
+  isolatedTaskRead: async (filter, currentStatus) => {
+    if (!currentStatus.databaseUuid || !currentStatus.applicationId || !currentStatus.environment) {
+      throw new Error('Identidad SQLite validada no disponible para lectura aislada.');
+    }
+    return readTasksInUtilityProcess(currentStatus.path, {
+      databaseUuid: currentStatus.databaseUuid,
+      applicationId: currentStatus.applicationId,
+      environment: currentStatus.environment,
+      schemaVersion: currentStatus.schemaVersion,
+    }, filter);
+  },
 });
 const { loadTaskRecordsSnapshot, saveTaskRecordIfUnchanged } = taskModule;
 export { loadTaskRecordsSnapshot, saveTaskRecordIfUnchanged };
