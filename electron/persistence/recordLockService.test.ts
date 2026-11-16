@@ -139,7 +139,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
       async <T>(label: string, operation: () => T | Promise<T>) =>
         tracker.run(label, operation),
     );
-    const service = createRecordLockService(deps);
+    const service = createRecordLockService(deps as Parameters<typeof createRecordLockService>[0]);
     const ticket = tracker.beginFreeze();
     const lock = await service.getRecordLock({ module: 'tareas', recordId: 'task-1' });
     const other = await service.listOtherLocks('tareas');
