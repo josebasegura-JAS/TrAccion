@@ -126,6 +126,9 @@ export interface LocalBackupService {
   getActivitySnapshot: () => LocalBackupActivitySnapshot;
   enqueueLocalBackup: (reason: string) => void;
   flushPendingLocalBackup: () => Promise<void>;
+  /** Preparación reversible del futuro handoff: detener timers sin perder cambios pendientes. */
+  pauseSchedulingForHandoff: () => void;
+  resumeSchedulingAfterAbortedHandoff: () => void;
   createShutdownLocalBackup: () => Promise<ShutdownBackupMetrics>;
   createManualLocalBackup: () => Promise<void>;
   listLocalBackups: () => Promise<LocalBackupEntry[]>;
@@ -165,6 +168,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   let localBackupQueue: Promise<void> = Promise.resolve();
   let backupWorkRunning = 0;
   let localBackupTimer: ReturnType<typeof setTimeout> | null = null;
+  let schedulingPausedForHandoff = false;
   let pendingLocalBackupReason: string | null = null;
   // Revisión de cambios de esta sesión. Si todos los cambios ya están incluidos
   // en una copia viva completada, repetir un backup completo al cerrar solo
@@ -332,7 +336,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   const schedulePendingBackup = (): void => {
-    if (localBackupTimer || backupRevision <= backedUpRevision) return;
+    if (schedulingPausedForHandoff || localBackupTimer || backupRevision <= backedUpRevision) return;
     localBackupTimer = setTimeout(() => {
       localBackupTimer = null;
       const reason = pendingLocalBackupReason ?? 'periodic:pending';
@@ -363,6 +367,21 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     localBackupTimer.unref?.();
   };
 
+  const pauseSchedulingForHandoff = (): void => {
+    // Preparación SINCRÓNICA: ningún timer nuevo puede programarse tras esta
+    // llamada. Las copias ya iniciadas siguen vivas y se drenan normalmente.
+    schedulingPausedForHandoff = true;
+    if (localBackupTimer) {
+      clearTimeout(localBackupTimer);
+      localBackupTimer = null;
+    }
+  };
+
+  const resumeSchedulingAfterAbortedHandoff = (): void => {
+    schedulingPausedForHandoff = false;
+    schedulePendingBackup();
+  };
+
   const enqueueLocalBackup = (reason: string): void => {
     backupRevision += 1;
     pendingLocalBackupReason = pendingLocalBackupReason
@@ -383,7 +402,14 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     if (backupRevision > backedUpRevision) {
       const revision = backupRevision;
       const ok = await writeLocalBackupArtifacts(reason ?? 'flush:pending');
-      if (ok) backedUpRevision = Math.max(backedUpRevision, revision);
+      if (ok) {
+        backedUpRevision = Math.max(backedUpRevision, revision);
+      } else {
+        // Un flush previo a la cesión NO debe perder el motivo del backup:
+        // solo una copia confirmada permite consumirlo.
+        pendingLocalBackupReason = pendingLocalBackupReason ?? reason ?? 'flush:pending';
+        schedulePendingBackup();
+      }
     }
   };
 
@@ -748,6 +774,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }),
     enqueueLocalBackup,
     flushPendingLocalBackup,
+    pauseSchedulingForHandoff,
+    resumeSchedulingAfterAbortedHandoff,
     createShutdownLocalBackup,
     createManualLocalBackup,
     listLocalBackups,
