@@ -140,6 +140,51 @@ function replaceSorteosTable(
   }
 }
 
+/** Guardado atómico de sorteos + exclusiones con OCC por colección.
+ * La migración legacy se inyecta y ejecuta DENTRO de la misma transacción.
+ * El caller mantiene el lock SMB, el handle y el backup. */
+export function saveSorteosTransaction(
+  db: Database,
+  snapshot: ConditionalSqliteSorteosSnapshot,
+  status: DatabaseStatus,
+  migrateLegacy: (db: Database) => void,
+  updateRefreshMetadata: (db: Database, updatedAt: string) => void,
+): ConditionalSqliteSorteosSaveResult {
+        const result = db.transaction((): ConditionalSqliteSorteosSaveResult => {
+          migrateLegacy(db);
+          const currentDrawsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records');
+          const currentExclusionsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records');
+
+          if (
+            currentDrawsUpdatedAt !== snapshot.expectedDrawsUpdatedAt ||
+            currentExclusionsUpdatedAt !== snapshot.expectedExclusionsUpdatedAt
+          ) {
+            return {
+              ok: false,
+              status: status,
+              currentDrawsUpdatedAt,
+              currentExclusionsUpdatedAt,
+              message:
+                'Los sorteos han cambiado mientras guardabas. Recarga antes de continuar para no sobrescribir cambios.',
+            };
+          }
+
+          const now = new Date().toISOString();
+          replaceSorteosTable(db, 'sorteos_draw_records', snapshot.draws, now);
+          replaceSorteosTable(db, 'sorteos_exclusion_records', snapshot.exclusions, now);
+          updateRefreshMetadata(db, now);
+
+          return {
+            ok: true,
+            status: status,
+            currentDrawsUpdatedAt: now,
+            currentExclusionsUpdatedAt: now,
+            message: 'Sorteos guardados en SQLite.',
+          };
+        })();
+  return result;
+}
+
 /**
  * Dependencias de orquestación que siguen viviendo en sqlitePersistence.ts
  * (safeDatabaseOperation, guards de fila genéricos, backups, etc.) y se
@@ -301,38 +346,9 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = db.transaction((): ConditionalSqliteSorteosSaveResult => {
-          maybeMigrateSorteosFromPersistedRecords(db);
-          const currentDrawsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records');
-          const currentExclusionsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records');
-
-          if (
-            currentDrawsUpdatedAt !== snapshot.expectedDrawsUpdatedAt ||
-            currentExclusionsUpdatedAt !== snapshot.expectedExclusionsUpdatedAt
-          ) {
-            return {
-              ok: false,
-              status: currentStatus,
-              currentDrawsUpdatedAt,
-              currentExclusionsUpdatedAt,
-              message:
-                'Los sorteos han cambiado mientras guardabas. Recarga antes de continuar para no sobrescribir cambios.',
-            };
-          }
-
-          const now = new Date().toISOString();
-          replaceSorteosTable(db, 'sorteos_draw_records', snapshot.draws, now);
-          replaceSorteosTable(db, 'sorteos_exclusion_records', snapshot.exclusions, now);
-          updateRefreshMetadata(db, now);
-
-          return {
-            ok: true,
-            status: currentStatus,
-            currentDrawsUpdatedAt: now,
-            currentExclusionsUpdatedAt: now,
-            message: 'Sorteos guardados en SQLite.',
-          };
-        })();
+        const result = saveSorteosTransaction(
+          db, snapshot, currentStatus, maybeMigrateSorteosFromPersistedRecords, updateRefreshMetadata,
+        );
 
         if (result.ok) {
           enqueueLocalBackup('save:sorteos_records');
