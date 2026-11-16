@@ -24,8 +24,7 @@ export function importSessionHistoryTransaction(
       const sessionTable =
         payload.module === 'comite' ? 'comite_session_records' : 'paritaria_session_records';
 
-      try {
-        const result = db.transaction((): AtomicSessionHistoryImportResult => {
+      const result = db.transaction((): AtomicSessionHistoryImportResult => {
         const parseObject = (value: string): Record<string, unknown> => {
           try {
             const parsed = JSON.parse(value);
