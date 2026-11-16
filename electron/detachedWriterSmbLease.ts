@@ -33,6 +33,15 @@ export async function withDetachedSqliteSmbLease<T>(
     }
     manager.assertDatabaseWritesAllowed();
     value = await operation();
+    // A heartbeat may have lost ownership while the SQL callback was awaiting.
+    // Fail closed even if the SQL transaction itself returned successfully.
+    const finalOwner = await manager.readLock(lockPath);
+    if (!finalOwner ||
+        finalOwner.ownerId !== lock.ownerId ||
+        finalOwner.pid !== lock.pid ||
+        finalOwner.createdAt !== lock.createdAt) {
+      throw new Error('Propiedad del lock SQLite perdida durante la escritura aislada.');
+    }
     manager.assertDatabaseWritesAllowed();
     succeeded = true;
   } catch (error) {
@@ -42,6 +51,7 @@ export async function withDetachedSqliteSmbLease<T>(
       // No release while an in-flight heartbeat may still be writing owner.json.
       try {
         await manager.pauseDatabaseLockHeartbeat(heartbeat);
+        manager.assertDatabaseWritesAllowed();
       } catch (error) {
         failure ??= error;
         succeeded = false;
