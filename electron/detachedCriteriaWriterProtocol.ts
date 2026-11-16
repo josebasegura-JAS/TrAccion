@@ -6,7 +6,8 @@ import type { DetachedTaskSave } from './detachedTaskWriterCore.js';
 import type { DetachedSessionSave } from './detachedSessionWriterCore.js';
 import { isDetachedAtomicSessionClose, type DetachedAtomicSessionClose } from './detachedAtomicSessionCloseCore.js';
 import { isDetachedSessionHistoryImport, type DetachedSessionHistoryImport } from './detachedSessionHistoryImportCore.js';
-import type { ConditionalSqliteTaskSaveResult, AtomicSessionWorkflowResult, AtomicSessionHistoryImportResult } from './sqlitePersistence.js';
+import { isDetachedCoordinationWorkflow, type DetachedCoordinationWorkflow } from './detachedCoordinationWorkflowCore.js';
+import type { ConditionalSqliteTaskSaveResult, AtomicSessionWorkflowResult, AtomicSessionHistoryImportResult, AtomicCoordinationWorkflowResult } from './sqlitePersistence.js';
 
 export type DetachedWriterRequest =
   | { kind: 'detached:open'; databasePath: string; expected: ExpectedSqliteIdentity }
@@ -16,6 +17,7 @@ export type DetachedWriterRequest =
   | { kind: 'detached:save-session'; operationId: string; payload: DetachedSessionSave }
   | { kind: 'detached:close-session-atomically'; operationId: string; payload: DetachedAtomicSessionClose }
   | { kind: 'detached:import-session-history'; operationId: string; payload: DetachedSessionHistoryImport }
+  | { kind: 'detached:coordination-workflow'; operationId: string; payload: DetachedCoordinationWorkflow }
   | { kind: 'detached:close' };
 
 export type DetachedWriterResponse =
@@ -27,6 +29,7 @@ export type DetachedWriterResponse =
   | { kind: 'detached:session-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
   | { kind: 'detached:session-closed-atomically'; operationId: string; result: AtomicSessionWorkflowResult }
   | { kind: 'detached:session-history-imported'; operationId: string; result: AtomicSessionHistoryImportResult }
+  | { kind: 'detached:coordination-workflow-done'; operationId: string; result: AtomicCoordinationWorkflowResult }
   | { kind: 'detached:closed' }
   | { kind: 'detached:error'; operationId?: string };
 
@@ -41,6 +44,10 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
       && typeof e.applicationId === 'string' && !!e.applicationId
       && typeof e.environment === 'string' && !!e.environment
       && Number.isSafeInteger(e.schemaVersion) && Number(e.schemaVersion) >= 0;
+  }
+  if (r.kind === 'detached:coordination-workflow') {
+    return typeof r.operationId === 'string' && !!r.operationId.trim() &&
+      isDetachedCoordinationWorkflow(r.payload);
   }
   if (r.kind === 'detached:import-session-history') {
     return typeof r.operationId === 'string' && !!r.operationId.trim() &&
@@ -100,6 +107,15 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
   const r = value as Record<string, unknown>;
   if (['detached:ready', 'detached:opened', 'detached:closed'].includes(String(r.kind))) return true;
   if (r.kind === 'detached:error') return r.operationId === undefined || typeof r.operationId === 'string';
+  if (r.kind === 'detached:coordination-workflow-done') {
+    if (typeof r.operationId !== 'string' || !r.operationId.trim() ||
+        !r.result || typeof r.result !== 'object') return false;
+    const result = r.result as Record<string, unknown>;
+    return typeof result.ok === 'boolean' && typeof result.message === 'string' &&
+      (result.meetingUpdatedAt === undefined || typeof result.meetingUpdatedAt === 'string') &&
+      (result.indexUpdatedAt === undefined || typeof result.indexUpdatedAt === 'string') &&
+      !!result.status && typeof result.status === 'object';
+  }
   if (r.kind === 'detached:session-history-imported') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() ||
         !r.result || typeof r.result !== 'object') return false;
