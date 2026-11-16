@@ -4,7 +4,8 @@ import type { DetachedJsonWrite, DetachedJsonBatchResult } from './detachedJsonW
 import { isIsolatedJsonTable } from './persistence/isolatedJsonTables.js';
 import type { DetachedTaskSave } from './detachedTaskWriterCore.js';
 import type { DetachedSessionSave } from './detachedSessionWriterCore.js';
-import type { ConditionalSqliteTaskSaveResult } from './sqlitePersistence.js';
+import { isDetachedAtomicSessionClose, type DetachedAtomicSessionClose } from './detachedAtomicSessionCloseCore.js';
+import type { ConditionalSqliteTaskSaveResult, AtomicSessionWorkflowResult } from './sqlitePersistence.js';
 
 export type DetachedWriterRequest =
   | { kind: 'detached:open'; databasePath: string; expected: ExpectedSqliteIdentity }
@@ -12,6 +13,7 @@ export type DetachedWriterRequest =
   | { kind: 'detached:save-json-batch'; operationId: string; table: string; records: DetachedJsonWrite[] }
   | { kind: 'detached:save-task'; operationId: string; payload: DetachedTaskSave }
   | { kind: 'detached:save-session'; operationId: string; payload: DetachedSessionSave }
+  | { kind: 'detached:close-session-atomically'; operationId: string; payload: DetachedAtomicSessionClose }
   | { kind: 'detached:close' };
 
 export type DetachedWriterResponse =
@@ -21,6 +23,7 @@ export type DetachedWriterResponse =
   | { kind: 'detached:json-batch-saved'; operationId: string; result: DetachedJsonBatchResult }
   | { kind: 'detached:task-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
   | { kind: 'detached:session-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
+  | { kind: 'detached:session-closed-atomically'; operationId: string; result: AtomicSessionWorkflowResult }
   | { kind: 'detached:closed' }
   | { kind: 'detached:error'; operationId?: string };
 
@@ -35,6 +38,10 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
       && typeof e.applicationId === 'string' && !!e.applicationId
       && typeof e.environment === 'string' && !!e.environment
       && Number.isSafeInteger(e.schemaVersion) && Number(e.schemaVersion) >= 0;
+  }
+  if (r.kind === 'detached:close-session-atomically') {
+    return typeof r.operationId === 'string' && !!r.operationId.trim() &&
+      isDetachedAtomicSessionClose(r.payload);
   }
   if (r.kind === 'detached:save-session') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() ||
@@ -86,6 +93,13 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
   const r = value as Record<string, unknown>;
   if (['detached:ready', 'detached:opened', 'detached:closed'].includes(String(r.kind))) return true;
   if (r.kind === 'detached:error') return r.operationId === undefined || typeof r.operationId === 'string';
+  if (r.kind === 'detached:session-closed-atomically') {
+    if (typeof r.operationId !== 'string' || !r.operationId.trim() ||
+        !r.result || typeof r.result !== 'object') return false;
+    const result = r.result as Record<string, unknown>;
+    return typeof result.ok === 'boolean' && typeof result.message === 'string' &&
+      !!result.status && typeof result.status === 'object';
+  }
   if (r.kind === 'detached:task-saved' || r.kind === 'detached:session-saved') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() ||
         !r.result || typeof r.result !== 'object') return false;
