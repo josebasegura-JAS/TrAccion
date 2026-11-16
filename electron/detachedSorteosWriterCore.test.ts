@@ -61,9 +61,12 @@ describe('PR462 · escritor aislado Sorteos en SQLite real',()=>{
       f.db.prepare('INSERT INTO persisted_records VALUES (?,?)').run(
         'traccion.v1.sorteos.draws','[{"id":"legacy-d"}]'
       );
+      f.db.prepare('INSERT INTO persisted_records VALUES (?,?)').run(
+        'traccion.v1.sorteos.exclusions','[{"id":"legacy-e"}]'
+      );
       f.db.exec("CREATE TRIGGER fail_exclusion BEFORE INSERT ON sorteos_exclusion_records BEGIN SELECT RAISE(ABORT,'fallo simulado'); END;");
-      // La migración debe formar parte de la misma transacción: si falla
-      // una inserción posterior, también desaparecen las filas importadas.
+      // La migración legacy inserta primero un sorteo y falla al importar
+      // exclusiones: ambas operaciones deben deshacerse.
       expect(()=>saveDetachedSorteos(f.db,f.request)).toThrow('fallo simulado');
       expect(f.count('sorteos_draw_records')).toBe(0);
       expect(f.count('sorteos_exclusion_records')).toBe(0);
