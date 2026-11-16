@@ -492,8 +492,10 @@ export function setDatabaseConnectivityIssueNotifier(
 }
 
 export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | null> {
-  const currentStatus = getSqliteStatus();
-  return readLock(currentStatus.lockPath);
+  return sqliteIndependentActivityTracker.run('sqlite:get-current-smb-lock', () => {
+    const currentStatus = getSqliteStatus();
+    return readLock(currentStatus.lockPath);
+  });
 }
 
 /**
@@ -1906,6 +1908,7 @@ function getRecordLockService(): RecordLockService {
     withDatabaseOperationLock,
     getOwnerId: () => ownerId,
     getDatabasePath: () => getSqliteStatus().path,
+    runIndependentRead: (label, operation) => sqliteIndependentActivityTracker.run(label, operation),
   });
 }
 
