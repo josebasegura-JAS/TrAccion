@@ -89,6 +89,8 @@ export interface RestoreLocalBackupResult {
 
 export interface LocalBackupServiceDependencies {
   getDatabase: () => Database | null;
+  /** Reserva admisión SQLite antes de cualquier E/S/timer de backup; inyectada por main. */
+  trackActivity?: <T>(label: string, operation: () => Promise<T>) => Promise<T>;
   getStatus: () => DatabaseStatus;
   acquireLock: (databasePath: string) => Promise<DatabaseLockInfo>;
   releaseLock: (lockPath: string, lock: DatabaseLockInfo) => Promise<void>;
@@ -173,7 +175,9 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
     backupWorkRunning += 1;
     try {
-      return await writeLocalBackupArtifactsTracked(reason, force);
+      return await (dependencies.trackActivity
+        ? dependencies.trackActivity('sqlite:backup-live-full', () => writeLocalBackupArtifactsTracked(reason, force))
+        : writeLocalBackupArtifactsTracked(reason, force));
     } finally {
       backupWorkRunning -= 1;
     }
@@ -386,7 +390,9 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
     backupWorkRunning += 1;
     try {
-      return await writeShutdownLocalBackupArtifactsTracked();
+      return await (dependencies.trackActivity
+        ? dependencies.trackActivity('sqlite:backup-shutdown-full', () => writeShutdownLocalBackupArtifactsTracked())
+        : writeShutdownLocalBackupArtifactsTracked());
     } finally {
       backupWorkRunning -= 1;
     }
