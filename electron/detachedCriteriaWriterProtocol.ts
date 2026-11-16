@@ -1,4 +1,6 @@
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
+import { isDetachedPresupuestosSave, type DetachedPresupuestosSave } from './detachedPresupuestosWriterCore.js';
+import type { SimpleJsonSaveResult } from './persistence/simpleJsonModuleRepository.js';
 import { isDetachedTeletrabajoBatchSave, type DetachedTeletrabajoBatchSave } from './detachedTeletrabajoBatchCore.js';
 import type { TeletrabajoBatchSaveResult } from './persistence/teletrabajoRepository.js';
 import { isDetachedSorteosSave, type DetachedSorteosSave } from './detachedSorteosWriterCore.js';
@@ -30,6 +32,7 @@ export type DetachedWriterRequest =
   | { kind: 'detached:save-lottery'; operationId: string; payload: DetachedLotterySave }
   | { kind: 'detached:save-sorteos'; operationId: string; payload: DetachedSorteosSave }
   | { kind: 'detached:save-teletrabajo-batch'; operationId: string; payload: DetachedTeletrabajoBatchSave }
+  | { kind: 'detached:save-presupuestos'; operationId: string; payload: DetachedPresupuestosSave }
   | { kind: 'detached:close' };
 
 export type DetachedWriterResponse =
@@ -46,6 +49,7 @@ export type DetachedWriterResponse =
   | { kind: 'detached:lottery-saved'; operationId: string; result: LotterySaveResult }
   | { kind: 'detached:sorteos-saved'; operationId: string; result: ConditionalSqliteSorteosSaveResult }
   | { kind: 'detached:teletrabajo-batch-saved'; operationId: string; result: TeletrabajoBatchSaveResult }
+  | { kind: 'detached:presupuestos-saved'; operationId: string; result: SimpleJsonSaveResult }
   | { kind: 'detached:closed' }
   | { kind: 'detached:error'; operationId?: string };
 
@@ -53,6 +57,9 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
   if (!value || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
   if (r.kind === 'detached:close') return true;
+  if (r.kind === 'detached:save-presupuestos') {
+    return typeof r.operationId === 'string' && !!r.operationId.trim() && isDetachedPresupuestosSave(r.payload);
+  }
   if (r.kind === 'detached:save-teletrabajo-batch') {
     return typeof r.operationId === 'string' && !!r.operationId.trim() && isDetachedTeletrabajoBatchSave(r.payload);
   }
@@ -135,6 +142,13 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
   const r = value as Record<string, unknown>;
   if (['detached:ready', 'detached:opened', 'detached:closed'].includes(String(r.kind))) return true;
   if (r.kind === 'detached:error') return r.operationId === undefined || typeof r.operationId === 'string';
+  if (r.kind === 'detached:presupuestos-saved') {
+    if (typeof r.operationId !== 'string' || !r.operationId.trim() || !r.result || typeof r.result !== 'object') return false;
+    const result = r.result as Record<string, unknown>;
+    return typeof result.ok === 'boolean' && typeof result.message === 'string' &&
+      (result.currentUpdatedAt === null || typeof result.currentUpdatedAt === 'string') &&
+      !!result.status && typeof result.status === 'object';
+  }
   if (r.kind === 'detached:teletrabajo-batch-saved') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() || !r.result || typeof r.result !== 'object') return false;
     const result = r.result as Record<string,unknown>;
