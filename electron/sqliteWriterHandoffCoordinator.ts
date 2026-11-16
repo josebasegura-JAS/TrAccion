@@ -31,8 +31,6 @@ export interface WriterHandoffDependencies {
   closeMainHandle: () => Promise<void>;
   /** Resuelve solo cuando el proceso hijo confirma inicio y propiedad única. */
   startWriter: (generation: number) => Promise<{ generation: number }>;
-  /** Libro compartido por el supervisor; nunca autoriza reenvíos automáticos. */
-  operationLedger?: ReturnType<typeof createSqliteWriterOperationLedger>;
 }
 
 export function createSqliteWriterHandoffCoordinator(
@@ -41,7 +39,8 @@ export function createSqliteWriterHandoffCoordinator(
 ) {
   let pending: Promise<number> | null = null;
   let activeFreezeTicket: number | null = null;
-  const operationLedger = deps.operationLedger ?? createSqliteWriterOperationLedger();
+  // Libro privado: solo la conciliación en cuarentena puede levantar una incertidumbre.
+  const operationLedger = createSqliteWriterOperationLedger();
 
   function assertCurrentWorker(generation: number): void {
     const owner = fence.snapshot();
@@ -117,11 +116,6 @@ export function createSqliteWriterHandoffCoordinator(
     acknowledgeWriterOperation(id: string, generation: number): void {
       assertCurrentWorker(generation);
       operationLedger.acknowledge(id, generation);
-    },
-    /** Completar solo con confirmación suficientemente fiable del resultado. */
-    completeWriterOperation(id: string, generation: number): void {
-      assertCurrentWorker(generation);
-      operationLedger.complete(id, generation);
     },
     reconcileWriterOperation(id: string, generation: number): void {
       if (fence.snapshot().owner !== 'quarantine' ||
