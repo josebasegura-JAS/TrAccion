@@ -1,19 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSqliteEngineOwnershipFence, type SqliteQueueState } from './sqliteEngineOwnershipFence.js';
 import { createSqliteWriterHandoffCoordinator } from './sqliteWriterHandoffCoordinator.js';
+import { createSqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 
 const idle: SqliteQueueState = { queuedOperations: 0, runningOperation: null, timedOut: false };
 
 function fixture() {
   const fence = createSqliteEngineOwnershipFence();
+  const independentActivity = createSqliteIndependentActivityTracker();
   const inspectQueue = vi.fn(() => idle);
   const assertNoIndependentSqliteActivity = vi.fn(async () => undefined);
   const closeMainHandle = vi.fn(async () => undefined);
   const startWriter = vi.fn(async (generation: number) => ({ generation }));
   const coordinator = createSqliteWriterHandoffCoordinator(fence, {
-    inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter,
+    inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter, independentActivity,
   });
-  return { fence, coordinator, inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter };
+  return { fence, coordinator, independentActivity, inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter };
 }
 
 describe('PR9D-5A · cesión segura del propietario SQLite', () => {
@@ -31,6 +33,7 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     const generation = await f.coordinator.handoff();
     expect(generation).toBe(1);
     expect(f.fence.snapshot().owner).toBe('worker');
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
   });
 
   it('aborta sin cerrar cuando existen operaciones en cola', async () => {
@@ -46,8 +49,50 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     f.assertNoIndependentSqliteActivity.mockRejectedValue(new Error('Backup activo'));
     await expect(f.coordinator.handoff()).rejects.toThrow('Backup activo');
     expect(f.fence.snapshot().owner).toBe('main');
+    expect(f.independentActivity.snapshot().frozen).toBe(false);
     expect(f.closeMainHandle).not.toHaveBeenCalled();
     expect(f.startWriter).not.toHaveBeenCalled();
+  });
+
+  it('congela nuevas E/S independientes y espera a que una lectura activa termine REALMENTE', async () => {
+    const f = fixture();
+    let release!: () => void;
+    const pendingRead = new Promise<void>((resolve) => { release = resolve; });
+    const reader = f.independentActivity.run('tokens:readonly-worker', () => pendingRead);
+    const handoff = f.coordinator.handoff();
+
+    expect(f.fence.snapshot().owner).toBe('draining');
+    expect(f.independentActivity.snapshot()).toMatchObject({
+      frozen: true,
+      active: 1,
+    });
+    expect(f.closeMainHandle).not.toHaveBeenCalled();
+    await expect(f.independentActivity.run('late:heartbeat', async () => undefined))
+      .rejects.toThrow('suspendida');
+
+    release();
+    await reader;
+    const generation = await handoff;
+    expect(generation).toBe(1);
+    expect(f.closeMainHandle).toHaveBeenCalledTimes(1);
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
+  });
+
+  it('mantiene freeze durante un preflight asíncrono y no acepta nuevos trabajos', async () => {
+    const f = fixture();
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    f.assertNoIndependentSqliteActivity.mockImplementation(async () => pending);
+    const handoff = f.coordinator.handoff();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
+    await expect(f.independentActivity.run('backup:tardy', async () => undefined))
+      .rejects.toThrow('suspendida');
+    expect(f.startWriter).not.toHaveBeenCalled();
+    release();
+    await handoff;
+    expect(f.startWriter).toHaveBeenCalledTimes(1);
   });
 
   it('si el cierre devuelve error queda bloqueado y NUNCA inicia worker', async () => {
@@ -55,6 +100,7 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     f.closeMainHandle.mockRejectedValue(new Error('Cierre de SQLite incierto'));
     await expect(f.coordinator.handoff()).rejects.toThrow('Cierre de SQLite incierto');
     expect(f.fence.snapshot().owner).toBe('draining');
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
     expect(f.startWriter).not.toHaveBeenCalled();
     expect(() => f.fence.assertMayEnterMain()).toThrow();
   });
@@ -64,6 +110,7 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     f.startWriter.mockRejectedValue(new Error('Proceso no disponible'));
     await expect(f.coordinator.handoff()).rejects.toThrow('Proceso no disponible');
     expect(f.fence.snapshot().owner).toBe('main-closed');
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
     expect(() => f.fence.assertMayEnterMain()).toThrow();
     await expect(f.coordinator.handoff()).rejects.toThrow('ya está iniciada');
   });
@@ -85,5 +132,6 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     expect(() => f.coordinator.restoreMainAfterReconciliation(generation, true, false)).toThrow();
     f.coordinator.restoreMainAfterReconciliation(generation, true, true);
     expect(f.fence.snapshot().owner).toBe('main');
+    expect(f.independentActivity.snapshot().frozen).toBe(false);
   });
 });
