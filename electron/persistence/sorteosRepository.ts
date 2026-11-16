@@ -1,3 +1,4 @@
+import { transactionWithMigrationReset, withMigrationFlagRollback } from './migrationRollbackGuard.js';
 import type { Database } from 'better-sqlite3';
 import type { DatabaseStatus, PersistedStorageRecordSnapshot } from '../sqlitePersistence.js';
 
@@ -306,7 +307,7 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
         }
 
         const db = requireDatabase();
-        db.transaction(() => maybeMigrateSorteosFromPersistedRecords(db))();
+        transactionWithMigrationReset(db, () => { sorteosMigrationDone = false; }, () => maybeMigrateSorteosFromPersistedRecords(db))();
         return {
           status: currentStatus,
           draws: readAllSorteosRows(db, 'sorteos_draw_records'),
@@ -344,8 +345,10 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = saveSorteosTransaction(
-          db, snapshot, currentStatus, maybeMigrateSorteosFromPersistedRecords, updateRefreshMetadata,
+        const result = withMigrationFlagRollback(() => { sorteosMigrationDone = false; }, () =>
+          saveSorteosTransaction(
+            db, snapshot, currentStatus, maybeMigrateSorteosFromPersistedRecords, updateRefreshMetadata,
+          ),
         );
 
         if (result.ok) {
