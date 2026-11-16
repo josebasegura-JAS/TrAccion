@@ -1,3 +1,4 @@
+import { transactionWithMigrationReset } from './migrationRollbackGuard.js';
 import type { Database } from 'better-sqlite3';
 import type { DatabaseStatus, PersistedStorageRecordSnapshot } from '../sqlitePersistence.js';
 
@@ -280,7 +281,7 @@ export function createEmployeeRepository(deps: EmployeeRepositoryDeps): Employee
         }
 
         const db = requireDatabase();
-        db.transaction(() => maybeMigrateEmployeesFromPersistedRecord(db))();
+        transactionWithMigrationReset(db, () => { employeesMigrationDone = false; }, () => maybeMigrateEmployeesFromPersistedRecord(db))();
         return { status: currentStatus, records: readEmployeeRecords(db) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
@@ -305,7 +306,7 @@ export function createEmployeeRepository(deps: EmployeeRepositoryDeps): Employee
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = db.transaction((): ConditionalSqliteEmployeeSaveResult => {
+        const result = transactionWithMigrationReset(db, () => { employeesMigrationDone = false; }, (): ConditionalSqliteEmployeeSaveResult => {
           maybeMigrateEmployeesFromPersistedRecord(db);
           const row = db.prepare('SELECT value_json FROM employee_records WHERE id = ?').get(record.id);
           const currentValue = readValueJson(row);
@@ -415,7 +416,7 @@ export function createEmployeeRepository(deps: EmployeeRepositoryDeps): Employee
 
         const db = requireDatabase();
         try {
-          const result = db.transaction((): ConditionalSqliteEmployeeBatchSaveResult => {
+          const result = transactionWithMigrationReset(db, () => { employeesMigrationDone = false; }, (): ConditionalSqliteEmployeeBatchSaveResult => {
             maybeMigrateEmployeesFromPersistedRecord(db);
             const selectCurrent = db.prepare('SELECT value_json FROM employee_records WHERE id = ?');
             const insertRecord = db.prepare(

@@ -1,3 +1,4 @@
+import { transactionWithMigrationReset } from './migrationRollbackGuard.js';
 import type { Database } from 'better-sqlite3';
 import type {
   ConditionalSqliteTaskSaveResult,
@@ -217,7 +218,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
         // Preservar migración legacy exactamente como antes; puede escribir.
         // Se hace dentro de la misma cola IPC y del bloqueo de operación.
         const db = requireDatabase();
-        db.transaction(() => maybeMigrateTasksFromPersistedRecord(db))();
+        transactionWithMigrationReset(db, () => { tasksMigrationDone = false; }, () => maybeMigrateTasksFromPersistedRecord(db))();
         const records = await deps.isolatedTaskRead!(filter, currentStatus);
         return { status: currentStatus, records };
       }, (nextStatus) => ({ status: nextStatus, records: [] }));
@@ -230,7 +231,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
         }
 
         const db = requireDatabase();
-        db.transaction(() => maybeMigrateTasksFromPersistedRecord(db))();
+        transactionWithMigrationReset(db, () => { tasksMigrationDone = false; }, () => maybeMigrateTasksFromPersistedRecord(db))();
         return { status: currentStatus, records: readTaskRecords(db, filter) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
@@ -255,7 +256,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        const result = transactionWithMigrationReset(db, () => { tasksMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
           maybeMigrateTasksFromPersistedRecord(db);
           const foreignLock = findForeignTaskEditingLock(db, record.id);
           if (foreignLock) {

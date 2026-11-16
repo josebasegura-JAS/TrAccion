@@ -1,3 +1,4 @@
+import { transactionWithMigrationReset } from './migrationRollbackGuard.js';
 import type { Database } from 'better-sqlite3';
 import { isIsolatedJsonTable } from './isolatedJsonTables.js';
 import {
@@ -249,7 +250,7 @@ export function createSimpleJsonModuleRepository(
 
             deps.assertDatabaseWritesAllowed();
             const db = deps.requireDatabase();
-            db.transaction(() => ensureMigrationForDatabase(db))();
+            transactionWithMigrationReset(db, () => { migratedDatabases.delete(db); options.setMigrationDone(false); }, () => ensureMigrationForDatabase(db))();
             return currentStatus;
           },
           (nextStatus) => nextStatus,
@@ -304,7 +305,7 @@ export function createSimpleJsonModuleRepository(
         deps.assertDatabaseWritesAllowed();
 
         const db = deps.requireDatabase();
-        const result = db.transaction((): SimpleJsonSaveResult => {
+        const result = transactionWithMigrationReset(db, () => { migratedDatabases.delete(db); options.setMigrationDone(false); }, (): SimpleJsonSaveResult => {
           ensureMigrationForDatabase(db);
           const saveResult = saveJsonModuleRecordInTransaction(db, record, currentStatus, options, deps);
           return saveResult.ok ? { ...saveResult, message: `${options.moduleLabel} guardado en SQLite.` } : saveResult;
@@ -352,7 +353,7 @@ export function createSimpleJsonModuleRepository(
 
         const db = deps.requireDatabase();
         try {
-          const results = db.transaction((): SimpleJsonSaveResult[] => {
+          const results = transactionWithMigrationReset(db, () => { migratedDatabases.delete(db); options.setMigrationDone(false); }, (): SimpleJsonSaveResult[] => {
             ensureMigrationForDatabase(db);
             return records.map((record) => {
               const saveResult = saveJsonModuleRecordInTransaction(db, record, currentStatus, options, deps);
