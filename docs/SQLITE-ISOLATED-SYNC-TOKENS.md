@@ -5,6 +5,8 @@
 
 La consulta se realiza dentro de **una transacción de solo lectura** sobre la base compartida, con nueva conexión SQLite nativa en `utilityProcess`, comprobación de identidad y esquema y finalización confirmada del proceso antes de publicar resultado.
 
+El IPC de tokens se registra en `sqliteIndependentActivityTracker` y **no ocupa la cola de escrituras SQLite**: se elimina la espera de Tareas/Ticket Restaurante detrás del child de polling, detectada en CI de dos usuarios. El lector sigue aislado, de solo lectura y supervisado hasta `exit`. El `busy_timeout` del lector es 500 ms; el timeout total del worker es 8 s, sin reintento de escrituras ni desbloqueo prematuro. La ruta legacy de diagnóstico sigue usando la cola anterior.
+
 El controlador mantiene pendiente el IPC si no recibe `exit`; ante timeout solicita `kill` sin dar por terminada la operación ni habilitar un fallback nativo que pudiera bloquear main. Nunca devuelve tokens vacíos como resultado exitoso de un error de worker. Si el cliente no tiene una base activa, sigue el camino de estado anterior (sin lectura de SQLite) y no altera los mensajes de ausencia de base.
 
 La variable diagnóstica `TRACCION_SQLITE_ISOLATED_SYNC_TOKENS=0` permite desactivar temporalmente el aislamiento. Por defecto está activado.
