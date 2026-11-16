@@ -159,3 +159,32 @@ describe('PR448 · reentrada durante la cesión SQLite', () => {
     tracker.abortFreeze(ticket);
   });
 });
+
+
+describe('PR452 · liberación administrativa como ciclo de vida indivisible', () => {
+  it('una liberación ya admitida conserva la reserva hasta reactivar SQLite', async () => {
+    const tracker = createSqliteIndependentActivityTracker();
+    let resume!: () => void;
+    const pendingSmb = new Promise<void>(resolve => { resume = resolve; });
+    const steps: string[] = [];
+    const release = tracker.run('sqlite:force-release-lock-lifecycle', async () => {
+      steps.push('read-owner');
+      await pendingSmb;
+      steps.push('reclaim-lock');
+      await tracker.run('sqlite:activate', () => { steps.push('reconnect'); });
+    });
+    const ticket = tracker.beginFreeze();
+    let drained = false;
+    const drain = tracker.waitForDrain(ticket).then(() => { drained = true; });
+    await expect(tracker.run('sqlite:another-manual-reclaim', () => undefined))
+      .rejects.toThrow('suspendida');
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    resume();
+    await release;
+    await drain;
+    expect(steps).toEqual(['read-owner', 'reclaim-lock', 'reconnect']);
+    expect(tracker.snapshot().active).toBe(0);
+    tracker.abortFreeze(ticket);
+  });
+});
