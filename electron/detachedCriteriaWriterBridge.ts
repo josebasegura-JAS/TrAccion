@@ -8,6 +8,8 @@ import type { DetachedWriterRequest } from './detachedCriteriaWriterProtocol.js'
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
 import type { DetachedCriteriaSave, DetachedCriteriaSaveResult } from './detachedCriteriaWriterCore.js';
 import { saveCriteriaViaDetachedWriter } from './detachedCriteriaWriterRunner.js';
+import { saveJsonBatchViaDetachedWriter } from './detachedJsonWriterRunner.js';
+import type { DetachedJsonWrite, DetachedJsonBatchResult } from './detachedJsonWriterCore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,5 +49,22 @@ export function saveCriteriaInDetachedUtilityProcess(
     expected,
     operationId,
     record,
+  });
+}
+
+/**
+ * Escritura genérica con el MISMO proceso controlado, sin conexión al
+ * runtime productivo. Solo tras cesión validada del motor y bloqueo SMB.
+ */
+export function saveJsonBatchInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  table: string,
+  records: DetachedJsonWrite[],
+): Promise<DetachedJsonBatchResult> {
+  return saveJsonBatchViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, table, records,
   });
 }
