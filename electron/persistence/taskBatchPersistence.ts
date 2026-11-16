@@ -3,6 +3,8 @@ import { DATABASE_HEARTBEAT_BLOCKED_MESSAGE } from './databaseLockManager.js';
 import { openSqliteDatabase } from './sqliteConnection.js';
 import { createSqliteLockLifecycle } from './sqliteLockLifecycle.js';
 import { createVolatileOwnerId } from './stableOwnerIdentity.js';
+import { sqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
+import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 import {
   getSqliteStatus,
   loadTaskRecordsSnapshot,
@@ -148,7 +150,23 @@ export function saveTaskRecordsInTransaction(
   })();
 }
 
-export async function saveTaskRecordsAtomically(
+/**
+ * Reserva la ruta independiente ANTES del primer await (incluida la migración
+ * legacy). El handoff espera esta reserva y rechaza lotes admitidos después
+ * de iniciar freeze, incluso si utilizan su propia conexión SQLite.
+ */
+export function runTaskBatchUnderHandoffBarrier<T>(operation: () => Promise<T>): Promise<T> {
+  sqliteEngineOwnershipFence.assertMayEnterMain();
+  return sqliteIndependentActivityTracker.run('sqlite:task-batch-autonomous', operation);
+}
+
+export function saveTaskRecordsAtomically(
+  records: AtomicTaskRecord[],
+): Promise<AtomicTaskBatchSaveResult> {
+  return runTaskBatchUnderHandoffBarrier(() => performSaveTaskRecordsAtomically(records));
+}
+
+async function performSaveTaskRecordsAtomically(
   records: AtomicTaskRecord[],
 ): Promise<AtomicTaskBatchSaveResult> {
   let currentStatus = getSqliteStatus();
