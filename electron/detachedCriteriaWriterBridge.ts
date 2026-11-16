@@ -12,6 +12,9 @@ import { saveJsonBatchViaDetachedWriter } from './detachedJsonWriterRunner.js';
 import type { DetachedJsonWrite, DetachedJsonBatchResult } from './detachedJsonWriterCore.js';
 import { saveTaskViaDetachedWriter } from './detachedTaskWriterRunner.js';
 import { saveSessionViaDetachedWriter } from './detachedSessionWriterRunner.js';
+import { closeSessionViaDetachedWriter } from './detachedAtomicSessionCloseRunner.js';
+import type { DetachedAtomicSessionClose } from './detachedAtomicSessionCloseCore.js';
+import type { AtomicSessionWorkflowResult } from './sqlitePersistence.js';
 import type { DetachedSessionSave } from './detachedSessionWriterCore.js';
 import type { DetachedTaskSave } from './detachedTaskWriterCore.js';
 import type { ConditionalSqliteTaskSaveResult } from './sqlitePersistence.js';
@@ -99,6 +102,20 @@ export function saveSessionInDetachedUtilityProcess(
   payload: DetachedSessionSave,
 ): Promise<ConditionalSqliteTaskSaveResult> {
   return saveSessionViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** Cierre atómico en proceso aislado, únicamente tras cesión/exclusión verificadas.
+ * No utilizado por el IPC de producción. */
+export function closeSessionAtomicallyInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedAtomicSessionClose,
+): Promise<AtomicSessionWorkflowResult> {
+  return closeSessionViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });
