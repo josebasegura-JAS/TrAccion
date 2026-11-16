@@ -18,6 +18,9 @@ import { runCoordinationViaDetachedWriter } from './detachedCoordinationWorkflow
 import { saveConfiguracionViaDetachedWriter } from './detachedConfiguracionWriterRunner.js';
 import { saveLotteryViaDetachedWriter } from './detachedLotteryWriterRunner.js';
 import { saveSorteosViaDetachedWriter } from './detachedSorteosWriterRunner.js';
+import { saveTeletrabajoBatchViaDetachedWriter } from './detachedTeletrabajoBatchRunner.js';
+import type { DetachedTeletrabajoBatchSave } from './detachedTeletrabajoBatchCore.js';
+import type { TeletrabajoBatchSaveResult } from './persistence/teletrabajoRepository.js';
 import type { DetachedSorteosSave } from './detachedSorteosWriterCore.js';
 import type { ConditionalSqliteSorteosSaveResult } from './persistence/sorteosRepository.js';
 import type { DetachedLotterySave } from './detachedLotteryWriterCore.js';
@@ -197,6 +200,19 @@ export function saveSorteosInDetachedUtilityProcess(
   payload: DetachedSorteosSave,
 ): Promise<ConditionalSqliteSorteosSaveResult> {
   return saveSorteosViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** Teletrabajo masivo NO productivo: exige cesión exclusiva y lock SMB externo. */
+export function saveTeletrabajoBatchInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedTeletrabajoBatchSave,
+): Promise<TeletrabajoBatchSaveResult> {
+  return saveTeletrabajoBatchViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });
