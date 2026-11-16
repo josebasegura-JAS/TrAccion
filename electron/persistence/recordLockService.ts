@@ -36,6 +36,8 @@ export interface RecordLockServiceDependencies {
   getOwnerId: () => string;
   /** La ruta actual de la base, usada como clave de `withDatabaseOperationLock`. */
   getDatabasePath: () => string;
+  /** Registra TODA consulta SQLite extracola hasta concluir realmente. */
+  runIndependentRead: <T>(label: string, operation: () => T | Promise<T>) => Promise<T>;
 }
 
 export interface RecordLockService {
@@ -143,21 +145,19 @@ export function createRecordLockService(
       return Promise.resolve(recordLockError('Identificador de bloqueo inválido.'));
     }
     const startedAt = Date.now();
-    let result: RecordLockResult;
-    try {
-      // getRecordLockInTransaction utiliza únicamente SELECT. La lectura no
-      // necesita adquirir .lockdir; SQLite coordina sus lecturas con los
-      // escritores. El bloqueo exclusivo sigue vigente para adquirir,
-      // renovar y liberar reservas.
+    // SELECT sin lock exclusivo SMB, pero siempre dentro de la barrera de
+    // actividad SQLite. Durante la cesión, no entra ninguna lectura nueva.
+    return dependencies.runIndependentRead('recordLock:get', () => {
       const db = ensureRecordLockDatabase();
-      result = db
+      return db
         ? getRecordLockInTransaction(db, payload, currentOwnerContext(), new Date().toISOString())
         : recordLockError('SQLite no está disponible para consultar bloqueos.');
-    } catch (error) {
-      result = recordLockError(error instanceof Error ? error.message : 'No se ha podido consultar el bloqueo del registro.');
-    }
-    recordMultiuserMetric('record-lock', 'consulta de bloqueo de registro', Date.now() - startedAt, !result.ok);
-    return Promise.resolve(result);
+    }).catch((error: unknown) =>
+      recordLockError(error instanceof Error ? error.message : 'No se ha podido consultar el bloqueo del registro.')
+    ).then((result) => {
+      recordMultiuserMetric('record-lock', 'consulta de bloqueo de registro', Date.now() - startedAt, !result.ok);
+      return result;
+    });
   }
 
   return {
@@ -187,11 +187,13 @@ export function createRecordLockService(
       ),
     getRecordLock: (payload) => readLockWithoutExclusiveSmbLease(payload),
     listOtherLocks: async (moduleName) => {
+      if (!moduleName.trim()) return { ok: false, locks: {}, message: 'Módulo inválido.' };
       try {
-        if (!moduleName.trim()) return { ok: false, locks: {}, message: 'Módulo inválido.' };
-        const db = ensureRecordLockDatabase();
-        if (!db) return { ok: false, locks: {}, message: 'SQLite no disponible.' };
-        return { ok: true, locks: listOtherRecordLocks(db, moduleName.trim(), currentOwnerContext(), new Date().toISOString()), message: '' };
+        return await dependencies.runIndependentRead('recordLock:list-other', () => {
+          const db = ensureRecordLockDatabase();
+          if (!db) return { ok: false, locks: {}, message: 'SQLite no disponible.' };
+          return { ok: true, locks: listOtherRecordLocks(db, moduleName.trim(), currentOwnerContext(), new Date().toISOString()), message: '' };
+        });
       } catch (error) {
         return { ok: false, locks: {}, message: error instanceof Error ? error.message : 'Error al consultar bloqueos.' };
       }
