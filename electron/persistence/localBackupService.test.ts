@@ -326,4 +326,60 @@ describe('localBackupService - cierre sin backup redundante', () => {
     },
   );
 
+
+  it('PR474: la pausa de handoff cancela el timer pero conserva revision y motivo pendientes', async () => {
+    vi.useFakeTimers();
+    const acquire = vi.fn(buildDependencies(databasePath).acquireLock);
+    const service = createLocalBackupService(buildDependencies(databasePath, acquire));
+    service.enqueueLocalBackup('save:pr474');
+    expect(service.getActivitySnapshot()).toMatchObject({
+      timerScheduled: true, pendingReason: true, pendingRevision: true,
+    });
+    service.pauseSchedulingForHandoff();
+    expect(service.getActivitySnapshot()).toMatchObject({
+      timerScheduled: false, pendingReason: true, pendingRevision: true,
+    });
+    vi.advanceTimersByTime(16 * 60 * 1000);
+    await Promise.resolve();
+    expect(acquire).not.toHaveBeenCalled();
+    // Los guardados iniciados tras pausar no se pierden ni programan nuevos timers.
+    service.enqueueLocalBackup('save:concurrent');
+    expect(service.getActivitySnapshot()).toMatchObject({
+      timerScheduled: false, pendingReason: true, pendingRevision: true,
+    });
+    service.resumeSchedulingAfterAbortedHandoff();
+    expect(service.getActivitySnapshot().timerScheduled).toBe(true);
+    await service.flushPendingLocalBackup();
+    expect(acquire).toHaveBeenCalledTimes(1);
+    expect(service.getActivitySnapshot()).toMatchObject({
+      timerScheduled: false, pendingReason: false, pendingRevision: false,
+    });
+  });
+
+  it('PR474: un flush sin lock SMB conserva el motivo y permite reintentar tras abortar handoff', async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const original = buildDependencies(databasePath);
+    const acquire = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('LOCKED');
+      return original.acquireLock(databasePath);
+    });
+    const service = createLocalBackupService(buildDependencies(databasePath, acquire));
+    service.enqueueLocalBackup('save:pr474-retry');
+    service.pauseSchedulingForHandoff();
+    await service.flushPendingLocalBackup();
+    expect(attempts).toBe(1);
+    expect(service.getActivitySnapshot()).toMatchObject({
+      timerScheduled: false, pendingReason: true, pendingRevision: true,
+    });
+    service.resumeSchedulingAfterAbortedHandoff();
+    expect(service.getActivitySnapshot().timerScheduled).toBe(true);
+    await service.flushPendingLocalBackup();
+    expect(attempts).toBe(2);
+    expect(service.getActivitySnapshot()).toMatchObject({
+      timerScheduled: false, pendingReason: false, pendingRevision: false,
+    });
+  });
+
 });
