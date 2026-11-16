@@ -34,7 +34,7 @@ describe('PR444 · runner del escritor JSON', () => {
     expect(s.sent.map(x=>x.kind)).toEqual(['detached:open','detached:save-json-batch']);
     s.message({kind:'detached:json-batch-saved',operationId:'op-444',
       result:{ok:true,results:[{ok:true,currentUpdatedAt:'v1'}]}});
-    expect(s.sent.at(-1)?.kind).toBe('detached:close');
+    expect(s.sent[s.sent.length - 1]?.kind).toBe('detached:close');
     await Promise.resolve();
     expect(resolved).toBe(false);
     s.exit(0);
