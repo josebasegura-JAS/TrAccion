@@ -5,12 +5,23 @@
  * activar un worker escritor debe pasar por este coordinador: ninguna apertura
  * en el hijo antes de confirmar cierre de la conexión anterior.
  */
+import type { createSqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import {
   createSqliteEngineOwnershipFence,
   type SqliteQueueState,
 } from './sqliteEngineOwnershipFence.js';
 
+type IndependentActivityBarrier = Pick<
+  ReturnType<typeof createSqliteIndependentActivityTracker>,
+  'beginFreeze' | 'waitForDrain' | 'assertFrozenTicket' | 'abortFreeze'
+>;
+
 export interface WriterHandoffDependencies {
+  /**
+   * Barrera de admisión fuera de la cola IPC. Es OBLIGATORIA: sin ella,
+   * un heartbeat, backup o lector readonly podría entrar tras el preflight.
+   */
+  independentActivity: IndependentActivityBarrier;
   /** La cola global y TODOS los trabajos fuera de cola deben estar inactivos. */
   inspectQueue: () => SqliteQueueState;
   /** Aborta si hay backups, migraciones, heartbeat, timer o IO ajena a la cola. */
@@ -26,16 +37,23 @@ export function createSqliteWriterHandoffCoordinator(
   deps: WriterHandoffDependencies,
 ) {
   let pending: Promise<number> | null = null;
+  let activeFreezeTicket: number | null = null;
 
   async function performHandoff(): Promise<number> {
     // beginHandoff impide admitir operaciones nuevas inmediatamente.
     const ticket = fence.beginHandoff(deps.inspectQueue());
     let closeAttempted = false;
+    let freezeTicket: number | null = null;
     try {
+      // Dos barreras sin await entre ellas: fence bloquea nuevos IPC;
+      // freeze bloquea nuevos trabajos instrumentados fuera de la cola.
+      freezeTicket = deps.independentActivity.beginFreeze();
+      // El timeout externo NO libera el contador: esperar FIN REAL.
+      await deps.independentActivity.waitForDrain(freezeTicket);
       await deps.assertNoIndependentSqliteActivity();
-      // La comprobación previa es asíncrona: no permitir que un trabajo
-      // fuera de cola se inicie entre ella y el cierre. La integración futura
-      // debe implementar una barrera de admisión para esos trabajos.
+      // Un preflight asíncrono no puede levantar la barrera ni admitir
+      // trabajos nuevos antes del cierre confirmado del handle principal.
+      deps.independentActivity.assertFrozenTicket(freezeTicket);
       const current = deps.inspectQueue();
       if (current.runningOperation !== null || current.queuedOperations !== 0 || current.timedOut) {
         throw new Error('Operaciones SQLite activas durante la cesión.');
@@ -48,11 +66,20 @@ export function createSqliteWriterHandoffCoordinator(
         throw new Error('El proceso SQLite auxiliar no coincide con la generación de cesión.');
       }
       fence.confirmWorkerStarted(ticket);
+      // Seguir congelado mientras el worker sea propietario, incluso si
+      // posteriormente entra en cuarentena por salida incierta.
+      activeFreezeTicket = freezeTicket;
       return ticket;
     } catch (error) {
       if (!closeAttempted) {
-        // Único punto de retorno automático seguro.
+        // Único punto de retorno automático seguro. El handle principal
+        // todavía está abierto; nunca se ha creado el escritor auxiliar.
+        if (freezeTicket !== null) deps.independentActivity.abortFreeze(freezeTicket);
         fence.abortBeforeClose(ticket);
+      } else {
+        // Mantener la barrera congelada si el cierre/arranque es incierto.
+        // Nunca permitir E/S fuera de cola ni volver automáticamente a main.
+        activeFreezeTicket = freezeTicket;
       }
       // Tras intentar cerrar, NO hay fallback a main ni apertura automática.
       // El cierre podría haberse producido, o un hijo podría seguir vivo.
@@ -85,6 +112,11 @@ export function createSqliteWriterHandoffCoordinator(
       fence.restoreMainAfterVerification(
         generation, deps.inspectQueue(), identityVerified, allUncertainWritesReconciled,
       );
+      if (activeFreezeTicket === null) {
+        throw new Error('Cesión sin ticket de actividad independiente; requiere intervención.');
+      }
+      deps.independentActivity.abortFreeze(activeFreezeTicket);
+      activeFreezeTicket = null;
     },
   };
 }
