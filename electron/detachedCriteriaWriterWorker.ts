@@ -17,6 +17,7 @@ import { executeDetachedCoordinationWorkflow } from './detachedCoordinationWorkf
 import { saveDetachedConfiguracion } from './detachedConfiguracionWriterCore.js';
 import { saveDetachedLotterySnapshot } from './detachedLotteryWriterCore.js';
 import { saveDetachedSorteos } from './detachedSorteosWriterCore.js';
+import { saveDetachedTeletrabajoBatch } from './detachedTeletrabajoBatchCore.js';
 import { createSerializedDetachedMessageQueue } from './detachedWriterMessageQueue.js';
 import { isDetachedWriterRequest, type DetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
@@ -107,6 +108,9 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     } else if (message.kind === 'detached:save-sorteos') {
       const result = saveDetachedSorteos(db, message.payload);
       send({ kind: 'detached:sorteos-saved', operationId: message.operationId, result });
+    } else if (message.kind === 'detached:save-teletrabajo-batch') {
+      const result = saveDetachedTeletrabajoBatch(db, message.payload);
+      send({ kind: 'detached:teletrabajo-batch-saved', operationId: message.operationId, result });
     } else {
       const result = saveDetachedCriteriaRecord(db, message.record);
       send({ kind: 'detached:saved', operationId: message.operationId, result });
