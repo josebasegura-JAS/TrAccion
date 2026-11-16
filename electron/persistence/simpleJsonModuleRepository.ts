@@ -329,7 +329,7 @@ export function createSimpleJsonModuleRepository(
      * Guarda varios registros en una sola transacción SQLite. Atómico: si
      * cualquier registro falla (conflicto de concurrencia u otro motivo),
      * ninguno se aplica — better-sqlite3 revierte la transacción completa al
-     * lanzar dentro de transactionWithMigrationReset(db, () => { migratedDatabases.delete(db); options.setMigrationDone(false); }, ...). Pensado para importadores
+     * lanzar dentro de db.transaction(...). Pensado para importadores
      * masivos, que antes guardaban fila a fila con un await secuencial por
      * registro (N round-trips IPC en vez de 1).
      */
@@ -358,7 +358,7 @@ export function createSimpleJsonModuleRepository(
             return records.map((record) => {
               const saveResult = saveJsonModuleRecordInTransaction(db, record, currentStatus, options, deps);
               if (!saveResult.ok) {
-                // Lanzar dentro de transactionWithMigrationReset(db, () => { migratedDatabases.delete(db); options.setMigrationDone(false); }, ...) revierte todo lo
+                // Lanzar dentro de db.transaction(...) revierte todo lo
                 // aplicado hasta ahora en esta misma llamada — atomicidad
                 // real del lote completo, no solo del registro individual.
                 throw new BatchSaveError(record.id, saveResult);
