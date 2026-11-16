@@ -196,6 +196,10 @@ export function migrateSorteosLegacyInTransaction(
       .get(key) as { value_json?: unknown } | undefined;
     return typeof row?.value_json === 'string' ? row.value_json : null;
   },
+  isValidLegacyItem: (value: unknown) => value is { id: string; createdAt?: unknown; updatedAt?: unknown; deletedAt?: unknown } =
+    (value): value is { id: string } =>
+      !!value && typeof value === 'object' && !Array.isArray(value) &&
+      typeof (value as Record<string, unknown>).id === 'string',
 ): void {
   const migrations = [
     ['sorteos_draw_records', 'traccion.v1.sorteos.draws'],
@@ -215,9 +219,8 @@ export function migrateSorteosLegacyInTransaction(
        VALUES (?, ?, ?, ?, NULL)`,
     );
     for (const item of parsed) {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      if (!isValidLegacyItem(item)) continue;
       const row = item as Record<string, unknown>;
-      if (typeof row.id !== 'string') continue;
       const createdAt = typeof row.createdAt === 'string' ? row.createdAt : now;
       const updatedAt = typeof row.updatedAt === 'string' ? row.updatedAt : createdAt;
       insert.run(row.id, JSON.stringify(item), createdAt, updatedAt);
@@ -269,6 +272,7 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
     getSqliteStatus,
     requireDatabase,
     readPersistedRecordByKey,
+    isJsonObjectWithStringId,
     updateRefreshMetadata,
     enqueueLocalBackup,
     assertDatabaseWritesAllowed,
@@ -282,6 +286,7 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
     migrateSorteosLegacyInTransaction(
       db,
       (database, key) => readPersistedRecordByKey(database, key)?.value ?? null,
+      isJsonObjectWithStringId,
     );
     sorteosMigrationDone = true;
   }
