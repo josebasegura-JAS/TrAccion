@@ -134,4 +134,72 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     expect(f.fence.snapshot().owner).toBe('main');
     expect(f.independentActivity.snapshot().frozen).toBe(false);
   });
+
+  it('PR476: exit real no permite restaurar main si existe una escritura enviada sin conciliar', async () => {
+    const f = fixture();
+    const generation = await f.coordinator.handoff();
+    f.coordinator.registerWriterOperation('save:pending', generation);
+    f.coordinator.acknowledgeWriterOperation('save:pending', generation);
+    f.coordinator.workerExited(generation);
+    expect(f.fence.snapshot().owner).toBe('quarantine');
+    expect(f.coordinator.pendingWriterOperationIds(generation)).toEqual(['save:pending']);
+    expect(() => f.coordinator.restoreMainAfterReconciliation(generation, true, true))
+      .toThrow('pendientes');
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
+    f.coordinator.reconcileWriterOperation('save:pending', generation);
+    expect(f.coordinator.pendingWriterOperationIds(generation)).toEqual([]);
+    f.coordinator.restoreMainAfterReconciliation(generation, true, true);
+    expect(f.fence.snapshot().owner).toBe('main');
+    expect(f.independentActivity.snapshot().frozen).toBe(false);
+  });
+
+  it('PR476: kill solicitado no permite conciliar ni restaurar antes de exit', async () => {
+    const f = fixture();
+    const generation = await f.coordinator.handoff();
+    f.coordinator.registerWriterOperation('save:uncertain', generation);
+    f.coordinator.workerUncertain(generation);
+    expect(f.coordinator.pendingWriterOperationIds(generation)).toEqual(['save:uncertain']);
+    expect(() => f.coordinator.restoreMainAfterReconciliation(generation, true, true))
+      .toThrow('pendientes');
+    expect(() => f.coordinator.reconcileWriterOperation('save:uncertain', generation))
+      .not.toThrow();
+    expect(() => f.coordinator.restoreMainAfterReconciliation(generation, true, true))
+      .toThrow('salida');
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
+    f.coordinator.workerExited(generation);
+    f.coordinator.restoreMainAfterReconciliation(generation, true, true);
+  });
+
+  it('PR476: evita registrar o reconocer escrituras de generación ajena', async () => {
+    const f = fixture();
+    const generation = await f.coordinator.handoff();
+    expect(() => f.coordinator.registerWriterOperation('save:wrong', generation + 1))
+      .toThrow('generación');
+    expect(() => f.coordinator.acknowledgeWriterOperation('save:wrong', generation))
+      .toThrow('desconocida');
+    f.coordinator.registerWriterOperation('save:correct', generation);
+    expect(() => f.coordinator.registerWriterOperation('save:correct', generation))
+      .toThrow('duplicado');
+    f.coordinator.workerUncertain(generation);
+    expect(() => f.coordinator.registerWriterOperation('save:late', generation))
+      .toThrow('generación');
+    expect(() => f.coordinator.reconcileWriterOperation('save:correct', generation + 1))
+      .toThrow('generación');
+  });
+
+  it('PR476: dos escrituras pendientes requieren conciliación individual', async () => {
+    const f = fixture();
+    const generation = await f.coordinator.handoff();
+    f.coordinator.registerWriterOperation('save:first', generation);
+    f.coordinator.registerWriterOperation('save:second', generation);
+    f.coordinator.workerExited(generation);
+    f.coordinator.reconcileWriterOperation('save:first', generation);
+    expect(() => f.coordinator.restoreMainAfterReconciliation(generation, true, true))
+      .toThrow('pendientes');
+    expect(f.coordinator.pendingWriterOperationIds(generation)).toEqual(['save:second']);
+    f.coordinator.reconcileWriterOperation('save:second', generation);
+    f.coordinator.restoreMainAfterReconciliation(generation, true, true);
+    expect(f.fence.snapshot().owner).toBe('main');
+  });
+
 });
