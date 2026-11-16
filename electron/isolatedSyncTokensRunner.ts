@@ -22,7 +22,7 @@ export function runIsolatedSyncTokens(options: {
   expected: ExpectedSqliteIdentity;
   timeoutMs?: number;
 }): Promise<IsolatedSyncTokens> {
-  const timeoutMs = options.timeoutMs ?? 20_000;
+  const timeoutMs = options.timeoutMs ?? 8_000;
   if (!options.databasePath.trim() || !Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
     return Promise.reject(new Error('Parámetros de lectura SQLite inválidos.'));
   }
