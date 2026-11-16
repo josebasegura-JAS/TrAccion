@@ -51,7 +51,7 @@ const summary = [
   '',
   '| Archivo:línea | Categoría | Código encontrado |',
   '|---|---|---|',
-  ...findings.map(f=>`| ${f.file}:${f.line} | ${f.kind} | \`${f.excerpt.replace(/\|/g,'\\|').replace(/\`/g,"'")}\` |`),
+  ...findings.map(f=>`| ${f.file}:${f.line} | ${f.kind} | \`${f.excerpt.replace(/\|/g,'\\|').replace(/`/g,"'")}\` |`),
   '',
   '## Limitaciones',
   '- No identifica permisos reales de cada ruta ni demuestra que cada llamada esté bajo freeze/lock SMB.',
