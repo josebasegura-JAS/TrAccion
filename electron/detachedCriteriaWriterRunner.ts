@@ -37,6 +37,8 @@ export interface DetachedWriterSessionOptions {
   timeoutMs?: number;
   /** Señal inmediata para poner en cuarentena la sesión; no confirma cancelación. */
   onUncertain?: (event: DetachedWriterUncertainEvent) => void;
+  /** Notifica la salida REAL (nunca solo kill), para conciliar antes de liberar propiedad. */
+  onExitConfirmed?: (operationId: string, code: number) => void;
 }
 
 export function saveCriteriaViaDetachedWriter(
@@ -124,6 +126,8 @@ export function saveCriteriaViaDetachedWriter(
       if (exited) return;
       exited = true;
       clearTimeout(timer);
+      try { options.onExitConfirmed?.(options.operationId, code); }
+      catch { /* La instrumentación no cambia el resultado del guardado. */ }
       // Confirmar exit al llamador solo mediante el resultado final del
       // protocolo. Una notificación previa de timeout sigue siendo incierta.
       if (!(outcome === 'ok' && phase === 'closing' && code === 0 && completed !== null)) {
