@@ -2,6 +2,7 @@ import { stat } from 'node:fs/promises';
 import { shouldUseIsolatedSqliteHealth } from './sqliteHealthIsolationPolicy.js';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
+import { runGuardedSqliteLifecycle } from './sqliteLifecycleAdmission.js';
 import { createSqliteMaintenanceGate } from './sqliteMaintenanceGate.js';
 import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
 import { readSyncTokensInUtilityProcess } from './isolatedSyncTokensBridge.js';
@@ -655,8 +656,11 @@ async function activateDatabase(
   isDefaultPath: boolean,
   sourceDatabasePath: string | null,
 ): Promise<DatabaseStatus> {
-  sqliteEngineOwnershipFence.assertMayEnterMain();
-  return sqliteIndependentActivityTracker.run('sqlite:activate', async () => {
+  return runGuardedSqliteLifecycle(
+    () => sqliteEngineOwnershipFence.assertMayEnterMain(),
+    sqliteIndependentActivityTracker,
+    'sqlite:activate',
+    async () => {
     const activated = await activateSqliteDatabase(
       directoryPath,
       isDefaultPath,
@@ -674,7 +678,8 @@ async function activateDatabase(
     database = activated.database;
     status = activated.status;
     return status;
-  });
+    },
+  );
 }
 
 export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
@@ -739,9 +744,12 @@ function safeDatabaseOperation<T>(
   // Mantener UNA reserva durante todo el ciclo, incluidos delays entre
   // reintentos. Sin ello el preflight podría ver el tracker vacío mientras
   // queda una operación admitida esperando volver a entrar en SQLite.
-  sqliteEngineOwnershipFence.assertMayEnterMain();
-  return sqliteIndependentActivityTracker.run('sqlite:safe-operation-full', () =>
-    performSafeDatabaseOperation(operation, fallback));
+  return runGuardedSqliteLifecycle(
+    () => sqliteEngineOwnershipFence.assertMayEnterMain(),
+    sqliteIndependentActivityTracker,
+    'sqlite:safe-operation-full',
+    () => performSafeDatabaseOperation(operation, fallback),
+  );
 }
 
 async function performSafeDatabaseOperation<T>(
