@@ -102,7 +102,7 @@ export async function loadPresupuestosFromSqlite(): Promise<PresupuestosSqliteSt
     return null;
   }
 
-  const latestUpdatedAt = [
+  const legacyUpdatedAt = [
     ...snapshot.scenarios,
     ...snapshot.manualItems,
     ...snapshot.ticketGroups,
@@ -113,6 +113,7 @@ export async function loadPresupuestosFromSqlite(): Promise<PresupuestosSqliteSt
     }
     return latest;
   }, null);
+  const latestUpdatedAt = snapshot.revision ?? legacyUpdatedAt;
 
   return {
     scenarios: parseRecords<BudgetScenario>(snapshot.scenarios),
