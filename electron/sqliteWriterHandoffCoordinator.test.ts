@@ -9,7 +9,7 @@ function fixture() {
   const fence = createSqliteEngineOwnershipFence();
   const independentActivity = createSqliteIndependentActivityTracker();
   const inspectQueue = vi.fn(() => idle);
-  const assertNoIndependentSqliteActivity = vi.fn(async () => undefined);
+  const assertNoIndependentSqliteActivity = vi.fn(async (): Promise<void> => undefined);
   const closeMainHandle = vi.fn(async () => undefined);
   const startWriter = vi.fn(async (generation: number) => ({ generation }));
   const coordinator = createSqliteWriterHandoffCoordinator(fence, {
