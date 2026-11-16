@@ -14,9 +14,11 @@ import { saveTaskViaDetachedWriter } from './detachedTaskWriterRunner.js';
 import { saveSessionViaDetachedWriter } from './detachedSessionWriterRunner.js';
 import { closeSessionViaDetachedWriter } from './detachedAtomicSessionCloseRunner.js';
 import { importSessionHistoryViaDetachedWriter } from './detachedSessionHistoryImportRunner.js';
+import { runCoordinationViaDetachedWriter } from './detachedCoordinationWorkflowRunner.js';
+import type { DetachedCoordinationWorkflow } from './detachedCoordinationWorkflowCore.js';
 import type { DetachedSessionHistoryImport } from './detachedSessionHistoryImportCore.js';
 import type { DetachedAtomicSessionClose } from './detachedAtomicSessionCloseCore.js';
-import type { AtomicSessionWorkflowResult, AtomicSessionHistoryImportResult } from './sqlitePersistence.js';
+import type { AtomicSessionWorkflowResult, AtomicSessionHistoryImportResult, AtomicCoordinationWorkflowResult } from './sqlitePersistence.js';
 import type { DetachedSessionSave } from './detachedSessionWriterCore.js';
 import type { DetachedTaskSave } from './detachedTaskWriterCore.js';
 import type { ConditionalSqliteTaskSaveResult } from './sqlitePersistence.js';
@@ -133,6 +135,20 @@ export function importSessionHistoryInDetachedUtilityProcess(
   payload: DetachedSessionHistoryImport,
 ): Promise<AtomicSessionHistoryImportResult> {
   return importSessionHistoryViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** Cierre o creación de tarea en Coordinación, atómicos, no productivos.
+ * Solo después de cesión exclusiva y lock SMB validado externamente. */
+export function runCoordinationInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedCoordinationWorkflow,
+): Promise<AtomicCoordinationWorkflowResult> {
+  return runCoordinationViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });
