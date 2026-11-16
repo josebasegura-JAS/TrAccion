@@ -24,7 +24,7 @@ port.on('message', (event: { data: unknown }) => {
     const Ctor = require('better-sqlite3') as DatabaseConstructor;
     const db = new Ctor(request.databasePath, { readonly: true, fileMustExist: true });
     try {
-      db.pragma('busy_timeout = 5000');
+      db.pragma('busy_timeout = 500');
       const actual = readDatabaseIdentity(db);
       if (!actual ||
         actual.databaseUuid !== request.expected.databaseUuid ||
