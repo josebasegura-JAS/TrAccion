@@ -31,8 +31,7 @@ describe('PR444 · escritor JSON transaccional aislado', () => {
         .toEqual({ ok: false, failedRecordId: 'a', currentUpdatedAt: 'v1' });
       expect(saveDetachedJsonBatch(db, table, [entry('a','v2','v1')])).toMatchObject({ ok: true });
       expect(saveDetachedJsonBatch(db, table, [entry('a','v3','v2','2026-11-16')])).toMatchObject({ ok: true });
-      const stored = db.prepare(`SELECT updated_at, deleted_at FROM ${table} WHERE id = 'a'`).get()
-        as { updated_at: string; deleted_at: string };
+      const stored = db.prepare(`SELECT updated_at, deleted_at FROM ${table} WHERE id = 'a'`).get() as { updated_at: string; deleted_at: string };
       expect(stored).toEqual({ updated_at: 'v3', deleted_at: '2026-11-16' });
       expect(saveDetachedJsonBatch(db, table, [entry('a','v4','v1')]))
         .toEqual({ ok: false, failedRecordId: 'a', currentUpdatedAt: 'v3' });
@@ -61,8 +60,7 @@ describe('PR444 · escritor JSON transaccional aislado', () => {
       saveDetachedJsonBatch(db, people, [entry('empleado','v2','v1','2026-11-15')]);
       expect(saveDetachedJsonBatch(db, people, [entry('empleado','v3',null)]))
         .toMatchObject({ ok: true });
-      const active = db.prepare(`SELECT deleted_at FROM ${people} WHERE id = 'empleado'`).get()
-        as {deleted_at: string|null};
+      const active = db.prepare(`SELECT deleted_at FROM ${people} WHERE id = 'empleado'`).get() as {deleted_at: string|null};
       expect(active.deleted_at).toBeNull();
       saveDetachedJsonBatch(db, other, [entry('c','v1',null)]);
       saveDetachedJsonBatch(db, other, [entry('c','v2','v1','2026-11-15')]);
