@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import type { Database as SqliteDatabase } from 'better-sqlite3';
-import { closeDetachedSessionWorkflow, isDetachedAtomicSessionClose } from '../detachedAtomicSessionCloseCore.js';
-import { isDetachedWriterRequest, isDetachedWriterResponse } from '../detachedCriteriaWriterProtocol.js';
-import type { AtomicSessionWorkflowPayload } from '../sqlitePersistence.js';
+import { closeDetachedSessionWorkflow, isDetachedAtomicSessionClose } from './detachedAtomicSessionCloseCore.js';
+import { isDetachedWriterRequest, isDetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
+import type { AtomicSessionWorkflowPayload } from './sqlitePersistence.js';
 
 function fixture(module: 'comite' | 'paritaria') {
   const db = new Database(':memory:');
