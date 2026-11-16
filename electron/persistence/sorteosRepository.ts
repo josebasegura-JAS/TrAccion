@@ -189,7 +189,14 @@ export function saveSorteosTransaction(
  * Must run in the same transaction as the actual write, or as an
  * explicitly fenced migration. Never run on a read-only connection.
  */
-export function migrateSorteosLegacyInTransaction(db: Database): void {
+export function migrateSorteosLegacyInTransaction(
+  db: Database,
+  readLegacyValue: (db: Database, key: string) => string | null = (database, key) => {
+    const row = database.prepare('SELECT value_json FROM persisted_records WHERE key = ?')
+      .get(key) as { value_json?: unknown } | undefined;
+    return typeof row?.value_json === 'string' ? row.value_json : null;
+  },
+): void {
   const migrations = [
     ['sorteos_draw_records', 'traccion.v1.sorteos.draws'],
     ['sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions'],
@@ -197,10 +204,10 @@ export function migrateSorteosLegacyInTransaction(db: Database): void {
   for (const [table, key] of migrations) {
     const count = db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
     if (count.count > 0) continue;
-    const legacy = db.prepare('SELECT value_json FROM persisted_records WHERE key = ?').get(key) as {value_json?: unknown}|undefined;
-    if (typeof legacy?.value_json !== 'string') continue;
+    const legacyValue = readLegacyValue(db, key);
+    if (typeof legacyValue !== 'string') continue;
     let parsed: unknown;
-    try { parsed = JSON.parse(legacy.value_json); } catch { continue; }
+    try { parsed = JSON.parse(legacyValue); } catch { continue; }
     if (!Array.isArray(parsed)) continue;
     const now = new Date().toISOString();
     const insert = db.prepare(
@@ -261,6 +268,7 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
     safeDatabaseOperation,
     getSqliteStatus,
     requireDatabase,
+    readPersistedRecordByKey,
     updateRefreshMetadata,
     enqueueLocalBackup,
     assertDatabaseWritesAllowed,
@@ -271,7 +279,10 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
 
   function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
     if (sorteosMigrationDone) return;
-    migrateSorteosLegacyInTransaction(db);
+    migrateSorteosLegacyInTransaction(
+      db,
+      (database, key) => readPersistedRecordByKey(database, key)?.value ?? null,
+    );
     sorteosMigrationDone = true;
   }
 
