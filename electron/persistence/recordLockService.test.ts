@@ -20,7 +20,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
     return {
       getSqliteStatus: vi.fn(() => status),
       requireDatabase: vi.fn(() => fakeDb),
-      withDatabaseOperationLock: vi.fn(async (_path: string, operation: () => Promise<unknown>) =>
+      withDatabaseOperationLock: vi.fn(async <T>(_path: string, operation: () => Promise<T>): Promise<T> =>
         operation(),
       ),
       getOwnerId: vi.fn(() => 'owner-1'),
