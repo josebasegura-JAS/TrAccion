@@ -406,6 +406,7 @@ let localBackupServiceInstance: LocalBackupService | null = null;
 
 function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies {
   return {
+    trackActivity: (label, operation) => sqliteIndependentActivityTracker.run(label, operation),
     getDatabase: () => database,
     getStatus: getSqliteStatus,
     acquireLock,
