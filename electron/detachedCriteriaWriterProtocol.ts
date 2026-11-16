@@ -1,4 +1,6 @@
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
+import { isDetachedSorteosSave, type DetachedSorteosSave } from './detachedSorteosWriterCore.js';
+import type { ConditionalSqliteSorteosSaveResult } from './persistence/sorteosRepository.js';
 import { isDetachedLotterySave, type DetachedLotterySave } from './detachedLotteryWriterCore.js';
 import type { LotterySaveResult } from './persistence/loteriaRepository.js';
 import { isDetachedConfiguracionSave, type DetachedConfiguracionSave } from './detachedConfiguracionWriterCore.js';
@@ -24,6 +26,7 @@ export type DetachedWriterRequest =
   | { kind: 'detached:coordination-workflow'; operationId: string; payload: DetachedCoordinationWorkflow }
   | { kind: 'detached:save-configuracion'; operationId: string; payload: DetachedConfiguracionSave }
   | { kind: 'detached:save-lottery'; operationId: string; payload: DetachedLotterySave }
+  | { kind: 'detached:save-sorteos'; operationId: string; payload: DetachedSorteosSave }
   | { kind: 'detached:close' };
 
 export type DetachedWriterResponse =
@@ -38,6 +41,7 @@ export type DetachedWriterResponse =
   | { kind: 'detached:coordination-workflow-done'; operationId: string; result: AtomicCoordinationWorkflowResult }
   | { kind: 'detached:configuracion-saved'; operationId: string; result: ConfiguracionSaveResult }
   | { kind: 'detached:lottery-saved'; operationId: string; result: LotterySaveResult }
+  | { kind: 'detached:sorteos-saved'; operationId: string; result: ConditionalSqliteSorteosSaveResult }
   | { kind: 'detached:closed' }
   | { kind: 'detached:error'; operationId?: string };
 
@@ -45,6 +49,9 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
   if (!value || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
   if (r.kind === 'detached:close') return true;
+  if (r.kind === 'detached:save-sorteos') {
+    return typeof r.operationId === 'string' && !!r.operationId.trim() && isDetachedSorteosSave(r.payload);
+  }
   if (r.kind === 'detached:save-lottery') {
     return typeof r.operationId === 'string' && !!r.operationId.trim() && isDetachedLotterySave(r.payload);
   }
@@ -121,6 +128,14 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
   const r = value as Record<string, unknown>;
   if (['detached:ready', 'detached:opened', 'detached:closed'].includes(String(r.kind))) return true;
   if (r.kind === 'detached:error') return r.operationId === undefined || typeof r.operationId === 'string';
+  if (r.kind === 'detached:sorteos-saved') {
+    if (typeof r.operationId !== 'string' || !r.operationId.trim() || !r.result || typeof r.result !== 'object') return false;
+    const result = r.result as Record<string,unknown>;
+    return typeof result.ok === 'boolean' && typeof result.message === 'string' &&
+      (result.currentDrawsUpdatedAt === null || typeof result.currentDrawsUpdatedAt === 'string') &&
+      (result.currentExclusionsUpdatedAt === null || typeof result.currentExclusionsUpdatedAt === 'string') &&
+      !!result.status && typeof result.status === 'object';
+  }
   if (r.kind === 'detached:lottery-saved') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() ||
         !r.result || typeof r.result !== 'object') return false;
