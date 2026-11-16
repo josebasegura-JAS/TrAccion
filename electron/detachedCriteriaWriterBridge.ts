@@ -13,8 +13,10 @@ import type { DetachedJsonWrite, DetachedJsonBatchResult } from './detachedJsonW
 import { saveTaskViaDetachedWriter } from './detachedTaskWriterRunner.js';
 import { saveSessionViaDetachedWriter } from './detachedSessionWriterRunner.js';
 import { closeSessionViaDetachedWriter } from './detachedAtomicSessionCloseRunner.js';
+import { importSessionHistoryViaDetachedWriter } from './detachedSessionHistoryImportRunner.js';
+import type { DetachedSessionHistoryImport } from './detachedSessionHistoryImportCore.js';
 import type { DetachedAtomicSessionClose } from './detachedAtomicSessionCloseCore.js';
-import type { AtomicSessionWorkflowResult } from './sqlitePersistence.js';
+import type { AtomicSessionWorkflowResult, AtomicSessionHistoryImportResult } from './sqlitePersistence.js';
 import type { DetachedSessionSave } from './detachedSessionWriterCore.js';
 import type { DetachedTaskSave } from './detachedTaskWriterCore.js';
 import type { ConditionalSqliteTaskSaveResult } from './sqlitePersistence.js';
@@ -116,6 +118,21 @@ export function closeSessionAtomicallyInDetachedUtilityProcess(
   payload: DetachedAtomicSessionClose,
 ): Promise<AtomicSessionWorkflowResult> {
   return closeSessionViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** Importación histórica atómica de Comité/Paritaria solo para coordinación
+ * futura: requiere propiedad única, lock SMB y verificación de identidad.
+ * No invocada por main/IPC productivo. */
+export function importSessionHistoryInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedSessionHistoryImport,
+): Promise<AtomicSessionHistoryImportResult> {
+  return importSessionHistoryViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });

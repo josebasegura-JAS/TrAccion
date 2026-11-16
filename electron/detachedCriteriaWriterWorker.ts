@@ -12,6 +12,7 @@ import { saveDetachedJsonBatch } from './detachedJsonWriterCore.js';
 import { saveDetachedTaskRecord } from './detachedTaskWriterCore.js';
 import { saveDetachedSessionRecord } from './detachedSessionWriterCore.js';
 import { closeDetachedSessionWorkflow } from './detachedAtomicSessionCloseCore.js';
+import { importDetachedSessionHistory } from './detachedSessionHistoryImportCore.js';
 import { createSerializedDetachedMessageQueue } from './detachedWriterMessageQueue.js';
 import { isDetachedWriterRequest, type DetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
@@ -87,6 +88,9 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     } else if (message.kind === 'detached:close-session-atomically') {
       const result = closeDetachedSessionWorkflow(db, message.payload);
       send({ kind: 'detached:session-closed-atomically', operationId: message.operationId, result });
+    } else if (message.kind === 'detached:import-session-history') {
+      const result = importDetachedSessionHistory(db, message.payload);
+      send({ kind: 'detached:session-history-imported', operationId: message.operationId, result });
     } else {
       const result = saveDetachedCriteriaRecord(db, message.record);
       send({ kind: 'detached:saved', operationId: message.operationId, result });
