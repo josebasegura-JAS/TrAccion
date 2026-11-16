@@ -61,6 +61,10 @@ runs:
       shell: pwsh
       run: |
         node -e "const Sqlite=require('better-sqlite3');const db=new Sqlite(':memory:');console.log('SQLite disponible en Node '+process.version+': '+db.prepare('select sqlite_version() as version').get().version);db.close()"
+    - name: Inventario automático de accesos SQLite y guard autónomo Tareas
+      if: ${{ inputs.lane == 'calidad' }}
+      shell: pwsh
+      run: node scripts/audit-sqlite-access.mjs
     - name: TypeScript de pruebas, Electron y E2E
       if: ${{ inputs.lane == 'calidad' }}
       shell: pwsh
