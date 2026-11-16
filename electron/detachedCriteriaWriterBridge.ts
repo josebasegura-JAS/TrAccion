@@ -17,6 +17,9 @@ import { importSessionHistoryViaDetachedWriter } from './detachedSessionHistoryI
 import { runCoordinationViaDetachedWriter } from './detachedCoordinationWorkflowRunner.js';
 import { saveConfiguracionViaDetachedWriter } from './detachedConfiguracionWriterRunner.js';
 import { saveLotteryViaDetachedWriter } from './detachedLotteryWriterRunner.js';
+import { saveSorteosViaDetachedWriter } from './detachedSorteosWriterRunner.js';
+import type { DetachedSorteosSave } from './detachedSorteosWriterCore.js';
+import type { ConditionalSqliteSorteosSaveResult } from './persistence/sorteosRepository.js';
 import type { DetachedLotterySave } from './detachedLotteryWriterCore.js';
 import type { LotterySaveResult } from './persistence/loteriaRepository.js';
 import type { DetachedConfiguracionSave } from './detachedConfiguracionWriterCore.js';
@@ -181,6 +184,19 @@ export function saveLotteryInDetachedUtilityProcess(
   payload: DetachedLotterySave,
 ): Promise<LotterySaveResult> {
   return saveLotteryViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** Sorteos+exclusiones: ensayo aislado sin conexión al main productivo. */
+export function saveSorteosInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedSorteosSave,
+): Promise<ConditionalSqliteSorteosSaveResult> {
+  return saveSorteosViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });

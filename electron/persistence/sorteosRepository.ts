@@ -185,6 +185,49 @@ export function saveSorteosTransaction(
   return result;
 }
 
+/** Legacy migration shared by main and utilityProcess.
+ * Must run in the same transaction as the actual write, or as an
+ * explicitly fenced migration. Never run on a read-only connection.
+ */
+export function migrateSorteosLegacyInTransaction(
+  db: Database,
+  readLegacyValue: (db: Database, key: string) => string | null = (database, key) => {
+    const row = database.prepare('SELECT value_json FROM persisted_records WHERE key = ?')
+      .get(key) as { value_json?: unknown } | undefined;
+    return typeof row?.value_json === 'string' ? row.value_json : null;
+  },
+  isValidLegacyItem: (value: unknown) => value is { id: string; createdAt?: unknown; updatedAt?: unknown; deletedAt?: unknown } =
+    (value): value is { id: string } =>
+      !!value && typeof value === 'object' && !Array.isArray(value) &&
+      typeof (value as Record<string, unknown>).id === 'string',
+): void {
+  const migrations = [
+    ['sorteos_draw_records', 'traccion.v1.sorteos.draws'],
+    ['sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions'],
+  ] as const;
+  for (const [table, key] of migrations) {
+    const count = db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
+    if (count.count > 0) continue;
+    const legacyValue = readLegacyValue(db, key);
+    if (typeof legacyValue !== 'string') continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(legacyValue); } catch { continue; }
+    if (!Array.isArray(parsed)) continue;
+    const now = new Date().toISOString();
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO ${table} (id, value_json, created_at, updated_at, deleted_at)
+       VALUES (?, ?, ?, ?, NULL)`,
+    );
+    for (const item of parsed) {
+      if (!isValidLegacyItem(item)) continue;
+      const row = item as Record<string, unknown>;
+      const createdAt = typeof row.createdAt === 'string' ? row.createdAt : now;
+      const updatedAt = typeof row.updatedAt === 'string' ? row.updatedAt : createdAt;
+      insert.run(row.id, JSON.stringify(item), createdAt, updatedAt);
+    }
+  }
+}
+
 /**
  * Dependencias de orquestación que siguen viviendo en sqlitePersistence.ts
  * (safeDatabaseOperation, guards de fila genéricos, backups, etc.) y se
@@ -230,7 +273,6 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
     requireDatabase,
     readPersistedRecordByKey,
     isJsonObjectWithStringId,
-    isCountRow,
     updateRefreshMetadata,
     enqueueLocalBackup,
     assertDatabaseWritesAllowed,
@@ -239,57 +281,13 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
 
   let sorteosMigrationDone = false;
 
-  function migrateSorteosArrayFromPersistedRecord(
-    db: Database,
-    tableName: SorteosTableName,
-    storageKey: string,
-  ): void {
-    const countRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get();
-    const count = isCountRow(countRow) ? countRow.count : 0;
-    if (count > 0) {
-      return;
-    }
-
-    const legacyRecord = readPersistedRecordByKey(db, storageKey);
-    if (!legacyRecord) {
-      return;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(legacyRecord.value);
-    } catch {
-      return;
-    }
-
-    if (!Array.isArray(parsed)) {
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const insert = db.prepare(
-      `INSERT OR IGNORE INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
-       VALUES (?, ?, ?, ?, NULL)`,
-    );
-
-    for (const item of parsed) {
-      if (!isJsonObjectWithStringId(item)) {
-        continue;
-      }
-
-      const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
-      const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
-      insert.run(item.id, JSON.stringify(item), createdAt, updatedAt);
-    }
-  }
-
   function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
-    if (sorteosMigrationDone) {
-      return;
-    }
-
-    migrateSorteosArrayFromPersistedRecord(db, 'sorteos_draw_records', 'traccion.v1.sorteos.draws');
-    migrateSorteosArrayFromPersistedRecord(db, 'sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions');
+    if (sorteosMigrationDone) return;
+    migrateSorteosLegacyInTransaction(
+      db,
+      (database, key) => readPersistedRecordByKey(database, key)?.value ?? null,
+      isJsonObjectWithStringId,
+    );
     sorteosMigrationDone = true;
   }
 
