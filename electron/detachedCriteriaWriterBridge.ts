@@ -10,6 +10,9 @@ import type { DetachedCriteriaSave, DetachedCriteriaSaveResult } from './detache
 import { saveCriteriaViaDetachedWriter } from './detachedCriteriaWriterRunner.js';
 import { saveJsonBatchViaDetachedWriter } from './detachedJsonWriterRunner.js';
 import type { DetachedJsonWrite, DetachedJsonBatchResult } from './detachedJsonWriterCore.js';
+import { saveTaskViaDetachedWriter } from './detachedTaskWriterRunner.js';
+import type { DetachedTaskSave } from './detachedTaskWriterCore.js';
+import type { ConditionalSqliteTaskSaveResult } from './sqlitePersistence.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -66,5 +69,21 @@ export function saveJsonBatchInDetachedUtilityProcess(
   return saveJsonBatchViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, table, records,
+  });
+}
+
+/**
+ * Escritor de Tareas especializado. Sin ruta de producción hasta cerrar y
+ * verificar la cesión del propietario SQLite y el lock SMB distribuido.
+ */
+export function saveTaskInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedTaskSave,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return saveTaskViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
   });
 }
