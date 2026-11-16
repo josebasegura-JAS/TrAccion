@@ -134,7 +134,7 @@ interface TraccionEspecialRecipientRecordsSnapshot { status: TraccionDatabaseSta
 type TraccionConditionalEspecialRecipientRecord = TraccionConditionalComiteSessionRecord;
 interface TraccionConfiguracionSnapshot { status: TraccionDatabaseStatus; value: string | null; updatedAt: string | null; }
 type TraccionPresupuestoRecord = TraccionComiteSessionRecord;
-interface TraccionPresupuestosRecordsSnapshot { status: TraccionDatabaseStatus; scenarios: TraccionPresupuestoRecord[]; manualItems: TraccionPresupuestoRecord[]; ticketGroups: TraccionPresupuestoRecord[]; actuals: TraccionPresupuestoRecord[]; }
+interface TraccionPresupuestosRecordsSnapshot { status: TraccionDatabaseStatus; scenarios: TraccionPresupuestoRecord[]; manualItems: TraccionPresupuestoRecord[]; ticketGroups: TraccionPresupuestoRecord[]; actuals: TraccionPresupuestoRecord[]; revision?: string; }
 interface TraccionConditionalPresupuestosSnapshot { scenarios: Array<{ id: string; value: string }>; manualItems: Array<{ id: string; value: string }>; ticketGroups: Array<{ id: string; value: string }>; actuals: Array<{ id: string; value: string }>; expectedUpdatedAt: string | null; }
 interface TraccionConditionalConfiguracionRecord { value: string; expectedUpdatedAt: string | null; }
 
