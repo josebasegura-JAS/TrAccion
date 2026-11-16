@@ -58,6 +58,15 @@ export function createSqliteWriterOperationLedger() {
     hasUnknownOperations(): boolean {
       return [...operations.values()].some(op => op.state === 'unknown');
     },
+    /** Un resultado no es final mientras esté enviado, en ejecución o incierto. */
+    hasUnsettledOperations(): boolean {
+      return [...operations.values()].some(op => op.state !== 'completed');
+    },
+    unsettledIdsForGeneration(generation: number): string[] {
+      return [...operations.values()]
+        .filter(op => op.generation === generation && op.state !== 'completed')
+        .map(op => op.id);
+    },
     get(id: string): WriterOperationSnapshot | null {
       const state = operations.get(id);
       return state ? { ...state } : null;
