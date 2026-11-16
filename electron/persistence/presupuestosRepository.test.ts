@@ -69,7 +69,7 @@ describe('createPresupuestosRepository', () => {
     expect(snapshot.scenarios).toEqual([]);
     expect(snapshot.actuals).toEqual([]);
     expect(snapshot.revision).toBeNull();
-    expect(snapshot.status).toBe(status);
+    expect(snapshot.status).toStrictEqual(status);
     expect(deps.safeDatabaseOperation).toHaveBeenCalledTimes(1);
   });
 
