@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
-import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { createSimpleJsonModuleRepository, type SimpleJsonModuleRepositoryDependencies } from './simpleJsonModuleRepository.js';
 import { transactionWithMigrationReset, withMigrationFlagRollback } from './migrationRollbackGuard.js';
 
