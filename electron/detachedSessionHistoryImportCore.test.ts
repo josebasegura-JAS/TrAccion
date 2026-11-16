@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
-import type { AtomicSessionHistoryImportPayload } from '../sqlitePersistence.js';
-import { importDetachedSessionHistory, isDetachedSessionHistoryImport } from '../detachedSessionHistoryImportCore.js';
-import { isDetachedWriterRequest, isDetachedWriterResponse } from '../detachedCriteriaWriterProtocol.js';
+import type { AtomicSessionHistoryImportPayload } from './sqlitePersistence.js';
+import { importDetachedSessionHistory, isDetachedSessionHistoryImport } from './detachedSessionHistoryImportCore.js';
+import { isDetachedWriterRequest, isDetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
 function setup(module: 'comite' | 'paritaria') {
   const db = new Database(':memory:');
