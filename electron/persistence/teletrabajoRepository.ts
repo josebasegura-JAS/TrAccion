@@ -186,6 +186,10 @@ export function createTeletrabajoRepository(deps: TeletrabajoRepositoryDeps): Te
             message: `${records.length} solicitudes de Teletrabajo guardadas en SQLite.`,
           };
         } catch (error) {
+          // El callback de migración pudo marcar el flag antes de un rollback.
+          // Un fallo del lote invalida la marca; la siguiente carga debe
+          // comprobar de nuevo si hay datos legacy pendientes.
+          teletrabajoMigrationDone = false;
           if (error instanceof TeletrabajoBatchSaveError) {
             return {
               ok: false,
