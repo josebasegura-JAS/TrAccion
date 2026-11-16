@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from 'better-sqlite3';
 import { createDatabaseLockManager } from './databaseLockManager.js';
+import { createSqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
 
 const testPaths = vi.hoisted(() => ({ userData: '' }));
 
@@ -276,6 +277,52 @@ describe('localBackupService - cierre sin backup redundante', () => {
       finishBackupInnerAcquire();
       await Promise.all([backupPromise, concurrentWrite]);
       expect(events).toEqual(['backup-inicia', 'backup-libera', 'escritura-entra']);
+    },
+  );
+
+
+  it.each(['vivo', 'cierre'] as const)(
+    'PR469: la copia %s reserva la admisión antes de adquirir SMB y se drena al finalizar',
+    async (kind) => {
+      const tracker = createSqliteIndependentActivityTracker();
+      let release!: () => void;
+      let notify!: () => void;
+      const started = new Promise<void>(resolve => { notify = resolve; });
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const original = buildDependencies(databasePath);
+      const service = createLocalBackupService({
+        ...original,
+        trackActivity: (label, operation) => tracker.run(label, operation),
+        acquireLock: async () => {
+          notify();
+          await gate;
+          return original.acquireLock(databasePath);
+        },
+      });
+      service.enqueueLocalBackup('save:pr469');
+      const job = kind === 'vivo'
+        ? service.flushPendingLocalBackup().then(() => undefined)
+        : service.createShutdownLocalBackup().then(() => undefined);
+      await started;
+      expect(tracker.snapshot().labels).toContain(
+        kind === 'vivo' ? 'sqlite:backup-live-full' : 'sqlite:backup-shutdown-full',
+      );
+      const ticket = tracker.beginFreeze();
+      try {
+        let drained = false;
+        const drain = tracker.waitForDrain(ticket).then(() => { drained = true; });
+        await Promise.resolve();
+        expect(drained).toBe(false);
+        await expect(tracker.run('sqlite:new-foreign-backup', async () => undefined))
+          .rejects.toThrow('suspendida');
+        release();
+        await job;
+        await drain;
+        expect(drained).toBe(true);
+        expect(tracker.snapshot().active).toBe(0);
+      } finally {
+        tracker.abortFreeze(ticket);
+      }
     },
   );
 
