@@ -7,7 +7,7 @@ function buildEmptyRepository() {
 
 function buildDeps(overrides: Partial<Parameters<typeof createPresupuestosRepository>[0]> = {}) {
   const status = { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' };
-  const db = { transaction: vi.fn((fn: () => void) => () => fn()), prepare: vi.fn(() => ({ run: vi.fn(), all: vi.fn(() => []) })) };
+  const db = { transaction: vi.fn((fn: () => void) => () => fn()), prepare: vi.fn(() => ({ run: vi.fn(), all: vi.fn(() => []), get: vi.fn() })) };
 
   return {
     createJsonModuleRepository: vi.fn(() => buildEmptyRepository()),
@@ -48,7 +48,7 @@ describe('createPresupuestosRepository', () => {
     ]);
   });
 
-  it('loadPresupuestosRecordsSnapshot carga las 4 tablas en paralelo y las combina en un único snapshot', async () => {
+  it('loadPresupuestosRecordsSnapshot prepara las 4 tablas y toma snapshot SQL conjunto', async () => {
     const status = { ready: true, engine: 'better-sqlite3' as const, phase: 'active' as const, path: '/x.sqlite', schemaVersion: 17, isDefaultPath: false, lockPath: '/x.lockdir' };
     const repositoriesByTable = new Map<string, ReturnType<typeof buildEmptyRepository>>();
     const createJsonModuleRepository = vi.fn((tableName: string) => {
@@ -61,16 +61,16 @@ describe('createPresupuestosRepository', () => {
       return repo;
     });
 
-    const api = createPresupuestosRepository(asDeps(buildDeps({ createJsonModuleRepository })));
+    const deps = buildDeps({ createJsonModuleRepository });
+    const api = createPresupuestosRepository(asDeps(deps));
     const snapshot = await api.loadPresupuestosRecordsSnapshot();
 
-    expect(snapshot.scenarios).toEqual([
-      { id: 'presupuesto_scenario_records-1', value: '{}', updatedAt: '2026-01-01T00:00:00.000Z' },
-    ]);
-    expect(snapshot.actuals).toEqual([
-      { id: 'presupuesto_actual_records-1', value: '{}', updatedAt: '2026-01-01T00:00:00.000Z' },
-    ]);
-    expect(snapshot.status).toBe(status);
+    expect(repositoriesByTable.size).toBe(4);
+    expect(snapshot.scenarios).toEqual([]);
+    expect(snapshot.actuals).toEqual([]);
+    expect(snapshot.revision).toBeNull();
+    expect(snapshot.status).toStrictEqual(status);
+    expect(deps.safeDatabaseOperation).toHaveBeenCalledTimes(1);
   });
 
   it('savePresupuestosSnapshotIfUnchanged rechaza el guardado si expectedUpdatedAt no coincide con el más reciente de las 4 tablas', async () => {
@@ -97,7 +97,7 @@ describe('createPresupuestosRepository', () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain('modificado por otro usuario');
-    expect(deps.safeDatabaseOperation).not.toHaveBeenCalled();
+    expect(deps.safeDatabaseOperation).toHaveBeenCalledTimes(1);
   });
 
   it('savePresupuestosSnapshotIfUnchanged escribe las 4 tablas en una sola transacción cuando el token coincide', async () => {
@@ -130,7 +130,7 @@ describe('createPresupuestosRepository', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(db.transaction).toHaveBeenCalledTimes(2);
     expect(preparedStatements.some((sql) => sql.includes('presupuesto_scenario_records'))).toBe(true);
     expect(deps.updateRefreshMetadata).toHaveBeenCalledTimes(1);
     expect(deps.enqueueLocalBackup).toHaveBeenCalledWith('save:presupuestos');
