@@ -45,7 +45,7 @@ export interface PresupuestosRecordsSnapshot {
   ticketGroups: SimpleJsonRecordsSnapshot['records'];
   actuals: SimpleJsonRecordsSnapshot['records'];
   /** Token opaco de las cuatro tablas, incluidas las filas borradas lógicamente. */
-  revision: string;
+  revision: string | null;
 }
 
 export interface PresupuestosSnapshotInput {
@@ -122,7 +122,7 @@ export function createPresupuestosRepository(
       () => {
         const currentStatus = deps.getSqliteStatus();
         if (!currentStatus.ready || currentStatus.phase !== 'active') {
-          return { status: currentStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [], revision: '' };
+          return { status: currentStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [], revision: null };
         }
         const db = deps.requireDatabase();
         return db.transaction((): PresupuestosRecordsSnapshot => ({
