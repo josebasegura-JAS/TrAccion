@@ -90,3 +90,69 @@ describe('PR9D-5D · congelación y drenaje sin solapamientos', () => {
     expect(tracker.snapshot().active).toBe(0);
   });
 });
+
+
+describe('PR448 · reentrada durante la cesión SQLite', () => {
+  it('una operación ya admitida puede finalizar sus suboperaciones tras beginFreeze', async () => {
+    const tracker = createSqliteIndependentActivityTracker();
+    let continueOuter!: () => void;
+    const blocked = new Promise<void>(resolve => { continueOuter = resolve; });
+    const labels: string[] = [];
+    const parent = tracker.run('sqlite:restore-backup', async () => {
+      await blocked;
+      await tracker.run('sqlite:close-handle', async () => {
+        labels.push('close');
+        await tracker.run('sqlite:activate', () => { labels.push('open'); });
+      });
+      labels.push('restored');
+    });
+    const ticket = tracker.beginFreeze();
+    let drained = false;
+    const wait = tracker.waitForDrain(ticket).then(() => { drained = true; });
+    await expect(tracker.run('sqlite:unrelated-read', () => 0)).rejects.toThrow('suspendida');
+    continueOuter();
+    await parent;
+    await wait;
+    expect(labels).toEqual(['close', 'open', 'restored']);
+    expect(drained).toBe(true);
+    expect(tracker.snapshot()).toEqual({ active: 0, labels: [], frozen: true });
+    tracker.abortFreeze(ticket);
+  });
+
+  it('una tarea desprendida NO puede reutilizar el contexto cuando su raíz terminó', async () => {
+    const tracker = createSqliteIndependentActivityTracker();
+    let detached!: () => Promise<number>;
+    await tracker.run('sqlite:root', () => {
+      // El callback hereda el contexto AsyncLocalStorage del padre, pero solo
+      // puede admitir operaciones nuevas si ese padre sigue en active.
+      detached = async () => tracker.run('sqlite:detached', () => 7);
+    });
+    const ticket = tracker.beginFreeze();
+    await expect(detached()).rejects.toThrow('suspendida');
+    expect(tracker.snapshot().active).toBe(0);
+    tracker.abortFreeze(ticket);
+    expect(await detached()).toBe(7);
+  });
+
+  it('si una suboperación falla, la reserva raíz continúa hasta finalizar', async () => {
+    const tracker = createSqliteIndependentActivityTracker();
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const outer = tracker.run('sqlite:backup', async () => {
+      await expect(tracker.run('sqlite:backup-inner', async () => {
+        throw new Error('fallo SMB');
+      })).rejects.toThrow('fallo SMB');
+      await pending;
+    });
+    const ticket = tracker.beginFreeze();
+    let done = false;
+    const wait = tracker.waitForDrain(ticket).then(() => { done = true; });
+    await Promise.resolve();
+    expect(done).toBe(false);
+    release();
+    await outer;
+    await wait;
+    expect(done).toBe(true);
+    tracker.abortFreeze(ticket);
+  });
+});
