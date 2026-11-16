@@ -9,6 +9,7 @@ import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { readCurrentSchemaVersion } from './persistence/schemaMigrations.js';
 import { saveDetachedCriteriaRecord } from './detachedCriteriaWriterCore.js';
 import { saveDetachedJsonBatch } from './detachedJsonWriterCore.js';
+import { saveDetachedTaskRecord } from './detachedTaskWriterCore.js';
 import { isDetachedWriterRequest, type DetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
 const port = process.parentPort;
@@ -23,7 +24,7 @@ function send(message: DetachedWriterResponse): void {
   port!.postMessage(message);
 }
 
-port.on('message', (event: { data: unknown }) => {
+port.on('message', async (event: { data: unknown }) => {
   const message = event.data;
   if (!isDetachedWriterRequest(message) || closing) return;
   if (message.kind === 'detached:close') {
@@ -74,6 +75,9 @@ port.on('message', (event: { data: unknown }) => {
     if (message.kind === 'detached:save-json-batch') {
       const result = saveDetachedJsonBatch(db, message.table, message.records);
       send({ kind: 'detached:json-batch-saved', operationId: message.operationId, result });
+    } else if (message.kind === 'detached:save-task') {
+      const result = await saveDetachedTaskRecord(db, message.payload);
+      send({ kind: 'detached:task-saved', operationId: message.operationId, result });
     } else {
       const result = saveDetachedCriteriaRecord(db, message.record);
       send({ kind: 'detached:saved', operationId: message.operationId, result });
