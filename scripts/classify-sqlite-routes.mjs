@@ -5,7 +5,6 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 
 const root=process.cwd();
 const inventoryPath=path.join(root,'audit-results/sqlite-access-inventory.json');
