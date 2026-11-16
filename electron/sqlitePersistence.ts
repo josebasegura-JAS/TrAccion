@@ -3,6 +3,7 @@ import { shouldUseIsolatedSqliteHealth } from './sqliteHealthIsolationPolicy.js'
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
+import { readSyncTokensInUtilityProcess } from './isolatedSyncTokensBridge.js';
 import { isIsolatedJsonTable } from './persistence/isolatedJsonTables.js';
 import { readSessionsInUtilityProcess } from './sessionReadWorkerBridge.js';
 import { readTasksInUtilityProcess } from './taskReadWorkerBridge.js';
@@ -955,8 +956,34 @@ const {
   getPersistedRecordSnapshot,
   loadPersistedRecordsHydrationSnapshot,
   loadPersistedRecordsSnapshot,
-  getPersistedRecordsTokenSnapshot,
+  getPersistedRecordsTokenSnapshot: getPersistedRecordsTokenSnapshotInMain,
 } = persistedRecordsModule;
+
+/**
+ * Polling multiusuario: antes consultaba ~20 tablas con better-sqlite3
+ * síncrono en Electron main. Ahora se usa la misma fotografía de marcas desde
+ * un proceso aislado readonly con validación de identidad.
+ *
+ * Sin reintento ni fallback a SQLite en main ante un error del worker:
+ * cualquier respuesta incierta se propaga al servicio de sincronización.
+ */
+export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecordsTokenSnapshot> {
+  const current = getSqliteStatus();
+  if (process.env.TRACCION_SQLITE_ISOLATED_SYNC_TOKENS === '0' ||
+      !current.ready || current.phase !== 'active') {
+    return getPersistedRecordsTokenSnapshotInMain();
+  }
+  if (!current.databaseUuid || !current.applicationId || !current.environment) {
+    throw new Error('No hay identidad validada para leer tokens SQLite.');
+  }
+  const snapshot = await readSyncTokensInUtilityProcess(current.path, {
+    databaseUuid: current.databaseUuid,
+    applicationId: current.applicationId,
+    environment: current.environment,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+  });
+  return { status: getSqliteStatus(), ...snapshot };
+}
 
 export {
   savePersistedRecord,
@@ -966,7 +993,6 @@ export {
   getPersistedRecordSnapshot,
   loadPersistedRecordsHydrationSnapshot,
   loadPersistedRecordsSnapshot,
-  getPersistedRecordsTokenSnapshot,
 };
 
 export async function createLocalStorageBackup(

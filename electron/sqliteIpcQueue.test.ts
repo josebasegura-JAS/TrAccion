@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 
 // La cola se prueba realmente; el journal de Electron se prueba por separado.
 vi.mock('./sqliteIncidentJournal.js', () => ({
@@ -21,6 +22,22 @@ describe('enqueueSqliteIpc', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('un lector readonly en actividad independiente no retiene los guardados de la cola IPC', async () => {
+    let finishRead!: () => void;
+    const readPending = new Promise<void>((resolve) => { finishRead = resolve; });
+    const reader = sqliteIndependentActivityTracker.run(
+      'database:get-persisted-records-token:readonly-worker',
+      () => readPending,
+    );
+    const saved = enqueueSqliteIpc('tasks:save-record-if-unchanged', async () => 'guardado');
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(saved).resolves.toBe('guardado');
+    expect(sqliteIndependentActivityTracker.snapshot().active).toBe(1);
+    finishRead();
+    await reader;
+    expect(sqliteIndependentActivityTracker.snapshot().active).toBe(0);
   });
 
   it('serializa operaciones en orden y devuelve el resultado de cada una', async () => {
