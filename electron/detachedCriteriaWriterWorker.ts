@@ -10,6 +10,7 @@ import { readCurrentSchemaVersion } from './persistence/schemaMigrations.js';
 import { saveDetachedCriteriaRecord } from './detachedCriteriaWriterCore.js';
 import { saveDetachedJsonBatch } from './detachedJsonWriterCore.js';
 import { saveDetachedTaskRecord } from './detachedTaskWriterCore.js';
+import { createSerializedDetachedMessageQueue } from './detachedWriterMessageQueue.js';
 import { isDetachedWriterRequest, type DetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
 const port = process.parentPort;
@@ -24,8 +25,8 @@ function send(message: DetachedWriterResponse): void {
   port!.postMessage(message);
 }
 
-port.on('message', async (event: { data: unknown }) => {
-  const message = event.data;
+const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown) => {
+  const message = value;
   if (!isDetachedWriterRequest(message) || closing) return;
   if (message.kind === 'detached:close') {
     closing = true;
@@ -86,5 +87,12 @@ port.on('message', async (event: { data: unknown }) => {
     // Nunca reenviar de forma automática un guardado cuya respuesta se perdió.
     send({ kind: 'detached:error', operationId: message.operationId });
   }
+}, () => {
+  // Un fallo fuera del manejo transaccional invalida la sesión completa.
+  // El coordinador esperará exit antes de liberar propiedad o reintentar.
+  process.exit(1);
+});
+port.on('message', (event: { data: unknown }) => {
+  messageQueue.enqueue(event.data);
 });
 send({ kind: 'detached:ready' });
