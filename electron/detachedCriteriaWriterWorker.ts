@@ -8,6 +8,7 @@ import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { readCurrentSchemaVersion } from './persistence/schemaMigrations.js';
 import { saveDetachedCriteriaRecord } from './detachedCriteriaWriterCore.js';
+import { saveDetachedJsonBatch } from './detachedJsonWriterCore.js';
 import { isDetachedWriterRequest, type DetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
 const port = process.parentPort;
@@ -70,8 +71,13 @@ port.on('message', (event: { data: unknown }) => {
   }
   seenOperations.add(message.operationId);
   try {
-    const result = saveDetachedCriteriaRecord(db, message.record);
-    send({ kind: 'detached:saved', operationId: message.operationId, result });
+    if (message.kind === 'detached:save-json-batch') {
+      const result = saveDetachedJsonBatch(db, message.table, message.records);
+      send({ kind: 'detached:json-batch-saved', operationId: message.operationId, result });
+    } else {
+      const result = saveDetachedCriteriaRecord(db, message.record);
+      send({ kind: 'detached:saved', operationId: message.operationId, result });
+    }
   } catch {
     // Nunca reenviar de forma automática un guardado cuya respuesta se perdió.
     send({ kind: 'detached:error', operationId: message.operationId });
