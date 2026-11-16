@@ -42,4 +42,25 @@ describe('PR9D-5A · libro de escrituras del worker', () => {
     expect(ledger.hasUnknownOperations()).toBe(false);
     expect(() => ledger.reconcile('save:3', 3)).toThrow();
   });
+
+  it('PR476: cuenta también enviadas y reconocidas, no solo las marcadas unknown', () => {
+    const ledger = createSqliteWriterOperationLedger();
+    ledger.begin('pending:sent', 5);
+    ledger.begin('pending:ack', 5);
+    ledger.acknowledge('pending:ack', 5);
+    ledger.begin('confirmed:other', 6);
+    ledger.acknowledge('confirmed:other', 6);
+    ledger.complete('confirmed:other', 6);
+    expect(ledger.hasUnknownOperations()).toBe(false);
+    expect(ledger.hasUnsettledOperations()).toBe(true);
+    expect(ledger.unsettledIdsForGeneration(5)).toEqual(['pending:sent', 'pending:ack']);
+    expect(ledger.unsettledIdsForGeneration(6)).toEqual([]);
+    expect(ledger.markGenerationUncertain(5)).toEqual(['pending:sent', 'pending:ack']);
+    expect(ledger.hasUnknownOperations()).toBe(true);
+    ledger.reconcile('pending:sent', 5);
+    expect(ledger.hasUnsettledOperations()).toBe(true);
+    ledger.reconcile('pending:ack', 5);
+    expect(ledger.hasUnsettledOperations()).toBe(false);
+  });
+
 });
