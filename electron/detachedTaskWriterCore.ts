@@ -45,7 +45,7 @@ export async function saveDetachedTaskRecord(
     lockPath: ':external-smb-lock:',
   };
   const repo = createTaskRepository({
-    safeDatabaseOperation: async (operation, _fallback) => operation(),
+    safeDatabaseOperation: async (operation) => operation(),
     getSqliteStatus: () => status,
     requireDatabase: () => db,
     readPersistedRecordByKey,
