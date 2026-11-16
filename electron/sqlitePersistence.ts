@@ -524,7 +524,12 @@ export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | n
  * La acción sigue requiriendo confirmación del usuario en Ajustes.
  */
 export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLockResult> {
-  return forceReleaseDatabaseLockWithRecovery({
+  // Esta operación puede tocar owner.json/.lockdir y reactivar la conexión.
+  // Reservar su ciclo completo antes del primer await: el handoff debe
+  // esperarla y no puede permitir una liberación manual durante freeze.
+  sqliteEngineOwnershipFence.assertMayEnterMain();
+  return sqliteIndependentActivityTracker.run('sqlite:force-release-lock-lifecycle', () =>
+    forceReleaseDatabaseLockWithRecovery({
     getStatus: getSqliteStatus,
     readLock,
     getLockInfoPath,
@@ -536,7 +541,7 @@ export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLo
       status = nextStatus;
     },
     errorMessage,
-  });
+  }));
 }
 
 function resetRepositoryMigrationState(): void {
