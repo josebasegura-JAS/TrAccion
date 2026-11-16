@@ -121,17 +121,20 @@ describe('PR448 · reentrada durante la cesión SQLite', () => {
 
   it('una tarea desprendida NO puede reutilizar el contexto cuando su raíz terminó', async () => {
     const tracker = createSqliteIndependentActivityTracker();
-    let detached!: () => Promise<number>;
+    let trigger!: () => void;
+    let detachedResult!: Promise<number>;
     await tracker.run('sqlite:root', () => {
-      // El callback hereda el contexto AsyncLocalStorage del padre, pero solo
-      // puede admitir operaciones nuevas si ese padre sigue en active.
-      detached = async () => tracker.run('sqlite:detached', () => 7);
+      const pending = new Promise<void>(resolve => { trigger = resolve; });
+      // El .then se crea DENTRO de la raíz y hereda su contexto ALS,
+      // aunque se ejecute cuando el padre ya haya terminado.
+      detachedResult = pending.then(() => tracker.run('sqlite:detached', () => 7));
     });
     const ticket = tracker.beginFreeze();
-    await expect(detached()).rejects.toThrow('suspendida');
+    trigger();
+    await expect(detachedResult).rejects.toThrow('suspendida');
     expect(tracker.snapshot().active).toBe(0);
     tracker.abortFreeze(ticket);
-    expect(await detached()).toBe(7);
+    expect(await tracker.run('sqlite:detached-normal', () => 7)).toBe(7);
   });
 
   it('si una suboperación falla, la reserva raíz continúa hasta finalizar', async () => {
