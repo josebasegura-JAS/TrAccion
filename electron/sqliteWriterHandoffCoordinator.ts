@@ -6,6 +6,7 @@
  * en el hijo antes de confirmar cierre de la conexión anterior.
  */
 import type { createSqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
+import { createSqliteWriterOperationLedger } from './sqliteWriterOperationLedger.js';
 import {
   createSqliteEngineOwnershipFence,
   type SqliteQueueState,
@@ -38,6 +39,16 @@ export function createSqliteWriterHandoffCoordinator(
 ) {
   let pending: Promise<number> | null = null;
   let activeFreezeTicket: number | null = null;
+  // Libro privado: solo la conciliación en cuarentena puede levantar una incertidumbre.
+  const operationLedger = createSqliteWriterOperationLedger();
+  let confirmedExitGeneration: number | null = null;
+
+  function assertCurrentWorker(generation: number): void {
+    const owner = fence.snapshot();
+    if (owner.owner !== 'worker' || owner.generation !== generation) {
+      throw new Error('El escritor SQLite no pertenece a la generación activa.');
+    }
+  }
 
   async function performHandoff(): Promise<number> {
     // beginHandoff impide admitir operaciones nuevas inmediatamente.
@@ -98,17 +109,45 @@ export function createSqliteWriterHandoffCoordinator(
       );
       return job;
     },
+    /** Registrar ANTES de enviar una escritura. La capa de transporte no reintenta. */
+    registerWriterOperation(id: string, generation: number): void {
+      assertCurrentWorker(generation);
+      operationLedger.begin(id, generation);
+    },
+    acknowledgeWriterOperation(id: string, generation: number): void {
+      assertCurrentWorker(generation);
+      operationLedger.acknowledge(id, generation);
+    },
+    reconcileWriterOperation(id: string, generation: number): void {
+      if (fence.snapshot().owner !== 'quarantine' ||
+          fence.snapshot().generation !== generation ||
+          confirmedExitGeneration !== generation) {
+        throw new Error('Conciliación SQLite requiere cuarentena, generación correcta y exit confirmado.');
+      }
+      operationLedger.reconcile(id, generation);
+    },
+    pendingWriterOperationIds(generation: number): string[] {
+      return operationLedger.unsettledIdsForGeneration(generation);
+    },
     workerUncertain(generation: number): void {
       fence.markWorkerUncertain(generation);
+      operationLedger.markGenerationUncertain(generation);
     },
     workerExited(generation: number): void {
       fence.markWorkerExited(generation);
+      confirmedExitGeneration = generation;
+      operationLedger.markGenerationUncertain(generation);
     },
     restoreMainAfterReconciliation(
       generation: number,
       identityVerified: boolean,
       allUncertainWritesReconciled: boolean,
     ): void {
+      // Un booleano del llamador no puede sustituir al libro de operaciones.
+      // Rechazar también operaciones en vuelo no marcadas todavía como 'unknown'.
+      if (operationLedger.hasUnsettledOperations()) {
+        throw new Error('Quedan escrituras SQLite pendientes o de resultado incierto; reconciliar antes de reabrir.');
+      }
       fence.restoreMainAfterVerification(
         generation, deps.inspectQueue(), identityVerified, allUncertainWritesReconciled,
       );
@@ -117,6 +156,7 @@ export function createSqliteWriterHandoffCoordinator(
       }
       deps.independentActivity.abortFreeze(activeFreezeTicket);
       activeFreezeTicket = null;
+      confirmedExitGeneration = null;
     },
   };
 }
