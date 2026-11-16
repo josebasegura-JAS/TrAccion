@@ -1,6 +1,7 @@
 import type { Database } from 'better-sqlite3';
 import type { DatabaseStatus } from '../sqlitePersistence.js';
-import { savePresupuestosTransaction } from './presupuestosWriteCore.js';
+import { readPresupuestosRevision, savePresupuestosTransaction } from './presupuestosWriteCore.js';
+import { readActiveJsonRecords } from './jsonRecordRepository.js';
 import type { CreateJsonModuleRepository } from './simpleDomainRepositoryFactory.js';
 import type { SimpleJsonRecordsSnapshot, SimpleJsonSaveResult } from './simpleJsonModuleRepository.js';
 
@@ -43,6 +44,8 @@ export interface PresupuestosRecordsSnapshot {
   manualItems: SimpleJsonRecordsSnapshot['records'];
   ticketGroups: SimpleJsonRecordsSnapshot['records'];
   actuals: SimpleJsonRecordsSnapshot['records'];
+  /** Token opaco de las cuatro tablas, incluidas las filas borradas lógicamente. */
+  revision: string;
 }
 
 export interface PresupuestosSnapshotInput {
@@ -56,17 +59,6 @@ export interface PresupuestosSnapshotInput {
 export interface PresupuestosRepositoryApi {
   loadPresupuestosRecordsSnapshot: () => Promise<PresupuestosRecordsSnapshot>;
   savePresupuestosSnapshotIfUnchanged: (snapshot: PresupuestosSnapshotInput) => Promise<SimpleJsonSaveResult>;
-}
-
-function latestUpdatedAtFromSnapshots(snapshots: SimpleJsonRecordsSnapshot[]): string | null {
-  return snapshots
-    .flatMap((snapshot) => snapshot.records)
-    .reduce<string | null>((latest, record) => {
-      if (!latest || record.updatedAt > latest) {
-        return record.updatedAt;
-      }
-      return latest;
-    }, null);
 }
 
 export function createPresupuestosRepository(
@@ -118,32 +110,41 @@ export function createPresupuestosRepository(
   );
 
   async function loadPresupuestosRecordsSnapshot(): Promise<PresupuestosRecordsSnapshot> {
-    const [scenarios, manualItems, ticketGroups, actuals] = await Promise.all([
+    // Cada repositorio conserva la preparación/migración legacy bajo lock
+    // de escritura; después, leer las cuatro tablas en una única transacción.
+    await Promise.all([
       scenariosRepository.loadSnapshot(),
       manualItemsRepository.loadSnapshot(),
       ticketGroupsRepository.loadSnapshot(),
       actualsRepository.loadSnapshot(),
     ]);
-
-    return {
-      status: scenarios.status as DatabaseStatus,
-      scenarios: scenarios.records,
-      manualItems: manualItems.records,
-      ticketGroups: ticketGroups.records,
-      actuals: actuals.records,
-    };
+    return deps.safeDatabaseOperation(
+      () => {
+        const currentStatus = deps.getSqliteStatus();
+        if (!currentStatus.ready || currentStatus.phase !== 'active') {
+          return { status: currentStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [], revision: '' };
+        }
+        const db = deps.requireDatabase();
+        return db.transaction((): PresupuestosRecordsSnapshot => ({
+          status: currentStatus,
+          scenarios: readActiveJsonRecords(db, 'presupuesto_scenario_records'),
+          manualItems: readActiveJsonRecords(db, 'presupuesto_manual_item_records'),
+          ticketGroups: readActiveJsonRecords(db, 'presupuesto_ticket_group_records'),
+          actuals: readActiveJsonRecords(db, 'presupuesto_actual_records'),
+          revision: readPresupuestosRevision(db),
+        }))();
+      },
+      (nextStatus) => ({
+        status: nextStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [], revision: '',
+      }),
+    );
   }
 
   async function savePresupuestosSnapshotIfUnchanged(
     snapshot: PresupuestosSnapshotInput,
   ): Promise<SimpleJsonSaveResult> {
     const currentSnapshot = await loadPresupuestosRecordsSnapshot();
-    const currentUpdatedAt = latestUpdatedAtFromSnapshots([
-      { status: currentSnapshot.status, records: currentSnapshot.scenarios },
-      { status: currentSnapshot.status, records: currentSnapshot.manualItems },
-      { status: currentSnapshot.status, records: currentSnapshot.ticketGroups },
-      { status: currentSnapshot.status, records: currentSnapshot.actuals },
-    ]);
+    const currentUpdatedAt = currentSnapshot.revision;
 
     if (currentUpdatedAt !== snapshot.expectedUpdatedAt) {
       return {
