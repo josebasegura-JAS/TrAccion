@@ -2,6 +2,7 @@ import { stat } from 'node:fs/promises';
 import { shouldUseIsolatedSqliteHealth } from './sqliteHealthIsolationPolicy.js';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
+import { createSqliteMaintenanceGate } from './sqliteMaintenanceGate.js';
 import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
 import { readSyncTokensInUtilityProcess } from './isolatedSyncTokensBridge.js';
 import { isIsolatedJsonTable } from './persistence/isolatedJsonTables.js';
@@ -346,11 +347,21 @@ export type { DatabaseConnectivityIssuePayload, DatabaseLockInfo } from './persi
 export type { VacuumResult, VacuumStatus } from './persistence/vacuumMaintenance.js';
 
 export async function vacuumDatabaseNow(): Promise<VacuumResult> {
-  return vacuumDatabaseFromModule(createVacuumMaintenanceDependencies(), 'manual');
+  const current = getSqliteStatus();
+  const perform = () => vacuumDatabaseFromModule(createVacuumMaintenanceDependencies(), 'manual');
+  // Igual que los backups, VACUUM debe esperar su turno local ANTES de
+  // adquirir el lock SMB distribuido. Evita intercalar un guardado con
+  // la reescritura completa del fichero por el mantenimiento manual.
+  if (current.ready && current.phase === 'active') {
+    return sqliteMaintenanceGate.runExclusive('vacuum', current.path, perform);
+  }
+  return sqliteMaintenanceGate.run('vacuum-unavailable', perform);
 }
 
 export async function getVacuumStatus(): Promise<VacuumStatus> {
-  return getVacuumStatusFromModule(createVacuumMaintenanceDependencies());
+  return sqliteMaintenanceGate.run('vacuum-status', () =>
+    getVacuumStatusFromModule(createVacuumMaintenanceDependencies()),
+  );
 }
 
 function createVacuumMaintenanceDependencies(): VacuumMaintenanceDependencies {
@@ -370,7 +381,9 @@ function createVacuumMaintenanceDependencies(): VacuumMaintenanceDependencies {
 export type { DataIntegrityReport } from './persistence/dataIntegrityAudit.js';
 
 export async function runDataIntegrityAuditNow(): Promise<DataIntegrityReport> {
-  return runDataIntegrityAuditFromModule(createDataIntegrityAuditDependencies());
+  return sqliteMaintenanceGate.run('integrity-audit', () =>
+    runDataIntegrityAuditFromModule(createDataIntegrityAuditDependencies()),
+  );
 }
 
 function createDataIntegrityAuditDependencies(): DataIntegrityAuditDependencies {
@@ -436,6 +449,12 @@ export function getSqliteWriterHandoffReadiness(): {
   blockers.push('Cesión aún deshabilitada: faltan barrera global de admisión y cobertura exhaustiva de restauración/mantenimiento.');
   return { ready: false, blockers, independentActive: activity.active };
 }
+
+// La fachada registra lecturas y restauraciones durante toda su duración.
+const sqliteMaintenanceGate = createSqliteMaintenanceGate({
+  track: (label, operation) => sqliteIndependentActivityTracker.run(label, operation),
+  withExclusiveLock: (databasePath, operation) => withDatabaseOperationLock(databasePath, operation),
+});
 
 function getLocalBackupService(): LocalBackupService {
   if (!localBackupServiceInstance) {
@@ -925,11 +944,15 @@ function enqueueLocalBackup(reason: string): void {
 }
 
 export async function createShutdownLocalBackup() {
-  return getLocalBackupService().createShutdownLocalBackup();
+  return sqliteMaintenanceGate.run('shutdown-backup', () =>
+    getLocalBackupService().createShutdownLocalBackup(),
+  );
 }
 
 export async function createManualLocalBackup(): Promise<void> {
-  await getLocalBackupService().createManualLocalBackup();
+  await sqliteMaintenanceGate.run('manual-backup', () =>
+    getLocalBackupService().createManualLocalBackup(),
+  );
 }
 
 function getTaskRecordsUpdatedAt(db: Database): string | null {
@@ -1029,11 +1052,17 @@ export async function createLocalStorageBackup(
 }
 
 export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
-  return getLocalBackupService().listLocalBackups();
+  return sqliteMaintenanceGate.run('list-backups', () =>
+    getLocalBackupService().listLocalBackups(),
+  );
 }
 
 export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
-  return getLocalBackupService().restoreLocalBackup(fileName);
+  // Restauración completa: incluye prebackup, cierre/reapertura y verificación;
+  // no liberar la reserva a mitad de operación ni al recibir timeout externo.
+  return sqliteMaintenanceGate.run('restore-backup', () =>
+    getLocalBackupService().restoreLocalBackup(fileName),
+  );
 }
 
 
