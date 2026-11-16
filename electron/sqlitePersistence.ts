@@ -2,6 +2,7 @@ import { stat } from 'node:fs/promises';
 import { shouldUseIsolatedSqliteHealth } from './sqliteHealthIsolationPolicy.js';
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
+import { runGuardedSqliteLifecycle } from './sqliteLifecycleAdmission.js';
 import { createSqliteMaintenanceGate } from './sqliteMaintenanceGate.js';
 import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
 import { readSyncTokensInUtilityProcess } from './isolatedSyncTokensBridge.js';
@@ -655,9 +656,12 @@ async function activateDatabase(
   isDefaultPath: boolean,
   sourceDatabasePath: string | null,
 ): Promise<DatabaseStatus> {
-  sqliteEngineOwnershipFence.assertMayEnterMain();
-  const activated = await sqliteIndependentActivityTracker.run('sqlite:activate', () =>
-    activateSqliteDatabase(
+  return runGuardedSqliteLifecycle(
+    () => sqliteEngineOwnershipFence.assertMayEnterMain(),
+    sqliteIndependentActivityTracker,
+    'sqlite:activate',
+    async () => {
+    const activated = await activateSqliteDatabase(
       directoryPath,
       isDefaultPath,
       sourceDatabasePath,
@@ -669,11 +673,13 @@ async function activateDatabase(
         startDatabaseLockHeartbeat,
         releaseLock,
       },
-    ),
+    );
+    // No liberar la reserva antes de publicar el nuevo handle y su estado.
+    database = activated.database;
+    status = activated.status;
+    return status;
+    },
   );
-  database = activated.database;
-  status = activated.status;
-  return status;
 }
 
 export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
@@ -731,7 +737,22 @@ function requireDatabase(): Database {
   return database;
 }
 
-async function safeDatabaseOperation<T>(
+function safeDatabaseOperation<T>(
+  operation: () => T | Promise<T>,
+  fallback: (status: DatabaseStatus, message: string) => T,
+): Promise<T> {
+  // Mantener UNA reserva durante todo el ciclo, incluidos delays entre
+  // reintentos. Sin ello el preflight podría ver el tracker vacío mientras
+  // queda una operación admitida esperando volver a entrar en SQLite.
+  return runGuardedSqliteLifecycle(
+    () => sqliteEngineOwnershipFence.assertMayEnterMain(),
+    sqliteIndependentActivityTracker,
+    'sqlite:safe-operation-full',
+    () => performSafeDatabaseOperation(operation, fallback),
+  );
+}
+
+async function performSafeDatabaseOperation<T>(
   operation: () => T | Promise<T>,
   fallback: (status: DatabaseStatus, message: string) => T,
 ): Promise<T> {
