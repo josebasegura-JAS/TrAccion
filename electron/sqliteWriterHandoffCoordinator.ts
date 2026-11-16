@@ -41,6 +41,7 @@ export function createSqliteWriterHandoffCoordinator(
   let activeFreezeTicket: number | null = null;
   // Libro privado: solo la conciliación en cuarentena puede levantar una incertidumbre.
   const operationLedger = createSqliteWriterOperationLedger();
+  let confirmedExitGeneration: number | null = null;
 
   function assertCurrentWorker(generation: number): void {
     const owner = fence.snapshot();
@@ -119,8 +120,9 @@ export function createSqliteWriterHandoffCoordinator(
     },
     reconcileWriterOperation(id: string, generation: number): void {
       if (fence.snapshot().owner !== 'quarantine' ||
-          fence.snapshot().generation !== generation) {
-        throw new Error('Conciliación SQLite fuera de cuarentena o generación incorrecta.');
+          fence.snapshot().generation !== generation ||
+          confirmedExitGeneration !== generation) {
+        throw new Error('Conciliación SQLite requiere cuarentena, generación correcta y exit confirmado.');
       }
       operationLedger.reconcile(id, generation);
     },
@@ -133,6 +135,7 @@ export function createSqliteWriterHandoffCoordinator(
     },
     workerExited(generation: number): void {
       fence.markWorkerExited(generation);
+      confirmedExitGeneration = generation;
       operationLedger.markGenerationUncertain(generation);
     },
     restoreMainAfterReconciliation(
@@ -153,6 +156,7 @@ export function createSqliteWriterHandoffCoordinator(
       }
       deps.independentActivity.abortFreeze(activeFreezeTicket);
       activeFreezeTicket = null;
+      confirmedExitGeneration = null;
     },
   };
 }
