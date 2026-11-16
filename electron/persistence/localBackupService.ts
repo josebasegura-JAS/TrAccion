@@ -401,13 +401,22 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     await localBackupQueue;
     if (backupRevision > backedUpRevision) {
       const revision = backupRevision;
-      const ok = await writeLocalBackupArtifacts(reason ?? 'flush:pending');
-      if (ok) {
-        backedUpRevision = Math.max(backedUpRevision, revision);
-      } else {
-        // Un flush previo a la cesión NO debe perder el motivo del backup:
-        // solo una copia confirmada permite consumirlo.
+      try {
+        const ok = await writeLocalBackupArtifacts(reason ?? 'flush:pending');
+        if (ok) {
+          backedUpRevision = Math.max(backedUpRevision, revision);
+        } else {
+          // Una copia omitida por contención sigue pendiente.
+          pendingLocalBackupReason = pendingLocalBackupReason ?? reason ?? 'flush:pending';
+        }
+      } catch (error) {
+        // También conservar el motivo ante errores E/S reales: nunca
+        // considerar respaldada una revisión cuya copia no se confirmó.
         pendingLocalBackupReason = pendingLocalBackupReason ?? reason ?? 'flush:pending';
+        throw error;
+      } finally {
+        // Si hubo guardados concurrentes durante el flush, reprogramarlos
+        // cuando proceda. Bajo pausa de handoff no se crea ningún timer.
         schedulePendingBackup();
       }
     }
