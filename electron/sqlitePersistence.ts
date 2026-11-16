@@ -457,6 +457,7 @@ export function getSqliteWriterHandoffReadiness(): {
 
 // La fachada registra lecturas y restauraciones durante toda su duración.
 const sqliteMaintenanceGate = createSqliteMaintenanceGate({
+  assertMayEnterMain: () => sqliteEngineOwnershipFence.assertMayEnterMain(),
   track: (label, operation) => sqliteIndependentActivityTracker.run(label, operation),
   withExclusiveLock: (databasePath, operation) => withDatabaseOperationLock(databasePath, operation),
 });

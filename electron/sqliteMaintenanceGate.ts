@@ -7,6 +7,8 @@
  * una operación ya admitida mantiene la reserva hasta terminar realmente.
  */
 export interface SqliteMaintenanceGateDependencies {
+  /** Bloquea cualquier acceso al handle main cuando el escritor es otro proceso. */
+  assertMayEnterMain?: () => void;
   track<T>(label: string, operation: () => T | Promise<T>): Promise<T>;
   withExclusiveLock<T>(databasePath: string, operation: () => Promise<T>): Promise<T>;
 }
@@ -15,6 +17,7 @@ export function createSqliteMaintenanceGate(dependencies: SqliteMaintenanceGateD
   return {
     run<T>(label: string, operation: () => T | Promise<T>): Promise<T> {
       if (!label.trim()) return Promise.reject(new Error('Mantenimiento SQLite sin identificador.'));
+      try { dependencies.assertMayEnterMain?.(); } catch (error) { return Promise.reject(error); }
       return dependencies.track(`sqlite:maintenance:${label}`, operation);
     },
     runExclusive<T>(
@@ -25,6 +28,7 @@ export function createSqliteMaintenanceGate(dependencies: SqliteMaintenanceGateD
       if (!label.trim() || !databasePath.trim()) {
         return Promise.reject(new Error('Mantenimiento SQLite exclusivo sin ruta o identificador.'));
       }
+      try { dependencies.assertMayEnterMain?.(); } catch (error) { return Promise.reject(error); }
       // La reserva comienza antes de intentar la exclusión, de manera que
       // un handoff concurrente espera incluso a una adquisición SMB lenta.
       return dependencies.track(`sqlite:maintenance:${label}`, () =>

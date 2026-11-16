@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { createSqliteMaintenanceGate } from './sqliteMaintenanceGate.js';
+import { createSqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 
 function deferred() {
   let release!: () => void;
@@ -120,4 +121,62 @@ describe('Mantenimiento SQLite · admisión, drenaje y exclusión local', () => 
     await expect(gate.runExclusive('vacuum', ' ', async () => 'x')).rejects.toThrow('ruta');
     expect(called).toBe(false);
   });
+
+  it.each(['manual-backup', 'restore-backup', 'integrity-audit', 'list-backups', 'shutdown-backup'])(
+    'PR473: el mantenimiento %s rechaza el acceso si main no es propietario',
+    async label => {
+      const fence = createSqliteEngineOwnershipFence();
+      const tracker = createSqliteIndependentActivityTracker();
+      let invoked = 0;
+      const gate = createSqliteMaintenanceGate({
+        assertMayEnterMain: () => fence.assertMayEnterMain(),
+        track: (name, operation) => tracker.run(name, operation),
+        withExclusiveLock: async (_path, operation) => operation(),
+      });
+      const generation = fence.beginHandoff({
+        queuedOperations: 0, runningOperation: null, timedOut: false,
+      });
+      await expect(gate.run(label, () => { invoked++; })).rejects.toThrow('propiedad cedida');
+      expect(invoked).toBe(0);
+      expect(tracker.snapshot().active).toBe(0);
+      fence.abortBeforeClose(generation);
+      await expect(gate.run(label, () => { invoked++; })).resolves.toBeUndefined();
+      expect(invoked).toBe(1);
+    },
+  );
+
+  it('PR473: VACUUM no alcanza el lock SMB si la propiedad es de worker', async () => {
+    const fence = createSqliteEngineOwnershipFence();
+    const tracker = createSqliteIndependentActivityTracker();
+    let lockAttempts = 0;
+    const gate = createSqliteMaintenanceGate({
+      assertMayEnterMain: () => fence.assertMayEnterMain(),
+      track: (name, operation) => tracker.run(name, operation),
+      withExclusiveLock: async (_path, operation) => { lockAttempts++; return operation(); },
+    });
+    const generation = fence.beginHandoff({queuedOperations: 0,runningOperation: null,timedOut: false});
+    fence.confirmMainHandleClosed(generation);
+    fence.confirmWorkerStarted(generation);
+    await expect(gate.runExclusive('vacuum', 'Z:/traccion.sqlite', async () => 'compactado'))
+      .rejects.toThrow('propiedad cedida');
+    expect(lockAttempts).toBe(0);
+    expect(tracker.snapshot().active).toBe(0);
+  });
+
+  it('PR473: cuarentena del worker bloquea restauraciones aunque el tracker esté libre', async () => {
+    const fence = createSqliteEngineOwnershipFence();
+    const tracker = createSqliteIndependentActivityTracker();
+    const gate = createSqliteMaintenanceGate({
+      assertMayEnterMain: () => fence.assertMayEnterMain(),
+      track: (name, operation) => tracker.run(name, operation),
+      withExclusiveLock: async (_path, operation) => operation(),
+    });
+    const generation = fence.beginHandoff({queuedOperations: 0,runningOperation: null,timedOut: false});
+    fence.confirmMainHandleClosed(generation);
+    fence.confirmWorkerStarted(generation);
+    fence.markWorkerUncertain(generation);
+    await expect(gate.run('restore-backup', () => 'restaurado'))
+      .rejects.toThrow('propiedad cedida');
+  });
+
 });
