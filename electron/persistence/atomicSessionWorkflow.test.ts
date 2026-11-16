@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
+import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { closeSessionWorkflowTransaction } from './atomicSessionWorkflow.js';
 import type { AtomicSessionWorkflowPayload, DatabaseStatus } from '../sqlitePersistence.js';
 
@@ -35,13 +36,13 @@ function fixture(module: 'comite' | 'paritaria') {
     acta:{id:'acta-1',sourceSessionId:'session-1',
       value:JSON.stringify({id:'acta-1',sourceSessionId:'session-1',updatedAt:'rev-2'})},
   };
-  const metadata = (database: Database.Database, revision: string) => {
+  const metadata = (database: SqliteDatabase, revision: string) => {
     database.prepare("INSERT INTO app_metadata (key,value,updated_at) VALUES ('persisted_records_refresh_token',?,?)")
       .run(revision,revision);
   };
   return {db,table,payload,metadata};
 }
-function revision(db: Database.Database, table: string, id: string): string {
+function revision(db: SqliteDatabase, table: string, id: string): string {
   return (db.prepare(`SELECT updated_at FROM ${table} WHERE id = ?`).get(id) as {updated_at:string}).updated_at;
 }
 describe('PR453A · cierre transaccional compartido Comité/Paritaria', () => {
