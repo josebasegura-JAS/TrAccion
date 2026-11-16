@@ -33,8 +33,8 @@ let opened = false;
 let closing = false;
 const seenOperations = new Set<string>();
 // Unique to THIS utilityProcess. Never reuse the main process ownerId.
-const smbManager = createDatabaseLockManager({ getOwnerId: () => writerOwnerId });
 const writerOwnerId = `detached-writer:${process.pid}:${randomUUID()}`;
+const smbManager = createDatabaseLockManager({ getOwnerId: () => writerOwnerId });
 let activeDatabasePath: string | null = null;
 
 function send(message: DetachedWriterResponse): void {
