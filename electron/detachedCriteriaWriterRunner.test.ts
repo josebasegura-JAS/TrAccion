@@ -121,4 +121,97 @@ describe('Proceso escritor aislado: controlador del ciclo de vida', () => {
     })).rejects.toThrow('Ruta');
     expect(createChild).not.toHaveBeenCalled();
   });
+
+  it('PR475: timeout sin exit notifica cuarentena y deja sin resolver la escritura', async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const onUncertain = vi.fn();
+    const onExitConfirmed = vi.fn();
+    const job = saveCriteriaViaDetachedWriter({
+      createChild: () => f.child, databasePath: 'test-database.sqlite', expected,
+      operationId: 'save-timeout-no-exit', record, timeoutMs: 100,
+      onUncertain, onExitConfirmed,
+    });
+    let settled = false;
+    void job.then(() => { settled = true; }, () => { settled = true; });
+    f.message({ kind: 'detached:ready' });
+    f.message({ kind: 'detached:opened' });
+    await vi.advanceTimersByTimeAsync(101);
+    expect(f.kill).toHaveBeenCalledTimes(1);
+    expect(onUncertain).toHaveBeenCalledWith({
+      operationId: 'save-timeout-no-exit', phase: 'saving',
+      reason: 'timeout', exitConfirmed: false,
+    });
+    expect(onExitConfirmed).not.toHaveBeenCalled();
+    expect(settled).toBe(false);
+    f.message({ kind: 'detached:saved', operationId: 'save-timeout-no-exit',
+      result: { ok: true, updatedAt: 'late' } });
+    expect(settled).toBe(false);
+    f.exit(0);
+    await expect(job).rejects.toThrow('resultado incierto');
+    expect(onExitConfirmed).toHaveBeenCalledWith('save-timeout-no-exit', 0);
+    expect(onUncertain).toHaveBeenCalledTimes(1);
+    expect(f.requests.filter(x => x.kind === 'detached:save')).toHaveLength(1);
+  });
+
+  it('PR475: salida inesperada sin confirmación de guardado marca incertidumbre y exit real', async () => {
+    const f = fixture();
+    const onUncertain = vi.fn();
+    const onExitConfirmed = vi.fn();
+    const job = saveCriteriaViaDetachedWriter({
+      createChild: () => f.child, databasePath: 'test-database.sqlite', expected,
+      operationId: 'save-crash', record, onUncertain, onExitConfirmed,
+    });
+    f.message({ kind: 'detached:ready' });
+    f.message({ kind: 'detached:opened' });
+    f.exit(1);
+    await expect(job).rejects.toThrow('comprobar el registro');
+    expect(onUncertain).toHaveBeenCalledWith({
+      operationId: 'save-crash', phase: 'saving',
+      reason: 'unexpected-exit', exitConfirmed: true,
+    });
+    expect(onExitConfirmed).toHaveBeenCalledWith('save-crash', 1);
+  });
+
+  it('PR475: error de protocolo pide kill pero no finge salida del worker', async () => {
+    const f = fixture();
+    const onUncertain = vi.fn();
+    const onExitConfirmed = vi.fn();
+    const job = saveCriteriaViaDetachedWriter({
+      createChild: () => f.child, databasePath: 'test-database.sqlite', expected,
+      operationId: 'save-protocol', record, onUncertain, onExitConfirmed,
+    });
+    f.message({ kind: 'detached:ready' });
+    f.message({ kind: 'detached:opened' });
+    f.message({ kind: 'detached:saved', operationId: 'wrong-id',
+      result: { ok: true, updatedAt: 'fake' } });
+    expect(f.kill).toHaveBeenCalledTimes(1);
+    expect(onUncertain).toHaveBeenCalledWith({
+      operationId: 'save-protocol', phase: 'saving',
+      reason: 'protocol', exitConfirmed: false,
+    });
+    expect(onExitConfirmed).not.toHaveBeenCalled();
+    f.exit(1);
+    await expect(job).rejects.toThrow('comprobar el registro');
+    expect(onExitConfirmed).toHaveBeenCalledWith('save-protocol', 1);
+  });
+
+  it('PR475: sesión confirmada no declara incertidumbre y conserva exit(0)', async () => {
+    const f = fixture();
+    const onUncertain = vi.fn();
+    const onExitConfirmed = vi.fn();
+    const job = saveCriteriaViaDetachedWriter({
+      createChild: () => f.child, databasePath: 'test-database.sqlite', expected,
+      operationId: 'save-ok', record, onUncertain, onExitConfirmed,
+    });
+    f.message({ kind: 'detached:ready' });
+    f.message({ kind: 'detached:opened' });
+    f.message({ kind: 'detached:saved', operationId: 'save-ok',
+      result: { ok: true, updatedAt: 'v2' } });
+    f.exit(0);
+    expect(await job).toEqual({ ok: true, updatedAt: 'v2' });
+    expect(onUncertain).not.toHaveBeenCalled();
+    expect(onExitConfirmed).toHaveBeenCalledWith('save-ok', 0);
+  });
+
 });

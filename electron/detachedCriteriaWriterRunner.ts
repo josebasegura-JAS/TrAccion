@@ -20,6 +20,14 @@ export interface DetachedWriterChild {
   kill(): void;
 }
 
+export interface DetachedWriterUncertainEvent {
+  operationId: string;
+  phase: 'ready' | 'opening' | 'saving' | 'closing';
+  reason: 'timeout' | 'protocol' | 'unexpected-exit' | 'send-failed';
+  /** Sin exit confirmado no puede liberarse la propiedad del proceso hijo. */
+  exitConfirmed: boolean;
+}
+
 export interface DetachedWriterSessionOptions {
   createChild: () => DetachedWriterChild;
   databasePath: string;
@@ -27,6 +35,10 @@ export interface DetachedWriterSessionOptions {
   operationId: string;
   record: DetachedCriteriaSave;
   timeoutMs?: number;
+  /** Señal inmediata para poner en cuarentena la sesión; no confirma cancelación. */
+  onUncertain?: (event: DetachedWriterUncertainEvent) => void;
+  /** Notifica la salida REAL (nunca solo kill), para conciliar antes de liberar propiedad. */
+  onExitConfirmed?: (operationId: string, code: number) => void;
 }
 
 export function saveCriteriaViaDetachedWriter(
@@ -50,15 +62,34 @@ export function saveCriteriaViaDetachedWriter(
     let completed: DetachedCriteriaSaveResult | null = null;
     let exited = false;
     let stopped = false;
+    let uncertainReported = false;
+    const signalUncertain = (reason: DetachedWriterUncertainEvent['reason'], exitConfirmed: boolean): void => {
+      if (uncertainReported) return;
+      uncertainReported = true;
+      try {
+        options.onUncertain?.({
+          operationId: options.operationId,
+          phase,
+          reason,
+          exitConfirmed,
+        });
+      } catch {
+        // La instrumentación no altera el protocolo ni presume éxito.
+      }
+    };
 
     const kill = (): void => {
       if (stopped) return;
       stopped = true;
       try { child.kill(); } catch { /* No declarar liberado sin recibir exit. */ }
     };
-    const fail = (): void => { outcome = 'failed'; kill(); };
+    const fail = (reason: DetachedWriterUncertainEvent['reason']): void => {
+      outcome = 'failed';
+      signalUncertain(reason, false);
+      kill();
+    };
     const send = (request: DetachedWriterRequest): void => {
-      try { child.postMessage(request); } catch { fail(); }
+      try { child.postMessage(request); } catch { fail('send-failed'); }
     };
 
     // No resolver por timeout: aunque se pida kill, el proceso podría
@@ -66,6 +97,7 @@ export function saveCriteriaViaDetachedWriter(
     const timer = setTimeout(() => {
       if (exited || stopped) return;
       outcome = 'timeout';
+      signalUncertain('timeout', false);
       kill();
     }, timeoutMs);
     timer.unref?.();
@@ -87,13 +119,20 @@ export function saveCriteriaViaDetachedWriter(
       } else if (phase === 'closing' && message.kind === 'detached:closed') {
         // La confirmación de mensaje NO sustituye el exit(0) real.
       } else {
-        fail();
+        fail('protocol');
       }
     });
     child.onExit((code) => {
       if (exited) return;
       exited = true;
       clearTimeout(timer);
+      try { options.onExitConfirmed?.(options.operationId, code); }
+      catch { /* La instrumentación no cambia el resultado del guardado. */ }
+      // Confirmar exit al llamador solo mediante el resultado final del
+      // protocolo. Una notificación previa de timeout sigue siendo incierta.
+      if (!(outcome === 'ok' && phase === 'closing' && code === 0 && completed !== null)) {
+        signalUncertain('unexpected-exit', true);
+      }
       if (outcome === 'ok' && phase === 'closing' && code === 0 && completed !== null) {
         resolve(completed);
       } else {
