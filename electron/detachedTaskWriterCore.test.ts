@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
+import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { saveDetachedTaskRecord } from './detachedTaskWriterCore.js';
 import { isDetachedWriterRequest, isDetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
@@ -30,7 +31,7 @@ function payload(id: string, revision: string, expectedUpdatedAt: string | null,
     },
   };
 }
-function lock(db: Database, recordId: string, ownerId = 'owner-b', expiresAt = '2099-01-01T00:00:00.000Z') {
+function lock(db: SqliteDatabase, recordId: string, ownerId = 'owner-b', expiresAt = '2099-01-01T00:00:00.000Z') {
   db.prepare(
     'INSERT INTO editing_locks (module,record_id,owner_id,owner_name,machine_name,acquired_at,expires_at) VALUES (?,?,?,?,?,?,?)',
   ).run('tareas', recordId, ownerId, 'Otra persona', 'PC-B', '2026-11-16T08:00:00.000Z', expiresAt);
