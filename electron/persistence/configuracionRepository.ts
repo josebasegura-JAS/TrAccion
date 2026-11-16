@@ -4,6 +4,7 @@ import {
   isConfiguracionStateRow,
 } from './schemaMigrations.js';
 import type { DatabaseStatus } from '../sqlitePersistence.js';
+import { saveConfiguracionTransaction } from './configuracionWriteCore.js';
 
 export interface ConfiguracionSnapshot {
   status: DatabaseStatus;
@@ -108,39 +109,9 @@ export function createConfiguracionRepository(deps: ConfiguracionRepositoryDepen
 
         deps.assertDatabaseWritesAllowed();
         const db = deps.requireDatabase();
-        return db.transaction((): ConfiguracionSaveResult => {
-          maybeMigrateFromPersistedRecord(db);
-          const row = db
-            .prepare('SELECT updated_at FROM configuracion_state WHERE id = ?')
-            .get(CONFIGURACION_STATE_ID);
-          const currentUpdatedAt = deps.isUpdatedAtRow(row) ? row.updated_at : null;
-          if (currentUpdatedAt !== record.expectedUpdatedAt) {
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt,
-              message: 'Configuración ha sido modificada por otro usuario. Recarga antes de guardar.',
-            };
-          }
-
-          const updatedAt = new Date().toISOString();
-          db.prepare(
-            `INSERT INTO configuracion_state (id, value_json, created_at, updated_at, deleted_at)
-             VALUES (?, ?, ?, ?, NULL)
-             ON CONFLICT(id) DO UPDATE SET
-               value_json = excluded.value_json,
-               updated_at = excluded.updated_at,
-               deleted_at = NULL`,
-          ).run(CONFIGURACION_STATE_ID, record.value, updatedAt, updatedAt);
-          deps.updateRefreshMetadata(db, updatedAt);
-          deps.enqueueLocalBackup('save:configuracion');
-          return {
-            ok: true,
-            status: currentStatus,
-            currentUpdatedAt: updatedAt,
-            message: 'Configuración guardada en SQLite.',
-          };
-        })();
+        const result = saveConfiguracionTransaction(db, record, currentStatus, deps.updateRefreshMetadata);
+        if (result.ok) deps.enqueueLocalBackup('save:configuracion');
+        return result;
       },
       (nextStatus, message) => ({
         ok: false,

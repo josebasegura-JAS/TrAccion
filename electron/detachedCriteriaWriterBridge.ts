@@ -15,6 +15,9 @@ import { saveSessionViaDetachedWriter } from './detachedSessionWriterRunner.js';
 import { closeSessionViaDetachedWriter } from './detachedAtomicSessionCloseRunner.js';
 import { importSessionHistoryViaDetachedWriter } from './detachedSessionHistoryImportRunner.js';
 import { runCoordinationViaDetachedWriter } from './detachedCoordinationWorkflowRunner.js';
+import { saveConfiguracionViaDetachedWriter } from './detachedConfiguracionWriterRunner.js';
+import type { DetachedConfiguracionSave } from './detachedConfiguracionWriterCore.js';
+import type { ConfiguracionSaveResult } from './persistence/configuracionRepository.js';
 import type { DetachedCoordinationWorkflow } from './detachedCoordinationWorkflowCore.js';
 import type { DetachedSessionHistoryImport } from './detachedSessionHistoryImportCore.js';
 import type { DetachedAtomicSessionClose } from './detachedAtomicSessionCloseCore.js';
@@ -149,6 +152,19 @@ export function runCoordinationInDetachedUtilityProcess(
   payload: DetachedCoordinationWorkflow,
 ): Promise<AtomicCoordinationWorkflowResult> {
   return runCoordinationViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** No productivo. Requiere cesión exclusiva, lock SMB y confirmación de identidad. */
+export function saveConfiguracionInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedConfiguracionSave,
+): Promise<ConfiguracionSaveResult> {
+  return saveConfiguracionViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });
