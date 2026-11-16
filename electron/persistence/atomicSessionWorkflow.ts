@@ -166,4 +166,5 @@ export function closeSessionWorkflowTransaction(
           message: 'Sesión, tareas y acta actualizadas de forma atómica.',
         };
       })();
+  return result;
 }
