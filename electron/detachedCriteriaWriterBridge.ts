@@ -16,6 +16,9 @@ import { closeSessionViaDetachedWriter } from './detachedAtomicSessionCloseRunne
 import { importSessionHistoryViaDetachedWriter } from './detachedSessionHistoryImportRunner.js';
 import { runCoordinationViaDetachedWriter } from './detachedCoordinationWorkflowRunner.js';
 import { saveConfiguracionViaDetachedWriter } from './detachedConfiguracionWriterRunner.js';
+import { saveLotteryViaDetachedWriter } from './detachedLotteryWriterRunner.js';
+import type { DetachedLotterySave } from './detachedLotteryWriterCore.js';
+import type { LotterySaveResult } from './persistence/loteriaRepository.js';
 import type { DetachedConfiguracionSave } from './detachedConfiguracionWriterCore.js';
 import type { ConfiguracionSaveResult } from './persistence/configuracionRepository.js';
 import type { DetachedCoordinationWorkflow } from './detachedCoordinationWorkflowCore.js';
@@ -165,6 +168,19 @@ export function saveConfiguracionInDetachedUtilityProcess(
   payload: DetachedConfiguracionSave,
 ): Promise<ConfiguracionSaveResult> {
   return saveConfiguracionViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** Lotería: bridge auxiliar NO productivo. Propiedad SQLite y lock SMB externos obligatorios. */
+export function saveLotteryInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedLotterySave,
+): Promise<LotterySaveResult> {
+  return saveLotteryViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });
