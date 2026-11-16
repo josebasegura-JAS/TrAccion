@@ -112,7 +112,7 @@ describe('createPresupuestosRepository', () => {
       transaction: vi.fn((fn: () => void) => () => fn()),
       prepare: vi.fn((sql: string) => {
         preparedStatements.push(sql);
-        return { run: vi.fn(), all: vi.fn(() => []) };
+        return { run: vi.fn(), all: vi.fn(() => []), get: vi.fn(() => ({updated_at:null})) };
       }),
     };
     const deps = buildDeps({

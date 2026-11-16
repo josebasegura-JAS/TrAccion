@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3';
 import type { DatabaseStatus } from '../sqlitePersistence.js';
-import { readActiveJsonRecords } from './jsonRecordRepository.js';
+import { savePresupuestosTransaction } from './presupuestosWriteCore.js';
 import type { CreateJsonModuleRepository } from './simpleDomainRepositoryFactory.js';
 import type { SimpleJsonRecordsSnapshot, SimpleJsonSaveResult } from './simpleJsonModuleRepository.js';
 
@@ -154,7 +154,6 @@ export function createPresupuestosRepository(
       };
     }
 
-    const updatedAt = new Date().toISOString();
 
     return deps.safeDatabaseOperation(
       () => {
@@ -175,47 +174,12 @@ export function createPresupuestosRepository(
 
         deps.assertDatabaseWritesAllowed();
         const db = deps.requireDatabase();
-        db.transaction(() => {
-          const collections = [
-            ['presupuesto_scenario_records', snapshot.scenarios],
-            ['presupuesto_manual_item_records', snapshot.manualItems],
-            ['presupuesto_ticket_group_records', snapshot.ticketGroups],
-            ['presupuesto_actual_records', snapshot.actuals],
-          ] as const;
-
-          for (const [tableName, records] of collections) {
-            const ids = new Set(records.map((record) => record.id));
-            const existingRows = readActiveJsonRecords(db, tableName);
-            for (const row of existingRows) {
-              if (!ids.has(row.id)) {
-                db.prepare(`UPDATE ${tableName} SET updated_at = ?, deleted_at = ? WHERE id = ?`).run(
-                  updatedAt,
-                  updatedAt,
-                  row.id,
-                );
-              }
-            }
-
-            for (const record of records) {
-              db.prepare(
-                `INSERT INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
-                 VALUES (?, ?, ?, ?, NULL)
-                 ON CONFLICT(id) DO UPDATE SET
-                   value_json = excluded.value_json,
-                   updated_at = excluded.updated_at,
-                   deleted_at = NULL`,
-              ).run(record.id, record.value, updatedAt, updatedAt);
-            }
-          }
-          deps.updateRefreshMetadata(db, updatedAt);
-        })();
+        const result = savePresupuestosTransaction(
+          db, snapshot, currentStatus, deps.updateRefreshMetadata,
+        );
+        if (!result.ok) return result;
         deps.enqueueLocalBackup('save:presupuestos');
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: updatedAt,
-          message: 'Presupuestos guardado en SQLite.',
-        };
+        return result;
       },
       (nextStatus, message) => ({
         ok: false,
