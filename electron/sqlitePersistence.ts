@@ -574,6 +574,11 @@ function suspendDatabaseAfterIoError(error: unknown, suspectedCorruption = false
 }
 
 async function recoverDatabaseAfterIoError(): Promise<void> {
+  return sqliteIndependentActivityTracker.run('sqlite:recovery-lifecycle', () =>
+    performDatabaseRecoveryAfterIoError());
+}
+
+async function performDatabaseRecoveryAfterIoError(): Promise<void> {
   if (!sqliteIoRecoveryRequired) return;
   const previous = getSqliteStatus();
   const startedAt = Date.now();
@@ -663,6 +668,11 @@ async function activateDatabase(
 }
 
 export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
+  return sqliteIndependentActivityTracker.run('sqlite:initialize-lifecycle', () =>
+    performInitializeSqlitePersistence());
+}
+
+async function performInitializeSqlitePersistence(): Promise<DatabaseStatus> {
   if (status) {
     return status;
   }
@@ -1962,6 +1972,11 @@ export async function listOtherTaskLocks() {
 }
 
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
+  return sqliteIndependentActivityTracker.run('sqlite:change-directory-lifecycle', () =>
+    performChangeSqliteDirectory(directoryPath));
+}
+
+async function performChangeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
   const previousStatus = getSqliteStatus();
   const previousDatabasePath = database ? previousStatus.path : null;
   const normalizedDirectoryPath = path.resolve(directoryPath);
@@ -2023,6 +2038,11 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
 }
 
 export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
+  return sqliteIndependentActivityTracker.run('sqlite:reset-directory-lifecycle', () =>
+    performResetSqliteDirectory());
+}
+
+async function performResetSqliteDirectory(): Promise<DatabaseStatus> {
   const previousStatus = getSqliteStatus();
   const defaultDirectory = getDefaultDatabaseDirectory();
   const fallbackPath = getDatabasePathForDirectory(defaultDirectory);
@@ -2090,6 +2110,11 @@ export interface ShutdownPerformanceMetrics {
 }
 
 export async function closeSqlitePersistence(): Promise<ShutdownPerformanceMetrics> {
+  return sqliteIndependentActivityTracker.run('sqlite:shutdown-lifecycle', () =>
+    performCloseSqlitePersistence());
+}
+
+async function performCloseSqlitePersistence(): Promise<ShutdownPerformanceMetrics> {
   const totalStartedAt = Date.now();
 
   // El VACUUM programado no forma parte del camino crítico de cierre.

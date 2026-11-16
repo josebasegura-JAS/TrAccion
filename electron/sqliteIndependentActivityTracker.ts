@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 /**
  * PR9D-5D · Barrera de admisión para E/S SQLite/SMB instrumentada.
  *
@@ -19,6 +20,10 @@ export function createSqliteIndependentActivityTracker() {
   let generation = 0;
   let frozenGeneration: number | null = null;
   const active = new Map<number, string>();
+  // Las operaciones admitidas pueden invocar suboperaciones durante freeze.
+  // Solo se reutiliza un contexto cuyo id raíz SIGUE activo: las tareas
+  // desprendidas que heredan AsyncLocalStorage no heredan un permiso eterno.
+  const admittedContext = new AsyncLocalStorage<number>();
   const drainWaiters = new Set<() => void>();
 
   function notifyDrained(): void {
@@ -78,11 +83,15 @@ export function createSqliteIndependentActivityTracker() {
     },
     async run<T>(label: string, operation: () => T | Promise<T>): Promise<T> {
       if (!label.trim()) throw new Error('Operación SQLite sin etiqueta.');
-      assertAdmitting();
+      const inheritedId = admittedContext.getStore();
+      const reentrant = inheritedId !== undefined && active.has(inheritedId);
+      if (!reentrant) assertAdmitting();
       const id = nextId++;
       active.set(id, label);
       try {
-        return await operation();
+        // Mantener la identidad del trabajo admitido. Una llamada nueva sin
+        // ancestro vivo sigue siendo rechazada después de beginFreeze().
+        return await admittedContext.run(reentrant ? inheritedId : id, operation);
       } finally {
         active.delete(id);
         notifyDrained();
