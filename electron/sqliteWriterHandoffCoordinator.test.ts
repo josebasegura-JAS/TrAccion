@@ -162,11 +162,12 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     expect(() => f.coordinator.restoreMainAfterReconciliation(generation, true, true))
       .toThrow('pendientes');
     expect(() => f.coordinator.reconcileWriterOperation('save:uncertain', generation))
-      .not.toThrow();
-    expect(() => f.coordinator.restoreMainAfterReconciliation(generation, true, true))
-      .toThrow('salida');
+      .toThrow('exit confirmado');
     expect(f.independentActivity.snapshot().frozen).toBe(true);
     f.coordinator.workerExited(generation);
+    expect(() => f.coordinator.restoreMainAfterReconciliation(generation, true, true))
+      .toThrow('pendientes');
+    f.coordinator.reconcileWriterOperation('save:uncertain', generation);
     f.coordinator.restoreMainAfterReconciliation(generation, true, true);
   });
 
