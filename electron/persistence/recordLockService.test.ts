@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Database } from 'better-sqlite3';
 import { createRecordLockService, type DatabaseStatus } from './recordLockService';
 import * as recordLocksModule from './recordLocks';
+import { createSqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
 
 /**
  * Tests de orquestación de recordLockService.ts con dependencias mockeadas
@@ -24,6 +25,7 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
       ),
       getOwnerId: vi.fn(() => 'owner-1'),
       getDatabasePath: vi.fn(() => '/tmp/traccion.sqlite'),
+      runIndependentRead: vi.fn(async <T>(_: string, operation: () => T | Promise<T>): Promise<T> => operation()),
     };
   }
 
@@ -125,7 +127,61 @@ describe('recordLockService — orquestación de bloqueos por registro', () => {
 
     expect(result.status).toBe('idle');
     expect(dependencies.withDatabaseOperationLock).not.toHaveBeenCalled();
+    expect(dependencies.runIndependentRead).toHaveBeenCalledWith('recordLock:get', expect.any(Function));
     expect(spy).toHaveBeenCalledWith(fakeDb, { module: 'teletrabajo', recordId: 'sol-1' }, expect.objectContaining({ ownerId: 'owner-1' }), expect.any(String));
+    spy.mockRestore();
+  });
+
+  it('no admite consulta de edición nueva durante freeze del propietario', async () => {
+    const tracker = createSqliteIndependentActivityTracker();
+    const deps = buildDependencies();
+    deps.runIndependentRead.mockImplementation(
+      async <T>(label: string, operation: () => T | Promise<T>) =>
+        tracker.run(label, operation),
+    );
+    const service = createRecordLockService(deps);
+    const ticket = tracker.beginFreeze();
+    const lock = await service.getRecordLock({ module: 'tareas', recordId: 'task-1' });
+    const other = await service.listOtherLocks('tareas');
+    expect(lock.ok).toBe(false);
+    expect(lock.message).toContain('suspendida');
+    expect(other.ok).toBe(false);
+    expect(other.message).toContain('suspendida');
+    expect(deps.requireDatabase).not.toHaveBeenCalled();
+    tracker.abortFreeze(ticket);
+  });
+
+  it('mantiene reservada la lectura extracola hasta terminar realmente, incluso al iniciar una cesión', async () => {
+    const tracker = createSqliteIndependentActivityTracker();
+    const deps = buildDependencies();
+    deps.runIndependentRead.mockImplementation(
+      async <T>(label: string, operation: () => T | Promise<T>) =>
+        tracker.run(label, operation),
+    );
+    let release!: () => void;
+    const pending = new Promise<ReturnType<typeof recordLocksModule.getRecordLockInTransaction>>(
+      resolve => {
+        release = () => resolve({ ok: true, status: 'idle', lock: null, message: 'ok' });
+      },
+    );
+    const spy = vi.spyOn(recordLocksModule, 'getRecordLockInTransaction')
+      .mockImplementation(() => {
+        throw new Error('No debe usarse callback síncrono de prueba');
+      });
+    // El tracker acepta callbacks asíncronos aunque el SELECT nativo actual
+    // sea síncrono; así queda probado el contrato ante futura E/S en worker.
+    const reader = tracker.run('recordLock:get', () => pending);
+    const ticket = tracker.beginFreeze();
+    expect(tracker.snapshot()).toMatchObject({ frozen: true, active: 1 });
+    let drained = false;
+    const drain = tracker.waitForDrain(ticket).then(() => { drained = true; });
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    release();
+    await reader;
+    await drain;
+    expect(drained).toBe(true);
+    tracker.abortFreeze(ticket);
     spy.mockRestore();
   });
 });
