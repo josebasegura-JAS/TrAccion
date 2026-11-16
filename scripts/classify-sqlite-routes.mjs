@@ -96,3 +96,12 @@ if(files.length===0 || !files.includes('electron/persistence/taskBatchPersistenc
   console.error('Inventario SQLite vacío o faltan rutas críticas conocidas.');
   process.exitCode=1;
 }
+
+const backup=readFileSync(path.join(root,'electron/persistence/localBackupService.ts'),'utf8');
+const facade=readFileSync(path.join(root,'electron/sqlitePersistence.ts'),'utf8');
+if (!backup.includes("'sqlite:backup-live-full'") ||
+    !backup.includes("'sqlite:backup-shutdown-full'") ||
+    !facade.includes('trackActivity: (label, operation) => sqliteIndependentActivityTracker.run(label, operation)')) {
+  console.error('Falta la reserva previa de una ruta de backup SQLite en el main.');
+  process.exitCode=1;
+}
