@@ -11,6 +11,8 @@ import { saveCriteriaViaDetachedWriter } from './detachedCriteriaWriterRunner.js
 import { saveJsonBatchViaDetachedWriter } from './detachedJsonWriterRunner.js';
 import type { DetachedJsonWrite, DetachedJsonBatchResult } from './detachedJsonWriterCore.js';
 import { saveTaskViaDetachedWriter } from './detachedTaskWriterRunner.js';
+import { saveSessionViaDetachedWriter } from './detachedSessionWriterRunner.js';
+import type { DetachedSessionSave } from './detachedSessionWriterCore.js';
 import type { DetachedTaskSave } from './detachedTaskWriterCore.js';
 import type { ConditionalSqliteTaskSaveResult } from './sqlitePersistence.js';
 
@@ -83,6 +85,20 @@ export function saveTaskInDetachedUtilityProcess(
   payload: DetachedTaskSave,
 ): Promise<ConditionalSqliteTaskSaveResult> {
   return saveTaskViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** Adaptador no productivo de Comité, Paritaria y Actas. No incluye los
+ * workflows atómicos de cierre/importación, que requieren otra fase. */
+export function saveSessionInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedSessionSave,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return saveSessionViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });

@@ -10,6 +10,7 @@ import { readCurrentSchemaVersion } from './persistence/schemaMigrations.js';
 import { saveDetachedCriteriaRecord } from './detachedCriteriaWriterCore.js';
 import { saveDetachedJsonBatch } from './detachedJsonWriterCore.js';
 import { saveDetachedTaskRecord } from './detachedTaskWriterCore.js';
+import { saveDetachedSessionRecord } from './detachedSessionWriterCore.js';
 import { createSerializedDetachedMessageQueue } from './detachedWriterMessageQueue.js';
 import { isDetachedWriterRequest, type DetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
@@ -79,6 +80,9 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     } else if (message.kind === 'detached:save-task') {
       const result = await saveDetachedTaskRecord(db, message.payload);
       send({ kind: 'detached:task-saved', operationId: message.operationId, result });
+    } else if (message.kind === 'detached:save-session') {
+      const result = await saveDetachedSessionRecord(db, message.payload);
+      send({ kind: 'detached:session-saved', operationId: message.operationId, result });
     } else {
       const result = saveDetachedCriteriaRecord(db, message.record);
       send({ kind: 'detached:saved', operationId: message.operationId, result });
