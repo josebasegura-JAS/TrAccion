@@ -19,6 +19,9 @@ import { saveConfiguracionViaDetachedWriter } from './detachedConfiguracionWrite
 import { saveLotteryViaDetachedWriter } from './detachedLotteryWriterRunner.js';
 import { saveSorteosViaDetachedWriter } from './detachedSorteosWriterRunner.js';
 import { saveTeletrabajoBatchViaDetachedWriter } from './detachedTeletrabajoBatchRunner.js';
+import { savePresupuestosViaDetachedWriter } from './detachedPresupuestosWriterRunner.js';
+import type { DetachedPresupuestosSave } from './detachedPresupuestosWriterCore.js';
+import type { SimpleJsonSaveResult } from './persistence/simpleJsonModuleRepository.js';
 import type { DetachedTeletrabajoBatchSave } from './detachedTeletrabajoBatchCore.js';
 import type { TeletrabajoBatchSaveResult } from './persistence/teletrabajoRepository.js';
 import type { DetachedSorteosSave } from './detachedSorteosWriterCore.js';
@@ -213,6 +216,19 @@ export function saveTeletrabajoBatchInDetachedUtilityProcess(
   payload: DetachedTeletrabajoBatchSave,
 ): Promise<TeletrabajoBatchSaveResult> {
   return saveTeletrabajoBatchViaDetachedWriter({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath, expected, operationId, payload,
+  });
+}
+
+/** Presupuestos: puente aislado NO productivo; requiere handoff y lock SMB externo. */
+export function savePresupuestosInDetachedUtilityProcess(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  operationId: string,
+  payload: DetachedPresupuestosSave,
+): Promise<SimpleJsonSaveResult> {
+  return savePresupuestosViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
   });
