@@ -37,7 +37,7 @@ describe('PR466 · Presupuestos en escritor aislado con SQLite real',()=>{
       f.db.prepare('INSERT INTO presupuesto_manual_item_records VALUES (?,?,?,?,NULL)')
         .run('m2','{}','2026-01-01','2026-01-01');
       const result=saveDetachedPresupuestos(f.db,f.request);
-      expect(result).toMatchObject({ok:false,currentUpdatedAt:'2026-01-01'});
+      expect(result).toMatchObject({ok:false,currentUpdatedAt:expect.stringMatching(/^budget-rev:sha256:/)});
       expect(f.count('presupuesto_manual_item_records')).toBe(1);
       for(const table of TABLES.filter(x=>x!=='presupuesto_manual_item_records'))expect(f.count(table)).toBe(0);
       expect(f.count('app_metadata')).toBe(0);
