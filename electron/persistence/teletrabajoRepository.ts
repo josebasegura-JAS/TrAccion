@@ -1,3 +1,4 @@
+import { transactionWithMigrationReset, withMigrationFlagRollback } from './migrationRollbackGuard.js';
 import type { Database } from 'better-sqlite3';
 import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords } from './jsonRecordRepository.js';
 import type {
@@ -100,7 +101,7 @@ export function createTeletrabajoRepository(deps: TeletrabajoRepositoryDeps): Te
         }
 
         const db = requireDatabase();
-        db.transaction(() => maybeMigrateTeletrabajoFromPersistedRecord(db))();
+        transactionWithMigrationReset(db, () => { teletrabajoMigrationDone = false; }, () => maybeMigrateTeletrabajoFromPersistedRecord(db))();
         return { status: currentStatus, records: readTeletrabajoRecords(db) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
@@ -125,8 +126,10 @@ export function createTeletrabajoRepository(deps: TeletrabajoRepositoryDeps): Te
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = saveTeletrabajoSingleTransaction(
-          db, record, currentStatus, maybeMigrateTeletrabajoFromPersistedRecord, updateRefreshMetadata,
+        const result = withMigrationFlagRollback(() => { teletrabajoMigrationDone = false; }, () =>
+          saveTeletrabajoSingleTransaction(
+            db, record, currentStatus, maybeMigrateTeletrabajoFromPersistedRecord, updateRefreshMetadata,
+          ),
         );
 
         if (result.ok) {
@@ -174,8 +177,10 @@ export function createTeletrabajoRepository(deps: TeletrabajoRepositoryDeps): Te
 
         const db = requireDatabase();
         try {
-          const results = saveTeletrabajoBatchTransaction(
-            db, records, currentStatus, maybeMigrateTeletrabajoFromPersistedRecord, updateRefreshMetadata,
+          const results = withMigrationFlagRollback(() => { teletrabajoMigrationDone = false; }, () =>
+            saveTeletrabajoBatchTransaction(
+              db, records, currentStatus, maybeMigrateTeletrabajoFromPersistedRecord, updateRefreshMetadata,
+            ),
           );
 
           enqueueLocalBackup('save:teletrabajo_solicitud_records');
