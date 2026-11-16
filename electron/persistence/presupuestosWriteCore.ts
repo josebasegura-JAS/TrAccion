@@ -2,6 +2,7 @@
  * Comprueba OCC dentro de la transacción para evitar la ventana entre load y save.
  */
 import type { Database } from 'better-sqlite3';
+import { createHash } from 'node:crypto';
 import type { DatabaseStatus } from '../sqlitePersistence.js';
 import type { SimpleJsonSaveResult } from './simpleJsonModuleRepository.js';
 import type { PresupuestosSnapshotInput } from './presupuestosRepository.js';
@@ -14,19 +15,32 @@ const TABLES = [
   ['presupuesto_actual_records','actuals'],
 ] as const;
 
-/** Misma revisión que la lectura productiva: el máximo de filas activas
- * de las cuatro colecciones, sin incluir registros borrados lógicamente. */
-export function readPresupuestosActiveRevision(db: Database): string | null {
-  let latest: string | null = null;
+/**
+ * Revisión determinista de las cuatro tablas COMPLETAS, incluidos tombstones.
+ * No depende de Date.now() ni de MAX(updated_at): detecta bajas de una fila
+ * antigua, restauraciones y dos escrituras con el mismo timestamp.
+ * No crea columnas ni requiere una migración de esquema.
+ */
+export function readPresupuestosRevision(db: Database): string {
+  const digest = createHash('sha256');
   for (const [table] of TABLES) {
-    const row = db.prepare(
-      `SELECT MAX(updated_at) AS updated_at FROM ${table} WHERE deleted_at IS NULL`,
-    ).get() as { updated_at?: unknown } | undefined;
-    if (typeof row?.updated_at === 'string' && (latest === null || row.updated_at > latest)) {
-      latest = row.updated_at;
+    digest.update(table);
+    digest.update('\\0');
+    const rows = db.prepare(
+      `SELECT id, value_json, created_at, updated_at, deleted_at FROM ${table} ORDER BY id`,
+    ).all() as Array<{
+      id: string; value_json: string; created_at: string;
+      updated_at: string; deleted_at: string | null;
+    }>;
+    for (const row of rows) {
+      // JSON.stringify diferencia nulos, strings y longitudes.
+      digest.update(JSON.stringify([
+        row.id, row.value_json, row.created_at, row.updated_at, row.deleted_at,
+      ]));
+      digest.update('\\n');
     }
   }
-  return latest;
+  return `budget-rev:sha256:${digest.digest('hex')}`;
 }
 
 /** Returns conflict without altering any collection; throws on SQL failure (rollback).
@@ -55,7 +69,7 @@ export function savePresupuestosTransaction(
     }
   }
   return db.transaction((): SimpleJsonSaveResult => {
-    const currentUpdatedAt = readPresupuestosActiveRevision(db);
+    const currentUpdatedAt = readPresupuestosRevision(db);
     if (currentUpdatedAt !== snapshot.expectedUpdatedAt) {
       return {
         ok: false, status, currentUpdatedAt,
@@ -86,7 +100,7 @@ export function savePresupuestosTransaction(
     }
     updateRefreshMetadata(db, updatedAt);
     return {
-      ok: true, status, currentUpdatedAt: updatedAt,
+      ok: true, status, currentUpdatedAt: readPresupuestosRevision(db),
       message: 'Presupuestos guardado en SQLite.',
     };
   })();
