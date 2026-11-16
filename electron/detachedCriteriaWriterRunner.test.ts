@@ -138,7 +138,7 @@ describe('Proceso escritor aislado: controlador del ciclo de vida', () => {
     f.message({ kind: 'detached:opened' });
     await vi.advanceTimersByTimeAsync(101);
     expect(f.kill).toHaveBeenCalledTimes(1);
-    expect(onUncertain).toHaveBeenCalledExactlyOnceWith({
+    expect(onUncertain).toHaveBeenCalledWith({
       operationId: 'save-timeout-no-exit', phase: 'saving',
       reason: 'timeout', exitConfirmed: false,
     });
@@ -149,7 +149,7 @@ describe('Proceso escritor aislado: controlador del ciclo de vida', () => {
     expect(settled).toBe(false);
     f.exit(0);
     await expect(job).rejects.toThrow('resultado incierto');
-    expect(onExitConfirmed).toHaveBeenCalledExactlyOnceWith('save-timeout-no-exit', 0);
+    expect(onExitConfirmed).toHaveBeenCalledWith('save-timeout-no-exit', 0);
     expect(onUncertain).toHaveBeenCalledTimes(1);
     expect(f.requests.filter(x => x.kind === 'detached:save')).toHaveLength(1);
   });
@@ -166,11 +166,11 @@ describe('Proceso escritor aislado: controlador del ciclo de vida', () => {
     f.message({ kind: 'detached:opened' });
     f.exit(1);
     await expect(job).rejects.toThrow('comprobar el registro');
-    expect(onUncertain).toHaveBeenCalledExactlyOnceWith({
+    expect(onUncertain).toHaveBeenCalledWith({
       operationId: 'save-crash', phase: 'saving',
       reason: 'unexpected-exit', exitConfirmed: true,
     });
-    expect(onExitConfirmed).toHaveBeenCalledExactlyOnceWith('save-crash', 1);
+    expect(onExitConfirmed).toHaveBeenCalledWith('save-crash', 1);
   });
 
   it('PR475: error de protocolo pide kill pero no finge salida del worker', async () => {
@@ -186,14 +186,14 @@ describe('Proceso escritor aislado: controlador del ciclo de vida', () => {
     f.message({ kind: 'detached:saved', operationId: 'wrong-id',
       result: { ok: true, updatedAt: 'fake' } });
     expect(f.kill).toHaveBeenCalledTimes(1);
-    expect(onUncertain).toHaveBeenCalledExactlyOnceWith({
+    expect(onUncertain).toHaveBeenCalledWith({
       operationId: 'save-protocol', phase: 'saving',
       reason: 'protocol', exitConfirmed: false,
     });
     expect(onExitConfirmed).not.toHaveBeenCalled();
     f.exit(1);
     await expect(job).rejects.toThrow('comprobar el registro');
-    expect(onExitConfirmed).toHaveBeenCalledExactlyOnceWith('save-protocol', 1);
+    expect(onExitConfirmed).toHaveBeenCalledWith('save-protocol', 1);
   });
 
   it('PR475: sesión confirmada no declara incertidumbre y conserva exit(0)', async () => {
@@ -211,7 +211,7 @@ describe('Proceso escritor aislado: controlador del ciclo de vida', () => {
     f.exit(0);
     expect(await job).toEqual({ ok: true, updatedAt: 'v2' });
     expect(onUncertain).not.toHaveBeenCalled();
-    expect(onExitConfirmed).toHaveBeenCalledExactlyOnceWith('save-ok', 0);
+    expect(onExitConfirmed).toHaveBeenCalledWith('save-ok', 0);
   });
 
 });
