@@ -21,7 +21,8 @@ const TABLES = [
  * antigua, restauraciones y dos escrituras con el mismo timestamp.
  * No crea columnas ni requiere una migración de esquema.
  */
-export function readPresupuestosRevision(db: Database): string {
+export function readPresupuestosRevision(db: Database): string | null {
+  let totalRows = 0;
   const digest = createHash('sha256');
   for (const [table] of TABLES) {
     digest.update(table);
@@ -32,6 +33,7 @@ export function readPresupuestosRevision(db: Database): string {
       id: string; value_json: string; created_at: string;
       updated_at: string; deleted_at: string | null;
     }>;
+    totalRows += rows.length;
     for (const row of rows) {
       // JSON.stringify diferencia nulos, strings y longitudes.
       digest.update(JSON.stringify([
@@ -40,7 +42,7 @@ export function readPresupuestosRevision(db: Database): string {
       digest.update('\\n');
     }
   }
-  return `budget-rev:sha256:${digest.digest('hex')}`;
+  return totalRows === 0 ? null : `budget-rev:sha256:${digest.digest('hex')}`;
 }
 
 /** Returns conflict without altering any collection; throws on SQL failure (rollback).
