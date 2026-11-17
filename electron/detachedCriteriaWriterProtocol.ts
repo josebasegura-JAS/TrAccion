@@ -37,8 +37,11 @@ export type DetachedWriterRequest =
   | { kind: 'detached:save-configuracion'; operationId: string; payload: DetachedConfiguracionSave }
   | { kind: 'detached:save-configuracion-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedConfiguracionSave }
   | { kind: 'detached:save-lottery'; operationId: string; payload: DetachedLotterySave }
+  | { kind: 'detached:save-lottery-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedLotterySave }
   | { kind: 'detached:save-sorteos'; operationId: string; payload: DetachedSorteosSave }
+  | { kind: 'detached:save-sorteos-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedSorteosSave }
   | { kind: 'detached:save-teletrabajo-batch'; operationId: string; payload: DetachedTeletrabajoBatchSave }
+  | { kind: 'detached:save-teletrabajo-batch-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedTeletrabajoBatchSave }
   | { kind: 'detached:save-presupuestos'; operationId: string; payload: DetachedPresupuestosSave }
   | { kind: 'detached:save-presupuestos-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedPresupuestosSave }
   | { kind: 'detached:close' };
@@ -61,8 +64,11 @@ export type DetachedWriterResponse =
   | { kind: 'detached:configuracion-saved'; operationId: string; result: ConfiguracionSaveResult }
   | { kind: 'detached:configuracion-receipted'; operationId: string; result: ConfiguracionSaveResult }
   | { kind: 'detached:lottery-saved'; operationId: string; result: LotterySaveResult }
+  | { kind: 'detached:lottery-receipted'; operationId: string; result: LotterySaveResult }
   | { kind: 'detached:sorteos-saved'; operationId: string; result: ConditionalSqliteSorteosSaveResult }
+  | { kind: 'detached:sorteos-receipted'; operationId: string; result: ConditionalSqliteSorteosSaveResult }
   | { kind: 'detached:teletrabajo-batch-saved'; operationId: string; result: TeletrabajoBatchSaveResult }
+  | { kind: 'detached:teletrabajo-batch-receipted'; operationId: string; result: TeletrabajoBatchSaveResult }
   | { kind: 'detached:presupuestos-saved'; operationId: string; result: SimpleJsonSaveResult }
   | { kind: 'detached:presupuestos-receipted'; operationId: string; result: SimpleJsonSaveResult }
   | { kind: 'detached:closed' }
@@ -82,6 +88,17 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
   }
   if (r.kind === 'detached:save-presupuestos') {
     return typeof r.operationId === 'string' && !!r.operationId.trim() && isDetachedPresupuestosSave(r.payload);
+  }
+  if (r.kind === 'detached:save-lottery-receipted' ||
+      r.kind === 'detached:save-sorteos-receipted' ||
+      r.kind === 'detached:save-teletrabajo-batch-receipted') {
+    if (!Number.isSafeInteger(r.generation) || Number(r.generation) <= 0 ||
+        typeof r.databaseUuid !== 'string' || !r.databaseUuid.trim()) return false;
+    if (r.kind === 'detached:save-lottery-receipted')
+      return isDetachedWriterRequest({ kind: 'detached:save-lottery', operationId: r.operationId, payload: r.payload });
+    if (r.kind === 'detached:save-sorteos-receipted')
+      return isDetachedWriterRequest({ kind: 'detached:save-sorteos', operationId: r.operationId, payload: r.payload });
+    return isDetachedWriterRequest({ kind: 'detached:save-teletrabajo-batch', operationId: r.operationId, payload: r.payload });
   }
   if (r.kind === 'detached:save-teletrabajo-batch') {
     return typeof r.operationId === 'string' && !!r.operationId.trim() && isDetachedTeletrabajoBatchSave(r.payload);
@@ -205,6 +222,15 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
     return typeof result.ok === 'boolean' && typeof result.message === 'string' &&
       (result.currentUpdatedAt === null || typeof result.currentUpdatedAt === 'string') &&
       !!result.status && typeof result.status === 'object';
+  }
+  if (r.kind === 'detached:lottery-receipted' ||
+      r.kind === 'detached:sorteos-receipted' ||
+      r.kind === 'detached:teletrabajo-batch-receipted') {
+    if (r.kind === 'detached:lottery-receipted')
+      return isDetachedWriterResponse({ kind: 'detached:lottery-saved', operationId: r.operationId, result: r.result });
+    if (r.kind === 'detached:sorteos-receipted')
+      return isDetachedWriterResponse({ kind: 'detached:sorteos-saved', operationId: r.operationId, result: r.result });
+    return isDetachedWriterResponse({ kind: 'detached:teletrabajo-batch-saved', operationId: r.operationId, result: r.result });
   }
   if (r.kind === 'detached:teletrabajo-batch-saved') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() || !r.result || typeof r.result !== 'object') return false;
