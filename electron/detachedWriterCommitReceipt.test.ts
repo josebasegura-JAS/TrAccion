@@ -57,6 +57,8 @@ describe('PR482 · evidencia SQLite transaccional', () => {
   it('rolls back data and receipt when SQL throws', () => {
     const db = fixture();
     try {
+      // A prior successful commit establishes the receipt table durably.
+      saveWithDetachedCommitReceipt(db, key('baseline'), () => ({ ok: true }));
       expect(() => saveWithDetachedCommitReceipt(db, key('failed'), () => {
         db.prepare('INSERT INTO criterios_rrll_records VALUES (?, ?, ?, ?, ?)')
           .run('c2', '{}', 'a', 'b', null);
@@ -70,6 +72,8 @@ describe('PR482 · evidencia SQLite transaccional', () => {
   it('rolls back side-effects on OCC conflict and does not create a receipt', () => {
     const db = fixture();
     try {
+      // A prior successful commit establishes the receipt table durably.
+      saveWithDetachedCommitReceipt(db, key('baseline'), () => ({ ok: true }));
       const result = saveWithDetachedCommitReceipt(db, key('conflict'), () => {
         db.prepare('INSERT INTO criterios_rrll_records VALUES (?, ?, ?, ?, ?)')
           .run('c3', '{}', 'a', 'b', null);
@@ -78,6 +82,17 @@ describe('PR482 · evidencia SQLite transaccional', () => {
       expect(result.ok).toBe(false);
       expect(db.prepare('SELECT id FROM criterios_rrll_records WHERE id = ?').get('c3')).toBeUndefined();
       expect(verifyDetachedSqliteCommit(db, expected, key('conflict')).outcome).toBe('not-committed');
+    } finally { db.close(); }
+  });
+
+  it('keeps first failed write uncertain if its receipt table was rolled back', () => {
+    const db = fixture();
+    try {
+      expect(() => saveWithDetachedCommitReceipt(db, key('first-failure'), () => {
+        throw new Error('abort before initial receipt');
+      })).toThrow('abort before initial receipt');
+      expect(() => verifyDetachedSqliteCommit(db, expected, key('first-failure')))
+        .toThrow('commit incierto');
     } finally { db.close(); }
   });
 
