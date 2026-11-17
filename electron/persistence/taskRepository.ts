@@ -122,6 +122,8 @@ export interface TaskRepositoryDeps {
   assertDatabaseWritesAllowed: () => void;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
   findForeignTaskEditingLock: (db: Database, taskId: string) => { ownerName: string; machineName: string } | null;
+  beforeSaveTransaction?: (db: Database) => void;
+  afterSuccessfulSaveTransaction?: (db: Database) => void;
   isolatedTaskRead?: (filter: SqliteTaskRecordsFilter, status: DatabaseStatus) => Promise<SqliteTaskRecord[]>;
 }
 
@@ -257,6 +259,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
 
         const db = requireDatabase();
         const result = transactionWithMigrationReset(db, () => { tasksMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
+          deps.beforeSaveTransaction?.(db);
           maybeMigrateTasksFromPersistedRecord(db);
           const foreignLock = findForeignTaskEditingLock(db, record.id);
           if (foreignLock) {
@@ -339,6 +342,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
           }
 
           updateRefreshMetadata(db, updatedAt);
+          deps.afterSuccessfulSaveTransaction?.(db);
 
           return {
             ok: true,

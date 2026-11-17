@@ -126,7 +126,9 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     if (message.kind === 'detached:save-criteria-receipted' ||
         message.kind === 'detached:save-json-batch-receipted' ||
         message.kind === 'detached:save-configuracion-receipted' ||
-        message.kind === 'detached:save-presupuestos-receipted') {
+        message.kind === 'detached:save-presupuestos-receipted' ||
+        message.kind === 'detached:save-task-receipted' ||
+        message.kind === 'detached:save-session-receipted') {
       // A renderer/transport payload cannot nominate a different generation
       // or database identity than the one the worker actually opened.
       if (activeGeneration === null || message.generation !== activeGeneration ||
@@ -149,9 +151,21 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     } else if (message.kind === 'detached:save-json-batch') {
       const result = saveDetachedJsonBatch(activeDb, message.table, message.records);
       return { kind: 'detached:json-batch-saved', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-task-receipted') {
+      const result = await saveDetachedTaskRecord(activeDb, message.payload, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      });
+      return { kind: 'detached:task-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-task') {
       const result = await saveDetachedTaskRecord(activeDb, message.payload);
       return { kind: 'detached:task-saved', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-session-receipted') {
+      const result = await saveDetachedSessionRecord(activeDb, message.payload, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      });
+      return { kind: 'detached:session-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-session') {
       const result = await saveDetachedSessionRecord(activeDb, message.payload);
       return { kind: 'detached:session-saved', operationId: message.operationId, result };
