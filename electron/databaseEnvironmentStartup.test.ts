@@ -27,6 +27,10 @@ vi.mock('electron', () => ({
   },
 }));
 
+vi.mock('./databaseEnvironmentChoice.js', () => ({
+  promptDatabaseEnvironment: async () =>
+    mock.choice === 0 ? 'production' : mock.choice === 1 ? 'test' : null,
+}));
 import { selectDatabaseEnvironmentBeforeMain } from './databaseEnvironmentStartup.js';
 
 let workspace = '';
