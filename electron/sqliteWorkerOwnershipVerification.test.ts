@@ -7,7 +7,10 @@ const expected: SqliteWorkerLockProof = {
 };
 const fullLock = { ...expected, username: 'operator', updatedAt: expected.createdAt };
 function fixture(lock: typeof fullLock | null = fullLock) {
-  const readLock = vi.fn(async () => lock);
+  const readLock = vi.fn(async (lockPath: string) => {
+    expect(lockPath).toContain('.lockdir');
+    return lock;
+  });
   const assertDatabaseWritesAllowed = vi.fn();
   return { readLock, assertDatabaseWritesAllowed, getLockPath: (db: string) => db + '.lockdir' };
 }
