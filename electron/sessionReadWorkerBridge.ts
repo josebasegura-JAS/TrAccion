@@ -1,5 +1,6 @@
 /** PR9D-4B · Adaptador Electron al lector readonly de sesiones. */
 import { utilityProcess } from 'electron';
+import { runIsolatedSqliteReadUnderHandoffBarrier } from './isolatedSqliteReadAdmission.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
@@ -13,7 +14,7 @@ export function readSessionsInUtilityProcess(
  databasePath: string, expected: ExpectedSqliteIdentity,
  module: SessionReadKind, id?: string,
 ): Promise<SqliteComiteSessionRecord[]> {
- return runSessionReadWorker({
+ return runIsolatedSqliteReadUnderHandoffBarrier('sessions', () => runSessionReadWorker({
    databasePath, expected, module,
    ...(id === undefined ? {} : { id }),
    createChild: () => {
@@ -27,5 +28,5 @@ export function readSessionsInUtilityProcess(
        onExit: (handler) => { child.on('exit', handler); },
      };
    },
- });
+ }));
 }

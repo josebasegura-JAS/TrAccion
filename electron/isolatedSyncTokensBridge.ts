@@ -1,4 +1,5 @@
 import { utilityProcess } from 'electron';
+import { runIsolatedSqliteReadUnderHandoffBarrier } from './isolatedSqliteReadAdmission.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
@@ -11,7 +12,7 @@ export function readSyncTokensInUtilityProcess(
   databasePath: string,
   expected: ExpectedSqliteIdentity,
 ): Promise<IsolatedSyncTokens> {
-  return runIsolatedSyncTokens({
+  return runIsolatedSqliteReadUnderHandoffBarrier('sync-tokens', () => runIsolatedSyncTokens({
     databasePath,
     expected,
     createChild: () => {
@@ -25,5 +26,5 @@ export function readSyncTokensInUtilityProcess(
         onExit: handler => { child.on('exit', handler); },
       };
     },
-  });
+  }));
 }
