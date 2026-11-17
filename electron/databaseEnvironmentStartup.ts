@@ -6,6 +6,7 @@
 import { app, dialog } from 'electron';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { promptDatabaseEnvironment } from './databaseEnvironmentChoice.js';
 
 type Environment = 'production' | 'test';
 interface SavedTestPreferences {
@@ -42,15 +43,9 @@ function saveTestDirectory(profile: string, directory: string): void {
 }
 export async function selectDatabaseEnvironmentBeforeMain(): Promise<Environment | null> {
   const primaryProfile = app.getPath('userData');
-  const selected = dialog.showMessageBoxSync({
-    type:'question', title:'TrAcción · Entorno de trabajo',
-    message:'¿Con qué base de datos quieres trabajar?',
-    detail:'Producción utiliza tu configuración habitual. Pruebas utiliza otro perfil, otra carpeta SQLite y datos de ensayo.',
-    buttons:['Producción','Pruebas','Cancelar'],
-    defaultId:0, cancelId:2, noLink:true,
-  });
-  if (selected === 2) return null;
-  if (selected === 0) {
+  const selected = await promptDatabaseEnvironment();
+  if (!selected) return null;
+  if (selected === 'production') {
     process.env.TRACCION_DATABASE_ENVIRONMENT = 'production';
     return 'production';
   }
