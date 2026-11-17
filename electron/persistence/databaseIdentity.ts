@@ -13,6 +13,10 @@ type BetterSqlite3Constructor = new (
 
 export const TRACCION_APPLICATION_ID = 'TrAccion';
 export const TRACCION_DATABASE_ENVIRONMENT = 'production';
+/** Selected in startup before importing SQLite; default is production. */
+export function getExpectedDatabaseEnvironment(): 'production' | 'test' {
+  return process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? 'test' : 'production';
+}
 
 const APPLICATION_ID_KEY = 'application_id';
 const DATABASE_UUID_KEY = 'database_uuid';
@@ -110,9 +114,9 @@ export function inspectAndEnsureDatabaseIdentity(
           `La SQLite seleccionada pertenece a otra aplicación (${applicationId}). No se ha modificado el fichero.`,
         );
       }
-      if (environment !== TRACCION_DATABASE_ENVIRONMENT) {
+      if (environment !== getExpectedDatabaseEnvironment()) {
         throw new Error(
-          `La base pertenece al entorno "${environment}" y esta instalación solo admite "${TRACCION_DATABASE_ENVIRONMENT}".`,
+          `La base pertenece al entorno "${environment}" y esta sesión solo admite "${getExpectedDatabaseEnvironment()}".`,
         );
       }
       if (options.expectedDatabaseUuid && databaseUuid !== options.expectedDatabaseUuid) {
@@ -142,7 +146,7 @@ export function inspectAndEnsureDatabaseIdentity(
       applicationId: TRACCION_APPLICATION_ID,
       databaseUuid: options.expectedDatabaseUuid ?? randomUUID(),
       createdAt: new Date().toISOString(),
-      environment: TRACCION_DATABASE_ENVIRONMENT,
+      environment: getExpectedDatabaseEnvironment(),
     };
 
     const assignIdentity = db.transaction(() => {
