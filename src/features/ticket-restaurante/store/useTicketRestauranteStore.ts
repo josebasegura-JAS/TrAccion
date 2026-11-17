@@ -228,6 +228,8 @@ function areTicketSnapshotsEquivalent(
 }
 
 let calendarSqliteUpdatedAt = new Map<string, string>();
+// Ignore initial asynchronous snapshots captured before a successful calendar write.
+let calendarMutationRevision = 0;
 let personSqliteUpdatedAt = new Map<string, string>();
 let absenceSqliteUpdatedAt = new Map<string, string>();
 let configSqliteUpdatedAt: string | null = null;
@@ -397,8 +399,12 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   manutenciones: [],
   load: () => {
     if (!hasTicketRestauranteSharedRepository()) set(readTicketRestauranteSnapshot());
+    const revisionAtLoadStart = calendarMutationRevision;
     void loadTicketRestauranteStateFromSqliteOrStorage()
-      .then((nextSnapshot) => set(nextSnapshot))
+      .then((nextSnapshot) => {
+        if (revisionAtLoadStart !== calendarMutationRevision) return;
+        set(nextSnapshot);
+      })
       .catch((error) => {
         console.warn('Ticket Restaurante: no se ha podido cargar desde SQLite.', error);
         emitPersistenceFeedback({ kind: 'error', key: CONFIG_STORAGE_KEY, updatedAt: new Date().toISOString(), message: error instanceof Error ? error.message : 'Error al cargar Ticket Restaurante desde SQLite.' });
@@ -411,8 +417,10 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         set(syncSnapshot);
       }
     }
+    const revisionAtReloadStart = calendarMutationRevision;
     try {
       const nextSnapshot = await loadTicketRestauranteStateFromSqliteOrStorage();
+      if (revisionAtReloadStart !== calendarMutationRevision) return;
       if (!areTicketSnapshotsEquivalent(get(), nextSnapshot)) {
         set(nextSnapshot);
       }
@@ -437,14 +445,14 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         if (saveResult.currentUpdatedAt) {
           calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
         }
-        const calendars = [...state.calendars, newCalendar];
+        // A load started before this commit must never overwrite the new record.
+        calendarMutationRevision += 1;
+        const calendars = [...get().calendars.filter((row) => row.id !== id), newCalendar];
         set({ calendars });
         return id;
       }
-      console.warn(
-        'Ticket Restaurante: no se ha podido crear el calendario en SQLite.',
-        saveResult?.message,
-      );
+      throw new Error(saveResult?.message ??
+        'No se ha podido crear el calendario en SQLite compartida. No se ha guardado localmente.');
     }
 
     const calendars = [...state.calendars, newCalendar];

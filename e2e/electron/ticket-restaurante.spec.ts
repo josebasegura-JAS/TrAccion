@@ -42,6 +42,15 @@ test('flujo crítico: crear un calendario de Ticket Restaurante desde UI y verif
       await expect(page.getByLabel('Selector calendario')).toContainText(calendarName, {
         timeout: 10_000,
       });
+      // A rendered option alone is insufficient: verify the shared SQLite write.
+      await expect.poll(async () => {
+        return page.evaluate(async (name) => {
+          const snapshot = await window.traccion!.loadTicketRestauranteCalendarRecords!();
+          return snapshot.status.ready && snapshot.records.some((record) => {
+            try { return JSON.parse(record.value).nombre === name; } catch { return false; }
+          });
+        }, calendarName);
+      }, { timeout: 10_000 }).toBe(true);
       await expect(page.getByRole('dialog')).toHaveCount(0);
     });
   } finally {
