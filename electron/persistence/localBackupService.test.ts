@@ -79,6 +79,65 @@ function buildDependencies(
   };
 }
 
+describe('PR492B · admisión completa de lista, poda y restauración', () => {
+  it('no consulta ni poda respaldos durante la cesión congelada', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492b-list-'));
+    testPaths.userData = dir;
+    const service = createLocalBackupService(buildDependencies(path.join(dir, 'shared.sqlite')));
+    const ticket = sqliteIndependentActivityTracker.beginFreeze();
+    try {
+      await expect(service.listLocalBackups()).rejects.toThrow('suspendida');
+      expect(sqliteIndependentActivityTracker.snapshot()).toMatchObject({active:0,frozen:true});
+    } finally {
+      sqliteIndependentActivityTracker.abortFreeze(ticket);
+      rmSync(dir,{recursive:true,force:true});
+    }
+  });
+
+  it('no admite restauraciones ni sus prebackups mientras la barrera esté congelada', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492b-restore-'));
+    testPaths.userData = dir;
+    const service = createLocalBackupService(buildDependencies(path.join(dir, 'shared.sqlite')));
+    const ticket = sqliteIndependentActivityTracker.beginFreeze();
+    try {
+      await expect(service.restoreLocalBackup('no-valid-backup.sqlite')).rejects.toThrow('suspendida');
+      await expect(service.createManualLocalBackup()).rejects.toThrow('suspendida');
+      expect(sqliteIndependentActivityTracker.snapshot()).toMatchObject({active:0,frozen:true});
+    } finally {
+      sqliteIndependentActivityTracker.abortFreeze(ticket);
+      rmSync(dir,{recursive:true,force:true});
+    }
+  });
+
+  it('mantiene la reserva hasta finalizar realmente el trabajo de la restauración', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492b-drain-'));
+    testPaths.userData = dir;
+    const tracker = createSqliteIndependentActivityTracker();
+    let release!: () => void;
+    const hold = new Promise<void>(resolve => { release=resolve; });
+    const deps = buildDependencies(path.join(dir,'shared.sqlite'));
+    deps.trackActivity = (label, operation) =>
+      tracker.run(label, async () => { await hold; return operation(); });
+    const service = createLocalBackupService(deps);
+    const restoring = service.restoreLocalBackup('invalid.sqlite');
+    const ticket = tracker.beginFreeze();
+    let drained = false;
+    const drain = tracker.waitForDrain(ticket).then(() => { drained = true; });
+    try {
+      await Promise.resolve();
+      expect(tracker.snapshot()).toMatchObject({active:1,frozen:true});
+      expect(drained).toBe(false);
+    } finally {
+      release();
+      await restoring;
+      await drain;
+      tracker.abortFreeze(ticket);
+      rmSync(dir,{recursive:true,force:true});
+    }
+    expect(drained).toBe(true);
+  });
+});
+
 describe('PR492A · admisión obligatoria de backups sin inyector legacy', () => {
   it('deniega el backup manual cuando el freeze global ya está activo', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492a-backup-'));

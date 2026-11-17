@@ -103,6 +103,9 @@ if (!backup.includes("'sqlite:backup-live-full'") ||
     !backup.includes('sqliteIndependentActivityTracker.run(label, operation)') ||
     !backup.includes("return await trackActivity('sqlite:backup-live-full'") ||
     !backup.includes("return await trackActivity('sqlite:backup-shutdown-full'") ||
+    !backup.includes("trackActivity('sqlite:backup-manual-lifecycle', createManualLocalBackup)") ||
+    !backup.includes("trackActivity('sqlite:backup-list-prune', listLocalBackups)") ||
+    !backup.includes("trackActivity('sqlite:backup-restore-lifecycle', () => restoreLocalBackup(fileName))") ||
     !facade.includes('trackActivity: (label, operation) => sqliteIndependentActivityTracker.run(label, operation)')) {
   console.error('Falta la admisión obligatoria de un backup SQLite; no permitir un fallback sin tracker.');
   process.exitCode=1;
