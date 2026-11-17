@@ -27,6 +27,12 @@ export interface OrphanedWriterRecoveryDependencies {
    * Throw on network uncertainty or if the lock cannot be obtained.
    */
   withExclusiveRecoveryBarrier: <T>(work: () => Promise<T>) => Promise<T>;
+  /** Force exclusive validation even when the journal has zero unsettled writes. */
+  alwaysAcquireRecoveryBarrier?: boolean;
+  /** Called inside the same exclusive barrier BEFORE reading any SQLite receipts. */
+  verifyInsideBarrier?: () => Promise<void>;
+  /** Called inside the barrier only after all receipts were reconciled. */
+  finalizeInsideBarrier?: (result: OrphanedRecoveryResult) => Promise<void>;
 }
 
 export interface OrphanedRecoveryResult {
@@ -62,7 +68,7 @@ export async function reconcileOrphanedWriterJournal(
   if (pending.some(entry => entry.receiptBacked !== true)) {
     throw new Error('Journal contiene operaciones sin protocolo de recibo: conciliación manual obligatoria.');
   }
-  if (pending.length === 0) {
+  if (pending.length === 0 && !deps.alwaysAcquireRecoveryBarrier) {
     return { reconciled: [], remaining: [] };
   }
 
@@ -73,6 +79,7 @@ export async function reconcileOrphanedWriterJournal(
   return deps.withExclusiveRecoveryBarrier(async () => {
     // Recheck after obtaining exclusive ownership, before the first read.
     await deps.assertPreviousWriterTerminated();
+    await deps.verifyInsideBarrier?.();
 
     const reconciled: Array<{
       id: string; generation: number; outcome: SqliteReconciliationEvidence['outcome']
@@ -99,11 +106,19 @@ export async function reconcileOrphanedWriterJournal(
       reconciled.push({ id: entry.id, generation: entry.generation,
         outcome: evidence.outcome });
     }
-    return {
+    const result: OrphanedRecoveryResult = {
       reconciled,
       remaining: deps.journal.unsettled().map(e => ({
         id: e.id, generation: e.generation,
       })),
     };
+    if (result.remaining.length !== 0) {
+      throw new Error('Journal no conciliado: marcador de proceso retenido.');
+    }
+    // The final durable tombstone transition is performed under the SAME
+    // recovery barrier as the SQLite verification; a later callback may not
+    // re-enter after exclusivity has been released.
+    await deps.finalizeInsideBarrier?.(result);
+    return result;
   });
 }

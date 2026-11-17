@@ -172,6 +172,25 @@ if(files.length===0 || !files.includes('electron/persistence/taskBatchPersistenc
   process.exitCode=1;
 }
 
+// PR501: the experimental receipt pipeline and recovery remain fail-closed.
+// Presence checks complement (do not replace) Vitest and SMB integration tests.
+const receiptTransport=readFileSync(path.join(root,'electron/receiptBackedWriterTransport.ts'),'utf8');
+const recoveryWorkflow=readFileSync(path.join(root,'electron/detachedWriterRecoveryWorkflow.ts'),'utf8');
+const recoveryBarrier=readFileSync(path.join(root,'electron/exclusiveWriterRecoveryBarrier.ts'),'utf8');
+const processStore=readFileSync(path.join(root,'electron/detachedWriterProcessStore.ts'),'utf8');
+if (!receiptTransport.includes('deps.registerWriterOperation(request.operationId, request.generation, true);') ||
+    !receiptTransport.includes('deps.sendAndAwait(request)') ||
+    !receiptTransport.includes('deps.workerUncertain(request.generation)') ||
+    !receiptTransport.includes('deps.acknowledgeWriterOperation(request.operationId, request.generation)') ||
+    !recoveryWorkflow.includes('alwaysAcquireRecoveryBarrier: true') ||
+    !recoveryWorkflow.includes('verifySqliteIntegrityReadOnly(deps.databasePath, deps.expected)') ||
+    !recoveryWorkflow.includes('deps.store.markReconciled(marker)') ||
+    !recoveryBarrier.includes('options.manager.acquireLock(options.databasePath)') ||
+    !recoveryBarrier.includes('options.manager.readLock(lockPath)') ||
+    !processStore.includes("replaceState(record, 'reconciled')")) {
+  console.error('PR501: contrato de transporte/journal/recuperación no cumple barreras esenciales.');
+  process.exitCode=1;
+}
 // PR499: the shared integrity/health utilityProcess bridge must reserve
 // routine health reads, WITHOUT applying main ownership to integrity preflight.
 const healthBridge = readFileSync(path.join(root,'electron/sqliteIntegrityWorkerBridge.ts'),'utf8');

@@ -23,13 +23,15 @@ export interface DetachedWriterProcessRecord {
   readonly generation: number;
   readonly token: string;
   readonly startedAt: string;
-  readonly state: 'launching' | 'exit-confirmed';
+  readonly state: 'launching' | 'exit-confirmed' | 'reconciled';
   readonly exitCode?: number;
 }
 export interface DetachedWriterProcessStore {
   inspect(): DetachedWriterProcessRecord | null;
   claim(databaseUuid: string, generation: number): DetachedWriterProcessRecord;
   confirmExit(record: DetachedWriterProcessRecord, code: number): void;
+  /** Keep the tombstone even after journal reconciliation; never auto-rearm. */
+  markReconciled(record: DetachedWriterProcessRecord): void;
 }
 
 function validate(record: unknown): DetachedWriterProcessRecord {
@@ -38,8 +40,8 @@ function validate(record: unknown): DetachedWriterProcessRecord {
       !r.databaseUuid.trim() || !Number.isSafeInteger(r.generation) ||
       !r.generation || r.generation <= 0 || typeof r.token !== 'string' ||
       !r.token.trim() || typeof r.startedAt !== 'string' || !r.startedAt.trim() ||
-      (r.state !== 'launching' && r.state !== 'exit-confirmed') ||
-      (r.state === 'exit-confirmed' && !Number.isSafeInteger(r.exitCode)) ||
+      (r.state !== 'launching' && r.state !== 'exit-confirmed' && r.state !== 'reconciled') ||
+      ((r.state === 'exit-confirmed' || r.state === 'reconciled') && !Number.isSafeInteger(r.exitCode)) ||
       (r.state === 'launching' && r.exitCode !== undefined)) {
     throw new Error('Marcador de proceso escritor SQLite ilegible: cuarentena obligatoria.');
   }
@@ -61,6 +63,39 @@ export function createDetachedWriterProcessStore(file: string): DetachedWriterPr
   function read(): DetachedWriterProcessRecord | null {
     healthy();
     return existsSync(file) ? validate(JSON.parse(readFileSync(file, 'utf8'))) : null;
+  }
+  function replaceState(
+    record: DetachedWriterProcessRecord, desired: 'exit-confirmed' | 'reconciled',
+    code?: number,
+  ): void {
+    healthy();
+    const current = read();
+    const sourceState = desired === 'reconciled' ? 'exit-confirmed' : 'launching';
+    if (!current || current.token !== record.token ||
+        current.generation !== record.generation ||
+        current.databaseUuid !== record.databaseUuid || current.state !== sourceState) {
+      throw new Error('Transición de proceso escritor no coincide con sesión persistente.');
+    }
+    if (desired === 'exit-confirmed' && !Number.isSafeInteger(code)) {
+      throw new Error('Salida del writer sin código válido.');
+    }
+    const temp = file + '.' + randomUUID() + '.tmp';
+    try {
+      const fd = openSync(temp, 'wx', 0o600);
+      try {
+        writeFileSync(fd, JSON.stringify({
+          ...current, state: desired,
+          exitCode: desired === 'exit-confirmed' ? code : current.exitCode,
+        }), 'utf8');
+        fsyncSync(fd);
+      } finally { closeSync(fd); }
+      renameSync(temp, file);
+      syncDirectory(dirname(file));
+    } catch (error) {
+      try { unlinkSync(temp); } catch { /* preserve failure */ }
+      poisoned = true;
+      throw error;
+    }
   }
   return {
     inspect: read,
@@ -93,28 +128,12 @@ export function createDetachedWriterProcessStore(file: string): DetachedWriterPr
       }
     },
     confirmExit(record, code) {
-      healthy();
-      if (!Number.isSafeInteger(code)) throw new Error('Salida del writer sin código válido.');
-      const current = read();
-      if (!current || current.token !== record.token ||
-          current.generation !== record.generation ||
-          current.databaseUuid !== record.databaseUuid || current.state !== 'launching') {
-        throw new Error('Salida de proceso escritor no coincide con la sesión persistente.');
-      }
-      const temp = file + '.' + randomUUID() + '.tmp';
-      try {
-        const fd = openSync(temp, 'wx', 0o600);
-        try {
-          writeFileSync(fd, JSON.stringify({ ...current, state: 'exit-confirmed', exitCode: code }), 'utf8');
-          fsyncSync(fd);
-        } finally { closeSync(fd); }
-        renameSync(temp, file);
-        syncDirectory(dirname(file));
-      } catch (error) {
-        try { unlinkSync(temp); } catch { /* retain original failure */ }
-        poisoned = true;
-        throw error;
-      }
+      replaceState(record, 'exit-confirmed', code);
+    },
+    markReconciled(record) {
+      // Only invoked inside an independently established recovery barrier.
+      // The file remains in place: later claim() still fails closed.
+      replaceState(record, 'reconciled');
     },
   };
 }
