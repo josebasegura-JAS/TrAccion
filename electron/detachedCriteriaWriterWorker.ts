@@ -279,11 +279,7 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
 port.on('message', (event: { data: unknown }) => {
   messageQueue.enqueue(event.data);
 });
-// If Electron destroys the parent messaging port, the child must not remain
-// alive holding SQLite or its SMB lease. EXIT is still independently verified
-// by the supervisor; closing the port is never a commit acknowledgement.
-port.on('close', () => {
-  closing = true;
-  process.exit(1);
-});
+// Electron's process.parentPort exposes only the 'message' event, not a
+// documented 'close' event. Do not register an unsupported listener:
+// lifecycle/EXIT monitoring remains the supervisor's responsibility.
 send({ kind: 'detached:ready' });
