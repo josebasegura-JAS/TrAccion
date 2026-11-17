@@ -26,6 +26,7 @@ import { saveDetachedSorteos } from './detachedSorteosWriterCore.js';
 import { saveDetachedTeletrabajoBatch } from './detachedTeletrabajoBatchCore.js';
 import { saveDetachedPresupuestos } from './detachedPresupuestosWriterCore.js';
 import { createSerializedDetachedMessageQueue } from './detachedWriterMessageQueue.js';
+import { assertSupervisedWriterRequestAllowed } from './detachedWriterSessionAdmission.js';
 import { isDetachedWriterRequest, type DetachedWriterResponse } from './detachedCriteriaWriterProtocol.js';
 
 const port = process.parentPort;
@@ -113,6 +114,17 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
   if (!db) { send({ kind: 'detached:error', operationId: message.operationId }); return; }
   if (seenOperations.has(message.operationId)) {
     send({ kind: 'detached:error', operationId: message.operationId });
+    return;
+  }
+  // In supervised sessions every write must produce a SQLite commit receipt.
+  // Reject the old protocol instead of accepting operations that cannot be
+  // reconciled safely after a lost ACK or an orphaned utilityProcess.
+  try {
+    assertSupervisedWriterRequestAllowed(message.kind, activeGeneration);
+  } catch {
+    closing = true;
+    send({ kind: 'detached:error', operationId: message.operationId });
+    process.exit(1);
     return;
   }
   seenOperations.add(message.operationId);
@@ -266,5 +278,12 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
 });
 port.on('message', (event: { data: unknown }) => {
   messageQueue.enqueue(event.data);
+});
+// If Electron destroys the parent messaging port, the child must not remain
+// alive holding SQLite or its SMB lease. EXIT is still independently verified
+// by the supervisor; closing the port is never a commit acknowledgement.
+port.on('close', () => {
+  closing = true;
+  process.exit(1);
 });
 send({ kind: 'detached:ready' });
