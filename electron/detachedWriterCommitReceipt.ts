@@ -3,12 +3,14 @@
  * Experimental only: do not connect to production until all write paths
  * are covered and the durable journal uses this verifier after child EXIT.
  */
-import type { Database } from 'better-sqlite3';
+import { createRequire } from 'node:module';
+import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
 import { readCurrentSchemaVersion } from './persistence/schemaMigrations.js';
 
 const TABLE = 'detached_writer_commit_receipts';
+const require = createRequire(import.meta.url);
 
 export interface DetachedCommitIdentity {
   operationId: string;
@@ -121,4 +123,28 @@ export function verifyDetachedSqliteCommit(
     outcome,
     sqliteVerificationReference: `sqlite-commit-receipt:${input.databaseUuid}:${input.generation}:${input.operationId}:${outcome}`,
   };
+}
+
+/**
+ * High-level evidence for an interrupted child. Refuses to inspect SQLite
+ * before a confirmed EXIT; NEVER accepts an IPC ACK as proof of commit.
+ * Reopening is strictly read-only and must be protected by the supervisor's
+ * independent-activity barrier before production integration.
+ */
+export function verifyDetachedSqliteCommitAfterExit(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  input: DetachedCommitIdentity,
+  exitConfirmed: boolean,
+): DetachedCommitEvidence {
+  if (!exitConfirmed || !databasePath.trim()) {
+    throw new Error('Verificación de commit exige EXIT confirmado y ruta SQLite fiable.');
+  }
+  const Ctor = require('better-sqlite3') as DatabaseConstructor;
+  const db = new Ctor(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    return verifyDetachedSqliteCommit(db, expected, input);
+  } finally {
+    db.close();
+  }
 }
