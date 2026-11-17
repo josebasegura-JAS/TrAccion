@@ -74,6 +74,15 @@ describe('PR507 · base de pruebas sin datos reales', () => {
       .toThrow(/entorno/);
   });
 
+  it('rechaza abrir una SQLite ya visible si otro equipo aún conserva el marcador de copia', async()=>{
+    const databasePath=path.join(shared,'traccion.sqlite');
+    writeFileSync(databasePath,'incomplete-test-sqlite');
+    const lock=databasePath+'.test-initialization.lockdir';
+    mkdirSync(lock);
+    await expect(prepareDisposableTestDatabase()).rejects.toThrow('posiblemente incompleto');
+    expect(existsSync(lock)).toBe(true);
+  });
+
   it('no elimina un marcador de inicialización perteneciente a otro equipo',async()=>{
     const lock=path.join(shared,'traccion.sqlite.test-initialization.lockdir');
     mkdirSync(lock);
