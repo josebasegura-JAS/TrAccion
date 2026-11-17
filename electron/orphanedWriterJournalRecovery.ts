@@ -57,6 +57,11 @@ export async function reconcileOrphanedWriterJournal(
   if (pending.some(entry => entry.databaseUuid !== deps.expected.databaseUuid)) {
     throw new Error('Journal e identidad SQLite distintos: recuperación suspendida.');
   }
+  // A receipt missing for a LEGACY operation proves nothing. The provenance
+  // must have been durably recorded BEFORE dispatching the original request.
+  if (pending.some(entry => entry.receiptBacked !== true)) {
+    throw new Error('Journal contiene operaciones sin protocolo de recibo: conciliación manual obligatoria.');
+  }
   if (pending.length === 0) {
     return { reconciled: [], remaining: [] };
   }
