@@ -1,4 +1,4 @@
-import { app, screen } from 'electron';
+import { app, dialog, screen } from 'electron';
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { selectDatabaseEnvironmentBeforeMain } from './databaseEnvironmentStartup.js';
@@ -66,6 +66,9 @@ void app.whenReady().then(async () => {
     }
     await import('./main.js');
   } catch (error: unknown) {
-    console.error('[startup] No se pudo cargar main.js.', error);
+    console.error('[startup] No se pudo preparar el entorno o cargar main.js.', error);
+    dialog.showErrorBox('TrAcción · Arranque suspendido',
+      error instanceof Error ? error.message : 'No se pudo preparar el entorno de trabajo.');
+    app.quit();
   }
 });
