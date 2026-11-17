@@ -79,13 +79,13 @@ describe('PR478 · journal durable de escrituras detached', () => {
     coordinator.acknowledgeWriterOperation('op:4', generation);
     coordinator.workerExited(generation);
     expect(() => coordinator.restoreMainAfterReconciliation(generation, true, true)).toThrow();
-    expect(() => coordinator.reconcileWriterOperation('op:4', generation)).toThrow('evidencia');
-    coordinator.reconcileWriterOperation('op:4', generation, {
+    expect(() => coordinator.reconcileWriterOperation('op:4', generation)).toThrow('conciliación directa prohibida');
+    expect(() => coordinator.reconcileWriterOperation('op:4', generation, {
       outcome: 'committed', sqliteVerificationReference: 'verified-snapshot:op4',
-    });
-    expect(createDurableWriterJournal(f.file, f.uuid).unsettled()).toEqual([]);
-    coordinator.restoreMainAfterReconciliation(generation, true, true);
-    expect(fence.snapshot().owner).toBe('main');
+    })).toThrow('conciliación directa prohibida');
+    expect(createDurableWriterJournal(f.file, f.uuid).unsettled()).toHaveLength(1);
+    expect(() => coordinator.restoreMainAfterReconciliation(generation, true, true)).toThrow();
+    expect(fence.snapshot().owner).toBe('quarantine');
   });
   it('PR483: verifica commits contra SQLite tras EXIT antes de conciliar el journal', async () => {
     const f = fixture();
@@ -123,23 +123,26 @@ describe('PR478 · journal durable de escrituras detached', () => {
       verifyWorkerSmbOwnership: async () => {},
     });
     const gen = await coordinator.handoff();
-    coordinator.registerWriterOperation('committed', gen);
-    coordinator.registerWriterOperation('absent', gen);
+    coordinator.registerWriterOperation('committed', gen, true);
+    coordinator.registerWriterOperation('absent', gen, true);
+    coordinator.registerWriterOperation('legacy-no-receipt', gen);
     expect(() => coordinator.reconcileReceiptedWriterOperation(
       'committed', gen, databasePath, expected)).toThrow('EXIT');
     coordinator.workerExited(gen);
     expect(() => coordinator.reconcileReceiptedWriterOperation(
       'committed', gen, databasePath + '-missing', expected)).toThrow();
-    expect(f.journal.unsettled()).toHaveLength(2);
+    expect(f.journal.unsettled()).toHaveLength(3);
+    expect(() => coordinator.reconcileReceiptedWriterOperation(
+      'legacy-no-receipt', gen, databasePath, expected)).toThrow('sin recibo');
     const commitEvidence = coordinator.reconcileReceiptedWriterOperation(
       'committed', gen, databasePath, expected);
     expect(commitEvidence.outcome).toBe('committed');
     const absentEvidence = coordinator.reconcileReceiptedWriterOperation(
       'absent', gen, databasePath, expected);
     expect(absentEvidence.outcome).toBe('not-committed');
-    expect(f.journal.unsettled()).toEqual([]);
-    coordinator.restoreMainAfterReconciliation(gen, true, true);
-    expect(fence.snapshot().owner).toBe('main');
+    expect(f.journal.unsettled()).toMatchObject([{ id: 'legacy-no-receipt', receiptBacked: false }]);
+    expect(() => coordinator.restoreMainAfterReconciliation(gen, true, true)).toThrow();
+    expect(fence.snapshot().owner).toBe('quarantine');
   });
 
   it('bloquea un handoff si existen operaciones pendientes de otra ejecución', async () => {

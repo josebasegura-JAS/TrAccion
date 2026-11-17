@@ -146,10 +146,10 @@ export function createSqliteWriterHandoffCoordinator(
       return job;
     },
     /** Registrar ANTES de enviar una escritura. La capa de transporte no reintenta. */
-    registerWriterOperation(id: string, generation: number): void {
+    registerWriterOperation(id: string, generation: number, receiptBacked = false): void {
       assertCurrentWorker(generation);
       // Durable write-ahead record BEFORE the message can be sent.
-      deps.durableJournal?.recordSubmitted(id, generation);
+      deps.durableJournal?.recordSubmitted(id, generation, receiptBacked);
       operationLedger.begin(id, generation);
     },
     acknowledgeWriterOperation(id: string, generation: number): void {
@@ -158,6 +158,11 @@ export function createSqliteWriterHandoffCoordinator(
       operationLedger.acknowledge(id, generation);
     },
     reconcileWriterOperation(id: string, generation: number, evidence?: SqliteReconciliationEvidence): void {
+      // PR491: a caller-provided reference is NOT trustworthy commit proof.
+      // Durable operations can only be settled by the independent SQLite verifier.
+      if (deps.durableJournal) {
+        throw new Error('Journal durable: conciliación directa prohibida; verificar recibo SQLite real.');
+      }
       reconcileWriterOperationVerified(id, generation, evidence);
     },
     /**
@@ -183,6 +188,9 @@ export function createSqliteWriterHandoffCoordinator(
         e.id === id && e.generation === generation && e.databaseUuid === expected.databaseUuid);
       if (!entry) {
         throw new Error('Operación no pendiente o identidad incompatible para conciliación SQLite.');
+      }
+      if (entry.receiptBacked !== true) {
+        throw new Error('Operación sin recibo transaccional: no puede probarse ausencia de commit.');
       }
       if (!operationLedger.unsettledIdsForGeneration(generation).includes(id)) {
         // Across a main-process restart, the journal survives but the in-memory
