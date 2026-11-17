@@ -2,6 +2,10 @@
  * NO se importa desde main ni desde los handlers IPC de producción.
  */
 import { utilityProcess } from 'electron';
+import { createSupervisedDetachedWriterSession } from './supervisedDetachedWriterSession.js';
+import { verifyDetachedWorkerSmbSessionOwner } from './sqliteWorkerOwnershipVerification.js';
+import type { DatabaseLockManager } from './persistence/databaseLockManager.js';
+import { hostname } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DetachedWriterRequest } from './detachedCriteriaWriterProtocol.js';
@@ -231,5 +235,28 @@ export function savePresupuestosInDetachedUtilityProcess(
   return savePresupuestosViaDetachedWriter({
     createChild: forkDetachedCriteriaWriter,
     databasePath, expected, operationId, payload,
+  });
+}
+
+/**
+ * PR481: experimental adapter for WriterHandoffDependencies.
+ * Do not call until main has fully drained and closed through coordinator.
+ * Never expose as an enabled production IPC path.
+ */
+export function createExperimentalWriterHandoffTransport(
+  databasePath: string,
+  expected: ExpectedSqliteIdentity,
+  manager: Pick<DatabaseLockManager, 'getLockPath' | 'readLock' | 'assertDatabaseWritesAllowed'>,
+  onExitConfirmed?: (generation: number, code: number) => void,
+  onUncertain?: (generation: number) => void,
+) {
+  return createSupervisedDetachedWriterSession({
+    createChild: forkDetachedCriteriaWriter,
+    databasePath,
+    expected,
+    verifyOwnership: (proof) =>
+      verifyDetachedWorkerSmbSessionOwner(manager, databasePath, hostname(), proof),
+    onExitConfirmed,
+    onUncertain,
   });
 }

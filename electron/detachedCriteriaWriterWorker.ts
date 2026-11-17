@@ -64,7 +64,7 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     }
     return;
   }
-  if (message.kind === 'detached:open') {
+  if (message.kind === 'detached:open' || message.kind === 'detached:open-session') {
     if (opened) { send({ kind: 'detached:error' }); return; }
     opened = true;
     try {
@@ -87,7 +87,13 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
         await sessionLease.assertOwned();
         db = candidate;
         activeDatabasePath = message.databasePath;
-        send({ kind: 'detached:opened' });
+        if (message.kind === 'detached:open-session') {
+          const { ownerId, hostname: ownerHost, pid, createdAt } = sessionLease.owner;
+          send({ kind: 'detached:session-opened', generation: message.generation,
+            proof: { ownerId, hostname: ownerHost, pid, createdAt } });
+        } else {
+          send({ kind: 'detached:opened' });
+        }
       } finally {
         if (db !== candidate) candidate.close();
       }
