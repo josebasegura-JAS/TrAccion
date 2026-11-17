@@ -19,12 +19,14 @@ export interface DurableWriterEntry {
   generation: number;
   databaseUuid: string;
   state: DurableWriterState;
+  /** Explicit provenance: only operations using the atomic receipt protocol can be auto-reconciled. */
+  receiptBacked?: boolean;
   updatedAt: string;
   evidence?: SqliteReconciliationEvidence;
 }
 interface Snapshot { version: 1; databaseUuid: string; entries: DurableWriterEntry[]; }
 export interface DurableWriterJournal {
-  recordSubmitted(id: string, generation: number): void;
+  recordSubmitted(id: string, generation: number, receiptBacked?: boolean): void;
   recordAcknowledged(id: string, generation: number): void;
   markGenerationUnknown(generation: number): void;
   reconcileVerified(id: string, generation: number, evidence: SqliteReconciliationEvidence): void;
@@ -50,6 +52,7 @@ export function createDurableWriterJournal(file: string, databaseUuid: string): 
       if (!entry || typeof entry.id !== 'string' || !entry.id.trim() ||
           seen.has(entry.id) || !checkGeneration(entry.generation) ||
           entry.databaseUuid !== databaseUuid || !validState(entry.state) ||
+          (entry.receiptBacked !== undefined && typeof entry.receiptBacked !== 'boolean') ||
           typeof entry.updatedAt !== 'string' ||
           (entry.state === 'reconciled' && (!entry.evidence ||
             !['committed', 'not-committed'].includes(entry.evidence.outcome) ||
@@ -98,12 +101,13 @@ export function createDurableWriterJournal(file: string, databaseUuid: string): 
     persist(entries.map(e => e.id === entry.id ? entry : e));
   }
   return {
-    recordSubmitted(id, generation) {
+    recordSubmitted(id, generation, receiptBacked = false) {
       assertHealthy();
       if (!id.trim() || !checkGeneration(generation) || entries.some(e => e.id === id)) {
         throw new Error('Operación duplicada o generación inválida en journal.');
       }
-      persist([...entries, { id, generation, databaseUuid, state: 'submitted', updatedAt: new Date().toISOString() }]);
+      persist([...entries, { id, generation, databaseUuid, receiptBacked,
+        state: 'submitted', updatedAt: new Date().toISOString() }]);
     },
     recordAcknowledged(id, generation) {
       assertHealthy();
