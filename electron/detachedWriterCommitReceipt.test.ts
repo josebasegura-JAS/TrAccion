@@ -1,15 +1,18 @@
 import { createRequire } from 'node:module';
+import { mkdtempSync, rmSync } from 'node:fs';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
-import { saveWithDetachedCommitReceipt, verifyDetachedSqliteCommit } from './detachedWriterCommitReceipt.js';
+import { saveWithDetachedCommitReceipt, verifyDetachedSqliteCommit, verifyDetachedSqliteCommitAfterExit } from './detachedWriterCommitReceipt.js';
 import { saveDetachedCriteriaRecord } from './detachedCriteriaWriterCore.js';
 
 const require = createRequire(import.meta.url);
 const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
 const expected = { databaseUuid: 'db-uuid-482', applicationId: 'TrAccion',
   environment: 'test', schemaVersion: 1 };
-function fixture(): Database {
-  const db = new BetterSqlite3(':memory:');
+function fixture(filename = ':memory:'): Database {
+  const db = new BetterSqlite3(filename);
   db.exec(`
     CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
@@ -89,6 +92,23 @@ describe('PR482 · evidencia SQLite transaccional', () => {
       })).toThrow('prohibido repetir');
       expect(invoked).toBe(false);
     } finally { db.close(); }
+  });
+
+  it('reads proof from a fresh readonly handle only after child EXIT is confirmed', () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'traccion-receipt-482-'));
+    const filename = path.join(folder, 'data.sqlite');
+    try {
+      const writer = fixture(filename);
+      try {
+        saveWithDetachedCommitReceipt(writer, key('persisted'), () => ({ ok: true }));
+      } finally { writer.close(); }
+      expect(() => verifyDetachedSqliteCommitAfterExit(filename, expected,
+        key('persisted'), false)).toThrow('EXIT');
+      expect(verifyDetachedSqliteCommitAfterExit(filename, expected,
+        key('persisted'), true).outcome).toBe('committed');
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 
   it('rejects mismatched database identity and missing receipt table (unknown, not absent)', () => {
