@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
 import { runSqliteIntegrityWorker } from './sqliteIntegrityWorkerRunner.js';
+import { runIsolatedSqliteReadUnderHandoffBarrier } from './isolatedSqliteReadAdmission.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,7 +23,11 @@ export function verifySqliteHealthInUtilityProcess(
   databasePath: string,
   expected: ExpectedSqliteIdentity,
 ): Promise<void> {
-  return runSqliteReadonlyWorker(databasePath, expected, 'health');
+  // Health is normal main-owned work: reserve BEFORE utilityProcess.fork,
+  // and release only after the runner confirms child EXIT. Integrity recovery
+  // below uses a DIFFERENT supervisor-owned recovery barrier in quarantine.
+  return runIsolatedSqliteReadUnderHandoffBarrier('health', () =>
+    runSqliteReadonlyWorker(databasePath, expected, 'health'));
 }
 
 function runSqliteReadonlyWorker(

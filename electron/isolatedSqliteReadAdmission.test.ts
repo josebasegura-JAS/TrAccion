@@ -40,7 +40,7 @@ describe('PR494 · readers detached and SQLite handoff', () => {
   it('denies spawning every reader family when admission is frozen', async () => {
     const ticket = sqliteIndependentActivityTracker.beginFreeze();
     try {
-      for(const kind of ['tasks','sessions','json','sync-tokens'] as const) {
+      for(const kind of ['tasks','sessions','json','sync-tokens','health'] as const) {
         let started = false;
         await expect(runIsolatedSqliteReadUnderHandoffBarrier(kind, async () => {
           started = true;
@@ -50,6 +50,33 @@ describe('PR494 · readers detached and SQLite handoff', () => {
       }
       expect(sqliteIndependentActivityTracker.snapshot().active).toBe(0);
     } finally {
+      sqliteIndependentActivityTracker.abortFreeze(ticket);
+    }
+  });
+
+  it('health mantiene reserva hasta salida y el freeze bloquea nuevos health-checks', async () => {
+    let exit!: () => void;
+    const workerExit = new Promise<void>(resolve => { exit = resolve; });
+    const running = runIsolatedSqliteReadUnderHandoffBarrier('health', async () => {
+      await workerExit;
+      return 'health-verified';
+    });
+    const ticket = sqliteIndependentActivityTracker.beginFreeze();
+    let drained = false;
+    const drain = sqliteIndependentActivityTracker.waitForDrain(ticket).then(() => { drained = true; });
+    try {
+      await expect(runIsolatedSqliteReadUnderHandoffBarrier('health', async () => 'unexpected'))
+        .rejects.toThrow('suspendida');
+      await Promise.resolve();
+      expect(drained).toBe(false);
+      expect(sqliteIndependentActivityTracker.snapshot().labels)
+        .toContain('sqlite:isolated-read:health');
+      exit();
+      await expect(running).resolves.toBe('health-verified');
+      await drain;
+      expect(drained).toBe(true);
+    } finally {
+      exit();
       sqliteIndependentActivityTracker.abortFreeze(ticket);
     }
   });
