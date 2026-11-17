@@ -216,7 +216,7 @@ describe('localBackupService - cierre sin backup redundante', () => {
     const backupDir = path.join(testPaths.userData, 'sqlite-local-backup');
     expect(existsSync(path.join(backupDir, 'traccion-local-backup.sqlite'))).toBe(false);
     expect(existsSync(`${databasePath}.backup-coordination.json`)).toBe(false);
-    const shared = readdirSync(rootDir).filter((name) => /^traccion-backup-.*\\.sqlite$/.test(name));
+    const shared = readdirSync(rootDir).filter((name) => /^traccion-backup-.*\.sqlite$/.test(name));
     expect(shared).toEqual([]);
   });
 
