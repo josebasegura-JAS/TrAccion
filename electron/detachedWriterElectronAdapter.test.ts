@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { basename } from 'node:path';
 
 const electronFake = vi.hoisted(() => ({
-  fork: vi.fn(),
+  fork: vi.fn<(entry: string, args: string[], options: { serviceName: string }) => void>(),
   postMessage: vi.fn(),
   kill: vi.fn(() => true),
   listeners: new Map<string, (...values: unknown[]) => void>(),
@@ -36,7 +36,7 @@ describe('PR506 · adaptador real Electron del writer experimental', () => {
     createExperimentalElectronDetachedWriterChild();
     expect(electronFake.fork).toHaveBeenCalledOnce();
     const [entry, args, options] = electronFake.fork.mock.calls[0]!;
-    expect(basename(entry as string)).toBe('detachedCriteriaWriterWorker.js');
+    expect(basename(entry)).toBe('detachedCriteriaWriterWorker.js');
     expect(args).toEqual([]);
     expect(options.serviceName).toContain('experimental');
   });
@@ -60,6 +60,7 @@ describe('PR506 · adaptador real Electron del writer experimental', () => {
     expect(electronFake.kill).toHaveBeenCalledOnce();
     expect(exit).not.toHaveBeenCalled();
     electronFake.listeners.get('exit')?.(1);
-    expect(exit).toHaveBeenCalledExactlyOnceWith(1);
+    expect(exit).toHaveBeenCalledOnce();
+    expect(exit).toHaveBeenCalledWith(1);
   });
 });
