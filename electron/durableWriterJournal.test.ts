@@ -79,7 +79,7 @@ describe('PR478 · journal durable de escrituras detached', () => {
     coordinator.acknowledgeWriterOperation('op:4', generation);
     coordinator.workerExited(generation);
     expect(() => coordinator.restoreMainAfterReconciliation(generation, true, true)).toThrow();
-    expect(() => coordinator.reconcileWriterOperation('op:4', generation)).toThrow('evidencia');
+    expect(() => coordinator.reconcileWriterOperation('op:4', generation)).toThrow('conciliación directa prohibida');
     expect(() => coordinator.reconcileWriterOperation('op:4', generation, {
       outcome: 'committed', sqliteVerificationReference: 'verified-snapshot:op4',
     })).toThrow('conciliación directa prohibida');
