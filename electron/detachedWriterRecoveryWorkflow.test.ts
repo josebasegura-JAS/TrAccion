@@ -6,7 +6,7 @@ import Database from 'better-sqlite3';
 import { createDurableWriterJournal } from './durableWriterJournal.js';
 import { createDetachedWriterProcessStore } from './detachedWriterProcessStore.js';
 import { saveWithDetachedCommitReceipt } from './detachedWriterCommitReceipt.js';
-import { reconcileDetachedWriterAfterCrash } from './detachedWriterRecoveryWorkflow.js';
+import { reconcileDetachedWriterAfterCrash, rearmReconciledDetachedWriter } from './detachedWriterRecoveryWorkflow.js';
 
 const directories:string[]=[];
 const expected={ databaseUuid:'db-pr501', applicationId:'TrAccion',
@@ -50,7 +50,14 @@ function fixture() {
       withExclusiveRecoveryBarrier:<T>(work:()=>Promise<T>)=>barrier(work) as Promise<T>,
       ...override,
     });
-  return {db,store,marker,journal,databasePath,terminated,barrier,run};
+  const rearm=(override:Partial<Parameters<typeof rearmReconciledDetachedWriter>[0]>={})=>
+    rearmReconciledDetachedWriter({
+      store,journal,databasePath,expected,
+      assertPreviousWriterTerminated:terminated,
+      withExclusiveRecoveryBarrier:<T>(work:()=>Promise<T>)=>barrier(work) as Promise<T>,
+      ...override,
+    });
+  return {db,store,marker,journal,databasePath,terminated,barrier,run,rearm};
 }
 afterEach(()=>{for(const dir of directories.splice(0))rmSync(dir,{recursive:true,force:true});});
 
@@ -73,6 +80,58 @@ describe('PR501 · recovery integrates EXIT marker, SQLite receipts and SMB barr
     expect(f.store.inspect()).toMatchObject({state:'reconciled',generation:4,exitCode:1});
     expect(()=>f.store.claim(expected.databaseUuid,5)).toThrow('sesión escritora previa');
     await expect(f.run()).rejects.toThrow('ya conciliada');
+  });
+
+  it('PR505: no rearma antes de conciliar y archiva evidencia tras verificar el estado', async()=>{
+    const f=fixture();
+    f.db.close();
+    await expect(f.rearm()).rejects.toThrow('marcador conciliado');
+    await f.run();
+    const result=await f.rearm();
+    expect(result.nextGeneration).toBe(5);
+    expect(result.archivedMarkerPath).toContain('.reconciled.');
+    expect(f.store.inspect()).toBeNull();
+    // Only an explicitly verified administrative rearm permits a new claim.
+    expect(f.store.claim(expected.databaseUuid,5)).toMatchObject({generation:5,state:'launching'});
+    await expect(f.rearm()).rejects.toThrow('marcador conciliado');
+  });
+
+  it('PR505: no rearma si quedan operaciones desconocidas o proceso vivo',async()=>{
+    const f=fixture();
+    f.db.close();
+    await f.run();
+    f.journal.recordSubmitted('pending',4,true);
+    await expect(f.rearm()).rejects.toThrow('journal');
+    expect(f.store.inspect()?.state).toBe('reconciled');
+    // Use a clean separate fixture for independent termination failure.
+    const other=fixture();
+    other.db.close();
+    await other.run();
+    other.terminated.mockRejectedValue(new Error('writer orphan alive'));
+    await expect(other.rearm()).rejects.toThrow('writer orphan alive');
+    expect(other.store.inspect()?.state).toBe('reconciled');
+  });
+
+  it('PR505: revalida el marcador y la identidad bajo la barrera SMB',async()=>{
+    const f=fixture();
+    f.db.close();
+    await f.run();
+    const original= f.store.inspect();
+    expect(original?.state).toBe('reconciled');
+    const replacement= { ...original!, token:'otro-token' };
+    // A stale or substituted marker cannot be archived.
+    const badStore={ ...f.store, inspect:()=>replacement };
+    await expect(f.rearm({store:badStore})).rejects.toThrow('no conciliado');
+    expect(f.store.inspect()?.state).toBe('reconciled');
+
+    const other=fixture();
+    other.db.close();
+    await other.run();
+    const damaged = new Database(other.databasePath);
+    damaged.prepare("UPDATE app_metadata SET value='changed' WHERE key='database_uuid'").run();
+    damaged.close();
+    await expect(other.rearm()).rejects.toThrow(/identidad/i);
+    expect(other.store.inspect()?.state).toBe('reconciled');
   });
 
   it('verifies SQLite identity even when there are no pending journal operations',async()=>{
