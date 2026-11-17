@@ -1,11 +1,17 @@
 /**
- * Creates an EMPTY, disposable test database using the same migrations as
- * TrAcción. Never copies production data. Called only after selecting test
- * userData and a separate, configured test directory.
+ * Creates an EMPTY test database using the ordinary TrAcción migrations.
+ * Never reads production data. A shared initialization directory prevents
+ * two PCs provisioning the same test DB at the same time.
+ *
+ * Provisioning does NOT replace existing databases. If interrupted,
+ * the initialization lock is retained for manual review (fail closed).
  */
 import { app } from 'electron';
-import { closeSync, existsSync, openSync } from 'node:fs';
+import {
+  constants, copyFileSync, existsSync, mkdirSync, rmSync, unlinkSync,
+} from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import type { DatabaseConstructor } from 'better-sqlite3';
 import { applyMigrations } from './schemaMigrations.js';
@@ -15,8 +21,9 @@ import { getConfiguredDatabaseDirectory, getDatabasePathForDirectory } from './d
 const require = createRequire(import.meta.url);
 
 export async function prepareDisposableTestDatabase(): Promise<void> {
+  const userData = app.getPath('userData');
   if (process.env.TRACCION_DATABASE_ENVIRONMENT !== 'test' ||
-      !app.getPath('userData').endsWith('-test-environment')) {
+      !userData.endsWith('-test-environment')) {
     throw new Error('No se permite crear una SQLite de prueba fuera del perfil aislado.');
   }
   const configured = await getConfiguredDatabaseDirectory();
@@ -24,27 +31,35 @@ export async function prepareDisposableTestDatabase(): Promise<void> {
     throw new Error('Selecciona primero una carpeta de pruebas explícita.');
   }
   const databasePath = getDatabasePathForDirectory(configured.directoryPath);
-  if (existsSync(databasePath)) {
-    // No alter an existing database during startup. The normal identity
-    // verification will reject a production or foreign file.
-    return;
-  }
+  if (existsSync(databasePath)) return;
 
-  // Exclusive create: never overwrite a file another test client created.
-  let fd: number;
-  try { fd = openSync(databasePath, 'wx', 0o600); }
-  catch {
-    if (existsSync(databasePath)) return;
-    throw new Error('No se pudo crear la base SQLite de pruebas en la carpeta elegida.');
-  }
-  closeSync(fd);
-  const Ctor = require('better-sqlite3') as DatabaseConstructor;
-  const db = new Ctor(databasePath, { fileMustExist: true });
+  const creationLock = databasePath + '.test-initialization.lockdir';
+  // mkdir on the shared folder must be exclusive; refuse any uncertain owner
+  // rather than deleting a lock from a possibly running initializer.
+  try { mkdirSync(creationLock); }
+  catch { throw new Error('La base de pruebas se está creando en otro equipo o hay una inicialización pendiente de revisión.'); }
+  let completed = false;
+  const temporary = path.join(userData, 'traccion-test-init-' + randomUUID() + '.sqlite');
   try {
-    applyMigrations(db);
-  } finally { db.close(); }
-  const result = inspectAndEnsureDatabaseIdentity(databasePath, { allowLegacyBootstrap: true });
-  if (result.identity.environment !== 'test') {
-    throw new Error('La nueva base SQLite no tiene identidad de pruebas.');
+    if (existsSync(databasePath)) {
+      completed = true;
+      return;
+    }
+    const Ctor = require('better-sqlite3') as DatabaseConstructor;
+    const db = new Ctor(temporary);
+    try {
+      applyMigrations(db);
+    } finally { db.close(); }
+    const result = inspectAndEnsureDatabaseIdentity(temporary, { allowLegacyBootstrap: true });
+    if (result.identity.environment !== 'test') {
+      throw new Error('La nueva base SQLite no tiene identidad de pruebas.');
+    }
+    // EXCL: never overwrite the file if another client created it first.
+    copyFileSync(temporary, databasePath, constants.COPYFILE_EXCL);
+    completed = true;
+  } finally {
+    try { if (existsSync(temporary)) unlinkSync(temporary); } catch { /* diagnostic remains */ }
+    if (completed) rmSync(creationLock, {recursive:true});
+    // Uncertain creation keeps marker for manual investigation.
   }
 }
