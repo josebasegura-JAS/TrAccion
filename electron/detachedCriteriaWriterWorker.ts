@@ -131,7 +131,10 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
         message.kind === 'detached:save-session-receipted' ||
         message.kind === 'detached:save-lottery-receipted' ||
         message.kind === 'detached:save-sorteos-receipted' ||
-        message.kind === 'detached:save-teletrabajo-batch-receipted') {
+        message.kind === 'detached:save-teletrabajo-batch-receipted' ||
+        message.kind === 'detached:close-session-atomically-receipted' ||
+        message.kind === 'detached:import-session-history-receipted' ||
+        message.kind === 'detached:coordination-workflow-receipted') {
       // A renderer/transport payload cannot nominate a different generation
       // or database identity than the one the worker actually opened.
       if (activeGeneration === null || message.generation !== activeGeneration ||
@@ -172,12 +175,30 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     } else if (message.kind === 'detached:save-session') {
       const result = await saveDetachedSessionRecord(activeDb, message.payload);
       return { kind: 'detached:session-saved', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:close-session-atomically-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => closeDetachedSessionWorkflow(activeDb, message.payload));
+      return { kind: 'detached:session-closed-atomically-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:close-session-atomically') {
       const result = closeDetachedSessionWorkflow(activeDb, message.payload);
       return { kind: 'detached:session-closed-atomically', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:import-session-history-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => importDetachedSessionHistory(activeDb, message.payload));
+      return { kind: 'detached:session-history-imported-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:import-session-history') {
       const result = importDetachedSessionHistory(activeDb, message.payload);
       return { kind: 'detached:session-history-imported', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:coordination-workflow-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => executeDetachedCoordinationWorkflow(activeDb, message.payload));
+      return { kind: 'detached:coordination-workflow-done-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:coordination-workflow') {
       const result = executeDetachedCoordinationWorkflow(activeDb, message.payload);
       return { kind: 'detached:coordination-workflow-done', operationId: message.operationId, result };

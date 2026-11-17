@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { saveWithDetachedCommitReceipt, verifyDetachedSqliteCommit } from './detachedWriterCommitReceipt.js';
 import Database from 'better-sqlite3';
 import type { AtomicSessionHistoryImportPayload } from './sqlitePersistence.js';
 import { importDetachedSessionHistory, isDetachedSessionHistoryImport } from './detachedSessionHistoryImportCore.js';
@@ -111,5 +112,38 @@ describe('PR456 · validación estricta del mensaje de importación', () => {
     expect(isDetachedWriterRequest({kind:'detached:import-session-history',operationId:'',payload})).toBe(false);
     expect(isDetachedWriterResponse({kind:'detached:session-history-imported',operationId:'op-1',
       result:{ok:true,message:'ok',status:{ready:true}}})).toBe(false);
+  });
+});
+
+describe('PR488 · recibo de flujo complejo (detachedSessionHistoryImportCore.test.ts)', () => {
+  const expected = { databaseUuid:'db-pr488', applicationId:'TrAccion', environment:'test', schemaVersion:1 };
+  function prepareIdentity(db: import('better-sqlite3').Database) {
+    db.exec("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations VALUES(1,'2026-11-17');");
+    for(const [key,value] of [['database_uuid',expected.databaseUuid],['application_id',expected.applicationId],['environment',expected.environment],['database_created_at','2026-11-17']]) {
+      db.prepare('INSERT INTO app_metadata (key,value,updated_at) VALUES (?,?,?)')
+        .run(key,value,'2026-11-17');
+    }
+  }
+  it('guarda datos y recibo del flujo conjuntamente', () => {
+    const f=setup('comite');
+    try {
+      prepareIdentity(f.db);
+      const operation = { operationId:'workflow-good', generation:8, databaseUuid:expected.databaseUuid };
+      const result=saveWithDetachedCommitReceipt(f.db,operation,()=>importDetachedSessionHistory(f.db,{ownerId:'owner-a',payload:f.payload}));
+      expect(result.ok).toBe(true);
+      expect(verifyDetachedSqliteCommit(f.db,expected,operation).outcome).toBe('committed');
+    } finally { f.db.close(); }
+  });
+  it('un fallo de negocio revierte y no crea recibo', () => {
+    const f=setup('comite');
+    try {
+      prepareIdentity(f.db);
+      saveWithDetachedCommitReceipt(f.db,
+        {operationId:'baseline',generation:8,databaseUuid:expected.databaseUuid},()=>({ok:true}));
+      f.payload.sessions[0].taskExternalKeys.push('missing');
+      const operation = { operationId:'workflow-failed', generation:8, databaseUuid:expected.databaseUuid };
+      expect(()=>saveWithDetachedCommitReceipt(f.db,operation,()=>importDetachedSessionHistory(f.db,{ownerId:'owner-a',payload:f.payload}))).toThrow();
+      expect(verifyDetachedSqliteCommit(f.db,expected,operation).outcome).toBe('not-committed');
+    } finally { f.db.close(); }
   });
 });
