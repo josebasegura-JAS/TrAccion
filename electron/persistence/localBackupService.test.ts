@@ -71,7 +71,7 @@ function buildDependencies(
         const { copyFile } = await import('node:fs/promises');
         await copyFile(databasePath, destination);
       },
-    }) as Database,
+    }) as unknown as Database,
     getStatus: () => activeStatus(databasePath),
     acquireLock: acquireLock ?? (async () => lock),
     releaseLock: async () => undefined,
@@ -207,7 +207,7 @@ describe('localBackupService - cierre sin backup redundante', () => {
     const dependencies = buildDependencies(databasePath);
     dependencies.getDatabase = () => ({
       backup: async () => { throw new Error('native backup failed'); },
-    }) as Database;
+    }) as unknown as Database;
     const service = createLocalBackupService(dependencies);
     service.enqueueLocalBackup('save:pr503');
     await service.flushPendingLocalBackup();
