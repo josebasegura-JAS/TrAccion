@@ -791,8 +791,12 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     pauseSchedulingForHandoff,
     resumeSchedulingAfterAbortedHandoff,
     createShutdownLocalBackup,
-    createManualLocalBackup,
-    listLocalBackups,
-    restoreLocalBackup,
+    // External entrypoints must reserve the handoff barrier BEFORE any await.
+    // Restoration may invoke a pre-backup; nested admission is supported by
+    // the tracker while its root operation remains active.
+    createManualLocalBackup: () => trackActivity('sqlite:backup-manual-lifecycle', createManualLocalBackup),
+    listLocalBackups: () => trackActivity('sqlite:backup-list-prune', listLocalBackups),
+    restoreLocalBackup: (fileName) =>
+      trackActivity('sqlite:backup-restore-lifecycle', () => restoreLocalBackup(fileName)),
   };
 }
