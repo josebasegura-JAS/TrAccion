@@ -56,8 +56,12 @@ describe('PR500 · durable writer process tombstone', () => {
     store.confirmExit(marker,1);
     expect(()=>store.archiveReconciled(marker)).toThrow('no conciliado');
     store.markReconciled(marker);
-    expect(()=>store.archiveReconciled({...marker,token:'wrong'})).toThrow('no conciliado');
-    const archived=store.archiveReconciled(marker);
+    const reconciled=store.inspect();
+    expect(reconciled).toMatchObject({state:'reconciled',exitCode:1});
+    expect(reconciled).not.toBeNull();
+    expect(()=>store.archiveReconciled(marker)).toThrow('no conciliado');
+    expect(()=>store.archiveReconciled({...reconciled!,token:'wrong'})).toThrow('no conciliado');
+    const archived=store.archiveReconciled(reconciled!);
     expect(readFileSync(archived,'utf8')).toContain(marker.token);
     expect(store.inspect()).toBeNull();
     const next=store.claim('database-1',10);
