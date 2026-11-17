@@ -24,10 +24,11 @@ export function createExclusiveWriterRecoveryBarrier(
   options: ExclusiveWriterRecoveryBarrierOptions,
 ) {
   let busy = false;
+  let poisoned = false;
   return async function withExclusiveRecoveryBarrier<T>(
     operation: () => Promise<T>,
   ): Promise<T> {
-    if (busy || !options.databasePath.trim()) {
+    if (busy || poisoned || !options.databasePath.trim()) {
       throw new Error('Barrera de recuperación SQLite ocupada o sin base válida.');
     }
     busy = true;
@@ -57,13 +58,21 @@ export function createExclusiveWriterRecoveryBarrier(
       await assertOwned();
       await options.assertLocalSqliteInactive();
       return result;
+    } catch (error) {
+      // A failed network/heartbeat or unknown callback outcome may not be
+      // retried using this instance; require a new supervised recovery.
+      poisoned = true;
+      throw error;
     } finally {
       try {
         if (heartbeat) await options.manager.pauseDatabaseLockHeartbeat(heartbeat);
       } finally {
         if (heartbeat) clearInterval(heartbeat);
         try {
-          if (owner) await options.manager.releaseLock(lockPath, owner);
+          if (owner) {
+            try { await options.manager.releaseLock(lockPath, owner); }
+            catch (error) { poisoned = true; throw error; }
+          }
         } finally {
           busy = false;
         }
