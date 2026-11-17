@@ -316,8 +316,18 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   ipcMain.on('app:boot-visible', onBootVisible);
   ipcMain.on('app:renderer-ready', onRendererReady);
   mainWindow.once('closed', () => { clearTimeout(forceShowTimer); ipcMain.removeListener('app:boot-visible', onBootVisible); ipcMain.removeListener('app:renderer-ready', onRendererReady); setConnectivityIssueNotifier?.(null); });
-  if (isDev) mainWindow.loadURL(devServerUrl).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
-  else mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
+  // The environment hint drives ONLY the permanent blue visual warning.
+  // SQLite security continues to check process environment + database UUID.
+  const isTestEnvironment = process.env.TRACCION_DATABASE_ENVIRONMENT === 'test';
+  if (isDev) {
+    const target = new URL(devServerUrl);
+    if (isTestEnvironment) target.searchParams.set('traccionEnvironment', 'test');
+    mainWindow.loadURL(target.href).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'),
+      isTestEnvironment ? { query: { traccionEnvironment: 'test' } } : undefined)
+      .catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
+  }
   return mainWindow;
 }
 
