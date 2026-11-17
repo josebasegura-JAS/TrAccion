@@ -63,7 +63,15 @@ function buildDependencies(
   };
 
   return {
-    getDatabase: () => ({}) as Database,
+    // Test double of the Online Backup API: the real backup implementation
+    // is verified separately with SQLite; these tests exercise scheduling,
+    // deduplication and shutdown coordination, not SQLite file semantics.
+    getDatabase: () => ({
+      backup: async (destination: string) => {
+        const { copyFile } = await import('node:fs/promises');
+        await copyFile(databasePath, destination);
+      },
+    }) as Database,
     getStatus: () => activeStatus(databasePath),
     acquireLock: acquireLock ?? (async () => lock),
     releaseLock: async () => undefined,
