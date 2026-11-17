@@ -30,8 +30,10 @@ export interface DetachedWriterProcessStore {
   inspect(): DetachedWriterProcessRecord | null;
   claim(databaseUuid: string, generation: number): DetachedWriterProcessRecord;
   confirmExit(record: DetachedWriterProcessRecord, code: number): void;
-  /** Keep the tombstone even after journal reconciliation; never auto-rearm. */
+  /** Mark reconciliation complete; does not itself permit a new writer. */
   markReconciled(record: DetachedWriterProcessRecord): void;
+  /** Only call inside a verified recovery barrier, never during normal startup. */
+  archiveReconciled(record: DetachedWriterProcessRecord): string;
 }
 
 function validate(record: unknown): DetachedWriterProcessRecord {
@@ -134,6 +136,30 @@ export function createDetachedWriterProcessStore(file: string): DetachedWriterPr
       // Only invoked inside an independently established recovery barrier.
       // The file remains in place: later claim() still fails closed.
       replaceState(record, 'reconciled');
+    },
+    archiveReconciled(record) {
+      healthy();
+      const current = read();
+      // Archive is a one-way administrative operation. An EXIT marker, a
+      // launching process or an old token never permits a new claim.
+      if (!current || current.state !== 'reconciled' ||
+          current.token !== record.token ||
+          current.databaseUuid !== record.databaseUuid ||
+          current.generation !== record.generation ||
+          current.exitCode !== record.exitCode) {
+        throw new Error('Rearme SQLite denegado: marcador no conciliado o sesión distinta.');
+      }
+      const archive = file + '.reconciled.' + randomUUID() + '.json';
+      try {
+        // Preserve evidence rather than unlinking the existing marker.
+        // A new claim still requires an atomic wx creation of the marker.
+        renameSync(file, archive);
+        syncDirectory(dirname(file));
+        return archive;
+      } catch (error) {
+        poisoned = true;
+        throw error;
+      }
     },
   };
 }

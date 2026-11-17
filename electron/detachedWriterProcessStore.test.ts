@@ -49,6 +49,27 @@ describe('PR500 · durable writer process tombstone', () => {
     expect(()=>store.confirmExit(record,0)).toThrow('no coincide');
   });
 
+  it('PR505: archiva solo una sesión realmente reconciliada, sin borrar evidencias', () => {
+    const {file,store}=fixture();
+    const marker=store.claim('database-1',9);
+    expect(()=>store.archiveReconciled(marker)).toThrow('no conciliado');
+    store.confirmExit(marker,1);
+    expect(()=>store.archiveReconciled(marker)).toThrow('no conciliado');
+    store.markReconciled(marker);
+    const reconciled=store.inspect();
+    expect(reconciled).toMatchObject({state:'reconciled',exitCode:1});
+    expect(reconciled).not.toBeNull();
+    expect(()=>store.archiveReconciled(marker)).toThrow('no conciliado');
+    expect(()=>store.archiveReconciled({...reconciled!,token:'wrong'})).toThrow('no conciliado');
+    const archived=store.archiveReconciled(reconciled!);
+    expect(readFileSync(archived,'utf8')).toContain(marker.token);
+    expect(store.inspect()).toBeNull();
+    const next=store.claim('database-1',10);
+    expect(next.generation).toBe(10);
+    expect(()=>store.archiveReconciled(marker)).toThrow('no conciliado');
+    expect(readFileSync(file,'utf8')).toContain(next.token);
+  });
+
   it('cannot claim an invalid generation or identity', () => {
     const {store}=fixture();
     expect(()=>store.claim(' ',1)).toThrow('inválidas');

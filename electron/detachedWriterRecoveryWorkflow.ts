@@ -84,3 +84,48 @@ export async function reconcileDetachedWriterAfterCrash(
     tombstoneRetained: true,
   };
 }
+
+/**
+ * Explicit administrator-controlled rearm AFTER a successful reconciliation.
+ *
+ * No automatic startup/production path invokes this function. The caller must
+ * independently prove the previous child is terminated and supply the same
+ * exclusive SMB recovery barrier used for receipt reconciliation. Do not
+ * treat a stale PID, lease TTL or an IPC ACK as termination evidence.
+ */
+export async function rearmReconciledDetachedWriter(
+  deps: DetachedWriterRecoveryOptions,
+): Promise<{ archivedMarkerPath: string; nextGeneration: number }> {
+  const marker = deps.store.inspect();
+  if (!marker || marker.state !== 'reconciled' ||
+      marker.databaseUuid !== deps.expected.databaseUuid) {
+    throw new Error('Rearme SQLite requiere marcador conciliado e identidad coincidente.');
+  }
+  if (!Number.isSafeInteger(marker.generation + 1)) {
+    throw new Error('Rearme SQLite: generación agotada.');
+  }
+  if (deps.journal.unsettled().length !== 0) {
+    throw new Error('Rearme SQLite denegado: journal con operaciones pendientes.');
+  }
+  await deps.assertPreviousWriterTerminated();
+  return deps.withExclusiveRecoveryBarrier(async () => {
+    await deps.assertPreviousWriterTerminated();
+    const current = deps.store.inspect();
+    if (!current || current.state !== 'reconciled' ||
+        current.token !== marker.token ||
+        current.generation !== marker.generation ||
+        current.exitCode !== marker.exitCode ||
+        current.databaseUuid !== marker.databaseUuid) {
+      throw new Error('Marcador SQLite modificado durante el rearme.');
+    }
+    if (deps.journal.unsettled().length !== 0) {
+      throw new Error('Journal SQLite modificado durante el rearme.');
+    }
+    verifySqliteIntegrityReadOnly(deps.databasePath, deps.expected);
+    // The proof of process termination and database identity is fresh
+    // immediately before archiving under the same exclusive SMB barrier.
+    await deps.assertPreviousWriterTerminated();
+    const archivedMarkerPath = deps.store.archiveReconciled(marker);
+    return { archivedMarkerPath, nextGeneration: marker.generation + 1 };
+  });
+}
