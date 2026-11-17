@@ -60,6 +60,82 @@ const known={
     disposition:'EN REVISIÓN',note:'Comprobar rutas programadas y backup/restore',
   },
 };
+/**
+ * PR498: reviewed native-opening inventory, grounded in the quality-lane
+ * artifact from PR497 (14 native-open matches / 13 files). This policy is
+ * intentionally an explicit review list, not a claim of runtime coverage.
+ * A NEW constructor, unknown file or changed native-opening count blocks CI
+ * until the route is individually reviewed. Function/call matching is
+ * heuristic; the limits are documented in the report.
+ *
+ * 'recovery-only' verifies evidence under a supervisor-owned exclusive
+ * barrier and must NOT blindly inherit the main ownership fence.
+ */
+const nativeOpenPolicy = {
+  'electron/detachedCriteriaWriterWorker.ts': {count:1,owner:'experimental-write-child',gate:'not connected to production; supervised handoff required',status:'NO-GO'},
+  'electron/detachedWriterCommitReceipt.ts': {count:1,owner:'recovery-verifier',gate:'confirmed child exit + independent SMB recovery barrier',status:'NO-GO'},
+  'electron/isolatedSyncTokensWorker.ts': {count:1,owner:'readonly-child',gate:'isolatedSyncTokensBridge + confirmed exit',status:'ADMISSION GUARDED'},
+  'electron/jsonReadWorker.ts': {count:1,owner:'readonly-child',gate:'jsonReadWorkerBridge + confirmed exit',status:'ADMISSION GUARDED'},
+  'electron/persistence/databaseActivation.ts': {count:1,owner:'main-activation',gate:'tracked activate lifecycle + protected openSqliteDatabase',status:'ADMISSION GUARDED'},
+  'electron/persistence/databaseIdentity.ts': {count:1,owner:'main-direct-write',gate:'PR497 main fence; caller lifecycle + startup lock',status:'ADMISSION GUARDED'},
+  'electron/persistence/sqliteBackupValidation.ts': {count:1,owner:'main-backup-check',gate:'PR497 main fence + tracked restore lifecycle',status:'ADMISSION GUARDED'},
+  'electron/persistence/sqliteConnection.ts': {count:2,owner:'main-native-open',gate:'PR496 main ownership fence before native constructor',status:'ADMISSION GUARDED'},
+  'electron/persistence/sqliteHealthVerification.ts': {count:1,owner:'readonly-health-child',gate:'isolated health worker lifecycle; verify exit and admission',status:'REVIEW REQUIRED'},
+  'electron/persistence/sqliteIntegrityVerification.ts': {count:1,owner:'recovery-verifier',gate:'independent preflight/recovery barrier; not main fence',status:'NO-GO'},
+  'electron/persistence/taskBatchPersistence.ts': {count:1,owner:'main-autonomous',gate:'PR task batch freeze + openSqliteDatabase fence',status:'ADMISSION GUARDED'},
+  'electron/sessionReadWorker.ts': {count:1,owner:'readonly-child',gate:'sessionReadWorkerBridge + confirmed exit',status:'ADMISSION GUARDED'},
+  'electron/taskReadWorker.ts': {count:1,owner:'readonly-child',gate:'taskReadWorkerBridge + confirmed exit',status:'ADMISSION GUARDED'},
+};
+const actualNativeOpens = findings.filter(x=>x.kind==='native-open');
+const nativeCounts = new Map();
+for (const entry of actualNativeOpens) {
+  nativeCounts.set(entry.file, (nativeCounts.get(entry.file)??0)+1);
+}
+const policyViolations = [];
+for (const [file,count] of nativeCounts) {
+  const reviewed=nativeOpenPolicy[file];
+  if (!reviewed) policyViolations.push(`Nueva apertura SQLite sin revisar: ${file} (${count})`);
+  else if (reviewed.count!==count) policyViolations.push(
+    `Cambió el número de aperturas SQLite de ${file}: ${count} vs ${reviewed.count}`);
+}
+for (const [file, reviewed] of Object.entries(nativeOpenPolicy)) {
+  if ((nativeCounts.get(file)??0)!==reviewed.count && !nativeCounts.has(file)) {
+    policyViolations.push(`Desapareció una apertura clasificada: ${file}; revisar y actualizar el contrato`);
+  }
+}
+const nativeAudit = {
+  scope:'heuristic native-open matches only; not exhaustive ownership proof',
+  totalOccurrences:actualNativeOpens.length,
+  classifiedFiles:Object.keys(nativeOpenPolicy).length,
+  productionHandoffReady:false,
+  routes:actualNativeOpens.map(x=>({
+    file:x.file,line:x.line,excerpt:x.excerpt,
+    owner:nativeOpenPolicy[x.file]?.owner??'UNREVIEWED',
+    gate:nativeOpenPolicy[x.file]?.gate??'UNKNOWN',
+    status:nativeOpenPolicy[x.file]?.status??'NO-GO',
+  })),
+  violations:policyViolations,
+};
+mkdirSync(path.join(root,'audit-results'),{recursive:true});
+writeFileSync(path.join(root,'audit-results/sqlite-native-open-review.json'),
+  JSON.stringify(nativeAudit,null,2));
+console.log(`PR498: ${actualNativeOpens.length} aperturas heurísticas, ${nativeCounts.size} archivos, ${policyViolations.length} desviaciones; handoff NO-GO.`);
+for (const violation of policyViolations) console.error(violation);
+if (policyViolations.length>0) process.exitCode=1;
+
+// A classification entry is descriptive only; the native-open audit above
+// is the strict regression gate and intentionally keeps NO-GO statuses.
+for (const [file, review] of Object.entries(nativeOpenPolicy)) {
+  if (!known[file]) known[file] = {
+    owner:review.owner,
+    mode:review.owner==='main-direct-write'||review.owner==='experimental-write-child'
+      ? 'write' : 'readonly / native-open',
+    admission:review.gate,
+    disposition:review.status==='ADMISSION GUARDED' ? 'PROTEGIDA PARCIAL'
+      : review.status==='NO-GO' ? 'BLOQUEADO' : 'EN REVISIÓN',
+    note:'Registro de apertura revisado por archivo. No certifica cierre de todos los handles.',
+  };
+}
 const files=[...new Set(findings.map(x=>x.file))].sort();
 const rows=files.map(file=>{
   const detail=known[file];
