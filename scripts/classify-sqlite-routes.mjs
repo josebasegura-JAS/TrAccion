@@ -116,8 +116,7 @@ for (const [file, kind] of isolatedReaders) {
 // main SQLite ownership fence and independent-activity freeze.
 const vacuum = readFileSync(path.join(root, 'electron/persistence/vacuumMaintenance.ts'), 'utf8');
 for (const route of ['vacuumDatabase', 'runScheduledVacuumIfDue', 'getVacuumStatus']) {
-  const pattern = new RegExp(`export function ${route}\\\\(`);
-  if (!pattern.test(vacuum)) {
+  if (!vacuum.includes(`export function ${route}(`)) {
     console.error(`Falta la entrada protegida de mantenimiento SQLite: ${route}`);
     process.exitCode = 1;
   }
