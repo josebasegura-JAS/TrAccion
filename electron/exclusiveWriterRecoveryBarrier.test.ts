@@ -8,7 +8,7 @@ const owner:DatabaseLockInfo={
 };
 function fixture() {
   const events:string[]=[];
-  const readLock=vi.fn(async()=>({...owner}));
+  const readLock=vi.fn(async (): Promise<DatabaseLockInfo | null>=>({...owner}));
   const acquireLock=vi.fn(async()=>{events.push('acquire');return {...owner};});
   const releaseLock=vi.fn(async()=>{events.push('release');});
   const pauseDatabaseLockHeartbeat=vi.fn(async()=>{events.push('pause');});
