@@ -128,7 +128,10 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
         message.kind === 'detached:save-configuracion-receipted' ||
         message.kind === 'detached:save-presupuestos-receipted' ||
         message.kind === 'detached:save-task-receipted' ||
-        message.kind === 'detached:save-session-receipted') {
+        message.kind === 'detached:save-session-receipted' ||
+        message.kind === 'detached:save-lottery-receipted' ||
+        message.kind === 'detached:save-sorteos-receipted' ||
+        message.kind === 'detached:save-teletrabajo-batch-receipted') {
       // A renderer/transport payload cannot nominate a different generation
       // or database identity than the one the worker actually opened.
       if (activeGeneration === null || message.generation !== activeGeneration ||
@@ -187,12 +190,30 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     } else if (message.kind === 'detached:save-configuracion') {
       const result = saveDetachedConfiguracion(activeDb, message.payload);
       return { kind: 'detached:configuracion-saved', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-lottery-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => saveDetachedLotterySnapshot(activeDb, message.payload));
+      return { kind: 'detached:lottery-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-lottery') {
       const result = saveDetachedLotterySnapshot(activeDb, message.payload);
       return { kind: 'detached:lottery-saved', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-sorteos-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => saveDetachedSorteos(activeDb, message.payload));
+      return { kind: 'detached:sorteos-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-sorteos') {
       const result = saveDetachedSorteos(activeDb, message.payload);
       return { kind: 'detached:sorteos-saved', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-teletrabajo-batch-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => saveDetachedTeletrabajoBatch(activeDb, message.payload));
+      return { kind: 'detached:teletrabajo-batch-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-teletrabajo-batch') {
       const result = saveDetachedTeletrabajoBatch(activeDb, message.payload);
       return { kind: 'detached:teletrabajo-batch-saved', operationId: message.operationId, result };
