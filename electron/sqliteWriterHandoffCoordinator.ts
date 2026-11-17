@@ -90,6 +90,11 @@ export function createSqliteWriterHandoffCoordinator(
       // publicar ownership worker. La comprobación debe fallar ante corte SMB.
       await deps.verifyWorkerSmbOwnership(ticket);
       deps.independentActivity.assertFrozenTicket(freezeTicket);
+      // An EXIT callback may have quarantined this generation while the
+      // asynchronous SMB read was in flight. Never publish a dead worker.
+      if (fence.snapshot().owner !== 'main-closed') {
+        throw new Error('Worker SQLite terminó o quedó incierto durante la cesión.');
+      }
       fence.confirmWorkerStarted(ticket);
       // Seguir congelado mientras el worker sea propietario, incluso si
       // posteriormente entra en cuarentena por salida incierta.
