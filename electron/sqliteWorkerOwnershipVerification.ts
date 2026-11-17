@@ -4,6 +4,7 @@
  * It does NOT acquire ownership and is NOT a continuous lease guarantee.
  */
 import type { DatabaseLockManager, DatabaseLockInfo } from './persistence/databaseLockManager.js';
+import { detachedWriterSessionLockKey } from './detachedWriterSessionLease.js';
 
 export type SqliteWorkerLockProof = Pick<DatabaseLockInfo,
   'ownerId' | 'hostname' | 'pid' | 'createdAt'>;
@@ -25,4 +26,19 @@ export async function verifyDetachedWorkerSmbOwner(
     throw new Error('No se puede demostrar propiedad exclusiva del worker en SMB.');
   }
   manager.assertDatabaseWritesAllowed();
+}
+
+/**
+ * PR480. The handoff verifier must check the long-lived per-device session
+ * reservation, not the short-lived global lock that is free between writes.
+ */
+export async function verifyDetachedWorkerSmbSessionOwner(
+  manager: Pick<DatabaseLockManager, 'getLockPath' | 'readLock' | 'assertDatabaseWritesAllowed'>,
+  databasePath: string,
+  deviceScope: string,
+  expected: SqliteWorkerLockProof,
+): Promise<void> {
+  await verifyDetachedWorkerSmbOwner(
+    manager, detachedWriterSessionLockKey(databasePath, deviceScope), expected,
+  );
 }
