@@ -34,6 +34,8 @@ export interface WriterHandoffDependencies {
   closeMainHandle: () => Promise<void>;
   /** Resuelve solo cuando el proceso hijo confirma inicio y propiedad única. */
   startWriter: (generation: number) => Promise<{ generation: number }>;
+  /** Independent check against actual shared .lockdir AFTER the child starts. */
+  verifyWorkerSmbOwnership: (generation: number) => Promise<void>;
 }
 
 export function createSqliteWriterHandoffCoordinator(
@@ -84,6 +86,10 @@ export function createSqliteWriterHandoffCoordinator(
       if (ready.generation !== ticket) {
         throw new Error('El proceso SQLite auxiliar no coincide con la generación de cesión.');
       }
+      // No confiar solo en READY IPC: comprobar lock SMB real antes de
+      // publicar ownership worker. La comprobación debe fallar ante corte SMB.
+      await deps.verifyWorkerSmbOwnership(ticket);
+      deps.independentActivity.assertFrozenTicket(freezeTicket);
       fence.confirmWorkerStarted(ticket);
       // Seguir congelado mientras el worker sea propietario, incluso si
       // posteriormente entra en cuarentena por salida incierta.
@@ -168,12 +174,13 @@ export function createSqliteWriterHandoffCoordinator(
       if (operationLedger.hasUnsettledOperations()) {
         throw new Error('Quedan escrituras SQLite pendientes o de resultado incierto; reconciliar antes de reabrir.');
       }
-      fence.restoreMainAfterVerification(
-        generation, deps.inspectQueue(), identityVerified, allUncertainWritesReconciled,
-      );
       if (activeFreezeTicket === null) {
         throw new Error('Cesión sin ticket de actividad independiente; requiere intervención.');
       }
+      deps.independentActivity.assertFrozenTicket(activeFreezeTicket);
+      fence.restoreMainAfterVerification(
+        generation, deps.inspectQueue(), identityVerified, allUncertainWritesReconciled,
+      );
       deps.independentActivity.abortFreeze(activeFreezeTicket);
       activeFreezeTicket = null;
       confirmedExitGeneration = null;

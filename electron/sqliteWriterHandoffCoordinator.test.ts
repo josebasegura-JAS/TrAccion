@@ -12,10 +12,13 @@ function fixture() {
   const assertNoIndependentSqliteActivity = vi.fn(async (): Promise<void> => undefined);
   const closeMainHandle = vi.fn(async () => undefined);
   const startWriter = vi.fn(async (generation: number) => ({ generation }));
-  const coordinator = createSqliteWriterHandoffCoordinator(fence, {
-    inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter, independentActivity,
+  const verifyWorkerSmbOwnership = vi.fn(async (generation: number): Promise<void> => {
+    expect(generation).toBeGreaterThan(0);
   });
-  return { fence, coordinator, independentActivity, inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter };
+  const coordinator = createSqliteWriterHandoffCoordinator(fence, {
+    inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter, verifyWorkerSmbOwnership, independentActivity,
+  });
+  return { fence, coordinator, independentActivity, inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter, verifyWorkerSmbOwnership };
 }
 
 describe('PR9D-5A · cesión segura del propietario SQLite', () => {
@@ -113,6 +116,29 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     expect(f.independentActivity.snapshot().frozen).toBe(true);
     expect(() => f.fence.assertMayEnterMain()).toThrow();
     await expect(f.coordinator.handoff()).rejects.toThrow('ya está iniciada');
+  });
+
+  it('PR479: no confirma worker cuando la propiedad SMB no se demuestra', async () => {
+    const f = fixture();
+    f.verifyWorkerSmbOwnership.mockRejectedValue(new Error('SMB sin propietario válido'));
+    await expect(f.coordinator.handoff()).rejects.toThrow('SMB sin propietario válido');
+    expect(f.closeMainHandle).toHaveBeenCalledTimes(1);
+    expect(f.verifyWorkerSmbOwnership).toHaveBeenCalledWith(1);
+    expect(f.fence.snapshot().owner).toBe('main-closed');
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
+    expect(() => f.fence.assertMayEnterMain()).toThrow();
+  });
+
+  it('PR479: solo publica propiedad worker después de comprobar lock SMB', async () => {
+    const f = fixture();
+    f.verifyWorkerSmbOwnership.mockImplementation(async (generation) => {
+      expect(generation).toBe(1);
+      expect(f.fence.snapshot().owner).toBe('main-closed');
+      expect(f.independentActivity.snapshot().frozen).toBe(true);
+    });
+    await f.coordinator.handoff();
+    expect(f.verifyWorkerSmbOwnership).toHaveBeenCalledTimes(1);
+    expect(f.fence.snapshot().owner).toBe('worker');
   });
 
   it('no acepta READY de una generación distinta', async () => {
