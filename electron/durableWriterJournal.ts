@@ -114,7 +114,7 @@ export function createDurableWriterJournal(file: string, databaseUuid: string): 
     markGenerationUnknown(generation) {
       assertHealthy();
       persist(entries.map(e => e.generation === generation && e.state !== 'reconciled'
-        ? { ...e, state: 'unknown', updatedAt: new Date().toISOString() } : e));
+        ? { ...e, state: 'unknown' as const, updatedAt: new Date().toISOString() } : e));
     },
     reconcileVerified(id, generation, evidence) {
       assertHealthy();
