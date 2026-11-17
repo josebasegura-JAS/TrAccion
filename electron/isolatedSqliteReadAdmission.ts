@@ -6,7 +6,7 @@
 import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
 import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 
-export type IsolatedSqliteReadKind = 'tasks' | 'sessions' | 'json' | 'sync-tokens';
+export type IsolatedSqliteReadKind = 'tasks' | 'sessions' | 'json' | 'sync-tokens' | 'health';
 
 export function runIsolatedSqliteReadUnderHandoffBarrier<T>(
   kind: IsolatedSqliteReadKind,
