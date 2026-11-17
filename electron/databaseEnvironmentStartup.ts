@@ -11,7 +11,7 @@ import { promptDatabaseEnvironment } from './databaseEnvironmentChoice.js';
 type Environment = 'production' | 'test';
 interface SavedTestPreferences {
   customDirectoryPath: string;
-  expectedDatabaseUuid: null;
+  expectedDatabaseUuid: string | null;
 }
 function normalizedExistingDirectory(value: string): string {
   return realpathSync.native(value).toLowerCase();
@@ -35,8 +35,17 @@ function saveTestDirectory(profile: string, directory: string): void {
       previous = parsed as Record<string,unknown>;
     }
   } catch { /* first setup */ }
+  const previousDirectory = typeof previous.customDirectoryPath === 'string'
+    ? previous.customDirectoryPath : null;
+  const sameDirectory = previousDirectory !== null && existsSync(previousDirectory)
+    && existsSync(directory)
+    && normalizedExistingDirectory(previousDirectory) === normalizedExistingDirectory(directory);
+  // Keep the recorded UUID when reusing the SAME test database. Reset only
+  // for a genuinely different directory (where a new DB may be generated).
   const settings: SavedTestPreferences & Record<string,unknown> = {
-    ...previous, customDirectoryPath: directory, expectedDatabaseUuid: null,
+    ...previous, customDirectoryPath: directory,
+    expectedDatabaseUuid: sameDirectory && typeof previous.expectedDatabaseUuid === 'string'
+      ? previous.expectedDatabaseUuid : null,
   };
   mkdirSync(profile,{recursive:true});
   writeFileSync(file,JSON.stringify(settings,null,2),'utf8');
