@@ -46,6 +46,9 @@ export function createExclusiveWriterRecoveryBarrier(
       }
       options.manager.assertDatabaseWritesAllowed();
     };
+    let result!: T;
+    let failure: unknown;
+    let failed = false;
     try {
       await options.assertLocalSqliteInactive();
       options.manager.assertDatabaseWritesAllowed();
@@ -53,30 +56,35 @@ export function createExclusiveWriterRecoveryBarrier(
       heartbeat = options.manager.startDatabaseLockHeartbeat(lockPath, owner);
       await assertOwned();
       await options.assertLocalSqliteInactive();
-      const result = await operation();
+      result = await operation();
       // Do not report successful reconciliation if network/lease failed.
       await assertOwned();
       await options.assertLocalSqliteInactive();
-      return result;
     } catch (error) {
-      // A failed network/heartbeat or unknown callback outcome may not be
-      // retried using this instance; require a new supervised recovery.
+      failed = true;
+      failure = error;
       poisoned = true;
-      throw error;
-    } finally {
-      try {
-        if (heartbeat) await options.manager.pauseDatabaseLockHeartbeat(heartbeat);
-      } finally {
-        if (heartbeat) clearInterval(heartbeat);
-        try {
-          if (owner) {
-            try { await options.manager.releaseLock(lockPath, owner); }
-            catch (error) { poisoned = true; throw error; }
-          }
-        } finally {
-          busy = false;
-        }
-      }
     }
+    // Cleanup must attempt to release the lease even if heartbeat suspension
+    // fails. A cleanup failure poisons the barrier; it must never make an
+    // uncertain recovery look successful or mask the original error.
+    try {
+      if (heartbeat) await options.manager.pauseDatabaseLockHeartbeat(heartbeat);
+    } catch (error) {
+      poisoned = true;
+      if (!failed) { failed = true; failure = error; }
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+    }
+    try {
+      if (owner) await options.manager.releaseLock(lockPath, owner);
+    } catch (error) {
+      poisoned = true;
+      if (!failed) { failed = true; failure = error; }
+    } finally {
+      busy = false;
+    }
+    if (failed) throw failure;
+    return result;
   };
 }
