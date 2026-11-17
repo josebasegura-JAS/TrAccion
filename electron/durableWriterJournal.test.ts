@@ -67,6 +67,7 @@ describe('PR478 · journal durable de escrituras detached', () => {
       assertNoIndependentSqliteActivity: async () => {},
       closeMainHandle: async () => {},
       startWriter: async (generation) => ({ generation }),
+      verifyWorkerSmbOwnership: async () => {},
     });
     const generation = await coordinator.handoff();
     coordinator.registerWriterOperation('op:4', generation);
