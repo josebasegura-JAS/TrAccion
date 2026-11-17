@@ -417,8 +417,10 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         set(syncSnapshot);
       }
     }
+    const revisionAtReloadStart = calendarMutationRevision;
     try {
       const nextSnapshot = await loadTicketRestauranteStateFromSqliteOrStorage();
+      if (revisionAtReloadStart !== calendarMutationRevision) return;
       if (!areTicketSnapshotsEquivalent(get(), nextSnapshot)) {
         set(nextSnapshot);
       }
