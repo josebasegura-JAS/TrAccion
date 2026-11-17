@@ -54,6 +54,11 @@ export function createSqliteWriterHandoffCoordinator(
   }
 
   async function performHandoff(): Promise<number> {
+    // A journal from a previous process may contain orphaned operations.
+    // Refuse to transfer ownership even when the in-memory ledger is empty.
+    if (deps.durableJournal?.unsettled().length) {
+      throw new Error('Journal durable con escrituras no conciliadas: cesión SQLite bloqueada.');
+    }
     // beginHandoff impide admitir operaciones nuevas inmediatamente.
     const ticket = fence.beginHandoff(deps.inspectQueue());
     let closeAttempted = false;
