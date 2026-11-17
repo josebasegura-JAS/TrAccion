@@ -47,7 +47,7 @@ describe('PR507 · base de pruebas sin datos reales', () => {
     } finally { db.close(); }
     await prepareDisposableTestDatabase();
     expect(existsSync(path.join(shared,'traccion.sqlite.test-initialization.lockdir'))).toBe(false);
-  });
+  }, 30_000); // Las 19 migraciones SQLite + E/S en Windows CI pueden superar los 5 s por defecto.
 
   it('no crea bases al ejecutarse desde entorno productivo', async () => {
     process.env.TRACCION_DATABASE_ENVIRONMENT='production';
