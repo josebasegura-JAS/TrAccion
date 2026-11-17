@@ -112,6 +112,24 @@ for (const [file, kind] of isolatedReaders) {
     process.exitCode = 1;
   }
 }
+// PR495: direct consumers of maintenance functions must not bypass the
+// main SQLite ownership fence and independent-activity freeze.
+const vacuum = readFileSync(path.join(root, 'electron/persistence/vacuumMaintenance.ts'), 'utf8');
+for (const route of ['vacuumDatabase', 'runScheduledVacuumIfDue', 'getVacuumStatus']) {
+  const pattern = new RegExp(`export function ${route}\\\\(`);
+  if (!pattern.test(vacuum)) {
+    console.error(`Falta la entrada protegida de mantenimiento SQLite: ${route}`);
+    process.exitCode = 1;
+  }
+}
+if (!vacuum.includes('sqliteEngineOwnershipFence.assertMayEnterMain()') ||
+    !vacuum.includes('sqliteIndependentActivityTracker.run(label, operation)') ||
+    !vacuum.includes("runVacuumUnderHandoffBarrier('sqlite:vacuum-full'") ||
+    !vacuum.includes("runVacuumUnderHandoffBarrier('sqlite:vacuum-scheduled-full'") ||
+    !vacuum.includes("runVacuumUnderHandoffBarrier('sqlite:vacuum-status-full'")) {
+  console.error('VACUUM: falta la admisión obligatoria al motor SQLite.');
+  process.exitCode = 1;
+}
 const backup=readFileSync(path.join(root,'electron/persistence/localBackupService.ts'),'utf8');
 const facade=readFileSync(path.join(root,'electron/sqlitePersistence.ts'),'utf8');
 if (!backup.includes("'sqlite:backup-live-full'") ||
