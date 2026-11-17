@@ -129,6 +129,25 @@ if (!vacuum.includes('sqliteEngineOwnershipFence.assertMayEnterMain()') ||
   console.error('VACUUM: falta la admisión obligatoria al motor SQLite.');
   process.exitCode = 1;
 }
+// PR496: shared native-open primitive must reject any new handle after
+// ownership has left main. This does not prove other direct constructors safe.
+const nativeOpen = readFileSync(path.join(root,'electron/persistence/sqliteConnection.ts'),'utf8');
+const openEntrypoint = nativeOpen.slice(nativeOpen.indexOf('export function openSqliteDatabase('));
+if (!nativeOpen.includes("import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js'") ||
+    !openEntrypoint.includes('sqliteEngineOwnershipFence.assertMayEnterMain();') ||
+    openEntrypoint.indexOf('sqliteEngineOwnershipFence.assertMayEnterMain();') >
+      openEntrypoint.indexOf("require('better-sqlite3')")) {
+  console.error('Punto central de apertura SQLite sin comprobación de propiedad previa a apertura nativa.');
+  process.exitCode = 1;
+}
+// An inventory classification is not proof of exhaustive admission.
+// Report any unclassified native-open path explicitly as NO-GO evidence.
+const unclassifiedNativeOpenFiles = [...new Set(findings
+  .filter(x => x.kind === 'native-open' && !known[x.file])
+  .map(x => x.file))].sort();
+writeFileSync(path.join(root,'audit-results/sqlite-native-open-pending.json'),
+  JSON.stringify({unclassifiedNativeOpenFiles,productionHandoffReady:false},null,2));
+console.log(`PR496: aperturas nativas sin clasificación previa: ${unclassifiedNativeOpenFiles.length}; handoff producción NO-GO.`);
 const backup=readFileSync(path.join(root,'electron/persistence/localBackupService.ts'),'utf8');
 const facade=readFileSync(path.join(root,'electron/sqlitePersistence.ts'),'utf8');
 if (!backup.includes("'sqlite:backup-live-full'") ||
