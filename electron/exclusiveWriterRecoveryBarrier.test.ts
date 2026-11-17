@@ -70,6 +70,25 @@ describe('PR501 · exclusive SMB recovery window',()=>{
     expect(await first).toBe(1);
   });
 
+  it('preserves the original reconciliation failure even when release also fails',async()=>{
+    const f=fixture();
+    f.releaseLock.mockRejectedValue(new Error('release SMB offline'));
+    await expect(f.barrier(async()=>{
+      throw new Error('original SQLite verification failed');
+    })).rejects.toThrow('original SQLite verification failed');
+    expect(f.pauseDatabaseLockHeartbeat).toHaveBeenCalledOnce();
+    expect(f.releaseLock).toHaveBeenCalledOnce();
+    await expect(f.barrier(async()=>42)).rejects.toThrow('ocupada');
+  });
+
+  it('attempts lease release after heartbeat suspension fails and retains quarantine',async()=>{
+    const f=fixture();
+    f.pauseDatabaseLockHeartbeat.mockRejectedValue(new Error('heartbeat pause failed'));
+    await expect(f.barrier(async()=>42)).rejects.toThrow('heartbeat pause failed');
+    expect(f.releaseLock).toHaveBeenCalledOnce();
+    await expect(f.barrier(async()=>42)).rejects.toThrow('ocupada');
+  });
+
   it('fails closed if local main SQLite work is still active',async()=>{
     const f=fixture();
     f.assertLocalSqliteInactive.mockRejectedValue(new Error('main handle still open'));
