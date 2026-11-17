@@ -81,11 +81,11 @@ describe('PR501 · exclusive SMB recovery window',()=>{
     await expect(f.barrier(async()=>42)).rejects.toThrow('ocupada');
   });
 
-  it('attempts lease release after heartbeat suspension fails and retains quarantine',async()=>{
+  it('retains lease if heartbeat suspension is uncertain, preventing a release race',async()=>{
     const f=fixture();
     f.pauseDatabaseLockHeartbeat.mockRejectedValue(new Error('heartbeat pause failed'));
     await expect(f.barrier(async()=>42)).rejects.toThrow('heartbeat pause failed');
-    expect(f.releaseLock).toHaveBeenCalledOnce();
+    expect(f.releaseLock).not.toHaveBeenCalled();
     await expect(f.barrier(async()=>42)).rejects.toThrow('ocupada');
   });
 
