@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { verifyDetachedWorkerSmbOwner, type SqliteWorkerLockProof } from './sqliteWorkerOwnershipVerification.js';
+import { verifyDetachedWorkerSmbOwner, verifyDetachedWorkerSmbSessionOwner, type SqliteWorkerLockProof } from './sqliteWorkerOwnershipVerification.js';
 
 const expected: SqliteWorkerLockProof = {
   ownerId: 'detached-writer:123:unique',
@@ -25,6 +25,14 @@ describe('PR479 · comprobación de propietario real SMB', () => {
     blocked.readLock.mockRejectedValue(new Error('SMB desconectado'));
     await expect(verifyDetachedWorkerSmbOwner(blocked, 'X:/traccion.sqlite', expected)).rejects.toThrow('SMB desconectado');
   });
+  it('PR480 comprueba la reserva persistente de sesión, no el lock global por escritura', async () => {
+    const manager = fixture();
+    await verifyDetachedWorkerSmbSessionOwner(manager, 'X:/traccion.sqlite', 'WIN-A', expected);
+    const checked = manager.readLock.mock.calls[0]?.[0];
+    expect(checked).toMatch(/^X:\/traccion\.sqlite\.writer-session\.[a-f0-9]{24}\.lockdir$/);
+    expect(checked).not.toBe('X:/traccion.sqlite.lockdir');
+  });
+
   it('rechaza evidencia incompleta aunque exista un lock', async () => {
     const manager = fixture();
     await expect(verifyDetachedWorkerSmbOwner(manager, 'X:/traccion.sqlite',
