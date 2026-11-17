@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 import { applyMigrations, CURRENT_SCHEMA_VERSION } from './schemaMigrations.js';
 import { validateSqliteBackupForRestore } from './sqliteBackupValidation.js';
+import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 
 const tempDirectories: string[] = [];
 
@@ -50,6 +51,25 @@ afterEach(() => {
   while (tempDirectories.length) {
     rmSync(tempDirectories.pop()!, { recursive: true, force: true });
   }
+});
+
+describe('PR497 · backup validation native connection ownership', () => {
+  it('rechaza validar respaldos durante la cesión sin abrir otro handle SQLite', () => {
+    const {databasePath,databaseUuid}=createValidTraccionDatabase();
+    const ticket=sqliteEngineOwnershipFence.beginHandoff({
+      queuedOperations:0,runningOperation:null,timedOut:false,
+    });
+    try {
+      expect(() => validateSqliteBackupForRestore(databasePath,{
+        expectedDatabaseUuid:databaseUuid,
+      })).toThrow('propiedad cedida');
+    } finally {
+      sqliteEngineOwnershipFence.abortBeforeClose(ticket);
+    }
+    expect(validateSqliteBackupForRestore(databasePath,{
+      expectedDatabaseUuid:databaseUuid,
+    }).databaseUuid).toBe(databaseUuid);
+  });
 });
 
 describe('validateSqliteBackupForRestore', () => {
