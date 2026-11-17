@@ -26,6 +26,7 @@ export type DetachedWriterRequest =
   | { kind: 'detached:save'; operationId: string; record: DetachedCriteriaSave }
   | { kind: 'detached:save-criteria-receipted'; operationId: string; generation: number; databaseUuid: string; record: DetachedCriteriaSave }
   | { kind: 'detached:save-json-batch'; operationId: string; table: string; records: DetachedJsonWrite[] }
+  | { kind: 'detached:save-json-batch-receipted'; operationId: string; generation: number; databaseUuid: string; table: string; records: DetachedJsonWrite[] }
   | { kind: 'detached:save-task'; operationId: string; payload: DetachedTaskSave }
   | { kind: 'detached:save-session'; operationId: string; payload: DetachedSessionSave }
   | { kind: 'detached:close-session-atomically'; operationId: string; payload: DetachedAtomicSessionClose }
@@ -45,6 +46,7 @@ export type DetachedWriterResponse =
   | { kind: 'detached:saved'; operationId: string; result: DetachedCriteriaSaveResult }
   | { kind: 'detached:criteria-receipted'; operationId: string; result: DetachedCriteriaSaveResult }
   | { kind: 'detached:json-batch-saved'; operationId: string; result: DetachedJsonBatchResult }
+  | { kind: 'detached:json-batch-receipted'; operationId: string; result: DetachedJsonBatchResult }
   | { kind: 'detached:task-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
   | { kind: 'detached:session-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
   | { kind: 'detached:session-closed-atomically'; operationId: string; result: AtomicSessionWorkflowResult }
@@ -121,6 +123,12 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
     return typeof record.id === 'string' && !!record.id.trim() &&
       typeof record.value === 'string' && !!record.value.trim() &&
       (record.expectedUpdatedAt === null || typeof record.expectedUpdatedAt === 'string');
+  }
+  if (r.kind === 'detached:save-json-batch-receipted') {
+    if (!Number.isSafeInteger(r.generation) || Number(r.generation) <= 0 ||
+        typeof r.databaseUuid !== 'string' || !r.databaseUuid.trim()) return false;
+    return isDetachedWriterRequest({ kind: 'detached:save-json-batch',
+      operationId: r.operationId, table: r.table, records: r.records });
   }
   if (r.kind === 'detached:save-json-batch') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() ||
@@ -234,6 +242,10 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
     return typeof result.ok === 'boolean' && typeof result.message === 'string' &&
       (result.currentUpdatedAt === null || typeof result.currentUpdatedAt === 'string') &&
       !!result.status && typeof result.status === 'object';
+  }
+  if (r.kind === 'detached:json-batch-receipted') {
+    return isDetachedWriterResponse({ kind: 'detached:json-batch-saved',
+      operationId: r.operationId, result: r.result });
   }
   if (r.kind === 'detached:json-batch-saved') {
     if (typeof r.operationId !== 'string' || !r.result || typeof r.result !== 'object') return false;

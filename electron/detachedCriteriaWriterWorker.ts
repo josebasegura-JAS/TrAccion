@@ -40,6 +40,8 @@ const writerOwnerId = `detached-writer:${process.pid}:${randomUUID()}`;
 const smbManager = createDatabaseLockManager({ getOwnerId: () => writerOwnerId });
 let activeDatabasePath: string | null = null;
 let sessionLease: DetachedWriterSessionLease | null = null;
+let activeGeneration: number | null = null;
+let activeDatabaseUuid: string | null = null;
 
 function send(message: DetachedWriterResponse): void {
   port!.postMessage(message);
@@ -89,6 +91,8 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
         db = candidate;
         activeDatabasePath = message.databasePath;
         if (message.kind === 'detached:open-session') {
+          activeGeneration = message.generation;
+          activeDatabaseUuid = message.expected.databaseUuid;
           const { ownerId, hostname: ownerHost, pid, createdAt } = sessionLease.owner;
           send({ kind: 'detached:session-opened', generation: message.generation,
             proof: { ownerId, hostname: ownerHost, pid, createdAt } });
@@ -119,12 +123,27 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     if (!activeDatabasePath || !sessionLease) throw new Error('Sesión SQLite aislada no verificada.');
     await sessionLease.assertOwned();
     const response: DetachedWriterResponse = await withDetachedSqliteSmbLease(smbManager, activeDatabasePath, async (): Promise<DetachedWriterResponse> => {
+    if (message.kind === 'detached:save-criteria-receipted' ||
+        message.kind === 'detached:save-json-batch-receipted') {
+      // A renderer/transport payload cannot nominate a different generation
+      // or database identity than the one the worker actually opened.
+      if (activeGeneration === null || message.generation !== activeGeneration ||
+          activeDatabaseUuid === null || message.databaseUuid !== activeDatabaseUuid) {
+        throw new Error('Generación o identidad ajena a la sesión SQLite del worker.');
+      }
+    }
     if (message.kind === 'detached:save-criteria-receipted') {
       const result = saveWithDetachedCommitReceipt(activeDb, {
         operationId: message.operationId, generation: message.generation,
         databaseUuid: message.databaseUuid,
       }, () => saveDetachedCriteriaRecord(activeDb, message.record));
       return { kind: 'detached:criteria-receipted', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-json-batch-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => saveDetachedJsonBatch(activeDb, message.table, message.records));
+      return { kind: 'detached:json-batch-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-json-batch') {
       const result = saveDetachedJsonBatch(activeDb, message.table, message.records);
       return { kind: 'detached:json-batch-saved', operationId: message.operationId, result };
