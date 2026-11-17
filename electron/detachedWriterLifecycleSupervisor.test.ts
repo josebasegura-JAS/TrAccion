@@ -40,15 +40,11 @@ afterEach(()=>{for(const dir of dirs.splice(0))rmSync(dir,{recursive:true,force:
 describe('PR500 · integrated fail-closed detached writer supervisor',()=>{
   it('persists claim BEFORE fork; requires READY and real SMB proof before verified',async()=>{
     const f=fixture();
+    const originalSpawn=f.spawn.getMockImplementation()!;
     f.spawn.mockImplementation(()=>{
       expect(f.store.inspect()).toMatchObject({generation:3,state:'launching'});
-      return {postMessage:f.send,kill:f.kill,
-        onMessage(handler){ f.message = handler; },
-        onExit(handler){ f.exit = handler; },
-      };
+      return originalSpawn();
     });
-    // Use fixture's normal child handler API instead; persistence is asserted
-    // inside spawn without replacing the event hooks.
     const start=f.supervisor.start(3);
     f.message({kind:'detached:ready'});
     f.message({kind:'detached:session-opened',generation:3,proof});
