@@ -129,7 +129,7 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
     const f = fixture();
     try {
       f.journal.recordSubmitted('op-race', 1, true);
-      f.terminated.mockResolvedValueOnce().mockRejectedValueOnce(new Error('worker sigue vivo'));
+      f.terminated.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('worker sigue vivo'));
       await expect(f.recovery()).rejects.toThrow('worker sigue vivo');
       expect(f.terminated).toHaveBeenCalledTimes(2);
       expect(createDurableWriterJournal(f.journalPath, expected.databaseUuid).unsettled())
