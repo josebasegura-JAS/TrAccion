@@ -33,10 +33,12 @@ export type DetachedWriterRequest =
   | { kind: 'detached:import-session-history'; operationId: string; payload: DetachedSessionHistoryImport }
   | { kind: 'detached:coordination-workflow'; operationId: string; payload: DetachedCoordinationWorkflow }
   | { kind: 'detached:save-configuracion'; operationId: string; payload: DetachedConfiguracionSave }
+  | { kind: 'detached:save-configuracion-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedConfiguracionSave }
   | { kind: 'detached:save-lottery'; operationId: string; payload: DetachedLotterySave }
   | { kind: 'detached:save-sorteos'; operationId: string; payload: DetachedSorteosSave }
   | { kind: 'detached:save-teletrabajo-batch'; operationId: string; payload: DetachedTeletrabajoBatchSave }
   | { kind: 'detached:save-presupuestos'; operationId: string; payload: DetachedPresupuestosSave }
+  | { kind: 'detached:save-presupuestos-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedPresupuestosSave }
   | { kind: 'detached:close' };
 
 export type DetachedWriterResponse =
@@ -53,10 +55,12 @@ export type DetachedWriterResponse =
   | { kind: 'detached:session-history-imported'; operationId: string; result: AtomicSessionHistoryImportResult }
   | { kind: 'detached:coordination-workflow-done'; operationId: string; result: AtomicCoordinationWorkflowResult }
   | { kind: 'detached:configuracion-saved'; operationId: string; result: ConfiguracionSaveResult }
+  | { kind: 'detached:configuracion-receipted'; operationId: string; result: ConfiguracionSaveResult }
   | { kind: 'detached:lottery-saved'; operationId: string; result: LotterySaveResult }
   | { kind: 'detached:sorteos-saved'; operationId: string; result: ConditionalSqliteSorteosSaveResult }
   | { kind: 'detached:teletrabajo-batch-saved'; operationId: string; result: TeletrabajoBatchSaveResult }
   | { kind: 'detached:presupuestos-saved'; operationId: string; result: SimpleJsonSaveResult }
+  | { kind: 'detached:presupuestos-receipted'; operationId: string; result: SimpleJsonSaveResult }
   | { kind: 'detached:closed' }
   | { kind: 'detached:error'; operationId?: string };
 
@@ -64,6 +68,14 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
   if (!value || typeof value !== 'object') return false;
   const r = value as Record<string, unknown>;
   if (r.kind === 'detached:close') return true;
+  if (r.kind === 'detached:save-presupuestos-receipted' ||
+      r.kind === 'detached:save-configuracion-receipted') {
+    if (!Number.isSafeInteger(r.generation) || Number(r.generation) <= 0 ||
+        typeof r.databaseUuid !== 'string' || !r.databaseUuid.trim()) return false;
+    return r.kind === 'detached:save-presupuestos-receipted'
+      ? isDetachedWriterRequest({ kind: 'detached:save-presupuestos', operationId: r.operationId, payload: r.payload })
+      : isDetachedWriterRequest({ kind: 'detached:save-configuracion', operationId: r.operationId, payload: r.payload });
+  }
   if (r.kind === 'detached:save-presupuestos') {
     return typeof r.operationId === 'string' && !!r.operationId.trim() && isDetachedPresupuestosSave(r.payload);
   }
@@ -170,6 +182,11 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
       p.ownerId.startsWith('detached-writer:') && typeof p.hostname === 'string' &&
       typeof p.pid === 'number' && Number.isSafeInteger(p.pid) && Number(p.pid) > 0 &&
       typeof p.createdAt === 'string' && !!p.createdAt.trim();
+  }
+  if (r.kind === 'detached:presupuestos-receipted' || r.kind === 'detached:configuracion-receipted') {
+    return r.kind === 'detached:presupuestos-receipted'
+      ? isDetachedWriterResponse({ kind: 'detached:presupuestos-saved', operationId: r.operationId, result: r.result })
+      : isDetachedWriterResponse({ kind: 'detached:configuracion-saved', operationId: r.operationId, result: r.result });
   }
   if (r.kind === 'detached:presupuestos-saved') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() || !r.result || typeof r.result !== 'object') return false;
