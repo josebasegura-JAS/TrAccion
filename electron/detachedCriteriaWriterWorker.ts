@@ -4,6 +4,9 @@
  * conexión y lock SMB. No valida ni adquiere por sí mismo el lock distribuido.
  */
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
+import { createDatabaseLockManager } from './persistence/databaseLockManager.js';
+import { withDetachedSqliteSmbLease } from './detachedWriterSmbLease.js';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { readCurrentSchemaVersion } from './persistence/schemaMigrations.js';
@@ -29,6 +32,10 @@ let db: Database | null = null;
 let opened = false;
 let closing = false;
 const seenOperations = new Set<string>();
+// Unique to THIS utilityProcess. Never reuse the main process ownerId.
+const writerOwnerId = `detached-writer:${process.pid}:${randomUUID()}`;
+const smbManager = createDatabaseLockManager({ getOwnerId: () => writerOwnerId });
+let activeDatabasePath: string | null = null;
 
 function send(message: DetachedWriterResponse): void {
   port!.postMessage(message);
@@ -66,6 +73,7 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
           throw new Error('Identidad o esquema SQLite incorrecto.');
         }
         db = candidate;
+        activeDatabasePath = message.databasePath;
         send({ kind: 'detached:opened' });
       } finally {
         if (db !== candidate) candidate.close();
@@ -81,47 +89,55 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     return;
   }
   seenOperations.add(message.operationId);
+  // Capture the validated connection before entering the async SMB lease callback.
+  // The message queue serializes open/write/close requests for this worker.
+  const activeDb = db;
   try {
+    if (!activeDatabasePath) throw new Error('No existe ruta de conexión SQLite verificada.');
+    const response: DetachedWriterResponse = await withDetachedSqliteSmbLease(smbManager, activeDatabasePath, async (): Promise<DetachedWriterResponse> => {
     if (message.kind === 'detached:save-json-batch') {
-      const result = saveDetachedJsonBatch(db, message.table, message.records);
-      send({ kind: 'detached:json-batch-saved', operationId: message.operationId, result });
+      const result = saveDetachedJsonBatch(activeDb, message.table, message.records);
+      return { kind: 'detached:json-batch-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-task') {
-      const result = await saveDetachedTaskRecord(db, message.payload);
-      send({ kind: 'detached:task-saved', operationId: message.operationId, result });
+      const result = await saveDetachedTaskRecord(activeDb, message.payload);
+      return { kind: 'detached:task-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-session') {
-      const result = await saveDetachedSessionRecord(db, message.payload);
-      send({ kind: 'detached:session-saved', operationId: message.operationId, result });
+      const result = await saveDetachedSessionRecord(activeDb, message.payload);
+      return { kind: 'detached:session-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:close-session-atomically') {
-      const result = closeDetachedSessionWorkflow(db, message.payload);
-      send({ kind: 'detached:session-closed-atomically', operationId: message.operationId, result });
+      const result = closeDetachedSessionWorkflow(activeDb, message.payload);
+      return { kind: 'detached:session-closed-atomically', operationId: message.operationId, result };
     } else if (message.kind === 'detached:import-session-history') {
-      const result = importDetachedSessionHistory(db, message.payload);
-      send({ kind: 'detached:session-history-imported', operationId: message.operationId, result });
+      const result = importDetachedSessionHistory(activeDb, message.payload);
+      return { kind: 'detached:session-history-imported', operationId: message.operationId, result };
     } else if (message.kind === 'detached:coordination-workflow') {
-      const result = executeDetachedCoordinationWorkflow(db, message.payload);
-      send({ kind: 'detached:coordination-workflow-done', operationId: message.operationId, result });
+      const result = executeDetachedCoordinationWorkflow(activeDb, message.payload);
+      return { kind: 'detached:coordination-workflow-done', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-configuracion') {
-      const result = saveDetachedConfiguracion(db, message.payload);
-      send({ kind: 'detached:configuracion-saved', operationId: message.operationId, result });
+      const result = saveDetachedConfiguracion(activeDb, message.payload);
+      return { kind: 'detached:configuracion-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-lottery') {
-      const result = saveDetachedLotterySnapshot(db, message.payload);
-      send({ kind: 'detached:lottery-saved', operationId: message.operationId, result });
+      const result = saveDetachedLotterySnapshot(activeDb, message.payload);
+      return { kind: 'detached:lottery-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-sorteos') {
-      const result = saveDetachedSorteos(db, message.payload);
-      send({ kind: 'detached:sorteos-saved', operationId: message.operationId, result });
+      const result = saveDetachedSorteos(activeDb, message.payload);
+      return { kind: 'detached:sorteos-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-teletrabajo-batch') {
-      const result = saveDetachedTeletrabajoBatch(db, message.payload);
-      send({ kind: 'detached:teletrabajo-batch-saved', operationId: message.operationId, result });
+      const result = saveDetachedTeletrabajoBatch(activeDb, message.payload);
+      return { kind: 'detached:teletrabajo-batch-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-presupuestos') {
-      const result = saveDetachedPresupuestos(db, message.payload);
-      send({ kind: 'detached:presupuestos-saved', operationId: message.operationId, result });
+      const result = saveDetachedPresupuestos(activeDb, message.payload);
+      return { kind: 'detached:presupuestos-saved', operationId: message.operationId, result };
     } else {
-      const result = saveDetachedCriteriaRecord(db, message.record);
-      send({ kind: 'detached:saved', operationId: message.operationId, result });
+      const result = saveDetachedCriteriaRecord(activeDb, message.record);
+      return { kind: 'detached:saved', operationId: message.operationId, result };
     }
+    });
+    send(response);
   } catch {
-    // Nunca reenviar de forma automática un guardado cuya respuesta se perdió.
+    closing = true;
     send({ kind: 'detached:error', operationId: message.operationId });
+    process.exit(1);
   }
 }, () => {
   // Un fallo fuera del manejo transaccional invalida la sesión completa.
