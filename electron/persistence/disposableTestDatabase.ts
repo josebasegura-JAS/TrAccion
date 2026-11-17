@@ -33,9 +33,14 @@ export async function prepareDisposableTestDatabase(): Promise<void> {
     throw new Error('Selecciona primero una carpeta de pruebas explícita.');
   }
   const databasePath = getDatabasePathForDirectory(configured.directoryPath);
+  const creationLock = databasePath + '.test-initialization.lockdir';
+  // A file may be visible while another PC is still copying it. Never use
+  // its mere existence as proof that initialization has completed.
+  if (existsSync(creationLock)) {
+    throw new Error('La base de pruebas tiene una inicialización pendiente; no se abrirá un archivo posiblemente incompleto.');
+  }
   if (existsSync(databasePath)) return;
 
-  const creationLock = databasePath + '.test-initialization.lockdir';
   // mkdir on the shared folder must be exclusive; refuse any uncertain owner
   // rather than deleting a lock from a possibly running initializer.
   try { mkdirSync(creationLock); }
