@@ -68,16 +68,21 @@ export function createExclusiveWriterRecoveryBarrier(
     // Cleanup must attempt to release the lease even if heartbeat suspension
     // fails. A cleanup failure poisons the barrier; it must never make an
     // uncertain recovery look successful or mask the original error.
+    let heartbeatStopped = heartbeat === null;
     try {
       if (heartbeat) await options.manager.pauseDatabaseLockHeartbeat(heartbeat);
+      heartbeatStopped = true;
     } catch (error) {
+      // A failed pause may leave a heartbeat operation in flight. Releasing
+      // its SMB lock now could race an in-flight write to owner.json.
+      // Retain the lock and quarantine instead of pretending cleanup worked.
       poisoned = true;
       if (!failed) { failed = true; failure = error; }
     } finally {
       if (heartbeat) clearInterval(heartbeat);
     }
     try {
-      if (owner) await options.manager.releaseLock(lockPath, owner);
+      if (owner && heartbeatStopped) await options.manager.releaseLock(lockPath, owner);
     } catch (error) {
       poisoned = true;
       if (!failed) { failed = true; failure = error; }
