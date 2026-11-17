@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from 'better-sqlite3';
 import { createDatabaseLockManager } from './databaseLockManager.js';
-import { createSqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
+import { createSqliteIndependentActivityTracker, sqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
 
 const testPaths = vi.hoisted(() => ({ userData: '' }));
 
@@ -78,6 +78,47 @@ function buildDependencies(
     activateDatabase: async () => activeStatus(databasePath),
   };
 }
+
+describe('PR492A · admisión obligatoria de backups sin inyector legacy', () => {
+  it('deniega el backup manual cuando el freeze global ya está activo', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492a-backup-'));
+    const databasePath = path.join(dir, 'shared.sqlite');
+    testPaths.userData = dir;
+    const dependencies = buildDependencies(databasePath);
+    // A deliberately legacy caller without trackActivity MUST NOT bypass
+    // the main-process SQLite handoff barrier.
+    expect(dependencies.trackActivity).toBeUndefined();
+    const service = createLocalBackupService(dependencies);
+    const ticket = sqliteIndependentActivityTracker.beginFreeze();
+    try {
+      await expect(service.createManualLocalBackup()).rejects.toThrow('suspendida');
+      expect(sqliteIndependentActivityTracker.snapshot()).toMatchObject({
+        active: 0, frozen: true,
+      });
+    } finally {
+      sqliteIndependentActivityTracker.abortFreeze(ticket);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserva el tracker inyectado, sin reemplazarlo por la reserva global', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492a-injected-'));
+    const databasePath = path.join(dir, 'shared.sqlite');
+    testPaths.userData = dir;
+    const tracker = createSqliteIndependentActivityTracker();
+    const dependencies = buildDependencies(databasePath);
+    dependencies.trackActivity = (label, operation) => tracker.run(label, operation);
+    const service = createLocalBackupService(dependencies);
+    const ticket = tracker.beginFreeze();
+    try {
+      await expect(service.createManualLocalBackup()).rejects.toThrow('suspendida');
+      expect(tracker.snapshot()).toMatchObject({active:0, frozen:true});
+    } finally {
+      tracker.abortFreeze(ticket);
+      rmSync(dir, { recursive:true, force:true });
+    }
+  });
+});
 
 describe('localBackupService - cierre sin backup redundante', () => {
   let rootDir: string;
