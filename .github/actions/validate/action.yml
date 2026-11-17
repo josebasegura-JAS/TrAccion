@@ -77,6 +77,10 @@ runs:
       if: ${{ inputs.lane == 'calidad' }}
       shell: pwsh
       run: node scripts/classify-sqlite-routes.mjs
+    - name: PR502 · Evaluación NO-GO y control de activación del writer aislado
+      if: ${{ inputs.lane == 'calidad' }}
+      shell: pwsh
+      run: node scripts/audit-detached-writer-readiness.mjs
     - name: TypeScript de pruebas, Electron y E2E
       if: ${{ inputs.lane == 'calidad' }}
       shell: pwsh
