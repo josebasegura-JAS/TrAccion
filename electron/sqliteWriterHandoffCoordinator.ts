@@ -8,6 +8,8 @@
 import type { createSqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { createSqliteWriterOperationLedger } from './sqliteWriterOperationLedger.js';
 import type { DurableWriterJournal, SqliteReconciliationEvidence } from './durableWriterJournal.js';
+import { verifyDetachedSqliteCommitAfterExit } from './detachedWriterCommitReceipt.js';
+import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
 import {
   createSqliteEngineOwnershipFence,
   type SqliteQueueState,
@@ -151,6 +153,40 @@ export function createSqliteWriterHandoffCoordinator(
         deps.durableJournal.reconcileVerified(id, generation, evidence);
       }
       operationLedger.reconcile(id, generation);
+    },
+    /**
+     * PR483: recovery of RECEIPTED writes only, using evidence read from the
+     * actual SQLite file after confirmed EXIT. No caller-supplied ACK or
+     * arbitrary reference can claim a commit through this path.
+     *
+     * A supervisor must own the recovery barrier; never expose this to UI.
+     */
+    reconcileReceiptedWriterOperation(
+      id: string, generation: number, databasePath: string,
+      expected: ExpectedSqliteIdentity,
+    ): SqliteReconciliationEvidence {
+      if (fence.snapshot().owner !== 'quarantine' ||
+          fence.snapshot().generation !== generation ||
+          confirmedExitGeneration !== generation) {
+        throw new Error('La comprobación de commit requiere cuarentena y EXIT confirmado.');
+      }
+      if (!deps.durableJournal) {
+        throw new Error('La conciliación con SQLite requiere journal durable.');
+      }
+      const entry = deps.durableJournal.unsettled().find(e =>
+        e.id === id && e.generation === generation && e.databaseUuid === expected.databaseUuid);
+      if (!entry) {
+        throw new Error('Operación no pendiente o identidad incompatible para conciliación SQLite.');
+      }
+      if (!operationLedger.unsettledIdsForGeneration(generation).includes(id)) {
+        // Across a main-process restart, the journal survives but the in-memory
+        // operation ledger does not. Do not fabricate recovered ledger state.
+        throw new Error('Journal huérfano tras reinicio: conciliación asistida pendiente.');
+      }
+      const evidence = verifyDetachedSqliteCommitAfterExit(databasePath, expected,
+        { operationId: id, generation, databaseUuid: expected.databaseUuid }, true);
+      this.reconcileWriterOperation(id, generation, evidence);
+      return evidence;
     },
     pendingWriterOperationIds(generation: number): string[] {
       return operationLedger.unsettledIdsForGeneration(generation);
