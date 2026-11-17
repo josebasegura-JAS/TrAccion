@@ -67,6 +67,8 @@ export interface SesionesRepositoryDeps {
   enqueueLocalBackup: (reason: string) => void;
   assertDatabaseWritesAllowed: () => void;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
+  beforeSaveTransaction?: (db: Database) => void;
+  afterSuccessfulSaveTransaction?: (db: Database) => void;
   isolatedSessionRead?: (module: 'comite' | 'paritaria', id: string | undefined, status: DatabaseStatus) => Promise<SqliteComiteSessionRecord[]>;
 }
 
@@ -253,6 +255,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
 
         const db = requireDatabase();
         const result = transactionWithMigrationReset(db, () => { comiteSessionsMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
+          deps.beforeSaveTransaction?.(db);
           maybeMigrateComiteSessionsFromPersistedRecord(db);
           const row = db.prepare('SELECT updated_at FROM comite_session_records WHERE id = ?').get(record.id);
           const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
@@ -324,6 +327,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
           }
 
           updateRefreshMetadata(db, updatedAt);
+          deps.afterSuccessfulSaveTransaction?.(db);
 
           return {
             ok: true,
@@ -367,6 +371,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
 
         const db = requireDatabase();
         const result = transactionWithMigrationReset(db, () => { paritariaSessionsMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
+          deps.beforeSaveTransaction?.(db);
           maybeMigrateParitariaSessionsFromPersistedRecord(db);
           const row = db.prepare('SELECT updated_at FROM paritaria_session_records WHERE id = ?').get(record.id);
           const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
@@ -442,6 +447,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
           }
 
           updateRefreshMetadata(db, updatedAt);
+          deps.afterSuccessfulSaveTransaction?.(db);
 
           return {
             ok: true,
@@ -485,6 +491,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
 
         const db = requireDatabase();
         const result = transactionWithMigrationReset(db, () => { actasMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
+          deps.beforeSaveTransaction?.(db);
           maybeMigrateActasFromPersistedRecord(db);
           const row = db.prepare('SELECT updated_at FROM acta_records WHERE id = ?').get(record.id);
           const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
@@ -556,6 +563,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
           }
 
           updateRefreshMetadata(db, updatedAt);
+          deps.afterSuccessfulSaveTransaction?.(db);
 
           return {
             ok: true,
