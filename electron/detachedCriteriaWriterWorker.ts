@@ -124,7 +124,9 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     await sessionLease.assertOwned();
     const response: DetachedWriterResponse = await withDetachedSqliteSmbLease(smbManager, activeDatabasePath, async (): Promise<DetachedWriterResponse> => {
     if (message.kind === 'detached:save-criteria-receipted' ||
-        message.kind === 'detached:save-json-batch-receipted') {
+        message.kind === 'detached:save-json-batch-receipted' ||
+        message.kind === 'detached:save-configuracion-receipted' ||
+        message.kind === 'detached:save-presupuestos-receipted') {
       // A renderer/transport payload cannot nominate a different generation
       // or database identity than the one the worker actually opened.
       if (activeGeneration === null || message.generation !== activeGeneration ||
@@ -162,6 +164,12 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     } else if (message.kind === 'detached:coordination-workflow') {
       const result = executeDetachedCoordinationWorkflow(activeDb, message.payload);
       return { kind: 'detached:coordination-workflow-done', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-configuracion-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => saveDetachedConfiguracion(activeDb, message.payload));
+      return { kind: 'detached:configuracion-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-configuracion') {
       const result = saveDetachedConfiguracion(activeDb, message.payload);
       return { kind: 'detached:configuracion-saved', operationId: message.operationId, result };
@@ -174,6 +182,12 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     } else if (message.kind === 'detached:save-teletrabajo-batch') {
       const result = saveDetachedTeletrabajoBatch(activeDb, message.payload);
       return { kind: 'detached:teletrabajo-batch-saved', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-presupuestos-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => saveDetachedPresupuestos(activeDb, message.payload));
+      return { kind: 'detached:presupuestos-receipted', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-presupuestos') {
       const result = saveDetachedPresupuestos(activeDb, message.payload);
       return { kind: 'detached:presupuestos-saved', operationId: message.operationId, result };
