@@ -100,7 +100,10 @@ const backup=readFileSync(path.join(root,'electron/persistence/localBackupServic
 const facade=readFileSync(path.join(root,'electron/sqlitePersistence.ts'),'utf8');
 if (!backup.includes("'sqlite:backup-live-full'") ||
     !backup.includes("'sqlite:backup-shutdown-full'") ||
+    !backup.includes('sqliteIndependentActivityTracker.run(label, operation)') ||
+    !backup.includes("return await trackActivity('sqlite:backup-live-full'") ||
+    !backup.includes("return await trackActivity('sqlite:backup-shutdown-full'") ||
     !facade.includes('trackActivity: (label, operation) => sqliteIndependentActivityTracker.run(label, operation)')) {
-  console.error('Falta la reserva previa de una ruta de backup SQLite en el main.');
+  console.error('Falta la admisión obligatoria de un backup SQLite; no permitir un fallback sin tracker.');
   process.exitCode=1;
 }
