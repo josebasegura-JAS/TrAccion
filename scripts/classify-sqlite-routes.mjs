@@ -172,6 +172,24 @@ if(files.length===0 || !files.includes('electron/persistence/taskBatchPersistenc
   process.exitCode=1;
 }
 
+// PR499: the shared integrity/health utilityProcess bridge must reserve
+// routine health reads, WITHOUT applying main ownership to integrity preflight.
+const healthBridge = readFileSync(path.join(root,'electron/sqliteIntegrityWorkerBridge.ts'),'utf8');
+const healthStart = healthBridge.indexOf('export function verifySqliteHealthInUtilityProcess(');
+const healthEnd = healthBridge.indexOf('function runSqliteReadonlyWorker(',healthStart);
+const healthEntry = healthStart < 0 || healthEnd < 0 ? '' :
+  healthBridge.slice(healthStart,healthEnd);
+const integrityStart = healthBridge.indexOf('export function verifySqliteIntegrityInUtilityProcess(');
+const integrityEnd = healthBridge.indexOf('export function verifySqliteHealthInUtilityProcess(',integrityStart);
+const integrityEntry = integrityStart < 0 || integrityEnd < 0 ? '' :
+  healthBridge.slice(integrityStart,integrityEnd);
+if (!healthEntry.includes("runIsolatedSqliteReadUnderHandoffBarrier('health'") ||
+    !healthEntry.includes("runSqliteReadonlyWorker(databasePath, expected, 'health')") ||
+    !integrityEntry.includes("runSqliteReadonlyWorker(databasePath, expected, 'integrity')") ||
+    integrityEntry.includes('runIsolatedSqliteReadUnderHandoffBarrier(')) {
+  console.error('Regresión del ciclo health/integrity: health requiere admisión main e integrity barrera separada.');
+  process.exitCode = 1;
+}
 // PR494: every bridge that forks a dedicated readonly SQLite utilityProcess
 // must reserve the global main handoff barrier before launching the child.
 const isolatedReaders = [
