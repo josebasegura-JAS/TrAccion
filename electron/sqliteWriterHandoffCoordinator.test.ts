@@ -141,6 +141,45 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     expect(f.fence.snapshot().owner).toBe('worker');
   });
 
+  it('PR483: si el worker sale durante el inicio, la cesión queda en cuarentena', async () => {
+    const f = fixture();
+    f.startWriter.mockImplementation(async (generation) => {
+      f.coordinator.workerExited(generation);
+      return { generation };
+    });
+    await expect(f.coordinator.handoff()).rejects.toThrow('Worker SQLite terminó');
+    expect(f.fence.snapshot().owner).toBe('quarantine');
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
+    expect(() => f.fence.assertMayEnterMain()).toThrow();
+    expect(() => f.coordinator.restoreMainAfterReconciliation(1, false, true)).toThrow();
+  });
+
+  it('PR483: si EXIT sucede mientras se verifica SMB no se activa un worker muerto', async () => {
+    const f = fixture();
+    f.verifyWorkerSmbOwnership.mockImplementation(async (generation) => {
+      f.coordinator.workerExited(generation);
+    });
+    await expect(f.coordinator.handoff()).rejects.toThrow('Worker SQLite terminó');
+    expect(f.fence.snapshot().owner).toBe('quarantine');
+    expect(f.independentActivity.snapshot().frozen).toBe(true);
+    expect(() => f.coordinator.registerWriterOperation('late', 1)).toThrow();
+  });
+
+  it('PR483: un fallo incierto antes de READY requiere EXIT real para recuperar', async () => {
+    const f = fixture();
+    f.startWriter.mockImplementation(async (generation) => {
+      f.coordinator.workerUncertain(generation);
+      return { generation };
+    });
+    await expect(f.coordinator.handoff()).rejects.toThrow('Worker SQLite terminó');
+    expect(() => f.coordinator.restoreMainAfterReconciliation(1, true, true))
+      .toThrow('salida');
+    f.coordinator.workerExited(1);
+    expect(f.fence.snapshot().owner).toBe('quarantine');
+    f.coordinator.restoreMainAfterReconciliation(1, true, true);
+    expect(f.fence.snapshot().owner).toBe('main');
+  });
+
   it('no acepta READY de una generación distinta', async () => {
     const f = fixture();
     f.startWriter.mockImplementation(async (generation) => ({ generation: generation + 1 }));
