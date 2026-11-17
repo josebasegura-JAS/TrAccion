@@ -137,7 +137,9 @@ export async function backupSqliteDatabase(
   } catch (error) {
     // Fallar es preferible a publicar una copia inconsistente. El llamador
     // conserva la última copia validada y registra el fallo de mantenimiento.
-    throw new Error('Copia SQLite fallida: Online Backup API no ha terminado; se prohíbe el fallback copyFile.', { cause: error });
+    const failure = new Error('Copia SQLite fallida: Online Backup API no ha terminado; se prohíbe el fallback copyFile.') as Error & { cause?: unknown };
+    failure.cause = error;
+    throw failure;
   }
 }
 
