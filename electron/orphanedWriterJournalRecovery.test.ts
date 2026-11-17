@@ -27,13 +27,15 @@ function fixture() {
   ]) db.prepare('INSERT INTO app_metadata VALUES (?,?,?)').run(key, value, '2026-11-17');
   const journal = createDurableWriterJournal(journalPath, expected.databaseUuid);
   const terminated = vi.fn(async () => undefined);
-  const barrier = vi.fn(async <T>(work: () => Promise<T>): Promise<T> => work());
+  // Keep the Vitest spy non-generic; adapt it to the generic recovery contract.
+  const barrier = vi.fn(async (work: () => Promise<unknown>): Promise<unknown> => work());
   const recovery = (override?: Partial<Parameters<typeof reconcileOrphanedWriterJournal>[0]>) =>
     reconcileOrphanedWriterJournal({
       journal: createDurableWriterJournal(journalPath, expected.databaseUuid),
       databasePath, expected,
       assertPreviousWriterTerminated: terminated,
-      withExclusiveRecoveryBarrier: barrier,
+      withExclusiveRecoveryBarrier: <T>(work: () => Promise<T>): Promise<T> =>
+        barrier(work) as Promise<T>,
       ...override,
     });
   return { db, journal, journalPath, databasePath, terminated, barrier, recovery };
@@ -64,7 +66,7 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
       expect(persisted.snapshot().map(e => e.evidence?.outcome))
         .toEqual(['committed', 'not-committed']);
       await expect(f.recovery()).resolves.toEqual({reconciled:[],remaining:[]});
-    } finally { if (f.db.open) f.db.close(); }
+    } finally { try { f.db.close(); } catch { /* Ya cerrado explícitamente en la prueba. */ } }
   });
 
   it('keeps pending journal when previous worker may still be running', async () => {
@@ -98,7 +100,7 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
       await expect(f.recovery()).rejects.toThrow('commit incierto');
       const pending = createDurableWriterJournal(f.journalPath, expected.databaseUuid).unsettled();
       expect(pending).toMatchObject([{id:'op-unknown',state:'unknown'}]);
-    } finally { if (f.db.open) f.db.close(); }
+    } finally { try { f.db.close(); } catch { /* Ya cerrado explícitamente en la prueba. */ } }
   });
 
   it('rejects mismatched or damaged SQLite identity and keeps journal quarantined', async () => {
@@ -110,7 +112,7 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
       await expect(f.recovery()).rejects.toThrow('identidad');
       expect(createDurableWriterJournal(f.journalPath, expected.databaseUuid).unsettled())
         .toHaveLength(1);
-    } finally { if (f.db.open) f.db.close(); }
+    } finally { try { f.db.close(); } catch { /* Ya cerrado explícitamente en la prueba. */ } }
   });
 
   it('refuses legacy journal operations without recorded receipt provenance', async () => {
