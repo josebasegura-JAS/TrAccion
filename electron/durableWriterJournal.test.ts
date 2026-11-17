@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import type { DatabaseConstructor } from 'better-sqlite3';
+import { saveWithDetachedCommitReceipt } from './detachedWriterCommitReceipt.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDurableWriterJournal } from './durableWriterJournal.js';
@@ -7,6 +10,8 @@ import { createSqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.j
 import { createSqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { createSqliteWriterHandoffCoordinator } from './sqliteWriterHandoffCoordinator.js';
 
+const require = createRequire(import.meta.url);
+const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
 const dirs: string[] = [];
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'traccion-pr478-'));
@@ -82,6 +87,61 @@ describe('PR478 · journal durable de escrituras detached', () => {
     coordinator.restoreMainAfterReconciliation(generation, true, true);
     expect(fence.snapshot().owner).toBe('main');
   });
+  it('PR483: verifica commits contra SQLite tras EXIT antes de conciliar el journal', async () => {
+    const f = fixture();
+    const databasePath = join(f.file + '-db.sqlite');
+    const expected = {
+      databaseUuid: f.uuid, applicationId: 'TrAccion',
+      environment: 'test', schemaVersion: 1,
+    };
+    const db = new BetterSqlite3(databasePath);
+    try {
+      db.exec(`CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
+        CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT);
+        INSERT INTO schema_migrations VALUES (1, '2026-11-17');`);
+      for (const [key, value] of [
+        ['database_uuid', expected.databaseUuid],
+        ['application_id', expected.applicationId],
+        ['environment', expected.environment],
+        ['database_created_at', '2026-11-17'],
+      ]) {
+        db.prepare('INSERT INTO app_metadata VALUES (?, ?, ?)').run(key, value, '2026-11-17');
+      }
+      saveWithDetachedCommitReceipt(db,
+        { operationId: 'committed', generation: 1, databaseUuid: f.uuid },
+        () => ({ ok: true }));
+    } finally { db.close(); }
+
+    const fence = createSqliteEngineOwnershipFence();
+    const coordinator = createSqliteWriterHandoffCoordinator(fence, {
+      durableJournal: f.journal,
+      independentActivity: createSqliteIndependentActivityTracker(),
+      inspectQueue: () => ({ queuedOperations: 0, runningOperation: null, timedOut: false }),
+      assertNoIndependentSqliteActivity: async () => {},
+      closeMainHandle: async () => {},
+      startWriter: async (generation) => ({ generation }),
+      verifyWorkerSmbOwnership: async () => {},
+    });
+    const gen = await coordinator.handoff();
+    coordinator.registerWriterOperation('committed', gen);
+    coordinator.registerWriterOperation('absent', gen);
+    expect(() => coordinator.reconcileReceiptedWriterOperation(
+      'committed', gen, databasePath, expected)).toThrow('EXIT');
+    coordinator.workerExited(gen);
+    expect(() => coordinator.reconcileReceiptedWriterOperation(
+      'committed', gen, databasePath + '-missing', expected)).toThrow();
+    expect(f.journal.unsettled()).toHaveLength(2);
+    const commitEvidence = coordinator.reconcileReceiptedWriterOperation(
+      'committed', gen, databasePath, expected);
+    expect(commitEvidence.outcome).toBe('committed');
+    const absentEvidence = coordinator.reconcileReceiptedWriterOperation(
+      'absent', gen, databasePath, expected);
+    expect(absentEvidence.outcome).toBe('not-committed');
+    expect(f.journal.unsettled()).toEqual([]);
+    coordinator.restoreMainAfterReconciliation(gen, true, true);
+    expect(fence.snapshot().owner).toBe('main');
+  });
+
   it('bloquea un handoff si existen operaciones pendientes de otra ejecución', async () => {
     const f = fixture();
     f.journal.recordSubmitted('op:orphan', 9);
