@@ -111,9 +111,12 @@ export async function pruneShutdownLocalBackups(extension: 'sqlite' | 'json'): P
 }
 
 /**
- * Crea una instantánea consistente de la base SQLite usando la Online Backup API
- * de SQLite. Si el backup nativo no está disponible o falla, conserva el
- * comportamiento histórico mediante una copia física del fichero origen.
+ * PR503: nunca copiar físicamente un SQLite potencialmente activo como
+ * sustituto de una Online Backup fallida. Una copia de solo el fichero .sqlite
+ * puede omitir un rollback journal necesario o capturar bytes inconsistentes.
+ *
+ * Para obtener una copia física con el motor cerrado se requiere una API
+ * explícita y una prueba independiente de inactividad; no es este método.
  */
 type DatabaseWithBackup = Database & {
   backup?: (destinationPath: string) => Promise<unknown>;
@@ -121,21 +124,21 @@ type DatabaseWithBackup = Database & {
 
 export async function backupSqliteDatabase(
   database: Database | null,
-  databasePath: string,
+  _databasePath: string,
   destinationPath: string,
-): Promise<'native' | 'copy'> {
+): Promise<'native'> {
   const databaseWithBackup = database as DatabaseWithBackup | null;
-  if (databaseWithBackup && typeof databaseWithBackup.backup === 'function') {
-    try {
-      await databaseWithBackup.backup(destinationPath);
-      return 'native';
-    } catch (error) {
-      console.warn('El backup nativo SQLite ha fallado; se usará la copia física de respaldo.', error);
-    }
+  if (!databaseWithBackup || typeof databaseWithBackup.backup !== 'function') {
+    throw new Error('Copia SQLite cancelada: no existe conexión con Online Backup API. No se realiza copia física de una base potencialmente activa.');
   }
-
-  await copyFile(databasePath, destinationPath);
-  return 'copy';
+  try {
+    await databaseWithBackup.backup(destinationPath);
+    return 'native';
+  } catch (error) {
+    // Fallar es preferible a publicar una copia inconsistente. El llamador
+    // conserva la última copia validada y registra el fallo de mantenimiento.
+    throw new Error('Copia SQLite fallida: Online Backup API no ha terminado; se prohíbe el fallback copyFile.', { cause: error });
+  }
 }
 
 export async function pruneSharedSqliteBackups(databasePath: string): Promise<void> {
