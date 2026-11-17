@@ -9,7 +9,8 @@ const request:ReceiptedWriterRequest={
 };
 function fixture() {
   const log:string[]=[];
-  const registerWriterOperation=vi.fn((_id:string,_gen:number,_backed:true)=>{
+  const registerWriterOperation=vi.fn((...args:[string,number,true])=>{
+    expect(args).toHaveLength(3);
     log.push('journal');
   });
   const acknowledgeWriterOperation=vi.fn(()=>{log.push('ack');});
