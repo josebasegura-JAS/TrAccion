@@ -1,5 +1,6 @@
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { sqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
 import type { Database } from 'better-sqlite3';
 import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
 import { getDailyLocalBackupWeekdayName } from './maintenanceQueries.js';
@@ -175,13 +176,18 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   // añade varios segundos de E/S sobre la base compartida sin aportar datos nuevos.
   let backupRevision = 0;
   let backedUpRevision = 0;
+  // Never run a backup without admission tracking. Legacy callers that do
+  // not inject trackActivity still participate in the shared main-process
+  // freeze/drain barrier; this is NOT a substitute for distributed SMB locks.
+  const trackActivity = dependencies.trackActivity ??
+    (<T>(label: string, operation: () => Promise<T>): Promise<T> =>
+      sqliteIndependentActivityTracker.run(label, operation));
 
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
     backupWorkRunning += 1;
     try {
-      return await (dependencies.trackActivity
-        ? dependencies.trackActivity('sqlite:backup-live-full', () => writeLocalBackupArtifactsTracked(reason, force))
-        : writeLocalBackupArtifactsTracked(reason, force));
+      return await trackActivity('sqlite:backup-live-full', () =>
+        writeLocalBackupArtifactsTracked(reason, force));
     } finally {
       backupWorkRunning -= 1;
     }
@@ -425,9 +431,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
     backupWorkRunning += 1;
     try {
-      return await (dependencies.trackActivity
-        ? dependencies.trackActivity('sqlite:backup-shutdown-full', () => writeShutdownLocalBackupArtifactsTracked())
-        : writeShutdownLocalBackupArtifactsTracked());
+      return await trackActivity('sqlite:backup-shutdown-full', () =>
+        writeShutdownLocalBackupArtifactsTracked());
     } finally {
       backupWorkRunning -= 1;
     }
