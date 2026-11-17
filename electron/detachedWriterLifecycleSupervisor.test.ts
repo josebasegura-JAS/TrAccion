@@ -108,6 +108,43 @@ describe('PR500 · integrated fail-closed detached writer supervisor',()=>{
     expect(f.supervisor.snapshot().verified).toBe(false);
   });
 
+  it('durable EXIT persistence failure cannot be mistaken for permission to recover',async()=>{
+    const f=fixture();
+    const start=f.supervisor.start(12);
+    f.message({kind:'detached:ready'});
+    f.message({kind:'detached:session-opened',generation:12,proof});
+    await start;
+    vi.spyOn(f.store,'confirmExit').mockImplementation(()=>{
+      throw new Error('local disk offline');
+    });
+    f.exit(0);
+    await expect(f.supervisor.waitForConfirmedExit())
+      .rejects.toThrow('no confirmada durablemente');
+    expect(f.quarantine).toHaveBeenCalledWith(12);
+    expect(f.supervisor.snapshot()).toMatchObject({exitObserved:true,exitDurable:false,verified:false});
+    expect(f.store.inspect()?.state).toBe('launching');
+  });
+
+  it('startup timeout requests kill but cannot confirm EXIT until the child actually exits',async()=>{
+    vi.useFakeTimers();
+    const f=fixture();
+    const starting=f.supervisor.start(15);
+    const outcome=expect(starting).rejects.toThrow('Timeout');
+    await vi.advanceTimersByTimeAsync(20_000);
+    await outcome;
+    expect(f.kill).toHaveBeenCalledOnce();
+    expect(f.quarantine).toHaveBeenCalledWith(15);
+    expect(f.store.inspect()?.state).toBe('launching');
+    let exitConfirmed=false;
+    const waiting=f.supervisor.waitForConfirmedExit().then(()=>{exitConfirmed=true;});
+    await Promise.resolve();
+    expect(exitConfirmed).toBe(false);
+    f.exit(1);
+    await waiting;
+    expect(exitConfirmed).toBe(true);
+    expect(f.store.inspect()).toMatchObject({state:'exit-confirmed',exitCode:1});
+  });
+
   it('does not fork if timeout config is invalid',async()=>{
     const f=fixture();
     const other=createDetachedWriterLifecycleSupervisor({
