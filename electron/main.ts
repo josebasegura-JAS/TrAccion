@@ -261,8 +261,8 @@ function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: Bro
   setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow, rendererReady), remainingMs);
 }
 function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt = Date.now(), setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void): BrowserWindow {
-  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${isMultiuserTestClientB ? ' · PRUEBA MULTIUSUARIO B (BASE REAL)' : ''}`;
-  const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: mainWindowTitle, backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? ' · ENTORNO DE PRUEBAS (DATOS FICTICIOS)' : ''}${isMultiuserTestClientB ? ' · PRUEBA MULTIUSUARIO B (BASE REAL)' : ''}`;
+  const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: mainWindowTitle, backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, ...(process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? { partition: 'persist:traccion-tests-only' } : {}) } });
   // El <title> del renderer no debe sustituir el título corporativo/versionado de la ventana.
   mainWindow.webContents.on('page-title-updated', (event) => {
     event.preventDefault();
@@ -316,8 +316,18 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   ipcMain.on('app:boot-visible', onBootVisible);
   ipcMain.on('app:renderer-ready', onRendererReady);
   mainWindow.once('closed', () => { clearTimeout(forceShowTimer); ipcMain.removeListener('app:boot-visible', onBootVisible); ipcMain.removeListener('app:renderer-ready', onRendererReady); setConnectivityIssueNotifier?.(null); });
-  if (isDev) mainWindow.loadURL(devServerUrl).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
-  else mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
+  // The environment hint drives ONLY the permanent blue visual warning.
+  // SQLite security continues to check process environment + database UUID.
+  const isTestEnvironment = process.env.TRACCION_DATABASE_ENVIRONMENT === 'test';
+  if (isDev) {
+    const target = new URL(devServerUrl);
+    if (isTestEnvironment) target.searchParams.set('traccionEnvironment', 'test');
+    mainWindow.loadURL(target.href).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'),
+      isTestEnvironment ? { query: { traccionEnvironment: 'test' } } : undefined)
+      .catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
+  }
   return mainWindow;
 }
 
