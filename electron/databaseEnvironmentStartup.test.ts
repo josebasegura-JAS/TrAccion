@@ -71,6 +71,17 @@ describe('PR507 · entorno al arrancar', () => {
     expect(process.env.TRACCION_DATABASE_ENVIRONMENT).toBe('test');
   });
 
+  it('conserva la identidad UUID al reutilizar una base de pruebas existente',async()=>{
+    mock.choice = 1;
+    const profile = mock.root + '-test-environment';
+    mkdirSync(profile);
+    writeFileSync(path.join(profile,'sqlite-preferences.json'),
+      JSON.stringify({customDirectoryPath:mock.folder,expectedDatabaseUuid:'test-uuid-123'}));
+    expect(await selectDatabaseEnvironmentBeforeMain()).toBe('test');
+    const saved = JSON.parse(readFileSync(path.join(profile,'sqlite-preferences.json'),'utf8'));
+    expect(saved.expectedDatabaseUuid).toBe('test-uuid-123');
+  });
+
   it('rechaza usar como pruebas exactamente la misma carpeta de producción',async()=>{
     const folder = path.join(workspace,'production');
     mkdirSync(folder);
