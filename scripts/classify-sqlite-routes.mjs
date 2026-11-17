@@ -72,6 +72,15 @@ const known={
  * barrier and must NOT blindly inherit the main ownership fence.
  */
 const nativeOpenPolicy = {
+  // PR507: empty TEST database provisioner. This is an explicit NEW native
+  // opening, allowed only after startup selects a segregated test userData.
+  // It creates a local temporary SQLite with migrations, then publishes with
+  // COPYFILE_EXCL. It does not open a shared production SQLite handle.
+  'electron/persistence/disposableTestDatabase.ts': {
+    count:1, owner:'test-only-initializer',
+    gate:'startup test environment + isolated userData + local temporary SQLite + exclusive shared publication; never production handoff',
+    status:'NO-GO',
+  },
   'electron/detachedCriteriaWriterWorker.ts': {count:1,owner:'experimental-write-child',gate:'not connected to production; supervised handoff required',status:'NO-GO'},
   'electron/detachedWriterCommitReceipt.ts': {count:1,owner:'recovery-verifier',gate:'confirmed child exit + independent SMB recovery barrier',status:'NO-GO'},
   'electron/isolatedSyncTokensWorker.ts': {count:1,owner:'readonly-child',gate:'isolatedSyncTokensBridge + confirmed exit',status:'ADMISSION GUARDED'},
