@@ -19,6 +19,9 @@ export type DetachedCommitStatus = 'committed' | 'not-committed';
 export interface DetachedCommitReceipt extends DetachedCommitIdentity {
   committedAt: string;
 }
+class RejectedWrite<T> extends Error {
+  constructor(readonly result: T) { super('Escritura OCC no confirmada'); }
+}
 export interface DetachedCommitEvidence {
   outcome: 'committed' | 'not-committed';
   sqliteVerificationReference: string;
@@ -60,18 +63,24 @@ export function saveWithDetachedCommitReceipt<T extends { ok: boolean }>(
 ): T {
   assertId(input);
   assertIdentity(db, input.databaseUuid);
-  return db.transaction((): T => {
-    createTable(db);
-    const duplicate = db.prepare(`SELECT operation_id FROM ${TABLE} WHERE operation_id = ?`)
-      .get(input.operationId);
-    if (duplicate) throw new Error('Operación SQLite ya confirmada: prohibido repetir operationId.');
-    const result = save();
-    if (!result.ok) return result;
-    db.prepare(`INSERT INTO ${TABLE} (operation_id, generation, database_uuid, committed_at)
-      VALUES (?, ?, ?, ?)`).run(input.operationId, input.generation, input.databaseUuid,
-      new Date().toISOString());
-    return result;
-  })();
+  try {
+    return db.transaction((): T => {
+      createTable(db);
+      const duplicate = db.prepare(`SELECT operation_id FROM ${TABLE} WHERE operation_id = ?`)
+        .get(input.operationId);
+      if (duplicate) throw new Error('Operación SQLite ya confirmada: prohibido repetir operationId.');
+      const result = save();
+      // Roll back even if a future core mutates before reporting a conflict.
+      if (!result.ok) throw new RejectedWrite(result);
+      db.prepare(`INSERT INTO ${TABLE} (operation_id, generation, database_uuid, committed_at)
+        VALUES (?, ?, ?, ?)`).run(input.operationId, input.generation, input.databaseUuid,
+        new Date().toISOString());
+      return result;
+    })();
+  } catch (error) {
+    if (error instanceof RejectedWrite) return error.result as T;
+    throw error;
+  }
 }
 
 /**
