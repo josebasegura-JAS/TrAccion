@@ -1,4 +1,5 @@
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
+import type { SqliteWorkerLockProof } from './sqliteWorkerOwnershipVerification.js';
 import { isDetachedPresupuestosSave, type DetachedPresupuestosSave } from './detachedPresupuestosWriterCore.js';
 import type { SimpleJsonSaveResult } from './persistence/simpleJsonModuleRepository.js';
 import { isDetachedTeletrabajoBatchSave, type DetachedTeletrabajoBatchSave } from './detachedTeletrabajoBatchCore.js';
@@ -21,6 +22,7 @@ import type { ConditionalSqliteTaskSaveResult, AtomicSessionWorkflowResult, Atom
 
 export type DetachedWriterRequest =
   | { kind: 'detached:open'; databasePath: string; expected: ExpectedSqliteIdentity }
+  | { kind: 'detached:open-session'; databasePath: string; expected: ExpectedSqliteIdentity; generation: number }
   | { kind: 'detached:save'; operationId: string; record: DetachedCriteriaSave }
   | { kind: 'detached:save-json-batch'; operationId: string; table: string; records: DetachedJsonWrite[] }
   | { kind: 'detached:save-task'; operationId: string; payload: DetachedTaskSave }
@@ -38,6 +40,7 @@ export type DetachedWriterRequest =
 export type DetachedWriterResponse =
   | { kind: 'detached:ready' }
   | { kind: 'detached:opened' }
+  | { kind: 'detached:session-opened'; generation: number; proof: SqliteWorkerLockProof }
   | { kind: 'detached:saved'; operationId: string; result: DetachedCriteriaSaveResult }
   | { kind: 'detached:json-batch-saved'; operationId: string; result: DetachedJsonBatchResult }
   | { kind: 'detached:task-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
@@ -72,7 +75,9 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
   if (r.kind === 'detached:save-configuracion') {
     return typeof r.operationId === 'string' && !!r.operationId.trim() && isDetachedConfiguracionSave(r.payload);
   }
-  if (r.kind === 'detached:open') {
+  if (r.kind === 'detached:open' || r.kind === 'detached:open-session') {
+    if (r.kind === 'detached:open-session' &&
+        (!Number.isSafeInteger(r.generation) || Number(r.generation) <= 0)) return false;
     if (typeof r.databasePath !== 'string' || !r.databasePath.trim()) return false;
     const e = r.expected as Record<string, unknown> | null;
     return !!e && typeof e === 'object' && typeof e.databaseUuid === 'string' && !!e.databaseUuid
@@ -142,6 +147,14 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
   const r = value as Record<string, unknown>;
   if (['detached:ready', 'detached:opened', 'detached:closed'].includes(String(r.kind))) return true;
   if (r.kind === 'detached:error') return r.operationId === undefined || typeof r.operationId === 'string';
+  if (r.kind === 'detached:session-opened') {
+    const p = r.proof as Record<string, unknown> | null;
+    return Number.isSafeInteger(r.generation) && Number(r.generation) > 0 &&
+      !!p && typeof p === 'object' && typeof p.ownerId === 'string' &&
+      p.ownerId.startsWith('detached-writer:') && typeof p.hostname === 'string' &&
+      typeof p.pid === 'number' && Number.isSafeInteger(p.pid) && Number(p.pid) > 0 &&
+      typeof p.createdAt === 'string' && !!p.createdAt.trim();
+  }
   if (r.kind === 'detached:presupuestos-saved') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() || !r.result || typeof r.result !== 'object') return false;
     const result = r.result as Record<string, unknown>;
