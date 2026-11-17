@@ -9,7 +9,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import type { DatabaseConstructor } from 'better-sqlite3';
 import { applyMigrations } from './schemaMigrations.js';
-import { inspectAndEnsureDatabaseIdentity, readDatabaseIdentity } from './databaseIdentity.js';
+import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 import { getConfiguredDatabaseDirectory, getDatabasePathForDirectory } from './databasePreferences.js';
 
 const require = createRequire(import.meta.url);
@@ -44,7 +44,7 @@ export async function prepareDisposableTestDatabase(): Promise<void> {
     applyMigrations(db);
   } finally { db.close(); }
   const result = inspectAndEnsureDatabaseIdentity(databasePath, { allowLegacyBootstrap: true });
-  if (result.identity.environment !== 'test' || !readDatabaseIdentity) {
+  if (result.identity.environment !== 'test') {
     throw new Error('La nueva base SQLite no tiene identidad de pruebas.');
   }
 }
