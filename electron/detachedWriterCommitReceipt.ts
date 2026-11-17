@@ -126,6 +126,30 @@ export function verifyDetachedSqliteCommit(
 }
 
 /**
+ * PR486: Hooks executed INSIDE the repository's existing synchronous
+ * transaction. The public repository may return Promise, but these hooks
+ * never run across an await and cannot accidentally commit a Promise.
+ */
+export function createDetachedReceiptTransactionHooks(input: DetachedCommitIdentity) {
+  assertId(input);
+  return {
+    beforeSaveTransaction(db: Database): void {
+      assertIdentity(db, input.databaseUuid);
+      createTable(db);
+      if (db.prepare(`SELECT 1 FROM ${TABLE} WHERE operation_id = ?`)
+        .get(input.operationId)) {
+        throw new Error('Operación SQLite ya confirmada: prohibido repetir operationId.');
+      }
+    },
+    afterSuccessfulSaveTransaction(db: Database): void {
+      db.prepare(`INSERT INTO ${TABLE} (operation_id, generation, database_uuid, committed_at)
+        VALUES (?, ?, ?, ?)`).run(input.operationId, input.generation,
+        input.databaseUuid, new Date().toISOString());
+    },
+  };
+}
+
+/**
  * High-level evidence for an interrupted child. Refuses to inspect SQLite
  * before a confirmed EXIT; NEVER accepts an IPC ACK as proof of commit.
  * Reopening is strictly read-only and must be protected by the supervisor's
