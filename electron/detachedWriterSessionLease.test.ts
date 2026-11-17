@@ -55,18 +55,20 @@ describe('PR480 · session lock scoped per device', () => {
 
   it('denies new work when the SMB owner changes', async () => {
     const { db, manager } = fixture();
-    const session = await acquireDetachedWriterSessionLease(manager, db, 'workstation-A');
-    const tampered = { ...manager,
+    let corruptNextRead = false;
+    const injected = {
+      ...manager,
       readLock: async (lockPath: string) => {
         const owner = await manager.readLock(lockPath);
-        return owner ? { ...owner, pid: owner.pid + 1 } : null;
+        return corruptNextRead && owner ? { ...owner, pid: owner.pid + 1 } : owner;
       },
     };
+    const session = await acquireDetachedWriterSessionLease(injected, db, 'workstation-A');
     try {
-      // Injected manager is verified independently against the same disk owner.
-      const actual = await tampered.readLock(session.lockPath);
-      expect(actual?.pid).not.toBe(session.owner.pid);
-      await session.assertOwned();
+      corruptNextRead = true;
+      await expect(session.assertOwned()).rejects.toThrow('perdido propietario');
+      corruptNextRead = false;
+      await expect(session.assertOwned()).rejects.toThrow('inactiva');
     } finally {
       await session.close();
     }
