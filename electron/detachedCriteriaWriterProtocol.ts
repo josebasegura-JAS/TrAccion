@@ -32,8 +32,11 @@ export type DetachedWriterRequest =
   | { kind: 'detached:save-session'; operationId: string; payload: DetachedSessionSave }
   | { kind: 'detached:save-session-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedSessionSave }
   | { kind: 'detached:close-session-atomically'; operationId: string; payload: DetachedAtomicSessionClose }
+  | { kind: 'detached:close-session-atomically-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedAtomicSessionClose }
   | { kind: 'detached:import-session-history'; operationId: string; payload: DetachedSessionHistoryImport }
+  | { kind: 'detached:import-session-history-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedSessionHistoryImport }
   | { kind: 'detached:coordination-workflow'; operationId: string; payload: DetachedCoordinationWorkflow }
+  | { kind: 'detached:coordination-workflow-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedCoordinationWorkflow }
   | { kind: 'detached:save-configuracion'; operationId: string; payload: DetachedConfiguracionSave }
   | { kind: 'detached:save-configuracion-receipted'; operationId: string; generation: number; databaseUuid: string; payload: DetachedConfiguracionSave }
   | { kind: 'detached:save-lottery'; operationId: string; payload: DetachedLotterySave }
@@ -59,8 +62,11 @@ export type DetachedWriterResponse =
   | { kind: 'detached:session-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
   | { kind: 'detached:session-receipted'; operationId: string; result: ConditionalSqliteTaskSaveResult }
   | { kind: 'detached:session-closed-atomically'; operationId: string; result: AtomicSessionWorkflowResult }
+  | { kind: 'detached:session-closed-atomically-receipted'; operationId: string; result: AtomicSessionWorkflowResult }
   | { kind: 'detached:session-history-imported'; operationId: string; result: AtomicSessionHistoryImportResult }
+  | { kind: 'detached:session-history-imported-receipted'; operationId: string; result: AtomicSessionHistoryImportResult }
   | { kind: 'detached:coordination-workflow-done'; operationId: string; result: AtomicCoordinationWorkflowResult }
+  | { kind: 'detached:coordination-workflow-done-receipted'; operationId: string; result: AtomicCoordinationWorkflowResult }
   | { kind: 'detached:configuracion-saved'; operationId: string; result: ConfiguracionSaveResult }
   | { kind: 'detached:configuracion-receipted'; operationId: string; result: ConfiguracionSaveResult }
   | { kind: 'detached:lottery-saved'; operationId: string; result: LotterySaveResult }
@@ -121,6 +127,17 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
       && typeof e.applicationId === 'string' && !!e.applicationId
       && typeof e.environment === 'string' && !!e.environment
       && Number.isSafeInteger(e.schemaVersion) && Number(e.schemaVersion) >= 0;
+  }
+  if (r.kind === 'detached:close-session-atomically-receipted' ||
+      r.kind === 'detached:import-session-history-receipted' ||
+      r.kind === 'detached:coordination-workflow-receipted') {
+    if (!Number.isSafeInteger(r.generation) || Number(r.generation) <= 0 ||
+        typeof r.databaseUuid !== 'string' || !r.databaseUuid.trim()) return false;
+    if (r.kind === 'detached:close-session-atomically-receipted')
+      return isDetachedWriterRequest({ kind: 'detached:close-session-atomically', operationId: r.operationId, payload: r.payload });
+    if (r.kind === 'detached:import-session-history-receipted')
+      return isDetachedWriterRequest({ kind: 'detached:import-session-history', operationId: r.operationId, payload: r.payload });
+    return isDetachedWriterRequest({ kind: 'detached:coordination-workflow', operationId: r.operationId, payload: r.payload });
   }
   if (r.kind === 'detached:coordination-workflow') {
     return typeof r.operationId === 'string' && !!r.operationId.trim() &&
@@ -263,6 +280,15 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
     return typeof result.ok === 'boolean' && typeof result.message === 'string' &&
       (result.currentUpdatedAt === null || typeof result.currentUpdatedAt === 'string') &&
       !!result.status && typeof result.status === 'object';
+  }
+  if (r.kind === 'detached:session-closed-atomically-receipted' ||
+      r.kind === 'detached:session-history-imported-receipted' ||
+      r.kind === 'detached:coordination-workflow-done-receipted') {
+    if (r.kind === 'detached:session-closed-atomically-receipted')
+      return isDetachedWriterResponse({ kind: 'detached:session-closed-atomically', operationId: r.operationId, result: r.result });
+    if (r.kind === 'detached:session-history-imported-receipted')
+      return isDetachedWriterResponse({ kind: 'detached:session-history-imported', operationId: r.operationId, result: r.result });
+    return isDetachedWriterResponse({ kind: 'detached:coordination-workflow-done', operationId: r.operationId, result: r.result });
   }
   if (r.kind === 'detached:coordination-workflow-done') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim() ||
