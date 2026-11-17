@@ -1,6 +1,7 @@
 import { app, screen } from 'electron';
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { selectDatabaseEnvironmentBeforeMain } from './databaseEnvironmentStartup.js';
 
 const isMultiuserTestClientB = process.argv.includes('--traccion-test-user-b');
 function prepareSecondClientProfile(): boolean {
@@ -51,6 +52,18 @@ void app.whenReady().then(async () => {
     return;
   }
   try {
+    // No production IPC or SQLite connection is initialized until the user
+    // chooses an environment and (for tests) a separate userData profile.
+    if (!isMultiuserTestClientB) {
+      const selected = await selectDatabaseEnvironmentBeforeMain();
+      if (!selected) { app.quit(); return; }
+      if (selected === 'test') {
+        const { prepareDisposableTestDatabase } = await import('./persistence/disposableTestDatabase.js');
+        await prepareDisposableTestDatabase();
+      }
+    } else {
+      process.env.TRACCION_DATABASE_ENVIRONMENT = 'production';
+    }
     await import('./main.js');
   } catch (error: unknown) {
     console.error('[startup] No se pudo cargar main.js.', error);
