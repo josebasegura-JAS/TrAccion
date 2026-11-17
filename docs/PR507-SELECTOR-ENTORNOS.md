@@ -2,8 +2,9 @@
 
 ## Uso
 
-Cada vez que se inicia TrAcción normalmente aparece una elección nativa de
-**Producción / Pruebas / Cancelar** antes de abrir la ventana principal
+Cada vez que se inicia TrAcción aparece una pequeña ventana de selección:
+**Entrar en Producción** como botón principal, **Abrir entorno de pruebas**
+como enlace secundario más pequeño y **Cancelar**. Se muestra antes de abrir la ventana principal
 o inicializar SQLite.
 
 - **Producción**: conserva exactamente el perfil local, carpeta SQLite,
@@ -32,7 +33,7 @@ creando la base. No se sobrescribe una SQLite existente.
    también se rechaza.
 3. Una ruta de prueba idéntica a la carpeta de producción configurada
    se rechaza antes de abrir SQLite (incluidas equivalencias por realpath).
-4. El título de la ventana muestra «ENTORNO DE PRUEBAS».
+4. El título de la ventana muestra «ENTORNO DE PRUEBAS». El entorno de ensayos añade además una banda azul fija arriba con «ENTORNO DE PRUEBAS · Base de datos ficticia · No es producción» y un borde azul que rodea la aplicación en todos los módulos.
 5. Cambiar entre entornos exige cerrar completamente la aplicación y
    volver a abrirla, para no conservar conexiones del entorno anterior.
 6. El modo existente `--traccion-test-user-b` sigue siendo una ruta
@@ -65,3 +66,7 @@ creando la base. No se sobrescribe una SQLite existente.
 La función es un selector de **base de datos**, no una activación del
 writer aislado. Volver a Producción en el siguiente arranque utiliza
 el perfil que ya existía sin alterar su fichero SQLite ni su UUID.
+
+## Auditoría SQLite en CI
+
+La nueva apertura nativa del inicializador local de base de pruebas está clasificada expresamente en `scripts/classify-sqlite-routes.mjs` como `test-only-initializer`, con estado `NO-GO` para la cesión productiva. No se desactiva ni se relaja el inventario de aperturas SQLite.
