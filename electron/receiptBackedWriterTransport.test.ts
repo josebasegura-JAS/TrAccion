@@ -18,7 +18,7 @@ function fixture() {
     log.push('wire');
     return {
       kind:'detached:criteria-receipted',operationId:'unique-op-1',
-      result:{ok:true,message:'saved',status:{ready:true}},
+      result:{ok:true,updatedAt:'2026-11-17T12:00:00Z'},
     };
   });
   return {log,registerWriterOperation,acknowledgeWriterOperation,workerUncertain,sendAndAwait};
@@ -67,7 +67,7 @@ describe('PR501 · strict receipt-backed transport admission',()=>{
     const f=fixture();
     f.sendAndAwait.mockResolvedValue({
       kind:'detached:criteria-receipted',operationId:'wrong-op',
-      result:{ok:true,message:'saved',status:{ready:true}},
+      result:{ok:true,updatedAt:'2026-11-17T12:00:00Z'},
     });
     await expect(sendReceiptBackedWriterOperation(f,'sqlite-uuid',request))
       .rejects.toThrow('ACK');
