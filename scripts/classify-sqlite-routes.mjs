@@ -96,6 +96,22 @@ if(files.length===0 || !files.includes('electron/persistence/taskBatchPersistenc
   process.exitCode=1;
 }
 
+// PR494: every bridge that forks a dedicated readonly SQLite utilityProcess
+// must reserve the global main handoff barrier before launching the child.
+const isolatedReaders = [
+  ['electron/taskReadWorkerBridge.ts', 'tasks'],
+  ['electron/sessionReadWorkerBridge.ts', 'sessions'],
+  ['electron/jsonReadWorkerBridge.ts', 'json'],
+  ['electron/isolatedSyncTokensBridge.ts', 'sync-tokens'],
+];
+for (const [file, kind] of isolatedReaders) {
+  const source = readFileSync(path.join(root, file), 'utf8');
+  if (!source.includes(`runIsolatedSqliteReadUnderHandoffBarrier('${kind}', () =>`) ||
+      !source.includes('utilityProcess.fork(')) {
+    console.error(`Lector SQLite independiente no reservado antes de fork: ${file}`);
+    process.exitCode = 1;
+  }
+}
 const backup=readFileSync(path.join(root,'electron/persistence/localBackupService.ts'),'utf8');
 const facade=readFileSync(path.join(root,'electron/sqlitePersistence.ts'),'utf8');
 if (!backup.includes("'sqlite:backup-live-full'") ||
