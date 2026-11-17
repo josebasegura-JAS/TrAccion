@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CURRENT_SCHEMA_VERSION, readCurrentSchemaVersion } from './schemaMigrations';
 import { openSqliteDatabase } from './sqliteConnection';
+import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 
 /**
  * Tests directos sobre openSqliteDatabase() — la orquestación real de
@@ -38,6 +39,24 @@ describe('sqliteConnection — openSqliteDatabase', () => {
 
     expect(readCurrentSchemaVersion(db!)).toBe(CURRENT_SCHEMA_VERSION);
     db!.close();
+  });
+
+  it('rechaza abrir una conexión nueva cuando main está en fase de cesión', () => {
+    const ticket = sqliteEngineOwnershipFence.beginHandoff({
+      queuedOperations:0,runningOperation:null,timedOut:false,
+    });
+    try {
+      expect(() => openSqliteDatabase(databasePath, {busyTimeoutMs:5_000}))
+        .toThrow('propiedad cedida');
+      // The guard is BEFORE require('better-sqlite3') and file creation.
+      expect(existsSync(databasePath)).toBe(false);
+    } finally {
+      sqliteEngineOwnershipFence.abortBeforeClose(ticket);
+    }
+    // Abort is only legal before main handle closes. Normal access resumes.
+    const db=openSqliteDatabase(databasePath,{busyTimeoutMs:5_000});
+    try { expect(readCurrentSchemaVersion(db)).toBe(CURRENT_SCHEMA_VERSION); }
+    finally { db.close(); }
   });
 
   it('reabre sin errores una base de datos ya existente y migrada', () => {
