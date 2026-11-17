@@ -639,6 +639,9 @@ export function createDatabaseLockManager(
       let operationFailed = false;
       let heartbeat: ReturnType<typeof setInterval> | null = null;
       let heartbeatStopped = true;
+      let result!: T;
+      let operationError: unknown;
+      let hasOperationError = false;
       // PR503: el lock ordinario debe renovarse durante operaciones
       // asíncronas largas; antes no iniciaba heartbeat en esta ruta.
       // Una llamada SQLite síncrona puede bloquear el event loop: esta
@@ -651,16 +654,16 @@ export function createDatabaseLockManager(
           throw new Error('El lock SMB cambió antes de iniciar la operación SQLite.');
         }
         assertDatabaseWritesAllowed();
-        const value = await operation();
+        result = await operation();
         const after = await readLock(lockPath);
         if (!sameLockOwner(after, operationLock)) {
           throw new Error('El lock SMB cambió durante la operación SQLite: resultado incierto.');
         }
         assertDatabaseWritesAllowed();
-        return value;
       } catch (error) {
         operationFailed = true;
-        throw error;
+        operationError = error;
+        hasOperationError = true;
       } finally {
         try {
           if (heartbeat) {
@@ -685,10 +688,12 @@ export function createDatabaseLockManager(
           operationFailed = true;
         }
         recordMultiuserMetric('smb-lock-held', operationName, Date.now() - heldStartedAt, operationFailed);
-        if (!heartbeatStopped) {
-          throw new Error('Heartbeat SMB incierto: lock retenido; se requiere recuperación supervisada.');
-        }
       }
+      if (!heartbeatStopped) {
+        throw new Error('Heartbeat SMB incierto: lock retenido; se requiere recuperación supervisada.');
+      }
+      if (hasOperationError) throw operationError;
+      return result;
     }
     const predecessor = localOperationTails.get(lockPath);
     let finishLocal!: () => void;
