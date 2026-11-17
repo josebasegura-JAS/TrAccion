@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDurableWriterJournal } from './durableWriterJournal.js';
@@ -93,9 +93,8 @@ describe('PR478 · journal durable de escrituras detached', () => {
       closeMainHandle: async () => {},
       startWriter: async (generation) => ({ generation }),
     });
-    // PR478 does not enable handoff; historical uncertainty must block recovery.
-    const generation = await coordinator.handoff();
-    coordinator.workerExited(generation);
-    expect(() => coordinator.restoreMainAfterReconciliation(generation, true, true)).toThrow('Journal durable');
+    // Previous-process uncertainty forbids even starting a new handoff.
+    await expect(coordinator.handoff()).rejects.toThrow('Journal durable');
+    expect(fence.snapshot().owner).toBe('main');
   });
 });
