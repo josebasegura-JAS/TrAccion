@@ -24,6 +24,7 @@ export type DetachedWriterRequest =
   | { kind: 'detached:open'; databasePath: string; expected: ExpectedSqliteIdentity }
   | { kind: 'detached:open-session'; databasePath: string; expected: ExpectedSqliteIdentity; generation: number }
   | { kind: 'detached:save'; operationId: string; record: DetachedCriteriaSave }
+  | { kind: 'detached:save-criteria-receipted'; operationId: string; generation: number; databaseUuid: string; record: DetachedCriteriaSave }
   | { kind: 'detached:save-json-batch'; operationId: string; table: string; records: DetachedJsonWrite[] }
   | { kind: 'detached:save-task'; operationId: string; payload: DetachedTaskSave }
   | { kind: 'detached:save-session'; operationId: string; payload: DetachedSessionSave }
@@ -42,6 +43,7 @@ export type DetachedWriterResponse =
   | { kind: 'detached:opened' }
   | { kind: 'detached:session-opened'; generation: number; proof: SqliteWorkerLockProof }
   | { kind: 'detached:saved'; operationId: string; result: DetachedCriteriaSaveResult }
+  | { kind: 'detached:criteria-receipted'; operationId: string; result: DetachedCriteriaSaveResult }
   | { kind: 'detached:json-batch-saved'; operationId: string; result: DetachedJsonBatchResult }
   | { kind: 'detached:task-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
   | { kind: 'detached:session-saved'; operationId: string; result: ConditionalSqliteTaskSaveResult }
@@ -131,6 +133,12 @@ export function isDetachedWriterRequest(value: unknown): value is DetachedWriter
         typeof row.value === 'string' && !!row.value.trim() &&
         (row.expectedUpdatedAt === null || typeof row.expectedUpdatedAt === 'string');
     });
+  }
+  if (r.kind === 'detached:save-criteria-receipted') {
+    if (!Number.isSafeInteger(r.generation) || Number(r.generation) <= 0 ||
+        typeof r.databaseUuid !== 'string' || !r.databaseUuid.trim()) return false;
+    return isDetachedWriterRequest({ kind: 'detached:save',
+      operationId: r.operationId, record: r.record });
   }
   if (r.kind === 'detached:save') {
     if (typeof r.operationId !== 'string' || !r.operationId.trim()) return false;
@@ -238,6 +246,9 @@ export function isDetachedWriterResponse(value: unknown): value is DetachedWrite
       });
     return result.ok === false && typeof result.failedRecordId === 'string' &&
       (result.currentUpdatedAt === null || typeof result.currentUpdatedAt === 'string');
+  }
+  if (r.kind === 'detached:criteria-receipted') {
+    return isDetachedWriterResponse({ kind: 'detached:saved', operationId: r.operationId, result: r.result });
   }
   if (r.kind !== 'detached:saved' || typeof r.operationId !== 'string') return false;
   const result = r.result as Record<string, unknown> | null;

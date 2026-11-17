@@ -13,6 +13,7 @@ import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { readCurrentSchemaVersion } from './persistence/schemaMigrations.js';
 import { saveDetachedCriteriaRecord } from './detachedCriteriaWriterCore.js';
+import { saveWithDetachedCommitReceipt } from './detachedWriterCommitReceipt.js';
 import { saveDetachedJsonBatch } from './detachedJsonWriterCore.js';
 import { saveDetachedTaskRecord } from './detachedTaskWriterCore.js';
 import { saveDetachedSessionRecord } from './detachedSessionWriterCore.js';
@@ -118,7 +119,13 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     if (!activeDatabasePath || !sessionLease) throw new Error('Sesión SQLite aislada no verificada.');
     await sessionLease.assertOwned();
     const response: DetachedWriterResponse = await withDetachedSqliteSmbLease(smbManager, activeDatabasePath, async (): Promise<DetachedWriterResponse> => {
-    if (message.kind === 'detached:save-json-batch') {
+    if (message.kind === 'detached:save-criteria-receipted') {
+      const result = saveWithDetachedCommitReceipt(activeDb, {
+        operationId: message.operationId, generation: message.generation,
+        databaseUuid: message.databaseUuid,
+      }, () => saveDetachedCriteriaRecord(activeDb, message.record));
+      return { kind: 'detached:criteria-receipted', operationId: message.operationId, result };
+    } else if (message.kind === 'detached:save-json-batch') {
       const result = saveDetachedJsonBatch(activeDb, message.table, message.records);
       return { kind: 'detached:json-batch-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-task') {
