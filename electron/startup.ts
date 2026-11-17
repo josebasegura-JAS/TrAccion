@@ -35,6 +35,16 @@ function prepareSecondClientProfile(): boolean {
 
 const multiuserProfileReady = prepareSecondClientProfile();
 
+// The startup chooser is initially the ONLY Electron BrowserWindow. Its close
+// must not trigger Electron's default "quit when all windows close" behaviour
+// before main.ts can create the real window. Keep this no-op listener for the
+// process lifetime; main.ts owns the normal quit logic after initialization.
+app.on('window-all-closed', () => {
+  // During environment selection/startup, an empty window list is expected.
+  // When the actual main window closes, main.ts handles shutdown separately.
+});
+
+
 const MAIN_WINDOW_TITLE_PREFIX = 'Cuadro de Mando RRLL - TrAcción';
 
 // Mantener el punto de entrada ligero: el splash principal se crea en main.ts.

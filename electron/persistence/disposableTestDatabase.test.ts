@@ -47,7 +47,7 @@ describe('PR507 · base de pruebas sin datos reales', () => {
     } finally { db.close(); }
     await prepareDisposableTestDatabase();
     expect(existsSync(path.join(shared,'traccion.sqlite.test-initialization.lockdir'))).toBe(false);
-  });
+  }, 30_000); // Las 19 migraciones SQLite + E/S en Windows CI pueden superar los 5 s por defecto.
 
   it('no crea bases al ejecutarse desde entorno productivo', async () => {
     process.env.TRACCION_DATABASE_ENVIRONMENT='production';
@@ -72,6 +72,15 @@ describe('PR507 · base de pruebas sin datos reales', () => {
     } finally {check.close();}
     expect(() => inspectAndEnsureDatabaseIdentity(file,{allowLegacyBootstrap:false}))
       .toThrow(/entorno/);
+  });
+
+  it('rechaza abrir una SQLite ya visible si otro equipo aún conserva el marcador de copia', async()=>{
+    const databasePath=path.join(shared,'traccion.sqlite');
+    writeFileSync(databasePath,'incomplete-test-sqlite');
+    const lock=databasePath+'.test-initialization.lockdir';
+    mkdirSync(lock);
+    await expect(prepareDisposableTestDatabase()).rejects.toThrow('posiblemente incompleto');
+    expect(existsSync(lock)).toBe(true);
   });
 
   it('no elimina un marcador de inicialización perteneciente a otro equipo',async()=>{

@@ -465,9 +465,22 @@ if (!app.requestSingleInstanceLock()) {
       updateSplashStep(splashWindow, 'database', 'active');
       updateSplashStep(splashWindow, 'services', 'active');
       await Promise.all([
-        persistence.initializeSqlitePersistence().then(() => {
-          startupMark('SQLite inicializada');
-          updateSplashStep(splashWindow, 'database', 'done');
+        persistence.initializeSqlitePersistence().then((databaseStatus) => {
+          if (!databaseStatus.ready || databaseStatus.phase !== 'active' ||
+              databaseStatus.environment !==
+                (process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? 'test' : 'production')) {
+            // A fallback/read-only status is not a successful connection.
+            // The normal UI must remain available for diagnosis and Settings,
+            // but the splash must not claim the selected SQLite is connected.
+            const message = databaseStatus.message ??
+              'La base de datos seleccionada no se ha podido activar.';
+            console.error('[startup] SQLite del entorno seleccionado no conectada.', message);
+            updateSplashStep(splashWindow, 'database', 'error', message);
+            startupMark('SQLite no conectada; edición bloqueada');
+          } else {
+            startupMark('SQLite inicializada');
+            updateSplashStep(splashWindow, 'database', 'done');
+          }
         }).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
           updateSplashStep(splashWindow, 'database', 'error', message || 'No se pudo inicializar la base de datos.');

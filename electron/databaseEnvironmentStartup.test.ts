@@ -32,6 +32,7 @@ vi.mock('./databaseEnvironmentChoice.js', () => ({
     mock.choice === 0 ? 'production' : mock.choice === 1 ? 'test' : null,
 }));
 import { selectDatabaseEnvironmentBeforeMain } from './databaseEnvironmentStartup.js';
+import { getConfiguredDatabaseDirectory } from './persistence/databasePreferences.js';
 
 let workspace = '';
 beforeEach(() => {
@@ -55,6 +56,9 @@ describe('PR507 · entorno al arrancar', () => {
     writeFileSync(original,JSON.stringify({customDirectoryPath:'X:/prod',expectedDatabaseUuid:'prod-id'}));
     expect(await selectDatabaseEnvironmentBeforeMain()).toBe('production');
     expect(mock.root).toBe(path.join(workspace,'profile'));
+    expect(await getConfiguredDatabaseDirectory()).toEqual({
+      directoryPath:'X:/prod',isDefaultPath:false,
+    });
     expect(JSON.parse(readFileSync(original,'utf8'))).toMatchObject({
       customDirectoryPath:'X:/prod',expectedDatabaseUuid:'prod-id',
     });
@@ -68,6 +72,9 @@ describe('PR507 · entorno al arrancar', () => {
     expect(mock.root.endsWith('-test-environment')).toBe(true);
     const prefs = JSON.parse(readFileSync(path.join(mock.root,'sqlite-preferences.json'),'utf8'));
     expect(prefs).toMatchObject({customDirectoryPath:mock.folder,expectedDatabaseUuid:null});
+    expect(await getConfiguredDatabaseDirectory()).toEqual({
+      directoryPath:mock.folder,isDefaultPath:false,
+    });
     expect(process.env.TRACCION_DATABASE_ENVIRONMENT).toBe('test');
   });
 
