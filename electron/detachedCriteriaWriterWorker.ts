@@ -5,6 +5,8 @@
  */
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
+import { acquireDetachedWriterSessionLease, type DetachedWriterSessionLease } from './detachedWriterSessionLease.js';
 import { createDatabaseLockManager } from './persistence/databaseLockManager.js';
 import { withDetachedSqliteSmbLease } from './detachedWriterSmbLease.js';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
@@ -36,6 +38,7 @@ const seenOperations = new Set<string>();
 const writerOwnerId = `detached-writer:${process.pid}:${randomUUID()}`;
 const smbManager = createDatabaseLockManager({ getOwnerId: () => writerOwnerId });
 let activeDatabasePath: string | null = null;
+let sessionLease: DetachedWriterSessionLease | null = null;
 
 function send(message: DetachedWriterResponse): void {
   port!.postMessage(message);
@@ -49,6 +52,10 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     try {
       db?.close();
       db = null;
+      if (sessionLease) {
+        await sessionLease.close();
+        sessionLease = null;
+      }
       send({ kind: 'detached:closed' });
       process.exit(0);
     } catch {
@@ -61,6 +68,11 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     if (opened) { send({ kind: 'detached:error' }); return; }
     opened = true;
     try {
+      // Reserve the worker session on this workstation BEFORE opening SQLite.
+      // The independent ordinary .lockdir is still acquired per write.
+      sessionLease = await acquireDetachedWriterSessionLease(
+        smbManager, message.databasePath, hostname(),
+      );
       const Ctor = require('better-sqlite3') as DatabaseConstructor;
       const candidate = new Ctor(message.databasePath, { fileMustExist: true });
       try {
@@ -72,6 +84,7 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
           readCurrentSchemaVersion(candidate) !== message.expected.schemaVersion) {
           throw new Error('Identidad o esquema SQLite incorrecto.');
         }
+        await sessionLease.assertOwned();
         db = candidate;
         activeDatabasePath = message.databasePath;
         send({ kind: 'detached:opened' });
@@ -79,7 +92,10 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
         if (db !== candidate) candidate.close();
       }
     } catch {
+      // An open failure cannot be retried against an uncertain session.
+      // Exit destroys the SQLite handle and the coordinator must observe EXIT.
       send({ kind: 'detached:error' });
+      process.exit(1);
     }
     return;
   }
@@ -93,7 +109,8 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
   // The message queue serializes open/write/close requests for this worker.
   const activeDb = db;
   try {
-    if (!activeDatabasePath) throw new Error('No existe ruta de conexión SQLite verificada.');
+    if (!activeDatabasePath || !sessionLease) throw new Error('Sesión SQLite aislada no verificada.');
+    await sessionLease.assertOwned();
     const response: DetachedWriterResponse = await withDetachedSqliteSmbLease(smbManager, activeDatabasePath, async (): Promise<DetachedWriterResponse> => {
     if (message.kind === 'detached:save-json-batch') {
       const result = saveDetachedJsonBatch(activeDb, message.table, message.records);
@@ -133,6 +150,7 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
       return { kind: 'detached:saved', operationId: message.operationId, result };
     }
     });
+    await sessionLease.assertOwned();
     send(response);
   } catch {
     closing = true;
