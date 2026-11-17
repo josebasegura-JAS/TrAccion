@@ -7,6 +7,7 @@
  */
 import type { createSqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { createSqliteWriterOperationLedger } from './sqliteWriterOperationLedger.js';
+import type { DurableWriterJournal, SqliteReconciliationEvidence } from './durableWriterJournal.js';
 import {
   createSqliteEngineOwnershipFence,
   type SqliteQueueState,
@@ -18,6 +19,8 @@ type IndependentActivityBarrier = Pick<
 >;
 
 export interface WriterHandoffDependencies {
+  /** Optional until production activation; MUST be provided for production. */
+  durableJournal?: DurableWriterJournal;
   /**
    * Barrera de admisión fuera de la cola IPC. Es OBLIGATORIA: sin ella,
    * un heartbeat, backup o lector readonly podría entrar tras el preflight.
@@ -112,17 +115,24 @@ export function createSqliteWriterHandoffCoordinator(
     /** Registrar ANTES de enviar una escritura. La capa de transporte no reintenta. */
     registerWriterOperation(id: string, generation: number): void {
       assertCurrentWorker(generation);
+      // Durable write-ahead record BEFORE the message can be sent.
+      deps.durableJournal?.recordSubmitted(id, generation);
       operationLedger.begin(id, generation);
     },
     acknowledgeWriterOperation(id: string, generation: number): void {
       assertCurrentWorker(generation);
+      deps.durableJournal?.recordAcknowledged(id, generation);
       operationLedger.acknowledge(id, generation);
     },
-    reconcileWriterOperation(id: string, generation: number): void {
+    reconcileWriterOperation(id: string, generation: number, evidence?: SqliteReconciliationEvidence): void {
       if (fence.snapshot().owner !== 'quarantine' ||
           fence.snapshot().generation !== generation ||
           confirmedExitGeneration !== generation) {
         throw new Error('Conciliación SQLite requiere cuarentena, generación correcta y exit confirmado.');
+      }
+      if (deps.durableJournal) {
+        if (!evidence) throw new Error('Conciliación durable exige evidencia SQLite explícita.');
+        deps.durableJournal.reconcileVerified(id, generation, evidence);
       }
       operationLedger.reconcile(id, generation);
     },
@@ -131,11 +141,13 @@ export function createSqliteWriterHandoffCoordinator(
     },
     workerUncertain(generation: number): void {
       fence.markWorkerUncertain(generation);
+      deps.durableJournal?.markGenerationUnknown(generation);
       operationLedger.markGenerationUncertain(generation);
     },
     workerExited(generation: number): void {
       fence.markWorkerExited(generation);
       confirmedExitGeneration = generation;
+      deps.durableJournal?.markGenerationUnknown(generation);
       operationLedger.markGenerationUncertain(generation);
     },
     restoreMainAfterReconciliation(
@@ -145,6 +157,9 @@ export function createSqliteWriterHandoffCoordinator(
     ): void {
       // Un booleano del llamador no puede sustituir al libro de operaciones.
       // Rechazar también operaciones en vuelo no marcadas todavía como 'unknown'.
+      if (deps.durableJournal?.unsettled().length) {
+        throw new Error('Journal durable contiene operaciones de resultado no conciliado, incluso tras reinicio.');
+      }
       if (operationLedger.hasUnsettledOperations()) {
         throw new Error('Quedan escrituras SQLite pendientes o de resultado incierto; reconciliar antes de reabrir.');
       }
