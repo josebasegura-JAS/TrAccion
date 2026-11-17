@@ -82,8 +82,8 @@ describe('PR486 · recibos dentro de transacciones Tareas/Sesiones', () => {
   it('un mismo operationId no se puede reutilizar entre Tareas y Comité',async()=>{
     const db=setup();try{
       expect((await saveDetachedTaskRecord(db,task('t3','v1'),op('shared-id'))).ok).toBe(true);
-      const second=await saveDetachedSessionRecord(db,meeting('comite','s3','v1'),op('shared-id'));
-      expect(second.ok).toBe(false);
+      await expect(saveDetachedSessionRecord(db,meeting('comite','s3','v1'),op('shared-id')))
+        .rejects.toThrow('prohibido repetir');
       expect(db.prepare("SELECT id FROM comite_session_records WHERE id='s3'").get()).toBeUndefined();
     }finally{db.close();}
   });
