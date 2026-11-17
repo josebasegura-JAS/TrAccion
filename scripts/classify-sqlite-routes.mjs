@@ -123,6 +123,19 @@ console.log(`PR498: ${actualNativeOpens.length} aperturas heurísticas, ${native
 for (const violation of policyViolations) console.error(violation);
 if (policyViolations.length>0) process.exitCode=1;
 
+// A classification entry is descriptive only; the native-open audit above
+// is the strict regression gate and intentionally keeps NO-GO statuses.
+for (const [file, review] of Object.entries(nativeOpenPolicy)) {
+  if (!known[file]) known[file] = {
+    owner:review.owner,
+    mode:review.owner==='main-direct-write'||review.owner==='experimental-write-child'
+      ? 'write' : 'readonly / native-open',
+    admission:review.gate,
+    disposition:review.status==='ADMISSION GUARDED' ? 'PROTEGIDA PARCIAL'
+      : review.status==='NO-GO' ? 'BLOQUEADO' : 'EN REVISIÓN',
+    note:'Registro de apertura revisado por archivo. No certifica cierre de todos los handles.',
+  };
+}
 const files=[...new Set(findings.map(x=>x.file))].sort();
 const rows=files.map(file=>{
   const detail=known[file];
