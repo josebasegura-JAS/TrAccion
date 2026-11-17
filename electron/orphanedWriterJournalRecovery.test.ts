@@ -44,9 +44,9 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
   it('reconciles committed and absent operations after restart using real SQLite receipts', async () => {
     const f = fixture();
     try {
-      f.journal.recordSubmitted('op-committed', 13);
+      f.journal.recordSubmitted('op-committed', 13, true);
       f.journal.recordAcknowledged('op-committed', 13);
-      f.journal.recordSubmitted('op-absent', 13);
+      f.journal.recordSubmitted('op-absent', 13, true);
       saveWithDetachedCommitReceipt(f.db,
         {operationId:'op-committed',generation:13,databaseUuid:expected.databaseUuid},
         () => { f.db.prepare('INSERT INTO work VALUES (?)').run('saved'); return {ok:true}; });
@@ -70,7 +70,7 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
   it('keeps pending journal when previous worker may still be running', async () => {
     const f = fixture();
     try {
-      f.journal.recordSubmitted('op-running', 3);
+      f.journal.recordSubmitted('op-running', 3, true);
       f.terminated.mockRejectedValue(new Error('worker vivo'));
       await expect(f.recovery()).rejects.toThrow('worker vivo');
       expect(f.barrier).not.toHaveBeenCalled();
@@ -82,7 +82,7 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
   it('does not read or reconcile without an exclusive SMB recovery barrier', async () => {
     const f = fixture();
     try {
-      f.journal.recordSubmitted('op-lock', 3);
+      f.journal.recordSubmitted('op-lock', 3, true);
       f.barrier.mockRejectedValue(new Error('SMB inaccesible'));
       await expect(f.recovery()).rejects.toThrow('SMB inaccesible');
       expect(createDurableWriterJournal(f.journalPath, expected.databaseUuid).unsettled()[0]?.state)
@@ -93,7 +93,7 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
   it('missing commit table is uncertain, never interpreted as not-committed', async () => {
     const f = fixture();
     try {
-      f.journal.recordSubmitted('op-unknown', 5);
+      f.journal.recordSubmitted('op-unknown', 5, true);
       f.db.close();
       await expect(f.recovery()).rejects.toThrow('commit incierto');
       const pending = createDurableWriterJournal(f.journalPath, expected.databaseUuid).unsettled();
@@ -104,7 +104,7 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
   it('rejects mismatched or damaged SQLite identity and keeps journal quarantined', async () => {
     const f = fixture();
     try {
-      f.journal.recordSubmitted('op-wrong-identity', 2);
+      f.journal.recordSubmitted('op-wrong-identity', 2, true);
       f.db.prepare("UPDATE app_metadata SET value = 'another-db' WHERE key = 'database_uuid'").run();
       f.db.close();
       await expect(f.recovery()).rejects.toThrow('identidad');
@@ -113,10 +113,22 @@ describe('PR489 · recuperación segura de journal huérfano', () => {
     } finally { if (f.db.open) f.db.close(); }
   });
 
+  it('refuses legacy journal operations without recorded receipt provenance', async () => {
+    const f = fixture();
+    try {
+      f.journal.recordSubmitted('legacy-no-receipt', 4);
+      await expect(f.recovery()).rejects.toThrow('sin protocolo de recibo');
+      expect(f.terminated).not.toHaveBeenCalled();
+      expect(f.barrier).not.toHaveBeenCalled();
+      expect(createDurableWriterJournal(f.journalPath, expected.databaseUuid)
+        .unsettled()).toMatchObject([{id:'legacy-no-receipt',receiptBacked:false}]);
+    } finally { f.db.close(); }
+  });
+
   it('must recheck worker stop INSIDE exclusive barrier; a race blocks recovery', async () => {
     const f = fixture();
     try {
-      f.journal.recordSubmitted('op-race', 1);
+      f.journal.recordSubmitted('op-race', 1, true);
       f.terminated.mockResolvedValueOnce().mockRejectedValueOnce(new Error('worker sigue vivo'));
       await expect(f.recovery()).rejects.toThrow('worker sigue vivo');
       expect(f.terminated).toHaveBeenCalledTimes(2);
