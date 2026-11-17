@@ -13,7 +13,9 @@ import {
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import type { DatabaseConstructor } from 'better-sqlite3';
+import type { Database } from 'better-sqlite3';
+
+type DatabaseConstructor = new (filename: string, options?: { fileMustExist?: boolean }) => Database;
 import { applyMigrations } from './schemaMigrations.js';
 import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 import { getConfiguredDatabaseDirectory, getDatabasePathForDirectory } from './databasePreferences.js';
