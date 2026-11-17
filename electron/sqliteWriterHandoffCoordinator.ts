@@ -119,6 +119,21 @@ export function createSqliteWriterHandoffCoordinator(
     }
   }
 
+  function reconcileWriterOperationVerified(
+    id: string, generation: number, evidence?: SqliteReconciliationEvidence,
+  ): void {
+    if (fence.snapshot().owner !== 'quarantine' ||
+        fence.snapshot().generation !== generation ||
+        confirmedExitGeneration !== generation) {
+      throw new Error('Conciliación SQLite requiere cuarentena, generación correcta y exit confirmado.');
+    }
+    if (deps.durableJournal) {
+      if (!evidence) throw new Error('Conciliación durable exige evidencia SQLite explícita.');
+      deps.durableJournal.reconcileVerified(id, generation, evidence);
+    }
+    operationLedger.reconcile(id, generation);
+  }
+
   return {
     handoff(): Promise<number> {
       if (pending) return pending;
@@ -143,16 +158,7 @@ export function createSqliteWriterHandoffCoordinator(
       operationLedger.acknowledge(id, generation);
     },
     reconcileWriterOperation(id: string, generation: number, evidence?: SqliteReconciliationEvidence): void {
-      if (fence.snapshot().owner !== 'quarantine' ||
-          fence.snapshot().generation !== generation ||
-          confirmedExitGeneration !== generation) {
-        throw new Error('Conciliación SQLite requiere cuarentena, generación correcta y exit confirmado.');
-      }
-      if (deps.durableJournal) {
-        if (!evidence) throw new Error('Conciliación durable exige evidencia SQLite explícita.');
-        deps.durableJournal.reconcileVerified(id, generation, evidence);
-      }
-      operationLedger.reconcile(id, generation);
+      reconcileWriterOperationVerified(id, generation, evidence);
     },
     /**
      * PR483: recovery of RECEIPTED writes only, using evidence read from the
@@ -185,7 +191,7 @@ export function createSqliteWriterHandoffCoordinator(
       }
       const evidence = verifyDetachedSqliteCommitAfterExit(databasePath, expected,
         { operationId: id, generation, databaseUuid: expected.databaseUuid }, true);
-      this.reconcileWriterOperation(id, generation, evidence);
+      reconcileWriterOperationVerified(id, generation, evidence);
       return evidence;
     },
     pendingWriterOperationIds(generation: number): string[] {
