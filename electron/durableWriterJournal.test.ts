@@ -93,6 +93,7 @@ describe('PR478 · journal durable de escrituras detached', () => {
       assertNoIndependentSqliteActivity: async () => {},
       closeMainHandle: async () => {},
       startWriter: async (generation) => ({ generation }),
+      verifyWorkerSmbOwnership: async () => {},
     });
     // Previous-process uncertainty forbids even starting a new handoff.
     await expect(coordinator.handoff()).rejects.toThrow('Journal durable');
