@@ -89,44 +89,47 @@ const messageQueue = createSerializedDetachedMessageQueue(async (value: unknown)
     return;
   }
   seenOperations.add(message.operationId);
+  // Capture the validated connection before entering the async SMB lease callback.
+  // The message queue serializes open/write/close requests for this worker.
+  const activeDb = db;
   try {
     if (!activeDatabasePath) throw new Error('No existe ruta de conexión SQLite verificada.');
     const response: DetachedWriterResponse = await withDetachedSqliteSmbLease(smbManager, activeDatabasePath, async (): Promise<DetachedWriterResponse> => {
     if (message.kind === 'detached:save-json-batch') {
-      const result = saveDetachedJsonBatch(db, message.table, message.records);
+      const result = saveDetachedJsonBatch(activeDb, message.table, message.records);
       return { kind: 'detached:json-batch-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-task') {
-      const result = await saveDetachedTaskRecord(db, message.payload);
+      const result = await saveDetachedTaskRecord(activeDb, message.payload);
       return { kind: 'detached:task-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-session') {
-      const result = await saveDetachedSessionRecord(db, message.payload);
+      const result = await saveDetachedSessionRecord(activeDb, message.payload);
       return { kind: 'detached:session-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:close-session-atomically') {
-      const result = closeDetachedSessionWorkflow(db, message.payload);
+      const result = closeDetachedSessionWorkflow(activeDb, message.payload);
       return { kind: 'detached:session-closed-atomically', operationId: message.operationId, result };
     } else if (message.kind === 'detached:import-session-history') {
-      const result = importDetachedSessionHistory(db, message.payload);
+      const result = importDetachedSessionHistory(activeDb, message.payload);
       return { kind: 'detached:session-history-imported', operationId: message.operationId, result };
     } else if (message.kind === 'detached:coordination-workflow') {
-      const result = executeDetachedCoordinationWorkflow(db, message.payload);
+      const result = executeDetachedCoordinationWorkflow(activeDb, message.payload);
       return { kind: 'detached:coordination-workflow-done', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-configuracion') {
-      const result = saveDetachedConfiguracion(db, message.payload);
+      const result = saveDetachedConfiguracion(activeDb, message.payload);
       return { kind: 'detached:configuracion-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-lottery') {
-      const result = saveDetachedLotterySnapshot(db, message.payload);
+      const result = saveDetachedLotterySnapshot(activeDb, message.payload);
       return { kind: 'detached:lottery-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-sorteos') {
-      const result = saveDetachedSorteos(db, message.payload);
+      const result = saveDetachedSorteos(activeDb, message.payload);
       return { kind: 'detached:sorteos-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-teletrabajo-batch') {
-      const result = saveDetachedTeletrabajoBatch(db, message.payload);
+      const result = saveDetachedTeletrabajoBatch(activeDb, message.payload);
       return { kind: 'detached:teletrabajo-batch-saved', operationId: message.operationId, result };
     } else if (message.kind === 'detached:save-presupuestos') {
-      const result = saveDetachedPresupuestos(db, message.payload);
+      const result = saveDetachedPresupuestos(activeDb, message.payload);
       return { kind: 'detached:presupuestos-saved', operationId: message.operationId, result };
     } else {
-      const result = saveDetachedCriteriaRecord(db, message.record);
+      const result = saveDetachedCriteriaRecord(activeDb, message.record);
       return { kind: 'detached:saved', operationId: message.operationId, result };
     }
     });
