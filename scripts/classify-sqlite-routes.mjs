@@ -148,6 +148,23 @@ const unclassifiedNativeOpenFiles = [...new Set(findings
 writeFileSync(path.join(root,'audit-results/sqlite-native-open-pending.json'),
   JSON.stringify({unclassifiedNativeOpenFiles,productionHandoffReady:false},null,2));
 console.log(`PR496: aperturas nativas sin clasificación previa: ${unclassifiedNativeOpenFiles.length}; handoff producción NO-GO.`);
+// PR497: direct native handles in main used for identity bootstrapping and
+// backup validation MUST check ownership before opening better-sqlite3.
+for (const [file, fn] of [
+  ['electron/persistence/databaseIdentity.ts', 'inspectAndEnsureDatabaseIdentity'],
+  ['electron/persistence/sqliteBackupValidation.ts', 'validateSqliteBackupForRestore'],
+]) {
+  const source = readFileSync(path.join(root, file), 'utf8');
+  const start = source.indexOf(`export function ${fn}(`);
+  const body = start >= 0 ? source.slice(start) : '';
+  const check = body.indexOf('sqliteEngineOwnershipFence.assertMayEnterMain();');
+  const nativeOpen = body.indexOf("require('better-sqlite3')");
+  if (!source.includes("import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js'") ||
+      start < 0 || check < 0 || nativeOpen < 0 || check > nativeOpen) {
+    console.error(`Apertura SQLite directa sin comprobación de propiedad previa: ${file}`);
+    process.exitCode = 1;
+  }
+}
 const backup=readFileSync(path.join(root,'electron/persistence/localBackupService.ts'),'utf8');
 const facade=readFileSync(path.join(root,'electron/sqlitePersistence.ts'),'utf8');
 if (!backup.includes("'sqlite:backup-live-full'") ||

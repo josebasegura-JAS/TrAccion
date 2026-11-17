@@ -4,6 +4,7 @@ import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { applyMigrations } from './schemaMigrations.js';
+import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 import {
   inspectAndEnsureDatabaseIdentity,
   TRACCION_APPLICATION_ID,
@@ -47,6 +48,24 @@ afterEach(() => {
   while (tempDirectories.length) {
     rmSync(tempDirectories.pop()!, { recursive: true, force: true });
   }
+});
+
+describe('PR497 · identidad SQLite respeta propiedad del motor', () => {
+  it('no abre ni altera identidad legacy cuando main está en cesión', () => {
+    const file = createLegacyDatabase();
+    const ticket = sqliteEngineOwnershipFence.beginHandoff({
+      queuedOperations:0,runningOperation:null,timedOut:false,
+    });
+    try {
+      expect(() => inspectAndEnsureDatabaseIdentity(file,{allowLegacyBootstrap:true}))
+        .toThrow('propiedad cedida');
+    } finally {
+      sqliteEngineOwnershipFence.abortBeforeClose(ticket);
+    }
+    // Verify the rejected attempt did not bootstrap identity.
+    const result=inspectAndEnsureDatabaseIdentity(file,{allowLegacyBootstrap:true});
+    expect(result.bootstrappedLegacyIdentity).toBe(true);
+  });
 });
 
 describe('database identity', () => {

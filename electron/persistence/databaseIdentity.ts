@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 import { randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import { CURRENT_SCHEMA_VERSION, readCurrentSchemaVersion } from './schemaMigrations.js';
@@ -83,6 +84,8 @@ export function inspectAndEnsureDatabaseIdentity(
   databasePath: string,
   options: InspectDatabaseIdentityOptions = {},
 ): DatabaseIdentityInspection {
+  // Deny new main-process native handles after SQLite ownership is ceded.
+  sqliteEngineOwnershipFence.assertMayEnterMain();
   const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
   const db = new BetterSqlite3(databasePath, { readonly: false, fileMustExist: true });
 

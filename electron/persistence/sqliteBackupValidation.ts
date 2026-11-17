@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 import type { Database } from 'better-sqlite3';
 import {
   TRACCION_APPLICATION_ID,
@@ -55,6 +56,8 @@ export function validateSqliteBackupForRestore(
   databasePath: string,
   options: SqliteBackupValidationOptions = {},
 ): SqliteBackupValidationResult {
+  // Deny new main-process native handles after SQLite ownership is ceded.
+  sqliteEngineOwnershipFence.assertMayEnterMain();
   const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
   let db: Database | null = null;
 
