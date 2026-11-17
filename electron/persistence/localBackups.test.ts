@@ -90,22 +90,27 @@ describe('localBackups', () => {
     expect(readFileSync(destinationPath, 'utf8')).toBe('origen');
   });
 
-  it('backupSqliteDatabase vuelve a copyFile si el backup nativo falla', async () => {
+  it('PR503: el fallo de Online Backup no se disfraza como copia física válida', async () => {
     const sourcePath = path.join(userDataDir, 'origen-fallback.sqlite');
     const destinationPath = path.join(userDataDir, 'destino-fallback.sqlite');
     writeFileSync(sourcePath, 'contenido-fallback');
-    const backup = vi.fn(async () => {
-      throw new Error('fallo intencionado');
-    });
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const backup = vi.fn(async () => { throw new Error('fallo intencionado'); });
 
-    const mode = await backupSqliteDatabase({ backup } as never, sourcePath, destinationPath);
-
-    const { readFileSync } = await import('node:fs');
-    expect(mode).toBe('copy');
+    await expect(backupSqliteDatabase({ backup } as never, sourcePath, destinationPath))
+      .rejects.toThrow('se prohíbe el fallback copyFile');
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(destinationPath)).toBe(false);
     expect(backup).toHaveBeenCalledTimes(1);
-    expect(readFileSync(destinationPath, 'utf8')).toBe('contenido-fallback');
-    warn.mockRestore();
+  });
+
+  it('PR503: no copia el archivo cuando falta una conexión SQLite nativa', async () => {
+    const sourcePath = path.join(userDataDir, 'origen-sin-conexion.sqlite');
+    const destinationPath = path.join(userDataDir, 'destino-sin-conexion.sqlite');
+    writeFileSync(sourcePath, 'contenido');
+    await expect(backupSqliteDatabase(null, sourcePath, destinationPath))
+      .rejects.toThrow('no existe conexión con Online Backup API');
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(destinationPath)).toBe(false);
   });
 
   it('las rutas de backup local cuelgan de la carpeta sqlite-local-backup dentro de userData', () => {

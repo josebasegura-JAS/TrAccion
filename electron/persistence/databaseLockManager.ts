@@ -594,6 +594,16 @@ export function createDatabaseLockManager(
     }
   }
 
+  function sameLockOwner(
+    current: DatabaseLockInfo | null, expected: DatabaseLockInfo,
+  ): boolean {
+    return Boolean(current &&
+      current.ownerId === expected.ownerId &&
+      current.pid === expected.pid &&
+      current.hostname === expected.hostname &&
+      current.createdAt === expected.createdAt);
+  }
+
   async function withDatabaseOperationLock<T>(
     databasePath: string,
     operation: () => Promise<T>,
@@ -627,18 +637,63 @@ export function createDatabaseLockManager(
       }
       const heldStartedAt = Date.now();
       let operationFailed = false;
+      let heartbeat: ReturnType<typeof setInterval> | null = null;
+      let heartbeatStopped = true;
+      let result!: T;
+      let operationError: unknown;
+      let hasOperationError = false;
+      // PR503: el lock ordinario debe renovarse durante operaciones
+      // asíncronas largas; antes no iniciaba heartbeat en esta ruta.
+      // Una llamada SQLite síncrona puede bloquear el event loop: esta
+      // renovación no constituye prueba de fencing en dos equipos SMB.
       try {
-        return await operation();
+        heartbeat = startDatabaseLockHeartbeat(lockPath, operationLock);
+        heartbeatStopped = false;
+        const before = await readLock(lockPath);
+        if (!sameLockOwner(before, operationLock)) {
+          throw new Error('El lock SMB cambió antes de iniciar la operación SQLite.');
+        }
+        assertDatabaseWritesAllowed();
+        result = await operation();
+        const after = await readLock(lockPath);
+        if (!sameLockOwner(after, operationLock)) {
+          throw new Error('El lock SMB cambió durante la operación SQLite: resultado incierto.');
+        }
+        assertDatabaseWritesAllowed();
       } catch (error) {
         operationFailed = true;
-        throw error;
+        operationError = error;
+        hasOperationError = true;
       } finally {
-        await releaseLock(lockPath, operationLock).catch((error: unknown) => {
+        try {
+          if (heartbeat) {
+            await pauseDatabaseLockHeartbeat(heartbeat);
+            heartbeatStopped = true;
+          }
+        } catch (error) {
           operationFailed = true;
-          console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
-        });
+          // Nunca eliminar .lockdir si sigue viva E/S de heartbeat.
+          console.warn('Heartbeat SMB no drenado; se conserva lock para revisión.', error);
+        } finally {
+          if (heartbeat) clearInterval(heartbeat);
+        }
+        if (heartbeatStopped) {
+          await releaseLock(lockPath, operationLock).catch((error: unknown) => {
+            operationFailed = true;
+            console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
+          });
+        } else {
+          // La cuarentena prevalece sobre la disponibilidad; el caller
+          // recibirá error cuando el heartbeat no se haya podido drenar.
+          operationFailed = true;
+        }
         recordMultiuserMetric('smb-lock-held', operationName, Date.now() - heldStartedAt, operationFailed);
       }
+      if (!heartbeatStopped) {
+        throw new Error('Heartbeat SMB incierto: lock retenido; se requiere recuperación supervisada.');
+      }
+      if (hasOperationError) throw operationError;
+      return result;
     }
     const predecessor = localOperationTails.get(lockPath);
     let finishLocal!: () => void;

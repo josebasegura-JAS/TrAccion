@@ -267,25 +267,30 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
             console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
           }
 
-          try {
-            await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, liveSnapshotPath);
-          } catch (error) {
-            coreSqliteBackupOk = false;
-            console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
+          if (coreSqliteBackupOk) {
+            try {
+              await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, liveSnapshotPath);
+            } catch (error) {
+              coreSqliteBackupOk = false;
+              console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
+            }
           }
 
-          try {
-            const dailyBackupPreferences = await readDatabasePreferences();
-            await writeDailyLocalBackup(
-              currentStatus.path,
-              dailyBackupPreferences,
-              getDailyLocalBackupWeekdayName,
-              liveSnapshotPath,
-            );
-          } catch (error) {
-            console.warn('No se ha podido crear la copia diaria local SQLite.', error);
+          if (coreSqliteBackupOk) {
+            try {
+              const dailyBackupPreferences = await readDatabasePreferences();
+              await writeDailyLocalBackup(
+                currentStatus.path,
+                dailyBackupPreferences,
+                getDailyLocalBackupWeekdayName,
+                liveSnapshotPath,
+              );
+            } catch (error) {
+              console.warn('No se ha podido crear la copia diaria local SQLite.', error);
+            }
           }
 
+          if (coreSqliteBackupOk) {
           try {
             const secondaryDir = (await readDatabasePreferences()).secondaryBackupDirectoryPath;
             if (secondaryDir) {
@@ -304,6 +309,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
             }
           } catch (error) {
             console.warn('No se ha podido crear la copia de respaldo secundaria.', error);
+          }
           }
 
           if (coreSqliteBackupOk) {

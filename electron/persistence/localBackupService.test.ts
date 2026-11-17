@@ -63,7 +63,15 @@ function buildDependencies(
   };
 
   return {
-    getDatabase: () => ({}) as Database,
+    // Test double of the Online Backup API: the real backup implementation
+    // is verified separately with SQLite; these tests exercise scheduling,
+    // deduplication and shutdown coordination, not SQLite file semantics.
+    getDatabase: () => ({
+      backup: async (destination: string) => {
+        const { copyFile } = await import('node:fs/promises');
+        await copyFile(databasePath, destination);
+      },
+    }) as unknown as Database,
     getStatus: () => activeStatus(databasePath),
     acquireLock: acquireLock ?? (async () => lock),
     releaseLock: async () => undefined,
@@ -193,6 +201,23 @@ describe('localBackupService - cierre sin backup redundante', () => {
   afterEach(() => {
     vi.useRealTimers();
     rmSync(rootDir, { recursive: true, force: true });
+  });
+
+  it('PR503: un backup nativo fallido no se publica en SMB desde una copia anterior', async () => {
+    const dependencies = buildDependencies(databasePath);
+    dependencies.getDatabase = () => ({
+      backup: async () => { throw new Error('native backup failed'); },
+    }) as unknown as Database;
+    const service = createLocalBackupService(dependencies);
+    service.enqueueLocalBackup('save:pr503');
+    await service.flushPendingLocalBackup();
+
+    const { existsSync } = await import('node:fs');
+    const backupDir = path.join(testPaths.userData, 'sqlite-local-backup');
+    expect(existsSync(path.join(backupDir, 'traccion-local-backup.sqlite'))).toBe(false);
+    expect(existsSync(`${databasePath}.backup-coordination.json`)).toBe(false);
+    const shared = readdirSync(rootDir).filter((name) => /^traccion-backup-.*\.sqlite$/.test(name));
+    expect(shared).toEqual([]);
   });
 
   it('no crea backup de cierre si la sesión no ha modificado nada', async () => {
