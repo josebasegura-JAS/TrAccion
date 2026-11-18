@@ -16,6 +16,7 @@ import { startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './service
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
 import { ConnectionRecoverySplash } from './components/ConnectionRecoverySplash';
+import { SqliteBusyRestartBanner } from './components/SqliteBusyRestartBanner';
 import { hasDirtyEditors } from './services/dirtyEditors';
 import { recordPerformanceMetric } from './services/performanceMetrics';
 import { useAppDialog } from './hooks/useAppDialog';
@@ -262,6 +263,7 @@ export function App() {
           <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
           <main className={`app-shell__content ${activeView === 'dashboard' ? 'app-shell__content--dashboard' : ''}`}>
             <div className={`app-module-stage ${activeView === 'dashboard' ? 'app-module-stage--dashboard' : ''}`}>
+              <SqliteBusyRestartBanner />
               <SqliteReadOnlyBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
               <PersistenceErrorBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
               <GlobalBusyIndicator />
