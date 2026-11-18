@@ -1,4 +1,3 @@
-import { transactionWithMigrationReset, withMigrationFlagRollback } from './migrationRollbackGuard.js';
 import type { Database } from 'better-sqlite3';
 import type { DatabaseStatus, PersistedStorageRecordSnapshot } from '../sqlitePersistence.js';
 
@@ -141,94 +140,6 @@ function replaceSorteosTable(
   }
 }
 
-/** Guardado atómico de sorteos + exclusiones con OCC por colección.
- * La migración legacy se inyecta y ejecuta DENTRO de la misma transacción.
- * El caller mantiene el lock SMB, el handle y el backup. */
-export function saveSorteosTransaction(
-  db: Database,
-  snapshot: ConditionalSqliteSorteosSnapshot,
-  status: DatabaseStatus,
-  migrateLegacy: (db: Database) => void,
-  updateRefreshMetadata: (db: Database, updatedAt: string) => void,
-): ConditionalSqliteSorteosSaveResult {
-        const result = db.transaction((): ConditionalSqliteSorteosSaveResult => {
-          migrateLegacy(db);
-          const currentDrawsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records');
-          const currentExclusionsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records');
-
-          if (
-            currentDrawsUpdatedAt !== snapshot.expectedDrawsUpdatedAt ||
-            currentExclusionsUpdatedAt !== snapshot.expectedExclusionsUpdatedAt
-          ) {
-            return {
-              ok: false,
-              status: status,
-              currentDrawsUpdatedAt,
-              currentExclusionsUpdatedAt,
-              message:
-                'Los sorteos han cambiado mientras guardabas. Recarga antes de continuar para no sobrescribir cambios.',
-            };
-          }
-
-          const now = new Date().toISOString();
-          replaceSorteosTable(db, 'sorteos_draw_records', snapshot.draws, now);
-          replaceSorteosTable(db, 'sorteos_exclusion_records', snapshot.exclusions, now);
-          updateRefreshMetadata(db, now);
-
-          return {
-            ok: true,
-            status: status,
-            currentDrawsUpdatedAt: now,
-            currentExclusionsUpdatedAt: now,
-            message: 'Sorteos guardados en SQLite.',
-          };
-        })();
-  return result;
-}
-
-/** Legacy migration shared by main and utilityProcess.
- * Must run in the same transaction as the actual write, or as an
- * explicitly fenced migration. Never run on a read-only connection.
- */
-export function migrateSorteosLegacyInTransaction(
-  db: Database,
-  readLegacyValue: (db: Database, key: string) => string | null = (database, key) => {
-    const row = database.prepare('SELECT value_json FROM persisted_records WHERE key = ?')
-      .get(key) as { value_json?: unknown } | undefined;
-    return typeof row?.value_json === 'string' ? row.value_json : null;
-  },
-  isValidLegacyItem: (value: unknown) => value is { id: string; createdAt?: unknown; updatedAt?: unknown; deletedAt?: unknown } =
-    (value): value is { id: string } =>
-      !!value && typeof value === 'object' && !Array.isArray(value) &&
-      typeof (value as Record<string, unknown>).id === 'string',
-): void {
-  const migrations = [
-    ['sorteos_draw_records', 'traccion.v1.sorteos.draws'],
-    ['sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions'],
-  ] as const;
-  for (const [table, key] of migrations) {
-    const count = db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number };
-    if (count.count > 0) continue;
-    const legacyValue = readLegacyValue(db, key);
-    if (typeof legacyValue !== 'string') continue;
-    let parsed: unknown;
-    try { parsed = JSON.parse(legacyValue); } catch { continue; }
-    if (!Array.isArray(parsed)) continue;
-    const now = new Date().toISOString();
-    const insert = db.prepare(
-      `INSERT OR IGNORE INTO ${table} (id, value_json, created_at, updated_at, deleted_at)
-       VALUES (?, ?, ?, ?, NULL)`,
-    );
-    for (const item of parsed) {
-      if (!isValidLegacyItem(item)) continue;
-      const row = item as Record<string, unknown>;
-      const createdAt = typeof row.createdAt === 'string' ? row.createdAt : now;
-      const updatedAt = typeof row.updatedAt === 'string' ? row.updatedAt : createdAt;
-      insert.run(row.id, JSON.stringify(item), createdAt, updatedAt);
-    }
-  }
-}
-
 /**
  * Dependencias de orquestación que siguen viviendo en sqlitePersistence.ts
  * (safeDatabaseOperation, guards de fila genéricos, backups, etc.) y se
@@ -274,6 +185,7 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
     requireDatabase,
     readPersistedRecordByKey,
     isJsonObjectWithStringId,
+    isCountRow,
     updateRefreshMetadata,
     enqueueLocalBackup,
     assertDatabaseWritesAllowed,
@@ -282,13 +194,57 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
 
   let sorteosMigrationDone = false;
 
-  function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
-    if (sorteosMigrationDone) return;
-    migrateSorteosLegacyInTransaction(
-      db,
-      (database, key) => readPersistedRecordByKey(database, key)?.value ?? null,
-      isJsonObjectWithStringId,
+  function migrateSorteosArrayFromPersistedRecord(
+    db: Database,
+    tableName: SorteosTableName,
+    storageKey: string,
+  ): void {
+    const countRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get();
+    const count = isCountRow(countRow) ? countRow.count : 0;
+    if (count > 0) {
+      return;
+    }
+
+    const legacyRecord = readPersistedRecordByKey(db, storageKey);
+    if (!legacyRecord) {
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(legacyRecord.value);
+    } catch {
+      return;
+    }
+
+    if (!Array.isArray(parsed)) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
+       VALUES (?, ?, ?, ?, NULL)`,
     );
+
+    for (const item of parsed) {
+      if (!isJsonObjectWithStringId(item)) {
+        continue;
+      }
+
+      const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
+      const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+      insert.run(item.id, JSON.stringify(item), createdAt, updatedAt);
+    }
+  }
+
+  function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
+    if (sorteosMigrationDone) {
+      return;
+    }
+
+    migrateSorteosArrayFromPersistedRecord(db, 'sorteos_draw_records', 'traccion.v1.sorteos.draws');
+    migrateSorteosArrayFromPersistedRecord(db, 'sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions');
     sorteosMigrationDone = true;
   }
 
@@ -307,7 +263,7 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
         }
 
         const db = requireDatabase();
-        transactionWithMigrationReset(db, () => { sorteosMigrationDone = false; }, () => maybeMigrateSorteosFromPersistedRecords(db))();
+        db.transaction(() => maybeMigrateSorteosFromPersistedRecords(db))();
         return {
           status: currentStatus,
           draws: readAllSorteosRows(db, 'sorteos_draw_records'),
@@ -345,11 +301,38 @@ export function createSorteosRepository(deps: SorteosRepositoryDeps): SorteosRep
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = withMigrationFlagRollback(() => { sorteosMigrationDone = false; }, () =>
-          saveSorteosTransaction(
-            db, snapshot, currentStatus, maybeMigrateSorteosFromPersistedRecords, updateRefreshMetadata,
-          ),
-        );
+        const result = db.transaction((): ConditionalSqliteSorteosSaveResult => {
+          maybeMigrateSorteosFromPersistedRecords(db);
+          const currentDrawsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records');
+          const currentExclusionsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records');
+
+          if (
+            currentDrawsUpdatedAt !== snapshot.expectedDrawsUpdatedAt ||
+            currentExclusionsUpdatedAt !== snapshot.expectedExclusionsUpdatedAt
+          ) {
+            return {
+              ok: false,
+              status: currentStatus,
+              currentDrawsUpdatedAt,
+              currentExclusionsUpdatedAt,
+              message:
+                'Los sorteos han cambiado mientras guardabas. Recarga antes de continuar para no sobrescribir cambios.',
+            };
+          }
+
+          const now = new Date().toISOString();
+          replaceSorteosTable(db, 'sorteos_draw_records', snapshot.draws, now);
+          replaceSorteosTable(db, 'sorteos_exclusion_records', snapshot.exclusions, now);
+          updateRefreshMetadata(db, now);
+
+          return {
+            ok: true,
+            status: currentStatus,
+            currentDrawsUpdatedAt: now,
+            currentExclusionsUpdatedAt: now,
+            message: 'Sorteos guardados en SQLite.',
+          };
+        })();
 
         if (result.ok) {
           enqueueLocalBackup('save:sorteos_records');

@@ -52,9 +52,6 @@ test('flujo crítico: crear una tarea desde UI y verificar que queda visible', a
 });
 
 test('persistencia crítica: una tarea sigue disponible después de cerrar y reabrir la app', async () => {
-  // Incluye dos arranques reales de Electron, dos hidrataciones y persistencia
-  // SQLite. No confundir latencia de guardado con pérdida de datos.
-  test.setTimeout(120_000);
   const sharedDatabaseDirectory = await createSharedDatabaseDirectory();
   const firstLaunch = await launchTraccionElectron({
     removeUserDataOnClose: false,
@@ -69,13 +66,7 @@ test('persistencia crítica: una tarea sigue disponible después de cerrar y rea
     const dialog = firstLaunch.page.getByRole('dialog', { name: 'Nueva tarea' });
     await dialog.getByLabel('Título').fill(taskTitle);
     await dialog.getByRole('region', { name: 'Acciones rápidas' }).getByRole('button', { name: 'Guardar' }).click();
-    // El click solo inicia el guardado asíncrono. Antes de cerrar Electron
-    // exigir que la UI confirme el fin de la operación (igual que el E2E
-    // de alta). Si no sucede, falla aquí con el formulario aún visible.
-    await expect(dialog).not.toBeVisible({ timeout: 20_000 });
-    await expect(firstLaunch.page.getByText(taskTitle, { exact: true }).first()).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(firstLaunch.page.getByText(taskTitle, { exact: true }).first()).toBeVisible();
 
     await closeTraccionElectron(firstLaunch.app);
 

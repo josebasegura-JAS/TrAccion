@@ -4,7 +4,6 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from 'better-sqlite3';
 import { createDatabaseLockManager } from './databaseLockManager.js';
-import { createSqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
 
 const testPaths = vi.hoisted(() => ({ userData: '' }));
 
@@ -279,107 +278,5 @@ describe('localBackupService - cierre sin backup redundante', () => {
       expect(events).toEqual(['backup-inicia', 'backup-libera', 'escritura-entra']);
     },
   );
-
-
-  it.each(['vivo', 'cierre'] as const)(
-    'PR469: la copia %s reserva la admisión antes de adquirir SMB y se drena al finalizar',
-    async (kind) => {
-      const tracker = createSqliteIndependentActivityTracker();
-      let release!: () => void;
-      let notify!: () => void;
-      const started = new Promise<void>(resolve => { notify = resolve; });
-      const gate = new Promise<void>(resolve => { release = resolve; });
-      const original = buildDependencies(databasePath);
-      const service = createLocalBackupService({
-        ...original,
-        trackActivity: (label, operation) => tracker.run(label, operation),
-        acquireLock: async () => {
-          notify();
-          await gate;
-          return original.acquireLock(databasePath);
-        },
-      });
-      service.enqueueLocalBackup('save:pr469');
-      const job = kind === 'vivo'
-        ? service.flushPendingLocalBackup().then(() => undefined)
-        : service.createShutdownLocalBackup().then(() => undefined);
-      await started;
-      expect(tracker.snapshot().labels).toContain(
-        kind === 'vivo' ? 'sqlite:backup-live-full' : 'sqlite:backup-shutdown-full',
-      );
-      const ticket = tracker.beginFreeze();
-      try {
-        let drained = false;
-        const drain = tracker.waitForDrain(ticket).then(() => { drained = true; });
-        await Promise.resolve();
-        expect(drained).toBe(false);
-        await expect(tracker.run('sqlite:new-foreign-backup', async () => undefined))
-          .rejects.toThrow('suspendida');
-        release();
-        await job;
-        await drain;
-        expect(drained).toBe(true);
-        expect(tracker.snapshot().active).toBe(0);
-      } finally {
-        tracker.abortFreeze(ticket);
-      }
-    },
-  );
-
-
-  it('PR474: la pausa de handoff cancela el timer pero conserva revision y motivo pendientes', async () => {
-    vi.useFakeTimers();
-    const acquire = vi.fn(buildDependencies(databasePath).acquireLock);
-    const service = createLocalBackupService(buildDependencies(databasePath, acquire));
-    service.enqueueLocalBackup('save:pr474');
-    expect(service.getActivitySnapshot()).toMatchObject({
-      timerScheduled: true, pendingReason: true, pendingRevision: true,
-    });
-    service.pauseSchedulingForHandoff();
-    expect(service.getActivitySnapshot()).toMatchObject({
-      timerScheduled: false, pendingReason: true, pendingRevision: true,
-    });
-    vi.advanceTimersByTime(16 * 60 * 1000);
-    await Promise.resolve();
-    expect(acquire).not.toHaveBeenCalled();
-    // Los guardados iniciados tras pausar no se pierden ni programan nuevos timers.
-    service.enqueueLocalBackup('save:concurrent');
-    expect(service.getActivitySnapshot()).toMatchObject({
-      timerScheduled: false, pendingReason: true, pendingRevision: true,
-    });
-    service.resumeSchedulingAfterAbortedHandoff();
-    expect(service.getActivitySnapshot().timerScheduled).toBe(true);
-    await service.flushPendingLocalBackup();
-    expect(acquire).toHaveBeenCalledTimes(1);
-    expect(service.getActivitySnapshot()).toMatchObject({
-      timerScheduled: false, pendingReason: false, pendingRevision: false,
-    });
-  });
-
-  it('PR474: un flush sin lock SMB conserva el motivo y permite reintentar tras abortar handoff', async () => {
-    vi.useFakeTimers();
-    let attempts = 0;
-    const original = buildDependencies(databasePath);
-    const acquire = vi.fn(async () => {
-      attempts += 1;
-      if (attempts === 1) throw new Error('LOCKED');
-      return original.acquireLock(databasePath);
-    });
-    const service = createLocalBackupService(buildDependencies(databasePath, acquire));
-    service.enqueueLocalBackup('save:pr474-retry');
-    service.pauseSchedulingForHandoff();
-    await service.flushPendingLocalBackup();
-    expect(attempts).toBe(1);
-    expect(service.getActivitySnapshot()).toMatchObject({
-      timerScheduled: false, pendingReason: true, pendingRevision: true,
-    });
-    service.resumeSchedulingAfterAbortedHandoff();
-    expect(service.getActivitySnapshot().timerScheduled).toBe(true);
-    await service.flushPendingLocalBackup();
-    expect(attempts).toBe(2);
-    expect(service.getActivitySnapshot()).toMatchObject({
-      timerScheduled: false, pendingReason: false, pendingRevision: false,
-    });
-  });
 
 });

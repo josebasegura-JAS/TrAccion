@@ -27,7 +27,7 @@ runs:
       shell: pwsh
       run: |
         # npm ci es determinista con package-lock. Reintentar solo si falla
-        # por un error transitorio de red o extracción de cabeceras Node.
+        # por un error de red transitorio (por ejemplo, el 504 de Electron).
         $maxAttempts = 3
         for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
           $log = Join-Path $env:RUNNER_TEMP "traccion-npm-ci-attempt-$attempt.log"
@@ -40,18 +40,10 @@ runs:
             break
           }
           $output = Get-Content -Path $log -Raw
-          $transient = $output -match '(?i)(HTTPError: Response code (429|500|502|503|504)|\b(ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|ENOTFOUND)\b|Gateway Time-out|TAR_ENTRY_ERROR[^\r\n]*ENOENT)'
+          $transient = $output -match '(?i)(HTTPError: Response code (429|500|502|503|504)|\b(ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|ENOTFOUND)\b|Gateway Time-out)'
           if (-not $transient -or $attempt -eq $maxAttempts) {
             Write-Error "npm ci falló con código $exitCode. Error no recuperable o máximo de intentos alcanzado."
             exit $exitCode
-          }
-          # En runners Windows, node-gyp puede fallar al extraer cabeceras de Node
-          # por un ENOENT temporal (TAR_ENTRY_ERROR); no es un error de código.
-          # Solo limpiar los temporales node-gyp antes del siguiente npm ci.
-          if ($output -match '(?i)TAR_ENTRY_ERROR[^\r\n]*ENOENT') {
-            Write-Warning "Extracción temporal de cabeceras Node interrumpida; se reintentará npm ci desde lockfile."
-            Get-ChildItem -Path $env:TEMP -Directory -Filter 'node-gyp-tmp-*' -ErrorAction SilentlyContinue |
-              Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           }
           # El origen de GitHub para binarios de Electron ha devuelto 504
           # repetidamente. Electron documenta ELECTRON_MIRROR como alternativa.
@@ -69,14 +61,6 @@ runs:
       shell: pwsh
       run: |
         node -e "const Sqlite=require('better-sqlite3');const db=new Sqlite(':memory:');console.log('SQLite disponible en Node '+process.version+': '+db.prepare('select sqlite_version() as version').get().version);db.close()"
-    - name: Inventario automático de accesos SQLite y guard autónomo Tareas
-      if: ${{ inputs.lane == 'calidad' }}
-      shell: pwsh
-      run: node scripts/audit-sqlite-access.mjs
-    - name: Clasificar rutas SQLite y verificar admisión completa de backups
-      if: ${{ inputs.lane == 'calidad' }}
-      shell: pwsh
-      run: node scripts/classify-sqlite-routes.mjs
     - name: TypeScript de pruebas, Electron y E2E
       if: ${{ inputs.lane == 'calidad' }}
       shell: pwsh

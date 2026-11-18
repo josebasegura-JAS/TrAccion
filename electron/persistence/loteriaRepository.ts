@@ -145,22 +145,30 @@ function migrateLegacyIfNeeded(db: Database): void {
   }
 }
 
-/** Transacción de campaña y participantes, misma implementación para main y utilityProcess.
- * Incluye migración legacy, OCC de campaña/participantes y arqueos append-only.
- * El llamador debe poseer el lock SMB y el handle SQLite en exclusiva. */
-export function saveLotterySnapshotTransaction(
-  db: Database,
-  payload: LotterySavePayload,
-  status: DatabaseStatus,
-  updateRefreshMetadata: (db: Database, updatedAt: string) => void,
-): LotterySaveResult {
-  if (!Number.isSafeInteger(payload.year) || payload.year < 2000 || payload.year > 9999 ||
-      typeof payload.campaignValue !== 'string' ||
-      !Array.isArray(payload.requests) ||
-      !payload.expectedRequestUpdatedAt || typeof payload.expectedRequestUpdatedAt !== 'object') {
-    throw new Error('Campaña de Lotería inválida.');
-  }
-  const result = db.transaction((): LotterySaveResult => {
+export function createLoteriaRepository(deps: Dependencies) {
+  return {
+    loadSnapshot: () => deps.safeDatabaseOperation(
+      () => {
+        const status = deps.getSqliteStatus();
+        if (!status.ready || status.phase !== 'active') return { status, campaigns: [], requests: [] };
+        const db = deps.requireDatabase();
+        db.transaction(() => migrateLegacyIfNeeded(db))();
+        const campaigns = db.prepare(`SELECT id, value_json AS value, updated_at AS updatedAt FROM loteria_campaign_records WHERE deleted_at IS NULL ORDER BY id`).all() as LotterySqliteRecord[];
+        const requests = db.prepare(`SELECT id, campaign_year AS campaignYear, value_json AS value, updated_at AS updatedAt FROM loteria_request_records WHERE deleted_at IS NULL ORDER BY campaign_year, id`).all() as LotterySqliteRecord[];
+        return { status, campaigns, requests };
+      },
+      (status) => ({ status, campaigns: [], requests: [] }),
+    ),
+
+    saveSnapshotIfUnchanged: (payload: LotterySavePayload) => deps.safeDatabaseOperation(
+      () => {
+        const status = deps.getSqliteStatus();
+        if (!status.ready || status.phase !== 'active' || deps.isDatabaseWriteBlockedByHeartbeat()) {
+          return { ok: false, status, campaignUpdatedAt: null, requestUpdatedAt: {}, message: status.message ?? 'SQLite no está activo.' };
+        }
+        deps.assertDatabaseWritesAllowed();
+        const db = deps.requireDatabase();
+        const result = db.transaction((): LotterySaveResult => {
           migrateLegacyIfNeeded(db);
           const campaignId = String(payload.year);
           const campaignRow = db.prepare('SELECT updated_at, value_json FROM loteria_campaign_records WHERE id = ?').get(campaignId) as { updated_at?: string; value_json?: string } | undefined;
@@ -220,36 +228,9 @@ export function saveLotterySnapshotTransaction(
             }
             nextRequestUpdatedAt[request.id] = requestUpdatedAt;
           }
-          updateRefreshMetadata(db, now);
+          deps.updateRefreshMetadata(db, now);
           return { ok: true, status, campaignUpdatedAt: now, requestUpdatedAt: nextRequestUpdatedAt, message: 'Campaña de Lotería guardada en SQLite.' };
         })();
-  return result;
-}
-
-export function createLoteriaRepository(deps: Dependencies) {
-  return {
-    loadSnapshot: () => deps.safeDatabaseOperation(
-      () => {
-        const status = deps.getSqliteStatus();
-        if (!status.ready || status.phase !== 'active') return { status, campaigns: [], requests: [] };
-        const db = deps.requireDatabase();
-        db.transaction(() => migrateLegacyIfNeeded(db))();
-        const campaigns = db.prepare(`SELECT id, value_json AS value, updated_at AS updatedAt FROM loteria_campaign_records WHERE deleted_at IS NULL ORDER BY id`).all() as LotterySqliteRecord[];
-        const requests = db.prepare(`SELECT id, campaign_year AS campaignYear, value_json AS value, updated_at AS updatedAt FROM loteria_request_records WHERE deleted_at IS NULL ORDER BY campaign_year, id`).all() as LotterySqliteRecord[];
-        return { status, campaigns, requests };
-      },
-      (status) => ({ status, campaigns: [], requests: [] }),
-    ),
-
-    saveSnapshotIfUnchanged: (payload: LotterySavePayload) => deps.safeDatabaseOperation(
-      () => {
-        const status = deps.getSqliteStatus();
-        if (!status.ready || status.phase !== 'active' || deps.isDatabaseWriteBlockedByHeartbeat()) {
-          return { ok: false, status, campaignUpdatedAt: null, requestUpdatedAt: {}, message: status.message ?? 'SQLite no está activo.' };
-        }
-        deps.assertDatabaseWritesAllowed();
-        const db = deps.requireDatabase();
-        const result = saveLotterySnapshotTransaction(db, payload, status, deps.updateRefreshMetadata);
         if (result.ok) deps.enqueueLocalBackup('save:loteria');
         return result;
       },

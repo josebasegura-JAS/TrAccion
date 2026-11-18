@@ -40,8 +40,7 @@ function insertTask(db: Database, id: string, title: string, updatedAt: string):
 
 function repository(db: Database) {
   const deps: TaskRepositoryDeps = {
-    safeDatabaseOperation: <T>(operation: () => T | Promise<T>): Promise<T> =>
-      Promise.resolve(operation()) as Promise<T>,
+    safeDatabaseOperation: async <T>(operation: () => T) => operation(),
     getSqliteStatus: () => status,
     requireDatabase: () => db,
     readPersistedRecordByKey: () => null,

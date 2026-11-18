@@ -1,4 +1,3 @@
-import { transactionWithMigrationReset } from './migrationRollbackGuard.js';
 import type { Database } from 'better-sqlite3';
 import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecordById, readActiveJsonRecords } from './jsonRecordRepository.js';
 import type { ConditionalSqliteTaskSaveResult, DatabaseStatus } from '../sqlitePersistence.js';
@@ -57,7 +56,7 @@ export type ConditionalSqliteActaRecord = ConditionalSqliteComiteSessionRecord;
  */
 export interface SesionesRepositoryDeps {
   safeDatabaseOperation: <T>(
-    operation: () => T | Promise<T>,
+    operation: () => T,
     fallback: (status: DatabaseStatus, message: string) => T,
   ) => Promise<T>;
   getSqliteStatus: () => DatabaseStatus;
@@ -67,7 +66,6 @@ export interface SesionesRepositoryDeps {
   enqueueLocalBackup: (reason: string) => void;
   assertDatabaseWritesAllowed: () => void;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
-  isolatedSessionRead?: (module: 'comite' | 'paritaria', id: string | undefined, status: DatabaseStatus) => Promise<SqliteComiteSessionRecord[]>;
 }
 
 export interface SesionesRepositoryApi {
@@ -131,20 +129,6 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
   }
 
   async function loadComiteSessionRecordsSnapshot(id?: string): Promise<SqliteComiteSessionRecordsSnapshot> {
-    if (deps.isolatedSessionRead && process.env.TRACCION_SQLITE_ISOLATED_SESSIONS_READ === '1') {
-      return safeDatabaseOperation(async () => {
-        const currentStatus = getSqliteStatus();
-        if (!currentStatus.ready || currentStatus.phase !== 'active') {
-          return { status: currentStatus, records: [] };
-        }
-        // La migración legacy puede escribir; se conserva en la conexión original,
-        // con bloqueo y cola existentes. Solo aislar la consulta posterior.
-        const db = requireDatabase();
-        transactionWithMigrationReset(db, () => { comiteSessionsMigrationDone = false; }, () => maybeMigrateComiteSessionsFromPersistedRecord(db))();
-        const records = await deps.isolatedSessionRead!('comite', id, currentStatus);
-        return { status: currentStatus, records };
-      }, (nextStatus) => ({ status: nextStatus, records: [] }));
-    }
     return safeDatabaseOperation(
       () => {
         const currentStatus = getSqliteStatus();
@@ -153,7 +137,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
         }
 
         const db = requireDatabase();
-        transactionWithMigrationReset(db, () => { comiteSessionsMigrationDone = false; }, () => maybeMigrateComiteSessionsFromPersistedRecord(db))();
+        db.transaction(() => maybeMigrateComiteSessionsFromPersistedRecord(db))();
         return { status: currentStatus, records: readComiteSessionRecords(db, id) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
@@ -177,20 +161,6 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
   }
 
   async function loadParitariaSessionRecordsSnapshot(id?: string): Promise<SqliteParitariaSessionRecordsSnapshot> {
-    if (deps.isolatedSessionRead && process.env.TRACCION_SQLITE_ISOLATED_SESSIONS_READ === '1') {
-      return safeDatabaseOperation(async () => {
-        const currentStatus = getSqliteStatus();
-        if (!currentStatus.ready || currentStatus.phase !== 'active') {
-          return { status: currentStatus, records: [] };
-        }
-        // La migración legacy puede escribir; se conserva en la conexión original,
-        // con bloqueo y cola existentes. Solo aislar la consulta posterior.
-        const db = requireDatabase();
-        transactionWithMigrationReset(db, () => { paritariaSessionsMigrationDone = false; }, () => maybeMigrateParitariaSessionsFromPersistedRecord(db))();
-        const records = await deps.isolatedSessionRead!('paritaria', id, currentStatus);
-        return { status: currentStatus, records };
-      }, (nextStatus) => ({ status: nextStatus, records: [] }));
-    }
     return safeDatabaseOperation(
       () => {
         const currentStatus = getSqliteStatus();
@@ -199,7 +169,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
         }
 
         const db = requireDatabase();
-        transactionWithMigrationReset(db, () => { paritariaSessionsMigrationDone = false; }, () => maybeMigrateParitariaSessionsFromPersistedRecord(db))();
+        db.transaction(() => maybeMigrateParitariaSessionsFromPersistedRecord(db))();
         return { status: currentStatus, records: readParitariaSessionRecords(db, id) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
@@ -227,7 +197,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
         }
 
         const db = requireDatabase();
-        transactionWithMigrationReset(db, () => { actasMigrationDone = false; }, () => maybeMigrateActasFromPersistedRecord(db))();
+        db.transaction(() => maybeMigrateActasFromPersistedRecord(db))();
         return { status: currentStatus, records: readActaRecords(db) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
@@ -252,7 +222,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = transactionWithMigrationReset(db, () => { comiteSessionsMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
+        const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
           maybeMigrateComiteSessionsFromPersistedRecord(db);
           const row = db.prepare('SELECT updated_at FROM comite_session_records WHERE id = ?').get(record.id);
           const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
@@ -366,7 +336,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = transactionWithMigrationReset(db, () => { paritariaSessionsMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
+        const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
           maybeMigrateParitariaSessionsFromPersistedRecord(db);
           const row = db.prepare('SELECT updated_at FROM paritaria_session_records WHERE id = ?').get(record.id);
           const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
@@ -484,7 +454,7 @@ export function createSesionesRepository(deps: SesionesRepositoryDeps): Sesiones
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = transactionWithMigrationReset(db, () => { actasMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
+        const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
           maybeMigrateActasFromPersistedRecord(db);
           const row = db.prepare('SELECT updated_at FROM acta_records WHERE id = ?').get(record.id);
           const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;

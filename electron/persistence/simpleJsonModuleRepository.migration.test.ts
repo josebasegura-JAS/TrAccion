@@ -105,8 +105,7 @@ describe('simpleJsonModuleRepository migration/read separation', () => {
         setMigrationDone: (value) => { migrationDone = value; },
       },
       {
-        safeDatabaseOperation: <T>(operation: () => T | Promise<T>): Promise<T> =>
-          Promise.resolve(operation()) as Promise<T>,
+        safeDatabaseOperation: async <T>(operation: () => T) => operation(),
         safeDatabaseMigrationOperation: safeMigrations as Parameters<typeof createSimpleJsonModuleRepository>[1]['safeDatabaseMigrationOperation'],
         getSqliteStatus: () => currentStatus,
         requireDatabase: () => currentDb,
