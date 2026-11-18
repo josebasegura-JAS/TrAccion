@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { saveWithDetachedCommitReceipt, verifyDetachedSqliteCommit } from './detachedWriterCommitReceipt.js';
 import Database from 'better-sqlite3';
 import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { closeDetachedSessionWorkflow, isDetachedAtomicSessionClose } from './detachedAtomicSessionCloseCore.js';
@@ -112,38 +111,5 @@ describe('PR453B · validación estricta de protocolo', () => {
     expect(isDetachedAtomicSessionClose({...payload,payload:{...payload.payload,tasks:[...payload.payload.tasks,...payload.payload.tasks]}})).toBe(false);
     expect(isDetachedAtomicSessionClose({...payload,payload:{...payload.payload,acta:{...payload.payload.acta,sourceSessionId:''}}})).toBe(false);
     expect(isDetachedWriterRequest({kind:'detached:close-session-atomically',operationId:'',payload})).toBe(false);
-  });
-});
-
-describe('PR488 · recibo de flujo complejo (detachedAtomicSessionCloseCore.test.ts)', () => {
-  const expected = { databaseUuid:'db-pr488', applicationId:'TrAccion', environment:'test', schemaVersion:1 };
-  function prepareIdentity(db: import('better-sqlite3').Database) {
-    db.exec("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations VALUES(1,'2026-11-17');");
-    for(const [key,value] of [['database_uuid',expected.databaseUuid],['application_id',expected.applicationId],['environment',expected.environment],['database_created_at','2026-11-17']]) {
-      db.prepare('INSERT INTO app_metadata (key,value,updated_at) VALUES (?,?,?)')
-        .run(key,value,'2026-11-17');
-    }
-  }
-  it('guarda datos y recibo del flujo conjuntamente', () => {
-    const f=fixture('comite');
-    try {
-      prepareIdentity(f.db);
-      const operation = { operationId:'workflow-good', generation:8, databaseUuid:expected.databaseUuid };
-      const result=saveWithDetachedCommitReceipt(f.db,operation,()=>closeDetachedSessionWorkflow(f.db,{ownerId:'owner-a',payload:f.payload}));
-      expect(result.ok).toBe(true);
-      expect(verifyDetachedSqliteCommit(f.db,expected,operation).outcome).toBe('committed');
-    } finally { f.db.close(); }
-  });
-  it('un fallo de negocio revierte y no crea recibo', () => {
-    const f=fixture('comite');
-    try {
-      prepareIdentity(f.db);
-      saveWithDetachedCommitReceipt(f.db,
-        {operationId:'baseline',generation:8,databaseUuid:expected.databaseUuid},()=>({ok:true}));
-      f.payload.tasks[0].expectedUpdatedAt='stale';
-      const operation = { operationId:'workflow-failed', generation:8, databaseUuid:expected.databaseUuid };
-      expect(saveWithDetachedCommitReceipt(f.db,operation,()=>closeDetachedSessionWorkflow(f.db,{ownerId:'owner-a',payload:f.payload})).ok).toBe(false);
-      expect(verifyDetachedSqliteCommit(f.db,expected,operation).outcome).toBe('not-committed');
-    } finally { f.db.close(); }
   });
 });

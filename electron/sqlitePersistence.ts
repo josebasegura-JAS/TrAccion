@@ -879,8 +879,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     // 20 s al consultar esquema con SQLITE_BUSY. Por defecto, toda la
     // consulta nativa de salud pasa al utilityProcess readonly; el opt-out
     // explícito permite diagnóstico de regresiones sin fallback automático.
-    if (shouldUseIsolatedSqliteHealth(process.env.TRACCION_SQLITE_ISOLATED_HEALTH,
-      process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? 'test' : 'production')) {
+    if (shouldUseIsolatedSqliteHealth(process.env.TRACCION_SQLITE_ISOLATED_HEALTH)) {
       requireDatabase(); // comprueba estado local, sin realizar E/S nativa
       if (!currentStatus.databaseUuid || !currentStatus.applicationId || !currentStatus.environment) {
         throw new Error('La identidad SQLite validada no está disponible.');

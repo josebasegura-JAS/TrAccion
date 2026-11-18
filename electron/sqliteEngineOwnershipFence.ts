@@ -64,19 +64,13 @@ export function createSqliteEngineOwnershipFence() {
       owner = 'worker';
     },
     markWorkerUncertain(ticket: number): void {
-      // PR483: failure can arrive after main closes but before READY is
-      // published. It must quarantine immediately, not be lost in a callback.
-      if ((owner !== 'main-closed' && owner !== 'worker' && owner !== 'quarantine') ||
-          ticket !== generation) {
+      if (owner !== 'worker' || ticket !== generation) {
         throw new Error('Generación/proceso SQLite inesperado.');
       }
       owner = 'quarantine';
     },
     markWorkerExited(ticket: number): void {
-      // A child may EXIT while startWriter or external SMB proof is in flight.
-      // No recovery to main until the real exit is observed.
-      if ((owner !== 'main-closed' && owner !== 'worker' && owner !== 'quarantine') ||
-          ticket !== generation) {
+      if ((owner !== 'worker' && owner !== 'quarantine') || ticket !== generation) {
         throw new Error('Salida SQLite no pertenece al worker vigente.');
       }
       // El proceso puede haber tenido un guardado de resultado incierto.

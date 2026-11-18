@@ -165,9 +165,6 @@ class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErr
 }
 
 export function App() {
-  // Visual warning only; the SQLite process separately enforces the selected
-  // environment and database identity, never this URL parameter.
-  const isTestEnvironment = new URLSearchParams(window.location.search).get('traccionEnvironment') === 'test';
   const { confirm, dialogNode } = useAppDialog();
   const [activeView, setActiveView] = useState<AppView>('dashboard');
   useEffect(() => { setActiveSyncView(activeView); }, [activeView]);
@@ -259,19 +256,7 @@ export function App() {
     <ExcelBackupRetryBanner />
     <AppShellErrorBoundary>
       <TooltipLayer /><AppUpdateChecker />
-      <div className="app-shell" style={isTestEnvironment ? { paddingTop: 34, boxSizing: 'border-box' } : undefined}>
-        {isTestEnvironment && (
-          <>
-            <div role="status" aria-label="Entorno de pruebas activo"
-              style={{ position:'fixed', top:0, left:4, right:4, height:34, background:'#1e40af',
-                color:'#fff', display:'flex', alignItems:'center', justifyContent:'center',
-                fontWeight:750, fontSize:13, letterSpacing:'.025em', zIndex:9999 }}>
-              ENTORNO DE PRUEBAS · Base de datos ficticia · No es producción
-            </div>
-            <div aria-hidden="true" style={{position:'fixed', inset:0, border:'4px solid #2563eb',
-              pointerEvents:'none', zIndex:9998 }} />
-          </>
-        )}
+      <div className="app-shell">
         <Sidebar activeView={activeView} onDashboardReset={resetToDashboard} onViewChange={(view) => { setNavigationTarget(null); void changeActiveView(view); }} />
         <div className="app-shell__main">
           <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />

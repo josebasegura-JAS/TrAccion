@@ -12,13 +12,10 @@ function fixture() {
   const assertNoIndependentSqliteActivity = vi.fn(async (): Promise<void> => undefined);
   const closeMainHandle = vi.fn(async () => undefined);
   const startWriter = vi.fn(async (generation: number) => ({ generation }));
-  const verifyWorkerSmbOwnership = vi.fn(async (generation: number): Promise<void> => {
-    expect(generation).toBeGreaterThan(0);
-  });
   const coordinator = createSqliteWriterHandoffCoordinator(fence, {
-    inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter, verifyWorkerSmbOwnership, independentActivity,
+    inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter, independentActivity,
   });
-  return { fence, coordinator, independentActivity, inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter, verifyWorkerSmbOwnership };
+  return { fence, coordinator, independentActivity, inspectQueue, assertNoIndependentSqliteActivity, closeMainHandle, startWriter };
 }
 
 describe('PR9D-5A · cesión segura del propietario SQLite', () => {
@@ -116,68 +113,6 @@ describe('PR9D-5A · cesión segura del propietario SQLite', () => {
     expect(f.independentActivity.snapshot().frozen).toBe(true);
     expect(() => f.fence.assertMayEnterMain()).toThrow();
     await expect(f.coordinator.handoff()).rejects.toThrow('ya está iniciada');
-  });
-
-  it('PR479: no confirma worker cuando la propiedad SMB no se demuestra', async () => {
-    const f = fixture();
-    f.verifyWorkerSmbOwnership.mockRejectedValue(new Error('SMB sin propietario válido'));
-    await expect(f.coordinator.handoff()).rejects.toThrow('SMB sin propietario válido');
-    expect(f.closeMainHandle).toHaveBeenCalledTimes(1);
-    expect(f.verifyWorkerSmbOwnership).toHaveBeenCalledWith(1);
-    expect(f.fence.snapshot().owner).toBe('main-closed');
-    expect(f.independentActivity.snapshot().frozen).toBe(true);
-    expect(() => f.fence.assertMayEnterMain()).toThrow();
-  });
-
-  it('PR479: solo publica propiedad worker después de comprobar lock SMB', async () => {
-    const f = fixture();
-    f.verifyWorkerSmbOwnership.mockImplementation(async (generation) => {
-      expect(generation).toBe(1);
-      expect(f.fence.snapshot().owner).toBe('main-closed');
-      expect(f.independentActivity.snapshot().frozen).toBe(true);
-    });
-    await f.coordinator.handoff();
-    expect(f.verifyWorkerSmbOwnership).toHaveBeenCalledTimes(1);
-    expect(f.fence.snapshot().owner).toBe('worker');
-  });
-
-  it('PR483: si el worker sale durante el inicio, la cesión queda en cuarentena', async () => {
-    const f = fixture();
-    f.startWriter.mockImplementation(async (generation) => {
-      f.coordinator.workerExited(generation);
-      return { generation };
-    });
-    await expect(f.coordinator.handoff()).rejects.toThrow('Worker SQLite terminó');
-    expect(f.fence.snapshot().owner).toBe('quarantine');
-    expect(f.independentActivity.snapshot().frozen).toBe(true);
-    expect(() => f.fence.assertMayEnterMain()).toThrow();
-    expect(() => f.coordinator.restoreMainAfterReconciliation(1, false, true)).toThrow();
-  });
-
-  it('PR483: si EXIT sucede mientras se verifica SMB no se activa un worker muerto', async () => {
-    const f = fixture();
-    f.verifyWorkerSmbOwnership.mockImplementation(async (generation) => {
-      f.coordinator.workerExited(generation);
-    });
-    await expect(f.coordinator.handoff()).rejects.toThrow('Worker SQLite terminó');
-    expect(f.fence.snapshot().owner).toBe('quarantine');
-    expect(f.independentActivity.snapshot().frozen).toBe(true);
-    expect(() => f.coordinator.registerWriterOperation('late', 1)).toThrow();
-  });
-
-  it('PR483: un fallo incierto antes de READY requiere EXIT real para recuperar', async () => {
-    const f = fixture();
-    f.startWriter.mockImplementation(async (generation) => {
-      f.coordinator.workerUncertain(generation);
-      return { generation };
-    });
-    await expect(f.coordinator.handoff()).rejects.toThrow('Worker SQLite terminó');
-    expect(() => f.coordinator.restoreMainAfterReconciliation(1, true, true))
-      .toThrow('salida');
-    f.coordinator.workerExited(1);
-    expect(f.fence.snapshot().owner).toBe('quarantine');
-    f.coordinator.restoreMainAfterReconciliation(1, true, true);
-    expect(f.fence.snapshot().owner).toBe('main');
   });
 
   it('no acepta READY de una generación distinta', async () => {

@@ -3,7 +3,6 @@
  * Ninguna ruta ni información de trabajadores se escribe en logs.
  */
 import { utilityProcess } from 'electron';
-import { runIsolatedSqliteReadUnderHandoffBarrier } from './isolatedSqliteReadAdmission.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
@@ -17,7 +16,7 @@ export function readTasksInUtilityProcess(
   expected: ExpectedSqliteIdentity,
   filter: SqliteTaskRecordsFilter,
 ): Promise<SqliteTaskRecord[]> {
-  return runIsolatedSqliteReadUnderHandoffBarrier('tasks', () => runTaskReadWorker({
+  return runTaskReadWorker({
     databasePath, expected, filter,
     createChild: () => {
       const child = utilityProcess.fork(path.join(__dirname, 'taskReadWorker.js'), [], {
@@ -30,5 +29,5 @@ export function readTasksInUtilityProcess(
         onExit: (handler) => { child.on('exit', handler); },
       };
     },
-  }));
+  });
 }

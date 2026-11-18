@@ -1,5 +1,4 @@
 import { createRequire } from 'node:module';
-import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 import { randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import { CURRENT_SCHEMA_VERSION, readCurrentSchemaVersion } from './schemaMigrations.js';
@@ -13,10 +12,6 @@ type BetterSqlite3Constructor = new (
 
 export const TRACCION_APPLICATION_ID = 'TrAccion';
 export const TRACCION_DATABASE_ENVIRONMENT = 'production';
-/** Selected in startup before importing SQLite; default is production. */
-export function getExpectedDatabaseEnvironment(): 'production' | 'test' {
-  return process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? 'test' : 'production';
-}
 
 const APPLICATION_ID_KEY = 'application_id';
 const DATABASE_UUID_KEY = 'database_uuid';
@@ -88,8 +83,6 @@ export function inspectAndEnsureDatabaseIdentity(
   databasePath: string,
   options: InspectDatabaseIdentityOptions = {},
 ): DatabaseIdentityInspection {
-  // Deny new main-process native handles after SQLite ownership is ceded.
-  sqliteEngineOwnershipFence.assertMayEnterMain();
   const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
   const db = new BetterSqlite3(databasePath, { readonly: false, fileMustExist: true });
 
@@ -114,9 +107,9 @@ export function inspectAndEnsureDatabaseIdentity(
           `La SQLite seleccionada pertenece a otra aplicación (${applicationId}). No se ha modificado el fichero.`,
         );
       }
-      if (environment !== getExpectedDatabaseEnvironment()) {
+      if (environment !== TRACCION_DATABASE_ENVIRONMENT) {
         throw new Error(
-          `La base pertenece al entorno "${environment}" y esta sesión solo admite "${getExpectedDatabaseEnvironment()}".`,
+          `La base pertenece al entorno "${environment}" y esta instalación solo admite "${TRACCION_DATABASE_ENVIRONMENT}".`,
         );
       }
       if (options.expectedDatabaseUuid && databaseUuid !== options.expectedDatabaseUuid) {
@@ -146,7 +139,7 @@ export function inspectAndEnsureDatabaseIdentity(
       applicationId: TRACCION_APPLICATION_ID,
       databaseUuid: options.expectedDatabaseUuid ?? randomUUID(),
       createdAt: new Date().toISOString(),
-      environment: getExpectedDatabaseEnvironment(),
+      environment: TRACCION_DATABASE_ENVIRONMENT,
     };
 
     const assignIdentity = db.transaction(() => {
