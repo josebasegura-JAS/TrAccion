@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldSuggestSqliteBusyRestart } from './SqliteBusyRestartBanner';
+import { shouldSuggestSqliteBusyRestart } from './sqliteBusyRestartPolicy';
 
 describe('SqliteBusyRestartBanner', () => {
   const started = '2026-11-18T12:00:00.000Z';
