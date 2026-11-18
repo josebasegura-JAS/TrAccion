@@ -145,6 +145,12 @@ ipcMain.handle('app:main-watchdog-report', () => {
 
 ipcMain.handle('app:request-safe-restart', async (event) => {
   if (restartRequestInProgress || isShutdownInProgress) return { ok: false, message: 'Ya se está cerrando TrAcción.' };
+  // No iniciar cierre/reapertura mientras SQLite tenga una operación en curso
+  // o en cola: el timeout IPC no cancela escrituras ni libera su resultado.
+  const queue = getSqliteIpcQueueDiagnostics();
+  if (queue.runningOperation || queue.queuedOperations > 0 || queue.timedOut) {
+    return { ok: false, message: 'SQLite sigue realizando operaciones. No se iniciará el reinicio para evitar interrumpir un guardado. Vuelve a intentarlo cuando termine.' };
+  }
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || window.isDestroyed()) return { ok: false, message: 'La ventana ya no está disponible.' };
   restartRequestInProgress = true;
