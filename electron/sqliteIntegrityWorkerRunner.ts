@@ -88,9 +88,17 @@ export function runSqliteIntegrityWorker(options: SqliteIntegrityRunOptions): Pr
       if (outcome === 'verified' && exitCode === 0) {
         resolve();
       } else {
-        reject(new Error(outcome === 'timed-out'
+        const category = outcome === 'timed-out' ? 'SQLITE_WORKER_TIMEOUT'
+          : outcome === 'rejected' ? 'SQLITE_WORKER_REJECTED'
+          : outcome === 'send-error' ? 'SQLITE_WORKER_SEND_FAILED'
+          : 'SQLITE_WORKER_EXIT_UNCONFIRMED';
+        const error = new Error(outcome === 'timed-out'
           ? 'El proceso de verificación SQLite agotó el tiempo. Edición bloqueada hasta recuperación.'
-          : 'No se ha podido verificar la integridad e identidad SQLite en un proceso aislado.'));
+          : 'No se ha podido verificar la integridad e identidad SQLite en un proceso aislado.');
+        // Bounded code only: never forward native SQL, paths, UNC details or
+        // personal data to diagnostic files. The worker remains fail-closed.
+        Object.assign(error, { code: category });
+        reject(error);
       }
     });
   });

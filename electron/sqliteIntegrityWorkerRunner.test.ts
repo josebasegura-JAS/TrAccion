@@ -106,6 +106,32 @@ describe('PR9D · fin de vida y reconexión fail-closed', () => {
     expect(settled).toBe(true);
   });
 
+  it('PR509: clasifica la causa sin exponer rutas ni SQL al diagnóstico', async () => {
+    const fake = fakeChild();
+    const job = runSqliteIntegrityWorker({
+      createChild: () => fake.child, databasePath: 'Z:/private-data.sqlite',
+      expected, mode: 'health',
+    });
+    fake.send({kind:'integrity:ready'});
+    fake.send({kind:'integrity:rejected'});
+    fake.exit(0);
+    await expect(job).rejects.toMatchObject({code:'SQLITE_WORKER_REJECTED'});
+  });
+
+  it('PR509: registra timeout solo después de EXIT, sin dar falso éxito', async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild();
+    const job = runSqliteIntegrityWorker({
+      createChild: () => fake.child, databasePath:'Z:/private-data.sqlite',
+      expected, mode:'health', timeoutMs:4000,
+    });
+    fake.send({kind:'integrity:ready'});
+    vi.advanceTimersByTime(4000);
+    expect(fake.kill).toHaveBeenCalledOnce();
+    fake.exit(1);
+    await expect(job).rejects.toMatchObject({code:'SQLITE_WORKER_TIMEOUT'});
+  });
+
   it('si termina sin respuesta, bloquea aunque exit code sea 0', async () => {
     const fake = fakeChild();
     const job = runSqliteIntegrityWorker({

@@ -4,7 +4,7 @@ import { startSqliteWorkerProbeSupervisor } from './sqliteWorkerProbeSupervisor.
 import { startLocalInstanceUpdateListener } from './localUpdateInstances.js';
 import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
 import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics.js';
-import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, utilityProcess } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -343,6 +343,17 @@ async function registerIpcHandlers(): Promise<void> {
 }
 
 if (!app.requestSingleInstanceLock()) {
+  // Selecting another environment while an earlier TrAcción instance remains
+  // alive used to quit silently, making Production appear broken. Never start
+  // a second writer or redirect the existing instance to another database.
+  dialog.showMessageBoxSync({
+    type: 'warning',
+    title: 'TrAcción · Otra instancia abierta',
+    message: 'TrAcción ya está abierta en este equipo.',
+    detail: 'Cierra completamente la otra instancia (también si está en la pantalla de reconexión) y vuelve a iniciar TrAcción para seleccionar Producción o Pruebas. No se ha cambiado ninguna base de datos.',
+    buttons: ['Entendido'],
+    noLink: true,
+  });
   app.quit();
 } else {
   app.on('second-instance', () => {
