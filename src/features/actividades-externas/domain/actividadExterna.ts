@@ -48,13 +48,25 @@ export function escapeMailHtml(value: string): string {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/**
+ * Plantilla suele presentar el nombre como «Apellidos, Nombre».
+ * Para el saludo se utiliza solo el primer nombre de pila, nunca el apellido.
+ * Si el registro no separa los apellidos con coma, se conserva el criterio
+ * histórico de utilizar su primera palabra (sin inventar la separación).
+ */
+export function getActividadPrimerNombre(nombreCompleto: string): string {
+  const nombre = nombreCompleto.trim();
+  const parteNombre = nombre.includes(',') ? nombre.split(',').slice(1).join(',').trim() : nombre;
+  return parteNombre.split(/\s+/)[0] || '';
+}
+
 export function buildActividadMail(record: ActividadExterna, puestoTrabajo?: string) {
   const name = escapeMailHtml(record.nombre);
   if (record.estado === 'autorizada') {
     const puesto = escapeMailHtml(puestoTrabajo?.trim() || '[PUESTO DE TRABAJO]');
     return {
       subject: 'Resolución favorable de solicitud de actividad externa',
-      html: `<div style="font-family:Verdana, Geneva, sans-serif;font-size:10pt;font-weight:normal;"><p>Kaixo ${escapeMailHtml(record.nombre.trim().split(/\s+/)[0] || '')},</p><p>Atendiendo a las explicaciones de las actividades concretas que nos ha hecho llegar, te comunicamos que una vez revisada tu solicitud no existe incompatibilidad con tu puesto de ${puesto}.</p><p>Cualquier aclaración estamos a tu disposición.</p><p>Ondo izan</p></div>`,
+      html: `<div style="font-family:Verdana, Geneva, sans-serif;font-size:10pt;font-weight:normal;"><p>Kaixo ${escapeMailHtml(getActividadPrimerNombre(record.nombre))},</p><p>Atendiendo a las explicaciones de las actividades concretas que nos ha hecho llegar, te comunicamos que una vez revisada tu solicitud no existe incompatibilidad con tu puesto de ${puesto}.</p><p>Cualquier aclaración estamos a tu disposición.</p><p>Ondo izan</p></div>`,
     };
   }
   const activity = escapeMailHtml(record.actividad).replace(/\\n/g, '<br>');
