@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TeletrabajoSolicitud } from './solicitud';
-import { buildTeletrabajoExtraordinariaDireccionReport, selectTeletrabajoDireccionExportRows } from './exportDireccionScope';
+import { buildTeletrabajoExtraordinariaDireccionReport, getDefaultTeletrabajoDireccionExportScope, selectTeletrabajoDireccionExportRows } from './exportDireccionScope';
 import { buildTeletrabajoDireccionAdministrativeFields } from './exportDireccionFields';
 
 const ordinary = {
@@ -71,5 +71,16 @@ describe('Dirección · informe extraordinario acumulado', () => {
     expect(report.rows.map((s) => s.id)).toEqual(['1']);
     expect(report.nuevasCount).toBe(0);
     expect(report.aprobadasCount).toBe(1);
+  });
+});
+
+describe('Selección inicial del Excel Dirección según pestaña', () => {
+  it('en Extraordinarias utiliza por defecto el informe de nuevas más aprobadas', () => {
+    expect(getDefaultTeletrabajoDireccionExportScope('extraordinaria')).toBe('extraordinaria');
+  });
+
+  it('mantiene el comportamiento habitual en ordinarias y sin clasificar', () => {
+    expect(getDefaultTeletrabajoDireccionExportScope('ordinaria')).toBe('vista');
+    expect(getDefaultTeletrabajoDireccionExportScope('sin_clasificar')).toBe('vista');
   });
 });
