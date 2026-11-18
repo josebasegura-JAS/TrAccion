@@ -506,6 +506,7 @@ export async function exportTeletrabajoDireccionToExcel({
   gruposCobertura = [],
   solicitudesForAssessment = rows,
   periodo,
+  extraordinarySummary,
 }: {
   rows: readonly TeletrabajoSolicitud[];
   employees: readonly Employee[];
@@ -513,6 +514,8 @@ export async function exportTeletrabajoDireccionToExcel({
   gruposCobertura?: readonly GrupoCobertura[];
   solicitudesForAssessment?: readonly TeletrabajoSolicitud[];
   periodo?: string;
+  /** Only the extraordinary-scope report gets the additional sections. */
+  extraordinarySummary?: { nuevasCount: number; aprobadasCount: number };
 }): Promise<void> {
   const { default: ExcelJSRuntime } = await import('exceljs');
   const generatedAt = new Date();
@@ -642,6 +645,31 @@ export async function exportTeletrabajoDireccionToExcel({
     });
   });
 
+  if (extraordinarySummary &&
+      extraordinarySummary.nuevasCount + extraordinarySummary.aprobadasCount !== rows.length) {
+    throw new Error('El informe de Dirección contiene un recuento incoherente.');
+  }
+
+  const addSectionHeader = (rowNumber: number, title: string) => {
+    worksheet.mergeCells(rowNumber, 2, rowNumber, COL_LAST);
+    const sectionRow = worksheet.getRow(rowNumber);
+    sectionRow.height = 24;
+    // Reutilizar exactamente el rojo y la fuente del encabezado existente.
+    for (let col = 2; col <= COL_LAST; col += 1) {
+      const cell = sectionRow.getCell(col);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: toExcelColor('#FF0000') };
+      cell.border = buildDottedBorder();
+    }
+    const sectionTitle = sectionRow.getCell(2);
+    sectionTitle.value = title;
+    sectionTitle.font = { name: ROTIS_FONT, size: 11, bold: true };
+    sectionTitle.alignment = { horizontal: 'left', vertical: 'middle' };
+  };
+  if (extraordinarySummary) {
+    addSectionHeader(6, 'NUEVAS SOLICITUDES EXTRAORDINARIAS · PENDIENTES DE VALORACIÓN');
+    addSectionHeader(7 + extraordinarySummary.nuevasCount, 'SOLICITUDES APROBADAS VIGENTES');
+  }
+
   rows.forEach((solicitud, index) => {
     const employee = findEmployee(employeesById, solicitud.empleado);
     const assessment = buildTeletrabajoAssessment({
@@ -658,7 +686,9 @@ export async function exportTeletrabajoDireccionToExcel({
       employeesById,
       gruposById,
     );
-    const rowNumber = 6 + index;
+    const rowNumber = extraordinarySummary
+      ? 7 + index + (index >= extraordinarySummary.nuevasCount ? 1 : 0)
+      : 6 + index;
     const row = worksheet.getRow(rowNumber);
 
     // Para cada año anterior (1 = inmediatamente anterior, 2 = dos periodos
@@ -752,6 +782,30 @@ export async function exportTeletrabajoDireccionToExcel({
       applyRowFill(row, assessment.rowFillColor);
     }
   });
+
+  if (extraordinarySummary) {
+    const summaryRow = 8 + rows.length;
+    addSectionHeader(summaryRow, 'RESUMEN PARA DIRECCIÓN');
+    const metrics: Array<[string, number]> = [
+      ['Solicitudes aprobadas vigentes', extraordinarySummary.aprobadasCount],
+      ['Nuevas solicitudes extraordinarias pendientes', extraordinarySummary.nuevasCount],
+      ['Total de solicitudes si se aprueban las nuevas',
+        extraordinarySummary.aprobadasCount + extraordinarySummary.nuevasCount],
+    ];
+    metrics.forEach(([label, count], index) => {
+      const summaryLine = worksheet.getRow(summaryRow + index + 1);
+      summaryLine.height = 20;
+      worksheet.mergeCells(summaryLine.number, 2, summaryLine.number, 4);
+      const labelCell = summaryLine.getCell(2);
+      labelCell.value = label;
+      labelCell.font = { name: ROTIS_FONT, size: 11, bold: index === 2 };
+      labelCell.alignment = { vertical: 'middle' };
+      const countCell = summaryLine.getCell(5);
+      countCell.value = count;
+      countCell.font = { name: ROTIS_FONT, size: 11, bold: true };
+      countCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+  }
 
   worksheet.autoFilter = {
     from: { row: 5, column: 2 },
