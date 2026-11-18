@@ -1,5 +1,33 @@
 # PR509 · Incidencias de arranque Producción / desconexión Pruebas
 
+## Evidencia recibida el 18/11/2026
+
+El archivo `sqlite-recovery-diagnostics(4).jsonl` contiene tres fallos de
+`health` en la etapa `consulta`, a las 06:45:40, 06:46:02 y 06:46:16 UTC.
+Sus duraciones son 20.033, 20.020 y 8.418 ms. Todos registran
+`recoveryRequired:false`, `queuedOperations:0` y
+`errorMessage:"Error sin código normalizado"`. Esta etapa ejecuta
+`verifySqliteHealthInUtilityProcess` por defecto. Las dos primeras duraciones
+son **compatibles** con el timeout de 20.000 ms del runner aislado, pero
+los logs anteriores no permiten demostrarlo porque la excepción no incluía
+código. Tampoco muestran el resultado del guardado de la tarea.
+
+El archivo adjunto `electron-main-watchdog(5).jsonl` termina el
+**16/11/2026 a las 11:34 UTC**, dos días antes del incidente: no permite
+correlacionarlo con la desconexión del 18/11. Nunca atribuir un watchdog
+antiguo a la ejecución actual.
+
+PR509 incorpora códigos diagnósticos acotados:
+`SQLITE_WORKER_TIMEOUT`, `SQLITE_WORKER_REJECTED`,
+`SQLITE_WORKER_SEND_FAILED` y `SQLITE_WORKER_EXIT_UNCONFIRMED`.
+Son categorías sanitizadas, sin rutas/SQL/identificadores privados, y no
+alteran la política de fallo cerrado ni la confirmación real de EXIT.
+
+**Estado:** causa raíz de la latencia/desconexión no determinada.
+Continuar la investigación con registros del mismo intervalo y una nueva
+reproducción solo sobre base ficticia. No modificar umbrales, bloquear menos
+ni reintentar escrituras mientras siga sin demostrarse el resultado anterior.
+
 ## Hecho comprobado en el código
 `electron/main.ts` usa un bloqueo de instancia única, compartido por
 Producción y Pruebas en el mismo PC. Antes de esta PR, si ya había un proceso
