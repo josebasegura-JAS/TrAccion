@@ -111,6 +111,8 @@ export const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Exportación Excel para Dirección',
     items: [
       'La Excel consolida las solicitudes del periodo y aplica las mismas reglas de cálculo que la app (peticiones, presencialidad, Grupos de Cobertura).',
+      'Al elegir el alcance Extraordinaria, el Excel de Dirección muestra primero las extraordinarias pendientes o analizadas, después todas las aprobadas vigentes del periodo (ordinarias y extraordinarias), y un resumen al final. Se mantienen las columnas y los colores corporativos originales.',
+      'Las solicitudes denegadas, desistidas y eliminadas no se incluyen en ese informe acumulado. Los demás alcances de exportación mantienen su funcionamiento anterior.',
       '"Peticiones" representa personas solicitantes del puesto/grupo, no días solicitados.',
       'Las incidencias se calculan por día concreto frente a la presencialidad mínima.',
       'Si una fila tiene color general y una celda tiene color propio por otra condición, se conserva el color específico de la celda.',
