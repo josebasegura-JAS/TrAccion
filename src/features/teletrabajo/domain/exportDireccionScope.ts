@@ -4,6 +4,15 @@ import type { TeletrabajoSolicitud } from './solicitud';
 
 export type TeletrabajoDireccionExportScope = 'vista' | 'ordinaria' | 'extraordinaria' | 'todas';
 
+/** La pestaña Extraordinarias propone el informe conjunto de Dirección;
+ * el usuario puede cambiar después el alcance manualmente. */
+export function getDefaultTeletrabajoDireccionExportScope(
+  modalidadTab: 'ordinaria' | 'extraordinaria' | 'sin_clasificar',
+): TeletrabajoDireccionExportScope {
+  return modalidadTab === 'extraordinaria' ? 'extraordinaria' : 'vista';
+}
+
+
 export function selectTeletrabajoDireccionExportRows(
   periodRows: readonly TeletrabajoSolicitud[],
   visibleRows: readonly TeletrabajoSolicitud[],
