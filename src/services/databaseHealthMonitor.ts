@@ -136,12 +136,13 @@ function markPotentialNetworkTransition(message: string, confirmedOffline = fals
 
 /** Solo tratar como contención cuando la conexión sigue activa y la respuesta
  * identifica explícitamente SQLITE_BUSY/SQLITE_LOCKED. No confundir con I/O. */
-function isActiveSqliteBusyResult(result: Awaited<ReturnType<NonNullable<typeof window.traccion>['databaseHealthCheck']>>): boolean {
+function isActiveSqliteBusyResult(result: { ok: boolean; status: { ready: boolean; phase: string }; message: string }): boolean {
   return !result.ok && result.status.ready && result.status.phase === 'active'
     && /\bSQLITE_(?:BUSY|LOCKED)\b/i.test(result.message);
 }
 
 function resetBusyEpisode(): void {
+  if (consecutiveBusy === 0 && busySinceAt === null) return;
   consecutiveBusy = 0;
   busySinceAt = null;
   updateDiagnostics({ consecutiveBusy: 0, busySinceAt: null });
