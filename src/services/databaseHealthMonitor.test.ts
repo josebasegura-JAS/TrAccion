@@ -135,6 +135,57 @@ describe('databaseHealthMonitor', () => {
     monitor.stopDatabaseHealthMonitor();
   });
 
+  it('PR509: un rechazo del verificador aislado no declara desconexión si SQLite sigue activa', async () => {
+    const databaseHealthCheck = vi.fn()
+      .mockResolvedValueOnce({
+        ok:false, status:activeStatus, checkedAt:'2026-11-18', message:'Proceso de verificación no disponible.',
+      })
+      .mockResolvedValueOnce({
+        ok:true, status:activeStatus, checkedAt:'2026-11-18', message:'SQLite verificada.',
+      });
+    installFakeWindow(databaseHealthCheck);
+    const monitor = await import('./databaseHealthMonitor');
+    const warn = vi.spyOn(console,'warn').mockImplementation(() => undefined);
+    try {
+      monitor.startDatabaseHealthMonitor();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+        true,expect.any(String),'health-monitor',
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(databaseHealthCheck).toHaveBeenCalledTimes(2);
+      expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+        true,expect.any(String),'health-monitor',
+      );
+    } finally {
+      monitor.stopDatabaseHealthMonitor();
+      warn.mockRestore();
+    }
+  });
+
+  it('PR509: dos rechazos consecutivos mantienen política de bloqueo conservadora', async () => {
+    const databaseHealthCheck = vi.fn().mockResolvedValue({
+      ok:false,status:activeStatus,checkedAt:'2026-11-18',message:'No se pudo verificar SQLite.',
+    });
+    installFakeWindow(databaseHealthCheck);
+    const monitor=await import('./databaseHealthMonitor');
+    const warn=vi.spyOn(console,'warn').mockImplementation(() => undefined);
+    try {
+      monitor.startDatabaseHealthMonitor();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+        true,expect.any(String),'health-monitor',
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(mocks.publishDatabaseConnectivityBlock).toHaveBeenCalledWith(
+        true,expect.stringContaining('No se pudo verificar SQLite.'),'health-monitor',
+      );
+    } finally {
+      monitor.stopDatabaseHealthMonitor();
+      warn.mockRestore();
+    }
+  });
+
   it('al recuperar red sincroniza datos y reactiva el polling antes de desbloquear la edición', async () => {
     const databaseHealthCheck = vi.fn()
       .mockResolvedValueOnce({
