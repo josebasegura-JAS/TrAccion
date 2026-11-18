@@ -796,9 +796,13 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     }
     if (isSqliteIoError(error) || recurrentFileFailure) suspendDatabaseAfterIoError(error);
     writeHealthDiagnostic('failed', (failedStage as SqliteRecoveryStage | null) ?? 'sin-etapa', error);
+    // El mensaje original de better-sqlite3 puede ser "database is locked"
+    // sin incluir SQLITE_BUSY. Informar explícitamente del código solo en
+    // el health-check para distinguir contención de una caída de SMB.
+    const isBusy = isSqliteBusyOrLockedError(error);
     const message =
       error instanceof Error
-        ? `No se puede verificar la base SQLite compartida: ${error.message}`
+        ? `No se puede verificar la base SQLite compartida: ${isBusy ? 'SQLITE_BUSY: ' : ''}${error.message}`
         : 'No se puede verificar la base SQLite compartida.';
     return {
       ok: false,
