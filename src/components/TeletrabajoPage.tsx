@@ -53,7 +53,7 @@ import { resolveTeletrabajoTipoSolicitud } from '../features/teletrabajo/domain/
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { exportTeletrabajoDireccionToExcel } from '../features/teletrabajo/domain/exportDireccion';
-import { selectTeletrabajoDireccionExportRows, type TeletrabajoDireccionExportScope } from '../features/teletrabajo/domain/exportDireccionScope';
+import { buildTeletrabajoExtraordinariaDireccionReport, selectTeletrabajoDireccionExportRows, type TeletrabajoDireccionExportScope } from '../features/teletrabajo/domain/exportDireccionScope';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import {
   applyPlantillaDataToTeletrabajoSolicitudes,
@@ -548,7 +548,12 @@ export function TeletrabajoPage({
 
   const handleExportDireccion = useCallback(async () => {
     try {
-      const exportRows = selectTeletrabajoDireccionExportRows(
+      const fullExtraordinaryReport = direccionExportScope === 'extraordinaria'
+        ? buildTeletrabajoExtraordinariaDireccionReport(
+          visibleSolicitudes.filter((solicitud) => solicitud.periodo === mainPeriodo),
+        )
+        : null;
+      const exportRows = fullExtraordinaryReport?.rows ?? selectTeletrabajoDireccionExportRows(
         visibleSolicitudes.filter((solicitud) => solicitud.periodo === mainPeriodo),
         sortedSolicitudes,
         direccionExportScope,
@@ -563,7 +568,10 @@ export function TeletrabajoPage({
         puestosTeletrabajo,
         gruposCobertura,
         solicitudesForAssessment: solicitudesWithPlantillaData,
-        periodo: filters.periodo,
+        periodo: mainPeriodo,
+        extraordinarySummary: fullExtraordinaryReport
+          ? { nuevasCount: fullExtraordinaryReport.nuevasCount, aprobadasCount: fullExtraordinaryReport.aprobadasCount }
+          : undefined,
       });
       setWordStatus('Excel Dirección generado y abierto correctamente.');
     } catch (error) {
