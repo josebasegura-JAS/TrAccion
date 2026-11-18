@@ -1,14 +1,4 @@
 import { stat } from 'node:fs/promises';
-import { shouldUseIsolatedSqliteHealth } from './sqliteHealthIsolationPolicy.js';
-import { sqliteEngineOwnershipFence } from './sqliteEngineOwnershipFence.js';
-import { sqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
-import { runGuardedSqliteLifecycle } from './sqliteLifecycleAdmission.js';
-import { createSqliteMaintenanceGate } from './sqliteMaintenanceGate.js';
-import { readJsonModuleInUtilityProcess } from './jsonReadWorkerBridge.js';
-import { readSyncTokensInUtilityProcess } from './isolatedSyncTokensBridge.js';
-import { isIsolatedJsonTable } from './persistence/isolatedJsonTables.js';
-import { readSessionsInUtilityProcess } from './sessionReadWorkerBridge.js';
-import { readTasksInUtilityProcess } from './taskReadWorkerBridge.js';
 import path from 'node:path';
 import { getSqliteIpcQueueDiagnostics, runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import {
@@ -45,9 +35,6 @@ import { createEmployeeRepository } from './persistence/employeeRepository.js';
 import { createSorteosRepository } from './persistence/sorteosRepository.js';
 import { createTaskRepository } from './persistence/taskRepository.js';
 import { createSesionesRepository } from './persistence/sesionesRepository.js';
-import { closeSessionWorkflowTransaction } from './persistence/atomicSessionWorkflow.js';
-import { importSessionHistoryTransaction } from './persistence/atomicSessionHistoryImport.js';
-import { closeCoordinationWorkflowTransaction, createCoordinationTaskTransaction } from './persistence/atomicCoordinationWorkflows.js';
 import { createTeletrabajoRepository } from './persistence/teletrabajoRepository.js';
 import { createVinculogramaRepository } from './persistence/vinculogramaRepository.js';
 import { createLicenciaSinSueldoRepository } from './persistence/licenciaSinSueldoRepository.js';
@@ -89,7 +76,7 @@ import {
   type DatabaseLockInfo,
 } from './persistence/sqliteLockLifecycle.js';
 import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
-import { verifySqliteIntegrityInUtilityProcess, verifySqliteHealthInUtilityProcess } from './sqliteIntegrityWorkerBridge.js';
+import { verifySqliteIntegrityReadOnly } from './persistence/sqliteIntegrityVerification.js';
 import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
 import {
   describeSqliteRecoveryError,
@@ -351,21 +338,11 @@ export type { DatabaseConnectivityIssuePayload, DatabaseLockInfo } from './persi
 export type { VacuumResult, VacuumStatus } from './persistence/vacuumMaintenance.js';
 
 export async function vacuumDatabaseNow(): Promise<VacuumResult> {
-  const current = getSqliteStatus();
-  const perform = () => vacuumDatabaseFromModule(createVacuumMaintenanceDependencies(), 'manual');
-  // Igual que los backups, VACUUM debe esperar su turno local ANTES de
-  // adquirir el lock SMB distribuido. Evita intercalar un guardado con
-  // la reescritura completa del fichero por el mantenimiento manual.
-  if (current.ready && current.phase === 'active') {
-    return sqliteMaintenanceGate.runExclusive('vacuum', current.path, perform);
-  }
-  return sqliteMaintenanceGate.run('vacuum-unavailable', perform);
+  return vacuumDatabaseFromModule(createVacuumMaintenanceDependencies(), 'manual');
 }
 
 export async function getVacuumStatus(): Promise<VacuumStatus> {
-  return sqliteMaintenanceGate.run('vacuum-status', () =>
-    getVacuumStatusFromModule(createVacuumMaintenanceDependencies()),
-  );
+  return getVacuumStatusFromModule(createVacuumMaintenanceDependencies());
 }
 
 function createVacuumMaintenanceDependencies(): VacuumMaintenanceDependencies {
@@ -385,9 +362,7 @@ function createVacuumMaintenanceDependencies(): VacuumMaintenanceDependencies {
 export type { DataIntegrityReport } from './persistence/dataIntegrityAudit.js';
 
 export async function runDataIntegrityAuditNow(): Promise<DataIntegrityReport> {
-  return sqliteMaintenanceGate.run('integrity-audit', () =>
-    runDataIntegrityAuditFromModule(createDataIntegrityAuditDependencies()),
-  );
+  return runDataIntegrityAuditFromModule(createDataIntegrityAuditDependencies());
 }
 
 function createDataIntegrityAuditDependencies(): DataIntegrityAuditDependencies {
@@ -407,7 +382,6 @@ let localBackupServiceInstance: LocalBackupService | null = null;
 
 function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies {
   return {
-    trackActivity: (label, operation) => sqliteIndependentActivityTracker.run(label, operation),
     getDatabase: () => database,
     getStatus: getSqliteStatus,
     acquireLock,
@@ -424,44 +398,6 @@ function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies 
   };
 }
 
-/**
- * PR9D-5B: informe conservador de preparación, NO autorización de handoff.
- * La conexión escritora sigue en main. El heartbeat y otras rutas extracola
- * todavía necesitan barrera de admisión antes de iniciar una cesión real.
- */
-export function getSqliteWriterHandoffReadiness(): {
-  ready: boolean;
-  blockers: string[];
-  independentActive: number;
-} {
-  const blockers: string[] = [];
-  const queue = getSqliteIpcQueueDiagnostics();
-  if (queue.queuedOperations > 0 || queue.runningOperation !== null || queue.timedOut) {
-    blockers.push('Cola SQLite activa, pendiente o con timeout incierto.');
-  }
-  const activity = sqliteIndependentActivityTracker.snapshot();
-  if (activity.active > 0) blockers.push('Operaciones SQLite/SMB en curso.');
-  const backups = localBackupServiceInstance?.getActivitySnapshot();
-  if (backups && (backups.workRunning || backups.timerScheduled || backups.pendingReason || backups.pendingRevision)) {
-    blockers.push('Copias SQLite activas o pendientes.');
-  }
-  if (sqliteEngineOwnershipFence.snapshot().owner !== 'main') {
-    blockers.push('El proceso principal no es propietario activo de SQLite.');
-  }
-  // El heartbeat, activación y cierre normal se observan, pero siguen existiendo
-  // caminos de mantenimiento y callbacks directos sin barrera de admisión global.
-  // Evitar un falso positivo: monitorizar no equivale a detener nuevas entradas.
-  blockers.push('Cesión aún deshabilitada: faltan barrera global de admisión y cobertura exhaustiva de restauración/mantenimiento.');
-  return { ready: false, blockers, independentActive: activity.active };
-}
-
-// La fachada registra lecturas y restauraciones durante toda su duración.
-const sqliteMaintenanceGate = createSqliteMaintenanceGate({
-  assertMayEnterMain: () => sqliteEngineOwnershipFence.assertMayEnterMain(),
-  track: (label, operation) => sqliteIndependentActivityTracker.run(label, operation),
-  withExclusiveLock: (databasePath, operation) => withDatabaseOperationLock(databasePath, operation),
-});
-
 function getLocalBackupService(): LocalBackupService {
   if (!localBackupServiceInstance) {
     localBackupServiceInstance = createLocalBackupService(createLocalBackupServiceDependencies());
@@ -474,10 +410,7 @@ function getLocalBackupService(): LocalBackupService {
 // Aquí se mantienen únicamente las operaciones que dependen del estado vivo
 // de sqlitePersistence (p. ej. liberación manual + reactivación de la base).
 
-const sqliteLockLifecycle = createSqliteLockLifecycle(
-  () => ownerId,
-  (operation) => sqliteIndependentActivityTracker.run('sqlite:heartbeat-smb', operation),
-);
+const sqliteLockLifecycle = createSqliteLockLifecycle(() => ownerId);
 
 const {
   acquireLock,
@@ -491,24 +424,8 @@ const {
   isLockStale,
   releaseLock,
   startDatabaseLockHeartbeat,
-  withDatabaseOperationLock: untrackedDatabaseOperationLock,
+  withDatabaseOperationLock,
 } = sqliteLockLifecycle;
-
-/**
- * PR9D-5B: contar tanto la espera por el lock SMB como la operación
- * posterior. Solo se libera el contador tras resolver/rechazar de verdad.
- * La cola IPC mantiene su semántica previa.
- */
-function withDatabaseOperationLock<T>(
-  databasePath: string,
-  operation: () => Promise<T>,
-  waitMs?: number,
-): Promise<T> {
-  sqliteEngineOwnershipFence.assertMayEnterMain();
-  return sqliteIndependentActivityTracker.run('sqlite:shared-operation-lock', () =>
-    untrackedDatabaseOperationLock(databasePath, operation, waitMs));
-}
-
 
 export function setDatabaseConnectivityIssueNotifier(
   notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
@@ -517,10 +434,8 @@ export function setDatabaseConnectivityIssueNotifier(
 }
 
 export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | null> {
-  return sqliteIndependentActivityTracker.run('sqlite:get-current-smb-lock', () => {
-    const currentStatus = getSqliteStatus();
-    return readLock(currentStatus.lockPath);
-  });
+  const currentStatus = getSqliteStatus();
+  return readLock(currentStatus.lockPath);
 }
 
 /**
@@ -530,12 +445,7 @@ export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | n
  * La acción sigue requiriendo confirmación del usuario en Ajustes.
  */
 export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLockResult> {
-  // Esta operación puede tocar owner.json/.lockdir y reactivar la conexión.
-  // Reservar su ciclo completo antes del primer await: el handoff debe
-  // esperarla y no puede permitir una liberación manual durante freeze.
-  sqliteEngineOwnershipFence.assertMayEnterMain();
-  return sqliteIndependentActivityTracker.run('sqlite:force-release-lock-lifecycle', () =>
-    forceReleaseDatabaseLockWithRecovery({
+  return forceReleaseDatabaseLockWithRecovery({
     getStatus: getSqliteStatus,
     readLock,
     getLockInfoPath,
@@ -547,7 +457,7 @@ export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLo
       status = nextStatus;
     },
     errorMessage,
-  }));
+  });
 }
 
 function resetRepositoryMigrationState(): void {
@@ -585,11 +495,6 @@ function suspendDatabaseAfterIoError(error: unknown, suspectedCorruption = false
 }
 
 async function recoverDatabaseAfterIoError(): Promise<void> {
-  return sqliteIndependentActivityTracker.run('sqlite:recovery-lifecycle', () =>
-    performDatabaseRecoveryAfterIoError());
-}
-
-async function performDatabaseRecoveryAfterIoError(): Promise<void> {
   if (!sqliteIoRecoveryRequired) return;
   const previous = getSqliteStatus();
   const startedAt = Date.now();
@@ -616,7 +521,7 @@ async function performDatabaseRecoveryAfterIoError(): Promise<void> {
       if (!previous.databaseUuid || !previous.applicationId || !previous.environment) {
         throw new Error('No hay identidad SQLite suficiente para una recuperación automática segura.');
       }
-      await verifySqliteIntegrityInUtilityProcess(previous.path, {
+      verifySqliteIntegrityReadOnly(previous.path, {
         databaseUuid: previous.databaseUuid,
         applicationId: previous.applicationId,
         environment: previous.environment,
@@ -647,9 +552,7 @@ async function performDatabaseRecoveryAfterIoError(): Promise<void> {
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
-  await sqliteIndependentActivityTracker.run('sqlite:close-handle', () => {
-    closeDatabase();
-  });
+  closeDatabase();
 }
 
 async function activateDatabase(
@@ -657,38 +560,25 @@ async function activateDatabase(
   isDefaultPath: boolean,
   sourceDatabasePath: string | null,
 ): Promise<DatabaseStatus> {
-  return runGuardedSqliteLifecycle(
-    () => sqliteEngineOwnershipFence.assertMayEnterMain(),
-    sqliteIndependentActivityTracker,
-    'sqlite:activate',
-    async () => {
-    const activated = await activateSqliteDatabase(
-      directoryPath,
-      isDefaultPath,
-      sourceDatabasePath,
-      {
-        ownerId,
-        busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS,
-        getLockPath,
-        acquireStartupLock,
-        startDatabaseLockHeartbeat,
-        releaseLock,
-      },
-    );
-    // No liberar la reserva antes de publicar el nuevo handle y su estado.
-    database = activated.database;
-    status = activated.status;
-    return status;
+  const activated = await activateSqliteDatabase(
+    directoryPath,
+    isDefaultPath,
+    sourceDatabasePath,
+    {
+      ownerId,
+      busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS,
+      getLockPath,
+      acquireStartupLock,
+      startDatabaseLockHeartbeat,
+      releaseLock,
     },
   );
+  database = activated.database;
+  status = activated.status;
+  return status;
 }
 
 export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
-  return sqliteIndependentActivityTracker.run('sqlite:initialize-lifecycle', () =>
-    performInitializeSqlitePersistence());
-}
-
-async function performInitializeSqlitePersistence(): Promise<DatabaseStatus> {
   if (status) {
     return status;
   }
@@ -730,7 +620,6 @@ async function performInitializeSqlitePersistence(): Promise<DatabaseStatus> {
 }
 
 function requireDatabase(): Database {
-  sqliteEngineOwnershipFence.assertMayEnterMain();
   if (!database) {
     throw new Error('SQLite no está inicializado.');
   }
@@ -738,28 +627,10 @@ function requireDatabase(): Database {
   return database;
 }
 
-function safeDatabaseOperation<T>(
-  operation: () => T | Promise<T>,
+async function safeDatabaseOperation<T>(
+  operation: () => T,
   fallback: (status: DatabaseStatus, message: string) => T,
 ): Promise<T> {
-  // Mantener UNA reserva durante todo el ciclo, incluidos delays entre
-  // reintentos. Sin ello el preflight podría ver el tracker vacío mientras
-  // queda una operación admitida esperando volver a entrar en SQLite.
-  return runGuardedSqliteLifecycle(
-    () => sqliteEngineOwnershipFence.assertMayEnterMain(),
-    sqliteIndependentActivityTracker,
-    'sqlite:safe-operation-full',
-    () => performSafeDatabaseOperation(operation, fallback),
-  );
-}
-
-async function performSafeDatabaseOperation<T>(
-  operation: () => T | Promise<T>,
-  fallback: (status: DatabaseStatus, message: string) => T,
-): Promise<T> {
-  // PR9D-5A: impedir incluso accesos que no llamen a requireDatabase()
-  // si en el futuro se cede la propiedad del motor escritor al auxiliar.
-  sqliteEngineOwnershipFence.assertMayEnterMain();
   if (sqliteIoRecoveryRequired) {
     throw new Error('SQLite suspendida tras un error de E/S. Espera la recuperación verificada de la base compartida.');
   }
@@ -875,38 +746,21 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       throw new Error('La ruta configurada ya no apunta a un fichero SQLite.');
     }
 
-    // Los logs reales (13/11/2026) muestran bloqueos de Electron de más de
-    // 20 s al consultar esquema con SQLITE_BUSY. Por defecto, toda la
-    // consulta nativa de salud pasa al utilityProcess readonly; el opt-out
-    // explícito permite diagnóstico de regresiones sin fallback automático.
-    if (shouldUseIsolatedSqliteHealth(process.env.TRACCION_SQLITE_ISOLATED_HEALTH)) {
-      requireDatabase(); // comprueba estado local, sin realizar E/S nativa
-      if (!currentStatus.databaseUuid || !currentStatus.applicationId || !currentStatus.environment) {
-        throw new Error('La identidad SQLite validada no está disponible.');
-      }
-      await diagnostic.stageAsync('consulta', () => verifySqliteHealthInUtilityProcess(currentStatus.path, {
-        databaseUuid: currentStatus.databaseUuid!,
-        applicationId: currentStatus.applicationId!,
-        environment: currentStatus.environment!,
-        schemaVersion: CURRENT_SCHEMA_VERSION,
-      }));
-    } else {
-      const db = requireDatabase();
-      diagnostic.stage('consulta', () => db.prepare('SELECT 1 AS ok').get());
-      const schemaVersion = diagnostic.stage('esquema', () => readCurrentSchemaVersion(db));
-      if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
-        throw new Error(
-          `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
-        );
-      }
+    const db = requireDatabase();
+    diagnostic.stage('consulta', () => db.prepare('SELECT 1 AS ok').get());
+    const schemaVersion = diagnostic.stage('esquema', () => readCurrentSchemaVersion(db));
+    if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
+      throw new Error(
+        `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
+      );
+    }
 
-      const identity = diagnostic.stage('identidad', () => readDatabaseIdentity(db));
-      if (!identity || !currentStatus.databaseUuid || identity.databaseUuid !== currentStatus.databaseUuid) {
-        throw new Error('La identidad de la base SQLite ha cambiado durante la sesión.');
-      }
-      if (identity.applicationId !== currentStatus.applicationId || identity.environment !== currentStatus.environment) {
-        throw new Error('Los metadatos de la base SQLite ya no coinciden con la base validada al iniciar.');
-      }
+    const identity = diagnostic.stage('identidad', () => readDatabaseIdentity(db));
+    if (!identity || !currentStatus.databaseUuid || identity.databaseUuid !== currentStatus.databaseUuid) {
+      throw new Error('La identidad de la base SQLite ha cambiado durante la sesión.');
+    }
+    if (identity.applicationId !== currentStatus.applicationId || identity.environment !== currentStatus.environment) {
+      throw new Error('Los metadatos de la base SQLite ya no coinciden con la base validada al iniciar.');
     }
 
     // Esta comprobación se ejecuta dentro de la cola IPC, después de
@@ -985,15 +839,11 @@ function enqueueLocalBackup(reason: string): void {
 }
 
 export async function createShutdownLocalBackup() {
-  return sqliteMaintenanceGate.run('shutdown-backup', () =>
-    getLocalBackupService().createShutdownLocalBackup(),
-  );
+  return getLocalBackupService().createShutdownLocalBackup();
 }
 
 export async function createManualLocalBackup(): Promise<void> {
-  await sqliteMaintenanceGate.run('manual-backup', () =>
-    getLocalBackupService().createManualLocalBackup(),
-  );
+  await getLocalBackupService().createManualLocalBackup();
 }
 
 function getTaskRecordsUpdatedAt(db: Database): string | null {
@@ -1022,34 +872,8 @@ const {
   getPersistedRecordSnapshot,
   loadPersistedRecordsHydrationSnapshot,
   loadPersistedRecordsSnapshot,
-  getPersistedRecordsTokenSnapshot: getPersistedRecordsTokenSnapshotInMain,
+  getPersistedRecordsTokenSnapshot,
 } = persistedRecordsModule;
-
-/**
- * Polling multiusuario: antes consultaba ~20 tablas con better-sqlite3
- * síncrono en Electron main. Ahora se usa la misma fotografía de marcas desde
- * un proceso aislado readonly con validación de identidad.
- *
- * Sin reintento ni fallback a SQLite en main ante un error del worker:
- * cualquier respuesta incierta se propaga al servicio de sincronización.
- */
-export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecordsTokenSnapshot> {
-  const current = getSqliteStatus();
-  if (process.env.TRACCION_SQLITE_ISOLATED_SYNC_TOKENS === '0' ||
-      !current.ready || current.phase !== 'active') {
-    return getPersistedRecordsTokenSnapshotInMain();
-  }
-  if (!current.databaseUuid || !current.applicationId || !current.environment) {
-    throw new Error('No hay identidad validada para leer tokens SQLite.');
-  }
-  const snapshot = await readSyncTokensInUtilityProcess(current.path, {
-    databaseUuid: current.databaseUuid,
-    applicationId: current.applicationId,
-    environment: current.environment,
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-  });
-  return { status: getSqliteStatus(), ...snapshot };
-}
 
 export {
   savePersistedRecord,
@@ -1059,6 +883,7 @@ export {
   getPersistedRecordSnapshot,
   loadPersistedRecordsHydrationSnapshot,
   loadPersistedRecordsSnapshot,
+  getPersistedRecordsTokenSnapshot,
 };
 
 export async function createLocalStorageBackup(
@@ -1093,17 +918,11 @@ export async function createLocalStorageBackup(
 }
 
 export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
-  return sqliteMaintenanceGate.run('list-backups', () =>
-    getLocalBackupService().listLocalBackups(),
-  );
+  return getLocalBackupService().listLocalBackups();
 }
 
 export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
-  // Restauración completa: incluye prebackup, cierre/reapertura y verificación;
-  // no liberar la reserva a mitad de operación ni al recibir timeout externo.
-  return sqliteMaintenanceGate.run('restore-backup', () =>
-    getLocalBackupService().restoreLocalBackup(fileName),
-  );
+  return getLocalBackupService().restoreLocalBackup(fileName);
 }
 
 
@@ -1132,23 +951,6 @@ function createJsonModuleRepository(
       enqueueLocalBackup,
       assertDatabaseWritesAllowed,
       isDatabaseWriteBlockedByHeartbeat,
-      isolatedJsonRead: async (tableName, currentStatus) => {
-        if (!isIsolatedJsonTable(tableName)) {
-          throw new Error('Tabla JSON no incluida en el catálogo seguro.');
-        }
-        const liveStatus = getSqliteStatus();
-        if (!liveStatus.databaseUuid || !liveStatus.applicationId || !liveStatus.environment ||
-            liveStatus.path !== currentStatus.path || liveStatus.schemaVersion !== currentStatus.schemaVersion ||
-            !liveStatus.ready || liveStatus.phase !== 'active') {
-          throw new Error('No hay identidad SQLite validada para lectura aislada.');
-        }
-        return readJsonModuleInUtilityProcess(liveStatus.path, {
-          databaseUuid: liveStatus.databaseUuid,
-          applicationId: liveStatus.applicationId,
-          environment: liveStatus.environment,
-          schemaVersion: liveStatus.schemaVersion,
-        }, tableName);
-      },
     },
   );
 }
@@ -1183,17 +985,6 @@ const sesionesModule = createSesionesRepository({
   enqueueLocalBackup,
   assertDatabaseWritesAllowed,
   isDatabaseWriteBlockedByHeartbeat,
-  isolatedSessionRead: async (module, id, currentStatus) => {
-    if (!currentStatus.databaseUuid || !currentStatus.applicationId || !currentStatus.environment) {
-      throw new Error('No existe identidad validada para lectura aislada de sesiones.');
-    }
-    return readSessionsInUtilityProcess(currentStatus.path, {
-      databaseUuid: currentStatus.databaseUuid,
-      applicationId: currentStatus.applicationId,
-      environment: currentStatus.environment,
-      schemaVersion: currentStatus.schemaVersion,
-    }, module, id);
-  },
 });
 const {
   loadComiteSessionRecordsSnapshot,
@@ -1235,7 +1026,145 @@ export async function closeSessionWorkflowAtomically(
 
       assertDatabaseWritesAllowed();
       const db = requireDatabase();
-      const result = closeSessionWorkflowTransaction(db, payload, currentStatus, ownerId, updateRefreshMetadata);
+      const sessionTable =
+        payload.module === 'comite' ? 'comite_session_records' : 'paritaria_session_records';
+
+      const result = db.transaction((): AtomicSessionWorkflowResult => {
+        const readUpdatedAt = (tableName: string, id: string): string | null => {
+          const row = db
+            .prepare(`SELECT updated_at FROM ${tableName} WHERE id = ? AND deleted_at IS NULL`)
+            .get(id);
+          return isUpdatedAtRow(row) ? row.updated_at : null;
+        };
+
+        const currentSessionUpdatedAt = readUpdatedAt(sessionTable, payload.session.id);
+        if (currentSessionUpdatedAt !== payload.session.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            message:
+              'La sesión ha sido modificada por otro usuario. Recarga antes de cerrarla.',
+          };
+        }
+
+        for (const task of payload.tasks) {
+          const conflictingEditor = findForeignTaskEditingLock(db, task.id, ownerId);
+          if (conflictingEditor) {
+            return {
+              ok: false,
+              status: currentStatus,
+              message: `No se puede cerrar la sesión: la tarea está siendo editada por ${conflictingEditor.ownerName}@${conflictingEditor.machineName}.`,
+            };
+          }
+          const currentTaskUpdatedAt = readUpdatedAt('task_records', task.id);
+          if (currentTaskUpdatedAt !== task.expectedUpdatedAt) {
+            return {
+              ok: false,
+              status: currentStatus,
+              message:
+                'Una de las tareas tratadas ha sido modificada por otro usuario. Recarga antes de cerrar la sesión.',
+            };
+          }
+        }
+
+        if (payload.acta) {
+          const existingRows = db
+            .prepare('SELECT value_json FROM acta_records WHERE deleted_at IS NULL')
+            .all() as Array<{ value_json?: unknown }>;
+          const existingActa = existingRows.some((row) => {
+            if (typeof row.value_json !== 'string') {
+              return false;
+            }
+            try {
+              const parsed = JSON.parse(row.value_json) as { sourceSessionId?: unknown };
+              return parsed.sourceSessionId === payload.acta?.sourceSessionId;
+            } catch {
+              return false;
+            }
+          });
+          if (existingActa) {
+            return {
+              ok: false,
+              status: currentStatus,
+              message:
+                'Ya existe un acta vinculada a esta sesión. Recarga antes de continuar.',
+            };
+          }
+        }
+
+        const parseRecordMeta = (value: string) => {
+          let parsed: Record<string, unknown> = {};
+          try {
+            const candidate = JSON.parse(value);
+            if (candidate && typeof candidate === 'object') {
+              parsed = candidate as Record<string, unknown>;
+            }
+          } catch {
+            // La validación funcional se realiza en renderer/store; aquí solo protegemos atomicidad.
+          }
+          const now = new Date().toISOString();
+          return {
+            createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : now,
+            updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : now,
+            deletedAt: typeof parsed.deletedAt === 'string' ? parsed.deletedAt : null,
+          };
+        };
+
+        const updateExisting = (
+          tableName: string,
+          record: AtomicSessionWorkflowRecord,
+        ): void => {
+          const meta = parseRecordMeta(record.value);
+          const updateResult = db
+            .prepare(
+              `UPDATE ${tableName}
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND updated_at = ?`,
+            )
+            .run(
+              record.value,
+              meta.updatedAt,
+              meta.deletedAt,
+              record.id,
+              record.expectedUpdatedAt,
+            );
+          if (updateResult.changes !== 1) {
+            throw new Error('Conflicto de concurrencia durante el cierre de la sesión.');
+          }
+        };
+
+        updateExisting(sessionTable, payload.session);
+        for (const task of payload.tasks) {
+          updateExisting('task_records', task);
+        }
+
+        if (payload.acta) {
+          const meta = parseRecordMeta(payload.acta.value);
+          const insertResult = db
+            .prepare(
+              `INSERT INTO acta_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+            .run(
+              payload.acta.id,
+              payload.acta.value,
+              meta.createdAt,
+              meta.updatedAt,
+              meta.deletedAt,
+            );
+          if (insertResult.changes !== 1) {
+            throw new Error('No se ha podido crear el acta asociada.');
+          }
+        }
+
+        const refreshUpdatedAt = new Date().toISOString();
+        updateRefreshMetadata(db, refreshUpdatedAt);
+        return {
+          ok: true,
+          status: currentStatus,
+          message: 'Sesión, tareas y acta actualizadas de forma atómica.',
+        };
+      })();
 
       if (result.ok) {
         enqueueLocalBackup(`close:${payload.module}_session_workflow`);
@@ -1275,8 +1204,144 @@ export async function importSessionHistoryAtomically(
 
       assertDatabaseWritesAllowed();
       const db = requireDatabase();
+      const sessionTable =
+        payload.module === 'comite' ? 'comite_session_records' : 'paritaria_session_records';
+
       try {
-        const result = importSessionHistoryTransaction(db, payload, currentStatus, updateRefreshMetadata);
+        const result = db.transaction((): AtomicSessionHistoryImportResult => {
+        const parseObject = (value: string): Record<string, unknown> => {
+          try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
+          } catch {
+            return {};
+          }
+        };
+        const importKeyFrom = (value: unknown): string | null => {
+          if (typeof value !== 'string') return null;
+          return value.match(/ImportKey:([^\s]+)/)?.[1] ?? null;
+        };
+        const recordMeta = (value: string) => {
+          const parsed = parseObject(value);
+          const now = new Date().toISOString();
+          return {
+            createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : now,
+            updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : now,
+            deletedAt: typeof parsed.deletedAt === 'string' ? parsed.deletedAt : null,
+          };
+        };
+
+        // Decidir qué sesiones se insertarán a partir del estado REAL de SQLite,
+        // dentro de la misma transacción que las tareas. La UI puede tener un
+        // histórico parcial u obsoleto, por lo que su filtro no es autoritativo.
+        const existingSessionImportKeys = new Set<string>();
+        const existingSessionCodeDates = new Set<string>();
+        const sessionRows = db.prepare(
+          `SELECT value_json FROM ${sessionTable} WHERE deleted_at IS NULL`,
+        ).all() as Array<{ value_json?: unknown }>;
+        for (const row of sessionRows) {
+          if (typeof row.value_json !== 'string') continue;
+          const parsed = parseObject(row.value_json);
+          const importKey = importKeyFrom(parsed.notes);
+          if (importKey) existingSessionImportKeys.add(importKey);
+          const code = typeof parsed.code === 'string' ? parsed.code.trim().toLowerCase() : '';
+          const date = typeof parsed.date === 'string' ? parsed.date : '';
+          if (code && date) existingSessionCodeDates.add(`${code}\u0000${date}`);
+        }
+
+        const importableSessions: Array<{
+          session: AtomicSessionHistoryImportSession;
+          parsed: Record<string, unknown>;
+        }> = [];
+        const neededTaskExternalKeys = new Set<string>();
+        for (const session of payload.sessions) {
+          const parsed = parseObject(session.value);
+          const code = typeof parsed.code === 'string' ? parsed.code.trim().toLowerCase() : '';
+          const date = typeof parsed.date === 'string' ? parsed.date : '';
+          const codeDate = `${code}\u0000${date}`;
+          if (
+            existingSessionImportKeys.has(session.externalKey) ||
+            (code && date && existingSessionCodeDates.has(codeDate))
+          ) {
+            continue;
+          }
+
+          // Reservar aquí también las claves del propio lote para que dos
+          // sesiones duplicadas no puedan dejar puntos asociados a la descartada.
+          existingSessionImportKeys.add(session.externalKey);
+          if (code && date) existingSessionCodeDates.add(codeDate);
+          importableSessions.push({ session, parsed });
+          for (const key of session.taskExternalKeys) neededTaskExternalKeys.add(key);
+        }
+
+        const taskIdsByExternalKey = new Map<string, string>();
+        let createdTaskCount = 0;
+        if (importableSessions.length > 0) {
+          const existingTaskRows = db.prepare(
+            'SELECT id, value_json FROM task_records WHERE deleted_at IS NULL',
+          ).all() as Array<{ id?: unknown; value_json?: unknown }>;
+          for (const row of existingTaskRows) {
+            if (typeof row.id !== 'string' || typeof row.value_json !== 'string') continue;
+            const parsed = parseObject(row.value_json);
+            const key = importKeyFrom(parsed.observaciones);
+            if (key && neededTaskExternalKeys.has(key)) taskIdsByExternalKey.set(key, row.id);
+          }
+
+          for (const task of payload.tasks) {
+            // Una tarea solo puede crearse si la referencia una sesión que
+            // realmente se incorporará. No persistir tareas de duplicados.
+            if (!neededTaskExternalKeys.has(task.externalKey)) continue;
+            if (taskIdsByExternalKey.has(task.externalKey)) continue;
+            const duplicateId = db.prepare('SELECT id FROM task_records WHERE id = ?').get(task.id) as { id?: unknown } | undefined;
+            if (duplicateId) {
+              throw new Error('Una tarea histórica generada ya existe con el mismo identificador. Reintenta la importación.');
+            }
+            const meta = recordMeta(task.value);
+            const inserted = db.prepare(
+              `INSERT INTO task_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            ).run(task.id, task.value, meta.createdAt, meta.updatedAt, meta.deletedAt);
+            if (inserted.changes !== 1) throw new Error('No se ha podido crear un punto histórico.');
+            taskIdsByExternalKey.set(task.externalKey, task.id);
+            createdTaskCount += 1;
+          }
+        }
+
+        let importedSessionCount = 0;
+        for (const { session, parsed } of importableSessions) {
+          const taskIds = session.taskExternalKeys.flatMap((externalKey) => {
+            const id = taskIdsByExternalKey.get(externalKey);
+            return id ? [id] : [];
+          });
+          if (taskIds.length !== session.taskExternalKeys.length) {
+            throw new Error('No se han podido resolver todos los puntos de una sesión histórica. No se ha importado ningún cambio.');
+          }
+          const finalValue = JSON.stringify({
+            ...parsed,
+            items: taskIds,
+            treatedTaskIds: taskIds,
+            untreatedTaskIds: [],
+          });
+          const meta = recordMeta(finalValue);
+          const duplicateId = db.prepare(`SELECT id FROM ${sessionTable} WHERE id = ?`).get(session.id) as { id?: unknown } | undefined;
+          if (duplicateId) throw new Error('Una sesión histórica generada ya existe con el mismo identificador. Reintenta la importación.');
+          const inserted = db.prepare(
+            `INSERT INTO ${sessionTable} (id, value_json, created_at, updated_at, deleted_at)
+             VALUES (?, ?, ?, ?, ?)`,
+          ).run(session.id, finalValue, meta.createdAt, meta.updatedAt, meta.deletedAt);
+          if (inserted.changes !== 1) throw new Error('No se ha podido crear una sesión histórica.');
+          importedSessionCount += 1;
+        }
+
+        updateRefreshMetadata(db, new Date().toISOString());
+        return {
+          ok: true,
+          status: currentStatus,
+          message: 'Histórico de sesiones y puntos importado de forma atómica.',
+          importedSessionCount,
+          createdTaskCount,
+        };
+      })();
 
         if (result.ok) enqueueLocalBackup(`import:${payload.module}_session_history`);
         return result;
@@ -1317,7 +1382,67 @@ export async function closeCoordinationWorkflowAtomically(
 
       assertDatabaseWritesAllowed();
       const db = requireDatabase();
-      const result = closeCoordinationWorkflowTransaction(db, payload, currentStatus, updateRefreshMetadata);
+      const result = db.transaction((): AtomicCoordinationWorkflowResult => {
+        const readPersistedUpdatedAt = (key: string): string | null => {
+          const row = db.prepare('SELECT updated_at FROM persisted_records WHERE key = ?').get(key) as { updated_at?: unknown } | undefined;
+          return typeof row?.updated_at === 'string' ? row.updated_at : null;
+        };
+        const readTaskUpdatedAt = (id: string): string | null => {
+          const row = db.prepare('SELECT updated_at FROM task_records WHERE id = ? AND deleted_at IS NULL').get(id) as { updated_at?: unknown } | undefined;
+          return typeof row?.updated_at === 'string' ? row.updated_at : null;
+        };
+
+        if (readPersistedUpdatedAt(payload.meeting.key) !== payload.meeting.expectedUpdatedAt) {
+          return { ok: false, status: currentStatus, message: 'La reunión ha sido modificada por otro usuario. Recarga antes de cerrarla.' };
+        }
+        if (readPersistedUpdatedAt(payload.index.key) !== payload.index.expectedUpdatedAt) {
+          return { ok: false, status: currentStatus, message: 'Coordinación ha sido modificada por otro usuario. Recarga antes de cerrar la reunión.' };
+        }
+        for (const task of payload.tasks) {
+          if (readTaskUpdatedAt(task.id) !== task.expectedUpdatedAt) {
+            return { ok: false, status: currentStatus, message: 'Una de las tareas seleccionadas ha sido modificada por otro usuario. Recarga antes de cerrar la reunión.' };
+          }
+        }
+
+        const now = new Date().toISOString();
+        const updatePersisted = (record: AtomicCoordinationWorkflowRecord): void => {
+          const update = db.prepare(
+            `UPDATE persisted_records
+             SET value_json = ?, source = 'sqlite-primary', updated_at = ?
+             WHERE key = ? AND updated_at = ?`,
+          ).run(record.value, now, record.key, record.expectedUpdatedAt);
+          if (update.changes !== 1) throw new Error('Conflicto de concurrencia durante el cierre de Coordinación.');
+        };
+        const updateTask = (record: AtomicSessionWorkflowRecord): void => {
+          let parsed: Record<string, unknown> = {};
+          try {
+            const candidate = JSON.parse(record.value);
+            if (candidate && typeof candidate === 'object') parsed = candidate as Record<string, unknown>;
+          } catch {
+            // The renderer/store has already validated the task record shape.
+          }
+          const updatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : now;
+          const deletedAt = typeof parsed.deletedAt === 'string' ? parsed.deletedAt : null;
+          const update = db.prepare(
+            `UPDATE task_records
+             SET value_json = ?, updated_at = ?, deleted_at = ?
+             WHERE id = ? AND updated_at = ?`,
+          ).run(record.value, updatedAt, deletedAt, record.id, record.expectedUpdatedAt);
+          if (update.changes !== 1) throw new Error('Conflicto de concurrencia durante el cierre de tareas de Coordinación.');
+        };
+
+        updatePersisted(payload.meeting);
+        updatePersisted(payload.index);
+        for (const task of payload.tasks) updateTask(task);
+        updateRefreshMetadata(db, now);
+        return {
+          ok: true,
+          status: currentStatus,
+          message: 'Reunión y tareas cerradas de forma atómica.',
+          meetingUpdatedAt: now,
+          indexUpdatedAt: now,
+        };
+      })();
 
       if (result.ok) enqueueLocalBackup('close:coordinacion_workflow');
       return result;
@@ -1343,7 +1468,60 @@ export async function createCoordinationTaskAtomically(
 
       assertDatabaseWritesAllowed();
       const db = requireDatabase();
-      const result = createCoordinationTaskTransaction(db, payload, currentStatus, updateRefreshMetadata);
+      const result = db.transaction((): AtomicCoordinationTaskCreationResult => {
+        const readPersistedUpdatedAt = (key: string): string | null => {
+          const row = db.prepare('SELECT updated_at FROM persisted_records WHERE key = ?').get(key) as { updated_at?: unknown } | undefined;
+          return typeof row?.updated_at === 'string' ? row.updated_at : null;
+        };
+        if (readPersistedUpdatedAt(payload.meeting.key) !== payload.meeting.expectedUpdatedAt) {
+          return { ok: false, status: currentStatus, message: 'La reunión ha sido modificada por otro usuario. Recarga antes de crear la tarea.' };
+        }
+        if (readPersistedUpdatedAt(payload.index.key) !== payload.index.expectedUpdatedAt) {
+          return { ok: false, status: currentStatus, message: 'Coordinación ha sido modificada por otro usuario. Recarga antes de crear la tarea.' };
+        }
+        const existingTask = db.prepare('SELECT id FROM task_records WHERE id = ?').get(payload.task.id);
+        if (existingTask) {
+          return { ok: false, status: currentStatus, message: 'La tarea ya existe. Recarga antes de volver a intentarlo.' };
+        }
+
+        const now = new Date().toISOString();
+        const updatePersisted = (record: AtomicCoordinationWorkflowRecord): void => {
+          const update = db.prepare(
+            `UPDATE persisted_records
+             SET value_json = ?, source = 'sqlite-primary', updated_at = ?
+             WHERE key = ? AND updated_at = ?`,
+          ).run(record.value, now, record.key, record.expectedUpdatedAt);
+          if (update.changes !== 1) throw new Error('Conflicto de concurrencia al vincular la nueva tarea con Coordinación.');
+        };
+
+        let parsed: Record<string, unknown> = {};
+        try {
+          const candidate = JSON.parse(payload.task.value);
+          if (candidate && typeof candidate === 'object') parsed = candidate as Record<string, unknown>;
+        } catch {
+          // El renderer ya ha validado la estructura funcional de la tarea.
+        }
+        const createdAt = typeof parsed.createdAt === 'string' ? parsed.createdAt : now;
+        const updatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : now;
+        const deletedAt = typeof parsed.deletedAt === 'string' ? parsed.deletedAt : null;
+
+        updatePersisted(payload.meeting);
+        updatePersisted(payload.index);
+        const insert = db.prepare(
+          `INSERT INTO task_records (id, value_json, created_at, updated_at, deleted_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        ).run(payload.task.id, payload.task.value, createdAt, updatedAt, deletedAt);
+        if (insert.changes !== 1) throw new Error('No se ha podido crear la tarea vinculada a Coordinación.');
+
+        updateRefreshMetadata(db, now);
+        return {
+          ok: true,
+          status: currentStatus,
+          message: 'Tarea creada y vinculada a Coordinación de forma atómica.',
+          meetingUpdatedAt: now,
+          indexUpdatedAt: now,
+        };
+      })();
 
       if (result.ok) enqueueLocalBackup('create:coordinacion_task_workflow');
       return result;
@@ -1365,17 +1543,6 @@ const taskModule = createTaskRepository({
   assertDatabaseWritesAllowed,
   isDatabaseWriteBlockedByHeartbeat,
   findForeignTaskEditingLock: (db, taskId) => findForeignTaskEditingLock(db, taskId, ownerId),
-  isolatedTaskRead: async (filter, currentStatus) => {
-    if (!currentStatus.databaseUuid || !currentStatus.applicationId || !currentStatus.environment) {
-      throw new Error('Identidad SQLite validada no disponible para lectura aislada.');
-    }
-    return readTasksInUtilityProcess(currentStatus.path, {
-      databaseUuid: currentStatus.databaseUuid,
-      applicationId: currentStatus.applicationId,
-      environment: currentStatus.environment,
-      schemaVersion: currentStatus.schemaVersion,
-    }, filter);
-  },
 });
 const { loadTaskRecordsSnapshot, saveTaskRecordIfUnchanged } = taskModule;
 export { loadTaskRecordsSnapshot, saveTaskRecordIfUnchanged };
@@ -1591,7 +1758,6 @@ function getRecordLockService(): RecordLockService {
     withDatabaseOperationLock,
     getOwnerId: () => ownerId,
     getDatabasePath: () => getSqliteStatus().path,
-    runIndependentRead: (label, operation) => sqliteIndependentActivityTracker.run(label, operation),
   });
 }
 
@@ -1616,11 +1782,6 @@ export async function listOtherTaskLocks() {
 }
 
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
-  return sqliteIndependentActivityTracker.run('sqlite:change-directory-lifecycle', () =>
-    performChangeSqliteDirectory(directoryPath));
-}
-
-async function performChangeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
   const previousStatus = getSqliteStatus();
   const previousDatabasePath = database ? previousStatus.path : null;
   const normalizedDirectoryPath = path.resolve(directoryPath);
@@ -1682,11 +1843,6 @@ async function performChangeSqliteDirectory(directoryPath: string): Promise<Data
 }
 
 export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
-  return sqliteIndependentActivityTracker.run('sqlite:reset-directory-lifecycle', () =>
-    performResetSqliteDirectory());
-}
-
-async function performResetSqliteDirectory(): Promise<DatabaseStatus> {
   const previousStatus = getSqliteStatus();
   const defaultDirectory = getDefaultDatabaseDirectory();
   const fallbackPath = getDatabasePathForDirectory(defaultDirectory);
@@ -1754,11 +1910,6 @@ export interface ShutdownPerformanceMetrics {
 }
 
 export async function closeSqlitePersistence(): Promise<ShutdownPerformanceMetrics> {
-  return sqliteIndependentActivityTracker.run('sqlite:shutdown-lifecycle', () =>
-    performCloseSqlitePersistence());
-}
-
-async function performCloseSqlitePersistence(): Promise<ShutdownPerformanceMetrics> {
   const totalStartedAt = Date.now();
 
   // El VACUUM programado no forma parte del camino crítico de cierre.

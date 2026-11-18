@@ -64,8 +64,6 @@ export interface DatabaseLockManagerDependencies {
   getOwnerId: () => string;
   /** Reloj monotónico inyectable para ensayar desfases sin tocar la hora de Windows. */
   monotonicNowMs?: () => number;
-  /** Instrumentación de E/S del heartbeat sin cambiar sus reintentos. */
-  observeHeartbeat?: (operation: () => Promise<void>) => Promise<void>;
 }
 
 export interface DatabaseLockManager {
@@ -85,11 +83,6 @@ export interface DatabaseLockManager {
     lockPath: string,
     lock: DatabaseLockInfo,
   ): ReturnType<typeof setInterval>;
-  /** Suspende nuevos ticks y espera la E/S SMB ya iniciada. No libera el lock. */
-  pauseDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): Promise<void>;
-  /** Reactiva ticks solo si la misma sesión conserva su timer. */
-  resumeDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): void;
-
   setConnectivityIssueNotifier(
     notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
   ): void;
@@ -716,56 +709,24 @@ export function createDatabaseLockManager(
     );
   }
 
-  // El identificador del intervalo no cambia durante una pausa.
-  // clearInterval(timer) del llamador sigue siendo eficaz tras reanudar.
-  const heartbeatSessions = new WeakMap<ReturnType<typeof setInterval>, {
-    paused: boolean;
-    inFlight: boolean;
-    drainWaiters: Set<() => void>;
-  }>();
-
-  function pauseDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): Promise<void> {
-    const session = heartbeatSessions.get(timer);
-    if (!session) return Promise.reject(new Error('Temporizador heartbeat SQLite no registrado.'));
-    session.paused = true; // barrera síncrona antes del primer await
-    if (!session.inFlight) return Promise.resolve();
-    return new Promise<void>(resolve => { session.drainWaiters.add(resolve); });
-  }
-
-  function resumeDatabaseLockHeartbeat(timer: ReturnType<typeof setInterval>): void {
-    const session = heartbeatSessions.get(timer);
-    if (!session) throw new Error('Temporizador heartbeat SQLite no registrado.');
-    session.paused = false;
-  }
-
   function startDatabaseLockHeartbeat(
     lockPath: string,
     lock: DatabaseLockInfo,
   ): ReturnType<typeof setInterval> {
-    const session = { paused: false, inFlight: false, drainWaiters: new Set<() => void>() };
-    const timer = setInterval(() => {
-      if (session.paused) return;
+    let inFlight = false;
+    return setInterval(() => {
       // Un SMB bloqueado no debe acumular nuevos readFile/writeFile en libuv.
-      if (session.inFlight) return;
-      session.inFlight = true;
+      if (inFlight) return;
+      inFlight = true;
       heartbeatOperationsInFlight += 1;
-      // PR9D-5C: contar hasta que la E/S SMB haya terminado realmente.
-      // La instrumentación no detiene el heartbeat ni cambia su cadencia.
-      const heartbeatOperation = dependencies.observeHeartbeat
-        ? dependencies.observeHeartbeat(() => heartbeatDatabaseLock(lockPath, lock))
-        : heartbeatDatabaseLock(lockPath, lock);
-      void heartbeatOperation
+      void heartbeatDatabaseLock(lockPath, lock)
         .then(() => markHeartbeatRecovered())
         .catch((error: unknown) => markHeartbeatFailure(error))
         .finally(() => {
           heartbeatOperationsInFlight -= 1;
-          session.inFlight = false;
-          for (const resolve of session.drainWaiters) resolve();
-          session.drainWaiters.clear();
+          inFlight = false;
         });
     }, LOCK_HEARTBEAT_MS);
-    heartbeatSessions.set(timer, session);
-    return timer;
   }
 
   function setConnectivityIssueNotifier(
@@ -796,8 +757,6 @@ export function createDatabaseLockManager(
     releaseLock,
     withDatabaseOperationLock,
     startDatabaseLockHeartbeat,
-    pauseDatabaseLockHeartbeat,
-    resumeDatabaseLockHeartbeat,
     setConnectivityIssueNotifier,
     isDatabaseWriteBlockedByHeartbeat,
     clearHeartbeatBlock,

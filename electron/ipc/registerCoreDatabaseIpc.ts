@@ -6,7 +6,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
-import { sqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
 import { applyAppUpdate, checkForAppUpdate } from '../appUpdate.js';
 import { userInfo } from 'node:os';
 import {
@@ -281,22 +280,11 @@ export function registerCoreDatabaseIpc(): void {
     const key = candidate.key;
     return enqueueSqliteIpc('database:get-persisted-record', () => getPersistedRecordSnapshot(key));
   });
-  ipcMain.handle('database:get-persisted-records-token', () => {
-    // El lector ya usa utilityProcess readonly y no necesita reservar la
-    // cola de escrituras del main. Reservarla hasta exit provocaba que
-    // Tareas y Ticket Restaurante esperasen detrás de un poll SMB lento.
-    // Registrar la E/S independiente para impedir una cesión del motor
-    // mientras el child siga activo; sin saltarse la barrera fail-closed.
-    if (process.env.TRACCION_SQLITE_ISOLATED_SYNC_TOKENS === '0') {
-      return enqueueSqliteIpc('database:get-persisted-records-token', () =>
-        getPersistedRecordsTokenSnapshot(),
-      );
-    }
-    return sqliteIndependentActivityTracker.run(
-      'database:get-persisted-records-token:readonly-worker',
-      () => getPersistedRecordsTokenSnapshot(),
-    );
-  });
+  ipcMain.handle('database:get-persisted-records-token', () =>
+    enqueueSqliteIpc('database:get-persisted-records-token', () =>
+      getPersistedRecordsTokenSnapshot(),
+    ),
+  );
   ipcMain.handle('database:backup-local-storage', (_event, payload: unknown) => {
     if (
       !payload ||

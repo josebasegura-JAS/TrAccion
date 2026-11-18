@@ -1,4 +1,3 @@
-import { transactionWithMigrationReset } from './migrationRollbackGuard.js';
 import type { Database } from 'better-sqlite3';
 import type {
   ConditionalSqliteTaskSaveResult,
@@ -66,7 +65,7 @@ function mapTaskRecordRow(row: TaskRecordRow): SqliteTaskRecord {
   };
 }
 
-export function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecord[] {
+function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecord[] {
   if (filter.ids !== undefined) {
     if (filter.ids.length === 0) return [];
     // Los identificadores son valores parametrizados, nunca SQL interpolado.
@@ -106,7 +105,7 @@ export function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = 
  */
 export interface TaskRepositoryDeps {
   safeDatabaseOperation: <T>(
-    operation: () => T | Promise<T>,
+    operation: () => T,
     fallback: (status: DatabaseStatus, message: string) => T,
   ) => Promise<T>;
   getSqliteStatus: () => DatabaseStatus;
@@ -122,7 +121,6 @@ export interface TaskRepositoryDeps {
   assertDatabaseWritesAllowed: () => void;
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
   findForeignTaskEditingLock: (db: Database, taskId: string) => { ownerName: string; machineName: string } | null;
-  isolatedTaskRead?: (filter: SqliteTaskRecordsFilter, status: DatabaseStatus) => Promise<SqliteTaskRecord[]>;
 }
 
 export interface TaskRepositoryApi {
@@ -209,20 +207,6 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
   async function loadTaskRecordsSnapshot(
     filter: SqliteTaskRecordsFilter = {},
   ): Promise<SqliteTaskRecordsSnapshot> {
-    if (deps.isolatedTaskRead && process.env.TRACCION_SQLITE_ISOLATED_TASK_READ === '1') {
-      return safeDatabaseOperation(async () => {
-        const currentStatus = getSqliteStatus();
-        if (!currentStatus.ready || currentStatus.phase !== 'active') {
-          return { status: currentStatus, records: [] };
-        }
-        // Preservar migración legacy exactamente como antes; puede escribir.
-        // Se hace dentro de la misma cola IPC y del bloqueo de operación.
-        const db = requireDatabase();
-        transactionWithMigrationReset(db, () => { tasksMigrationDone = false; }, () => maybeMigrateTasksFromPersistedRecord(db))();
-        const records = await deps.isolatedTaskRead!(filter, currentStatus);
-        return { status: currentStatus, records };
-      }, (nextStatus) => ({ status: nextStatus, records: [] }));
-    }
     return safeDatabaseOperation(
       () => {
         const currentStatus = getSqliteStatus();
@@ -231,7 +215,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
         }
 
         const db = requireDatabase();
-        transactionWithMigrationReset(db, () => { tasksMigrationDone = false; }, () => maybeMigrateTasksFromPersistedRecord(db))();
+        db.transaction(() => maybeMigrateTasksFromPersistedRecord(db))();
         return { status: currentStatus, records: readTaskRecords(db, filter) };
       },
       (nextStatus) => ({ status: nextStatus, records: [] }),
@@ -256,7 +240,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepositoryAp
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = transactionWithMigrationReset(db, () => { tasksMigrationDone = false; }, (): ConditionalSqliteTaskSaveResult => {
+        const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
           maybeMigrateTasksFromPersistedRecord(db);
           const foreignLock = findForeignTaskEditingLock(db, record.id);
           if (foreignLock) {

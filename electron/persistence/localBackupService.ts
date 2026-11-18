@@ -89,8 +89,6 @@ export interface RestoreLocalBackupResult {
 
 export interface LocalBackupServiceDependencies {
   getDatabase: () => Database | null;
-  /** Reserva admisión SQLite antes de cualquier E/S/timer de backup; inyectada por main. */
-  trackActivity?: <T>(label: string, operation: () => Promise<T>) => Promise<T>;
   getStatus: () => DatabaseStatus;
   acquireLock: (databasePath: string) => Promise<DatabaseLockInfo>;
   releaseLock: (lockPath: string, lock: DatabaseLockInfo) => Promise<void>;
@@ -115,20 +113,9 @@ export interface ShutdownBackupMetrics {
   dailySqliteMs: number;
 }
 
-export interface LocalBackupActivitySnapshot {
-  timerScheduled: boolean;
-  pendingReason: boolean;
-  pendingRevision: boolean;
-  workRunning: boolean;
-}
-
 export interface LocalBackupService {
-  getActivitySnapshot: () => LocalBackupActivitySnapshot;
   enqueueLocalBackup: (reason: string) => void;
   flushPendingLocalBackup: () => Promise<void>;
-  /** Preparación reversible del futuro handoff: detener timers sin perder cambios pendientes. */
-  pauseSchedulingForHandoff: () => void;
-  resumeSchedulingAfterAbortedHandoff: () => void;
   createShutdownLocalBackup: () => Promise<ShutdownBackupMetrics>;
   createManualLocalBackup: () => Promise<void>;
   listLocalBackups: () => Promise<LocalBackupEntry[]>;
@@ -166,9 +153,7 @@ async function isSharedSnapshotCurrent(databasePath: string, markerPath: string)
 
 export function createLocalBackupService(dependencies: LocalBackupServiceDependencies): LocalBackupService {
   let localBackupQueue: Promise<void> = Promise.resolve();
-  let backupWorkRunning = 0;
   let localBackupTimer: ReturnType<typeof setTimeout> | null = null;
-  let schedulingPausedForHandoff = false;
   let pendingLocalBackupReason: string | null = null;
   // Revisión de cambios de esta sesión. Si todos los cambios ya están incluidos
   // en una copia viva completada, repetir un backup completo al cerrar solo
@@ -177,17 +162,6 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   let backedUpRevision = 0;
 
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
-    backupWorkRunning += 1;
-    try {
-      return await (dependencies.trackActivity
-        ? dependencies.trackActivity('sqlite:backup-live-full', () => writeLocalBackupArtifactsTracked(reason, force))
-        : writeLocalBackupArtifactsTracked(reason, force));
-    } finally {
-      backupWorkRunning -= 1;
-    }
-  };
-
-  const writeLocalBackupArtifactsTracked = async (reason: string, force = false): Promise<boolean> => {
     const currentDatabase = dependencies.getDatabase();
     const currentStatus = dependencies.getStatus();
     if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
@@ -336,7 +310,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   const schedulePendingBackup = (): void => {
-    if (schedulingPausedForHandoff || localBackupTimer || backupRevision <= backedUpRevision) return;
+    if (localBackupTimer || backupRevision <= backedUpRevision) return;
     localBackupTimer = setTimeout(() => {
       localBackupTimer = null;
       const reason = pendingLocalBackupReason ?? 'periodic:pending';
@@ -367,21 +341,6 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     localBackupTimer.unref?.();
   };
 
-  const pauseSchedulingForHandoff = (): void => {
-    // Preparación SINCRÓNICA: ningún timer nuevo puede programarse tras esta
-    // llamada. Las copias ya iniciadas siguen vivas y se drenan normalmente.
-    schedulingPausedForHandoff = true;
-    if (localBackupTimer) {
-      clearTimeout(localBackupTimer);
-      localBackupTimer = null;
-    }
-  };
-
-  const resumeSchedulingAfterAbortedHandoff = (): void => {
-    schedulingPausedForHandoff = false;
-    schedulePendingBackup();
-  };
-
   const enqueueLocalBackup = (reason: string): void => {
     backupRevision += 1;
     pendingLocalBackupReason = pendingLocalBackupReason
@@ -401,38 +360,12 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     await localBackupQueue;
     if (backupRevision > backedUpRevision) {
       const revision = backupRevision;
-      try {
-        const ok = await writeLocalBackupArtifacts(reason ?? 'flush:pending');
-        if (ok) {
-          backedUpRevision = Math.max(backedUpRevision, revision);
-        } else {
-          // Una copia omitida por contención sigue pendiente.
-          pendingLocalBackupReason = pendingLocalBackupReason ?? reason ?? 'flush:pending';
-        }
-      } catch (error) {
-        // También conservar el motivo ante errores E/S reales: nunca
-        // considerar respaldada una revisión cuya copia no se confirmó.
-        pendingLocalBackupReason = pendingLocalBackupReason ?? reason ?? 'flush:pending';
-        throw error;
-      } finally {
-        // Si hubo guardados concurrentes durante el flush, reprogramarlos
-        // cuando proceda. Bajo pausa de handoff no se crea ningún timer.
-        schedulePendingBackup();
-      }
+      const ok = await writeLocalBackupArtifacts(reason ?? 'flush:pending');
+      if (ok) backedUpRevision = Math.max(backedUpRevision, revision);
     }
   };
 
   const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
-    backupWorkRunning += 1;
-    try {
-      return await (dependencies.trackActivity
-        ? dependencies.trackActivity('sqlite:backup-shutdown-full', () => writeShutdownLocalBackupArtifactsTracked())
-        : writeShutdownLocalBackupArtifactsTracked());
-    } finally {
-      backupWorkRunning -= 1;
-    }
-  };
-  const writeShutdownLocalBackupArtifactsTracked = async (): Promise<ShutdownBackupMetrics> => {
     const totalStartedAt = Date.now();
     const emptyMetrics = (): ShutdownBackupMetrics => ({
       totalMs: Date.now() - totalStartedAt,
@@ -775,16 +708,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   return {
-    getActivitySnapshot: () => ({
-      timerScheduled: localBackupTimer !== null,
-      pendingReason: pendingLocalBackupReason !== null,
-      pendingRevision: backupRevision > backedUpRevision,
-      workRunning: backupWorkRunning > 0,
-    }),
     enqueueLocalBackup,
     flushPendingLocalBackup,
-    pauseSchedulingForHandoff,
-    resumeSchedulingAfterAbortedHandoff,
     createShutdownLocalBackup,
     createManualLocalBackup,
     listLocalBackups,
