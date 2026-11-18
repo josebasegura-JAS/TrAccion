@@ -65,3 +65,27 @@ base productiva para reproducir el fallo.
    conectar a la otra base simultáneamente.
 
 **No es un GO para el escritor SQLite independiente.**
+
+## Auditoría consolidada del circuito de salud y escritura (18/11/2026)
+
+| Riesgo | Evidencia en código | Acción PR509 | Pendiente |
+|---|---|---|---|
+| Ventana de Producción se cierra al arrancar otra instancia | `main.ts` solicita `requestSingleInstanceLock()` tras elegir el entorno; antes hacía `app.quit()` sin explicar | Aviso explícito; mantiene lock | Confirmar en EXE que la otra instancia estaba abierta |
+| Pantalla de reconexión por fallo auxiliar con SQLite activa | `checkSqliteHealth()` devuelve `ok:false` y `status.ready:true, phase:'active'` si falla el lector auxiliar; `databaseHealthMonitor` bloqueaba en el primer rechazo | Primer fallo aislado es provisional, segundo consecutivo bloquea; fallos reales de estado bloquean al primero | Medir incidencia real y evitar conexiones falsas |
+| Desajuste de tiempos | Renderer espera 6 s; runner del hijo 20 s; cola IPC 25 s | No se cambian umbrales ni la reserva de trabajo a ciegas; primera espera lenta ya era transitoria | Revisar telemetría de procesos y elegir presupuesto uniforme solo con pruebas |
+| Error sin causa | `sqliteIntegrityWorker.ts` oculta error nativo y runner emitía error genérico | Categorías de código sanitizadas en `sqliteIntegrityWorkerRunner` | Si persiste `REJECTED`, discriminar error nativo por categorías sin SQL/rutas |
+| Resultado de guardar Tareas desconocido | `sqlite-recovery-diagnostics` solo captura salud, no acuse de guardado | No se reintentan escrituras inciertas | Contrastar registro de Tarea antes de intentar de nuevo |
+| Main arranque puede fallar sin ventana principal | `main.ts` captura fallo de inicialización y lo imprime, sin asegurar una pantalla de recuperación | No resuelto por hipótesis; requiere error real del arranque | Log de la instancia donde Producción falla con Pruebas cerrada |
+
+**Alcance deliberado:** una sola PR509 con correcciones verificables y
+pruebas. La nueva política de fallo transitorio no declara sana una base
+desconocida: únicamente evita atribuir una desconexión de SMB al primer
+fallo del proceso auxiliar cuando el estado de SQLite todavía es `active`.
+Los lock SMB, los errores `SQLITE_IOERR`, las escrituras indeterminadas
+y la reserva de la cola permanecen sin modificación. No usar para dar
+GO a la arquitectura writer aislada.
+
+**Criterio de cierre**: CI verde + EXE real, conexión secuencial a cada base,
+lectura de identidad/UUID, guardar y releer Tarea ficticia, ausencia de
+pantalla de reconexión injustificada, clasificación de cualquier nuevo
+fallo con código, y confirmación de que Producción está íntegra.
