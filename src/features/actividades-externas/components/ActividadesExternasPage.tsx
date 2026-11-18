@@ -22,15 +22,15 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Resolución',
     items: [
       'RRLL puede rechazar la solicitud o elevarla con propuesta favorable al Comité de Dirección.',
-      'El Comité decide aprobar o denegar las solicitudes elevadas. El rechazo o denegación requiere motivo.',
-      'Las observaciones se conservan en el registro. Para las solicitudes aprobadas, Outlook utiliza el texto de comunicación favorable con el puesto de Plantilla.',
+      'El Comité de Dirección decide aprobar o denegar las solicitudes elevadas. El rechazo o denegación requiere motivo.',
+      'Las observaciones se conservan en el registro. Al confirmar la aprobación del Comité de Dirección se abre automáticamente un borrador de Outlook con el nombre de pila y el puesto de Plantilla. El correo no se envía automáticamente.',
       'No es posible aprobar directamente una solicitud sin propuesta favorable previa de RRLL.',
     ],
   },
   {
     title: 'Edición y eliminación',
     items: [
-      'Editar permite corregir actividad, fecha, remuneración y observaciones RRLL, conservando la resolución del Comité.',
+      'Editar permite corregir actividad, fecha, remuneración y observaciones RRLL, conservando la resolución del Comité de Dirección.',
       'Eliminar pide confirmación y borra la solicitud de la base compartida. Comprueba los datos antes de confirmar.',
       'Si otro usuario ha modificado la solicitud, TrAcción evita sobrescribirla y solicita recargar.',
     ],
@@ -38,7 +38,7 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Outlook y envío',
     items: [
-      '«Preparar correo en Outlook» abre un borrador y rellena el correo disponible en Plantilla o en la solicitud. Si falta, deja el destinatario vacío para completarlo manualmente. Revisa también el puesto antes de enviarlo.',
+      'La aprobación del Comité de Dirección abre el borrador de Outlook automáticamente. «Preparar correo en Outlook» permite volver a abrirlo después. El destinatario procede de Plantilla o de la solicitud; si falta, se deja vacío. Revisa el puesto antes de enviarlo.',
       'Abrir un borrador no confirma el envío: usa «Confirmar envío manualmente» solo después de enviarlo realmente.',
     ],
   },
@@ -56,7 +56,7 @@ const today = () => {
   const date = new Date();
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
-const label = (status: ActividadExternaEstado) => ({ pendiente: 'Pendiente de RRLL', propuesta: 'Pendiente de Comité de Dirección', rechazada_rrll: 'Rechazada por RRLL', autorizada: 'Autorizada por Comité', denegada: 'Denegada por Comité' } as const)[status];
+const label = (status: ActividadExternaEstado) => ({ pendiente: 'Pendiente de RRLL', propuesta: 'Pendiente de Comité de Dirección', rechazada_rrll: 'Rechazada por RRLL', autorizada: 'Autorizada por Comité de Dirección', denegada: 'Denegada por Comité de Dirección' } as const)[status];
 
 export function ActividadesExternasPage() {
   const employees = useEmployeeStore((state) => state.employees);
@@ -117,28 +117,54 @@ export function ActividadesExternasPage() {
       setMessage(error instanceof Error ? error.message : 'No se ha podido completar la operación.');
     } finally { setBusy(false); }
   };
-  const openDraft = async (record: ActividadExterna) => {
-    if (!window.traccion?.createOutlookDraft) { setMessage('La integración con Outlook de escritorio no está disponible.'); return; }
+  const openDraft = async (record: ActividadExterna, afterApproval = false) => {
+    const approvalNote = afterApproval ? 'Aprobación guardada. ' : '';
+    if (!window.traccion?.createOutlookDraft) { setMessage(`${approvalNote}La integración con Outlook de escritorio no está disponible.`); return; }
     setBusy(true);
     try {
       const person = employees.find((item) => item.empleado === record.empleado && !item.deletedAt);
       const puesto = person?.puestoOrganizativo?.trim() || person?.puestoNomina?.trim();
       const email = person?.email?.trim() || record.email.trim();
-      const mail = buildActividadMail(record, puesto);
+      const mail = buildActividadMail({ ...record, nombre: person?.nombreApellidos?.trim() || record.nombre }, puesto);
       const result = await window.traccion.createOutlookDraft({ ...mail, to: email ? [email] : [], cc: [] });
-      if (!result.ok) { setMessage(result.message); return; }
+      if (!result.ok) { setMessage(`${approvalNote}${result.message}`); return; }
       const saved = await setComunicacion(record.id, 'borrador');
       const missing = [!email && 'destinatario', record.estado === 'autorizada' && !puesto && 'puesto de trabajo'].filter(Boolean);
-      setMessage(saved.ok ? `Borrador abierto en Outlook. El envío NO está confirmado.${missing.length ? ` Completa manualmente: ${missing.join(' y ')}.` : ''}` : `Borrador abierto, pero no se pudo registrar el estado: ${saved.message}`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'No se ha podido abrir Outlook.'); }
+      setMessage(saved.ok ? `${approvalNote}Borrador abierto en Outlook. El envío NO está confirmado.${missing.length ? ` Completa manualmente: ${missing.join(' y ')}.` : ''}` : `${approvalNote}Borrador abierto, pero no se pudo registrar el estado: ${saved.message}`);
+    } catch (error) { setMessage(`${approvalNote}${error instanceof Error ? error.message : 'No se ha podido abrir Outlook.'}`); }
     finally { setBusy(false); }
+  };
+  const approveAndOpenDraft = async (record: ActividadExterna, observations: string) => {
+    setBusy(true);
+    try {
+      const result = await resolve(record.id, 'autorizada', observations);
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+      setResolution(null);
+      // Leer el registro autorizado ya persistido: el borrador no se abre si
+      // falla el guardado (incluyendo un conflicto de edición multiusuario).
+      const approved = useActividadesExternasStore.getState().records.find(
+        (item) => item.id === record.id && item.estado === 'autorizada',
+      );
+      if (!approved) {
+        setMessage('Aprobación guardada, pero no se pudo recuperar la solicitud actualizada para Outlook.');
+        return;
+      }
+      await openDraft(approved, true);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo confirmar la aprobación.');
+    } finally {
+      setBusy(false);
+    }
   };
   return <section className="space-y-3">
     <PageHeader title="Actividades Externas" helpSections={ACTIVIDADES_EXTERNAS_HELP_SECTIONS} helpSubtitle="Solicitudes de compatibilidad, resolución y comunicaciones." />
     <div className="rounded-2xl border border-metro-border bg-metro-panel p-2">
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex min-w-[240px] flex-1 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3"><Search size={15} className="text-metro-muted"/><input aria-label="Buscar solicitudes" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Buscar por número, nombre o actividad" className="w-full bg-transparent py-2 text-sm text-metro-text outline-none"/></label>
-        <select aria-label="Filtrar estado" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-text"><option value="todos">Todos los estados</option><option value="pendiente">Pendiente RRLL</option><option value="propuesta">Pendiente Comité</option><option value="autorizada">Autorizadas</option><option value="rechazada_rrll">Rechazadas RRLL</option><option value="denegada">Denegadas Comité</option></select>
+        <select aria-label="Filtrar estado" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-text"><option value="todos">Todos los estados</option><option value="pendiente">Pendiente RRLL</option><option value="propuesta">Pendiente Comité de Dirección</option><option value="autorizada">Autorizadas</option><option value="rechazada_rrll">Rechazadas RRLL</option><option value="denegada">Denegadas Comité de Dirección</option></select>
         <select aria-label="Filtrar año" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-text"><option value="todos">Todos los años</option>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select>
         <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/> Nueva solicitud</button>
       </div>
@@ -181,9 +207,9 @@ export function ActividadesExternasPage() {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {([
           { heading: 'Pendientes de RRLL', description: 'Solicitudes pendientes de revisión inicial por Relaciones Laborales.', states: ['pendiente'], icon: 'rrll' },
-          { heading: 'Pendientes de Comité de Dirección', description: 'Propuestas favorables pendientes de resolución por el Comité.', states: ['propuesta'], icon: 'comite' },
+          { heading: 'Pendientes de Comité de Dirección', description: 'Propuestas favorables pendientes de resolución por el Comité de Dirección.', states: ['propuesta'], icon: 'comite' },
           { heading: 'Autorizadas', description: 'Actividades externas aprobadas por el Comité de Dirección.', states: ['autorizada'], icon: 'ok' },
-          { heading: 'Histórico de rechazadas y denegadas', description: 'Solicitudes rechazadas por RRLL o denegadas por el Comité.', states: ['rechazada_rrll', 'denegada'], icon: 'history' },
+          { heading: 'Histórico de rechazadas y denegadas', description: 'Solicitudes rechazadas por RRLL o denegadas por el Comité de Dirección.', states: ['rechazada_rrll', 'denegada'], icon: 'history' },
         ] as const).map((group) => {
           const groupRecords = visible.filter((record) => (group.states as readonly string[]).includes(record.estado));
           if (group.icon === 'history' && !showHistory) return <div key={group.heading} className="lg:col-span-2"><button type="button" onClick={() => setShowHistory(true)} className="rounded-lg border border-metro-border px-3 py-2 text-xs text-metro-text">Mostrar histórico de rechazadas y denegadas ({groupRecords.length})</button></div>;
@@ -222,9 +248,9 @@ export function ActividadesExternasPage() {
           </div>
           {record.observacionesRrll?.trim() && <p className="mt-2 whitespace-pre-wrap text-xs text-metro-muted"><strong>RRLL:</strong> {record.observacionesRrll}</p>}
            {record.estado === 'pendiente' ? <div className="mt-3 flex gap-2">
-            <button disabled={busy} onClick={() => { setResolution({ record, estado: 'propuesta' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Elevar al Comité</button>
+            <button disabled={busy} onClick={() => { setResolution({ record, estado: 'propuesta' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Elevar al Comité de Dirección</button>
             <button disabled={busy} onClick={() => { setResolution({ record, estado: 'rechazada_rrll' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Rechazar RRLL</button>
-          </div> : record.estado === 'propuesta' ? <div className="mt-3 flex gap-2"><button disabled={busy} onClick={() => { setResolution({ record, estado: 'autorizada' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Comité: aprobar</button><button disabled={busy} onClick={() => { setResolution({ record, estado: 'denegada' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Comité: denegar</button></div> : <div className="mt-3 flex flex-wrap items-center gap-2">
+          </div> : record.estado === 'propuesta' ? <div className="mt-3 flex gap-2"><button disabled={busy} onClick={() => { setResolution({ record, estado: 'autorizada' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Comité de Dirección: aprobar</button><button disabled={busy} onClick={() => { setResolution({ record, estado: 'denegada' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Comité de Dirección: denegar</button></div> : <div className="mt-3 flex flex-wrap items-center gap-2">
             {(record.observacionesResolucion || record.motivoDenegacion) && <p className="w-full whitespace-pre-wrap text-xs text-metro-muted">{record.estado === 'denegada' ? 'Motivo' : 'Observaciones'}: {record.observacionesResolucion || record.motivoDenegacion}</p>}
             <span className="text-xs text-metro-muted">Comunicación: {record.comunicacion === 'confirmada' ? 'Envío confirmado' : record.comunicacion === 'borrador' ? 'Borrador preparado' : 'Pendiente'}</span>
             <button disabled={busy} onClick={() => void openDraft(record)} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><Mail size={14}/> Preparar correo en Outlook</button>
@@ -267,7 +293,7 @@ export function ActividadesExternasPage() {
         <label className="block text-xs font-semibold">Observaciones de RRLL
           <textarea value={editRrllNotes} onChange={(event) => setEditRrllNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm text-metro-text"/>
         </label>
-        <p className="text-xs text-metro-muted">Se conservan la resolución del Comité, sus observaciones y el estado de comunicación. Si ya se comunicó, revisa si procede enviar una actualización.</p>
+        <p className="text-xs text-metro-muted">Se conservan la resolución del Comité de Dirección, sus observaciones y el estado de comunicación. Si ya se comunicó, revisa si procede enviar una actualización.</p>
         <div className="flex justify-end gap-2">
           <button type="button" disabled={busy} onClick={() => setEditing(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
           <button type="submit" disabled={busy || !editActivity.trim() || !editDate} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Guardar cambios</button>
@@ -277,12 +303,14 @@ export function ActividadesExternasPage() {
     {dialogNode}
     {resolution && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
       <div role="dialog" aria-modal="true" aria-label="Resolver solicitud" className="w-full max-w-lg space-y-3 rounded-xl border border-metro-border bg-metro-panel p-5 text-metro-text">
-        <h3 className="font-bold">{resolution.estado === 'propuesta' ? 'Elevar al Comité' : resolution.estado === 'rechazada_rrll' ? 'Rechazar en RRLL' : resolution.estado === 'autorizada' ? 'Aprobar en Comité' : 'Denegar en Comité'} solicitud de {resolution.record.nombre}</h3>
-        <p className="text-xs text-metro-muted">{resolution.estado === 'propuesta' ? 'Puedes añadir observaciones de RRLL.' : resolution.estado === 'autorizada' ? 'Puedes indicar observaciones de aprobación.' : 'Indica el motivo del rechazo o denegación.'} Las observaciones se incorporarán al borrador de Outlook.</p>
+        <h3 className="font-bold">{resolution.estado === 'propuesta' ? 'Elevar al Comité de Dirección' : resolution.estado === 'rechazada_rrll' ? 'Rechazar en RRLL' : resolution.estado === 'autorizada' ? 'Aprobar en Comité de Dirección' : 'Denegar en Comité de Dirección'} solicitud de {resolution.record.nombre}</h3>
+        <p className="text-xs text-metro-muted">{resolution.estado === 'propuesta' ? 'Puedes añadir observaciones de RRLL.' : resolution.estado === 'autorizada' ? 'Puedes indicar observaciones internas de aprobación.' : 'Indica el motivo del rechazo o denegación.'} Las observaciones quedarán en el registro; el borrador favorable utiliza el texto predefinido.</p>
         <label htmlFor="actividad-resolution-notes" className="block text-xs font-semibold">Observaciones {(resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') ? '(obligatorias)' : '(opcionales)'}</label>
         <textarea id="actividad-resolution-notes" autoFocus value={reason} onChange={(event) => setReason(event.target.value)} rows={4} className="w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm"/>
         <div className="flex justify-end gap-2"><button type="button" onClick={() => setResolution(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
-          <button type="button" disabled={busy || ((resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') && !reason.trim())} onClick={() => void act(() => resolve(resolution.record.id, resolution.estado, reason), () => setResolution(null))} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{resolution.estado === 'propuesta' ? 'Elevar al Comité' : resolution.estado === 'rechazada_rrll' ? 'Confirmar rechazo RRLL' : resolution.estado === 'autorizada' ? 'Confirmar aprobación Comité' : 'Confirmar denegación Comité'}</button>
+          <button type="button" disabled={busy || ((resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') && !reason.trim())} onClick={() => resolution.estado === 'autorizada'
+            ? void approveAndOpenDraft(resolution.record, reason)
+            : void act(() => resolve(resolution.record.id, resolution.estado, reason), () => setResolution(null))} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{resolution.estado === 'propuesta' ? 'Elevar al Comité de Dirección' : resolution.estado === 'rechazada_rrll' ? 'Confirmar rechazo RRLL' : resolution.estado === 'autorizada' ? 'Confirmar aprobación Comité de Dirección' : 'Confirmar denegación Comité de Dirección'}</button>
         </div>
       </div>
     </div>}
