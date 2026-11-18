@@ -23,7 +23,7 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'RRLL puede rechazar la solicitud o elevarla con propuesta favorable al Comité de Dirección.',
       'El Comité de Dirección decide aprobar o denegar las solicitudes elevadas. El rechazo o denegación requiere motivo.',
-      'Las observaciones se conservan en el registro. Al confirmar la aprobación del Comité de Dirección se abre automáticamente un borrador de Outlook con el nombre de pila y el puesto de Plantilla. El correo no se envía automáticamente.',
+      'Las observaciones se conservan en el registro. Después de autorizar, utiliza «Preparar correo en Outlook» para abrir un borrador con el nombre de pila y el puesto de Plantilla. El correo no se envía automáticamente.',
       'No es posible aprobar directamente una solicitud sin propuesta favorable previa de RRLL.',
     ],
   },
@@ -38,7 +38,7 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Outlook y envío',
     items: [
-      'La aprobación del Comité de Dirección abre el borrador de Outlook automáticamente. «Preparar correo en Outlook» permite volver a abrirlo después. El destinatario procede de Plantilla o de la solicitud; si falta, se deja vacío. Revisa el puesto antes de enviarlo.',
+      'La aprobación del Comité de Dirección guarda la resolución. Después, «Preparar correo en Outlook» abre el borrador (sin enviarlo) y muestra el resultado junto al botón. El destinatario procede de Plantilla o de la solicitud; si falta, se deja vacío. Revisa el puesto antes de enviarlo.',
       'Abrir un borrador no confirma el envío: usa «Confirmar envío manualmente» solo después de enviarlo realmente.',
     ],
   },
@@ -75,6 +75,7 @@ export function ActividadesExternasPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [outlookStatus, setOutlookStatus] = useState<{ recordId: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [resolution, setResolution] = useState<{ record: ActividadExterna; estado: 'propuesta' | 'rechazada_rrll' | 'autorizada' | 'denegada' } | null>(null);
   const [reason, setReason] = useState('');
@@ -117,44 +118,34 @@ export function ActividadesExternasPage() {
       setMessage(error instanceof Error ? error.message : 'No se ha podido completar la operación.');
     } finally { setBusy(false); }
   };
-  const openDraft = async (record: ActividadExterna, afterApproval = false) => {
-    const approvalNote = afterApproval ? 'Aprobación guardada. ' : '';
-    if (!window.traccion?.createOutlookDraft) { setMessage(`${approvalNote}La integración con Outlook de escritorio no está disponible.`); return; }
+  const openDraft = async (record: ActividadExterna) => {
+    const report = (text: string) => {
+      setOutlookStatus({ recordId: record.id, text });
+      setMessage(text);
+    };
+    if (!window.traccion?.createOutlookDraft) {
+      report('No está disponible la integración con Outlook de escritorio en esta instalación.');
+      return;
+    }
     setBusy(true);
+    report('Abriendo borrador en Outlook…');
     try {
       const person = employees.find((item) => item.empleado === record.empleado && !item.deletedAt);
       const puesto = person?.puestoOrganizativo?.trim() || person?.puestoNomina?.trim();
       const email = person?.email?.trim() || record.email.trim();
       const mail = buildActividadMail({ ...record, nombre: person?.nombreApellidos?.trim() || record.nombre }, puesto);
       const result = await window.traccion.createOutlookDraft({ ...mail, to: email ? [email] : [], cc: [] });
-      if (!result.ok) { setMessage(`${approvalNote}${result.message}`); return; }
+      if (!result.ok) {
+        report(`Outlook no ha abierto el borrador: ${result.message}`);
+        return;
+      }
       const saved = await setComunicacion(record.id, 'borrador');
       const missing = [!email && 'destinatario', record.estado === 'autorizada' && !puesto && 'puesto de trabajo'].filter(Boolean);
-      setMessage(saved.ok ? `${approvalNote}Borrador abierto en Outlook. El envío NO está confirmado.${missing.length ? ` Completa manualmente: ${missing.join(' y ')}.` : ''}` : `${approvalNote}Borrador abierto, pero no se pudo registrar el estado: ${saved.message}`);
-    } catch (error) { setMessage(`${approvalNote}${error instanceof Error ? error.message : 'No se ha podido abrir Outlook.'}`); }
-    finally { setBusy(false); }
-  };
-  const approveAndOpenDraft = async (record: ActividadExterna, observations: string) => {
-    setBusy(true);
-    try {
-      const result = await resolve(record.id, 'autorizada', observations);
-      if (!result.ok) {
-        setMessage(result.message);
-        return;
-      }
-      setResolution(null);
-      // Leer el registro autorizado ya persistido: el borrador no se abre si
-      // falla el guardado (incluyendo un conflicto de edición multiusuario).
-      const approved = useActividadesExternasStore.getState().records.find(
-        (item) => item.id === record.id && item.estado === 'autorizada',
-      );
-      if (!approved) {
-        setMessage('Aprobación guardada, pero no se pudo recuperar la solicitud actualizada para Outlook.');
-        return;
-      }
-      await openDraft(approved, true);
+      report(saved.ok
+        ? `Borrador abierto en Outlook; NO se ha enviado.${missing.length ? ` Completa manualmente: ${missing.join(' y ')}.` : ''}`
+        : `Borrador abierto en Outlook, pero no se pudo registrar el estado de comunicación: ${saved.message}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo confirmar la aprobación.');
+      report(`No se ha podido abrir Outlook: ${error instanceof Error ? error.message : 'error desconocido'}`);
     } finally {
       setBusy(false);
     }
@@ -253,7 +244,8 @@ export function ActividadesExternasPage() {
           </div> : record.estado === 'propuesta' ? <div className="mt-3 flex gap-2"><button disabled={busy} onClick={() => { setResolution({ record, estado: 'autorizada' }); setReason(''); }} className="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-400 disabled:opacity-50">Comité de Dirección: aprobar</button><button disabled={busy} onClick={() => { setResolution({ record, estado: 'denegada' }); setReason(''); }} className="rounded-lg border border-red-600 px-3 py-1.5 text-xs font-semibold text-red-400 disabled:opacity-50">Comité de Dirección: denegar</button></div> : <div className="mt-3 flex flex-wrap items-center gap-2">
             {(record.observacionesResolucion || record.motivoDenegacion) && <p className="w-full whitespace-pre-wrap text-xs text-metro-muted">{record.estado === 'denegada' ? 'Motivo' : 'Observaciones'}: {record.observacionesResolucion || record.motivoDenegacion}</p>}
             <span className="text-xs text-metro-muted">Comunicación: {record.comunicacion === 'confirmada' ? 'Envío confirmado' : record.comunicacion === 'borrador' ? 'Borrador preparado' : 'Pendiente'}</span>
-            <button disabled={busy} onClick={() => void openDraft(record)} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><Mail size={14}/> Preparar correo en Outlook</button>
+            <button type="button" disabled={busy} onClick={() => void openDraft(record)} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><Mail size={14}/> {busy && outlookStatus?.recordId === record.id ? 'Abriendo Outlook…' : 'Preparar correo en Outlook'}</button>
+            {outlookStatus?.recordId === record.id && <p role="status" aria-live="polite" className="w-full text-xs text-metro-text">{outlookStatus.text}</p>}
             {record.comunicacion !== 'confirmada' && <button disabled={busy} onClick={() => void act(() => setComunicacion(record.id, 'confirmada'))} className="rounded-lg border border-metro-border px-3 py-1.5 text-xs text-metro-text disabled:opacity-50">Confirmar envío manualmente</button>}
           </div>}
         </article>)}
@@ -304,13 +296,11 @@ export function ActividadesExternasPage() {
     {resolution && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
       <div role="dialog" aria-modal="true" aria-label="Resolver solicitud" className="w-full max-w-lg space-y-3 rounded-xl border border-metro-border bg-metro-panel p-5 text-metro-text">
         <h3 className="font-bold">{resolution.estado === 'propuesta' ? 'Elevar al Comité de Dirección' : resolution.estado === 'rechazada_rrll' ? 'Rechazar en RRLL' : resolution.estado === 'autorizada' ? 'Aprobar en Comité de Dirección' : 'Denegar en Comité de Dirección'} solicitud de {resolution.record.nombre}</h3>
-        <p className="text-xs text-metro-muted">{resolution.estado === 'propuesta' ? 'Puedes añadir observaciones de RRLL.' : resolution.estado === 'autorizada' ? 'Puedes indicar observaciones internas de aprobación.' : 'Indica el motivo del rechazo o denegación.'} Las observaciones quedarán en el registro; el borrador favorable utiliza el texto predefinido.</p>
+        <p className="text-xs text-metro-muted">{resolution.estado === 'propuesta' ? 'Puedes añadir observaciones de RRLL.' : resolution.estado === 'autorizada' ? 'Puedes indicar observaciones internas de aprobación.' : 'Indica el motivo del rechazo o denegación.'} Las observaciones quedarán en el registro; el borrador favorable utiliza el texto predefinido y se abre después desde «Preparar correo en Outlook».</p>
         <label htmlFor="actividad-resolution-notes" className="block text-xs font-semibold">Observaciones {(resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') ? '(obligatorias)' : '(opcionales)'}</label>
         <textarea id="actividad-resolution-notes" autoFocus value={reason} onChange={(event) => setReason(event.target.value)} rows={4} className="w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm"/>
         <div className="flex justify-end gap-2"><button type="button" onClick={() => setResolution(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
-          <button type="button" disabled={busy || ((resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') && !reason.trim())} onClick={() => resolution.estado === 'autorizada'
-            ? void approveAndOpenDraft(resolution.record, reason)
-            : void act(() => resolve(resolution.record.id, resolution.estado, reason), () => setResolution(null))} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{resolution.estado === 'propuesta' ? 'Elevar al Comité de Dirección' : resolution.estado === 'rechazada_rrll' ? 'Confirmar rechazo RRLL' : resolution.estado === 'autorizada' ? 'Confirmar aprobación Comité de Dirección' : 'Confirmar denegación Comité de Dirección'}</button>
+          <button type="button" disabled={busy || ((resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') && !reason.trim())} onClick={() => void act(() => resolve(resolution.record.id, resolution.estado, reason), () => setResolution(null))} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{resolution.estado === 'propuesta' ? 'Elevar al Comité de Dirección' : resolution.estado === 'rechazada_rrll' ? 'Confirmar rechazo RRLL' : resolution.estado === 'autorizada' ? 'Confirmar aprobación Comité de Dirección' : 'Confirmar denegación Comité de Dirección'}</button>
         </div>
       </div>
     </div>}
