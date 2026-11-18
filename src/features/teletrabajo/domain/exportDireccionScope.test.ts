@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TeletrabajoSolicitud } from './solicitud';
-import { selectTeletrabajoDireccionExportRows } from './exportDireccionScope';
+import { buildTeletrabajoExtraordinariaDireccionReport, selectTeletrabajoDireccionExportRows } from './exportDireccionScope';
 import { buildTeletrabajoDireccionAdministrativeFields } from './exportDireccionFields';
 
 const ordinary = {
@@ -35,5 +35,41 @@ describe('Excel Dirección: alcance de exportación', () => {
         referenciaAntiguedad: '2026-08-01', estado: 'aprobada', tipo: 'renovacion',
       });
     expect(buildTeletrabajoDireccionAdministrativeFields(unknown, null).referenciaAntiguedad).toBe('');
+  });
+});
+
+describe('Dirección · informe extraordinario acumulado', () => {
+  const build = (id: string, modalidad: 'ordinaria' | 'extraordinaria', estado: TeletrabajoSolicitud['estado'], periodo = '2026-2027') => ({
+    ...ordinary, id, periodo, estado, modalidadTramitacion: modalidad, deletedAt: null,
+  } as TeletrabajoSolicitud);
+
+  it('sitúa pendientes extraordinarias delante de todas las aprobadas del mismo periodo', () => {
+    const approvedOrdinary = build('a', 'ordinaria', 'aprobada');
+    const newExtra = build('n', 'extraordinaria', 'pendiente');
+    const approvedExtra = build('ae', 'extraordinaria', 'aprobada');
+    const analysed = build('an', 'extraordinaria', 'analizada');
+    const denied = build('d', 'extraordinaria', 'denegada');
+    const previousPeriod = build('old', 'ordinaria', 'aprobada', '2025-2026');
+    const report = buildTeletrabajoExtraordinariaDireccionReport([
+      approvedOrdinary, newExtra, approvedExtra, analysed, denied,
+    ]);
+    expect(report.rows.map((s) => s.id)).toEqual(['n', 'an', 'a', 'ae']);
+    expect(report.nuevasCount).toBe(2);
+    expect(report.aprobadasCount).toBe(2);
+    // Period filtering is performed by the caller; the exporter receives
+    // only one period to prevent accidental cross-period totals.
+    expect(previousPeriod.periodo).not.toBe(approvedOrdinary.periodo);
+  });
+
+  it('excluye desistidas, denegadas y eliminadas, sin duplicar aprobadas extraordinarias', () => {
+    const removed = { ...build('x','extraordinaria','pendiente'), deletedAt:'2026-11-01' };
+    const report = buildTeletrabajoExtraordinariaDireccionReport([
+      build('1','extraordinaria','aprobada'),
+      build('2','extraordinaria','desistida'),
+      removed,
+    ]);
+    expect(report.rows.map((s) => s.id)).toEqual(['1']);
+    expect(report.nuevasCount).toBe(0);
+    expect(report.aprobadasCount).toBe(1);
   });
 });
