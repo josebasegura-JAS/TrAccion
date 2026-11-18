@@ -40,7 +40,11 @@ describe('Excel Dirección · exportación extraordinaria con formato corporativ
     expect(capture.save).toHaveBeenCalledOnce();
     const [buffer] = capture.save.mock.calls[0] as [Buffer, string];
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    // ExcelJS espera Buffer<ArrayBuffer>; el exportador puede entregar
+    // Buffer<ArrayBufferLike>. Copiamos los bytes a un ArrayBuffer propio.
+    const exactBytes = new ArrayBuffer(buffer.byteLength);
+    new Uint8Array(exactBytes).set(buffer);
+    await workbook.xlsx.load(Buffer.from(exactBytes));
     const sheet = workbook.getWorksheet('Teletrabajo Dirección');
     expect(sheet).toBeDefined();
     if (!sheet) throw new Error('Falta hoja de Dirección');
