@@ -38,7 +38,7 @@ describe('Excel Dirección · exportación extraordinaria con formato corporativ
       extraordinarySummary:{nuevasCount:report.nuevasCount,aprobadasCount:report.aprobadasCount},
     });
     expect(capture.save).toHaveBeenCalledOnce();
-    const [buffer] = capture.save.mock.calls[0] as [ExcelJS.Buffer, string];
+    const [buffer] = capture.save.mock.calls[0] as [Buffer, string];
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
     const sheet = workbook.getWorksheet('Teletrabajo Dirección');
