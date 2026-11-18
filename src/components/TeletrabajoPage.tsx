@@ -568,7 +568,7 @@ export function TeletrabajoPage({
         puestosTeletrabajo,
         gruposCobertura,
         solicitudesForAssessment: solicitudesWithPlantillaData,
-        periodo: mainPeriodo,
+        periodo: fullExtraordinaryReport ? mainPeriodo : filters.periodo,
         extraordinarySummary: fullExtraordinaryReport
           ? { nuevasCount: fullExtraordinaryReport.nuevasCount, aprobadasCount: fullExtraordinaryReport.aprobadasCount }
           : undefined,
