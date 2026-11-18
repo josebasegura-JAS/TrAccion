@@ -83,7 +83,7 @@ export function TeletrabajoMainTableSection({
             >
               <option value="vista">Vista actual</option>
               <option value="ordinaria">Ordinarias del periodo</option>
-              <option value="extraordinaria">Extraordinarias del periodo</option>
+              <option value="extraordinaria">Nuevas extraordinarias + aprobadas vigentes</option>
               <option value="todas">Todas las del periodo</option>
             </select>
           </label>

@@ -53,7 +53,7 @@ import { resolveTeletrabajoTipoSolicitud } from '../features/teletrabajo/domain/
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { exportTeletrabajoDireccionToExcel } from '../features/teletrabajo/domain/exportDireccion';
-import { buildTeletrabajoExtraordinariaDireccionReport, selectTeletrabajoDireccionExportRows, type TeletrabajoDireccionExportScope } from '../features/teletrabajo/domain/exportDireccionScope';
+import { buildTeletrabajoExtraordinariaDireccionReport, getDefaultTeletrabajoDireccionExportScope, selectTeletrabajoDireccionExportRows, type TeletrabajoDireccionExportScope } from '../features/teletrabajo/domain/exportDireccionScope';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import {
   applyPlantillaDataToTeletrabajoSolicitudes,
@@ -109,7 +109,7 @@ export function TeletrabajoPage({
   const [ordinaryClosure, setOrdinaryClosure] = useState<TeletrabajoOrdinaryClosure | null>(null);
   const [closureLoading, setClosureLoading] = useState(false);
   const [closureStatus, setClosureStatus] = useState('');
-  const [direccionExportScope, setDireccionExportScope] = useState<TeletrabajoDireccionExportScope>('vista');
+  const [direccionExportScope, setDireccionExportScope] = useState<TeletrabajoDireccionExportScope>(() => getDefaultTeletrabajoDireccionExportScope(modalidadTab));
   const [newPeriodoName, setNewPeriodoName] = useState('');
   const [sourcePeriodo, setSourcePeriodo] = useState('');
   const [copyFromPreviousPeriodo, setCopyFromPreviousPeriodo] = useState(true);
@@ -1077,7 +1077,10 @@ export function TeletrabajoPage({
               className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${modalidadTab === value
                 ? 'border-sky-400/60 bg-sky-400/15 text-metro-text'
                 : 'border-metro-border text-metro-muted hover:text-metro-text'}`}
-              onClick={() => setModalidadTab(value)}
+              onClick={() => {
+                setModalidadTab(value);
+                setDireccionExportScope(getDefaultTeletrabajoDireccionExportScope(value));
+              }}
             >
               {label} ({filterSolicitudesByTeletrabajoModalidad(periodFilteredSolicitudes, value).length})
             </button>
