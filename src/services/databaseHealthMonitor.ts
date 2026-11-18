@@ -16,6 +16,10 @@ const RECOVERY_TIMEOUT_MS = 60_000;
 // Un único timeout de respuesta NO demuestra una desconexión SMB. El IPC
 // puede estar esperando detrás de una operación válida en la cola SQLite.
 const TRANSIENT_TIMEOUTS_BEFORE_BLOCK = 2;
+// Un SQLITE_BUSY puede ser contención temporal, no una caída de red.
+// Limitar el número de comprobaciones síncronas que mantienen ocupado Electron.
+const BUSY_BACKOFF_AFTER = 3;
+const BUSY_BACKOFF_MS = 20_000;
 const CONNECTIVITY_MESSAGE =
   'Se ha perdido la conexión con la base SQLite compartida. La edición permanece bloqueada mientras TrAcción intenta reconectar.';
 
@@ -31,8 +35,10 @@ export interface ConnectionDiagnostics {
   consecutiveFailures: number;
   lastCheckDurationMs: number | null;
   checking: boolean;
+  consecutiveBusy: number;
+  busySinceAt: string | null;
 }
-let diagnostics: ConnectionDiagnostics = { lastSuccessAt: null, lastFailureAt: null, lastError: null, consecutiveFailures: 0, lastCheckDurationMs: null, checking: false };
+let diagnostics: ConnectionDiagnostics = { lastSuccessAt: null, lastFailureAt: null, lastError: null, consecutiveFailures: 0, lastCheckDurationMs: null, checking: false, consecutiveBusy: 0, busySinceAt: null };
 const diagnosticsListeners = new Set<() => void>();
 function updateDiagnostics(patch: Partial<ConnectionDiagnostics>): void {
   diagnostics = { ...diagnostics, ...patch };
@@ -48,6 +54,8 @@ let timerId: number | null = null;
 let checkInProgress = false;
 let consecutiveFailures = 0;
 let consecutiveHealthCheckTimeouts = 0;
+let consecutiveBusy = 0;
+let busySinceAt: string | null = null;
 let blockedByHealthMonitor = false;
 // Cada cambio de conexión confirmado invalida recuperaciones antiguas.
 let recoveryGeneration = 0;
@@ -91,7 +99,9 @@ function scheduleNextCheck(delayMs?: number): void {
   const reconnectDelay = consecutiveFailures <= RECONNECT_FAST_ATTEMPTS
     ? RECONNECT_FAST_INTERVAL_MS
     : RECONNECT_SLOW_INTERVAL_MS;
-  const nextDelay = delayMs ?? (blockedByHealthMonitor ? reconnectDelay : HEALTHY_CHECK_INTERVAL_MS);
+  const nextDelay = delayMs ?? (consecutiveBusy >= BUSY_BACKOFF_AFTER
+    ? BUSY_BACKOFF_MS
+    : blockedByHealthMonitor ? reconnectDelay : HEALTHY_CHECK_INTERVAL_MS);
   timerId = window.setTimeout(() => {
     timerId = null;
     void runHealthCheck();
@@ -122,6 +132,20 @@ function markPotentialNetworkTransition(message: string, confirmedOffline = fals
     blockEditing(message);
   }
   requestDatabaseReconnectCheck();
+}
+
+/** Solo tratar como contención cuando la conexión sigue activa y la respuesta
+ * identifica explícitamente SQLITE_BUSY/SQLITE_LOCKED. No confundir con I/O. */
+function isActiveSqliteBusyResult(result: { ok: boolean; status: { ready: boolean; phase: string }; message: string }): boolean {
+  return !result.ok && result.status.ready && result.status.phase === 'active'
+    && /\bSQLITE_(?:BUSY|LOCKED)\b/i.test(result.message);
+}
+
+function resetBusyEpisode(): void {
+  if (consecutiveBusy === 0 && busySinceAt === null) return;
+  consecutiveBusy = 0;
+  busySinceAt = null;
+  updateDiagnostics({ consecutiveBusy: 0, busySinceAt: null });
 }
 
 function isHealthCheckResponseTimeout(error: unknown): boolean {
@@ -205,8 +229,23 @@ async function runHealthCheck(): Promise<void> {
   updateDiagnostics({ checking: true });
   try {
     const result = await withTimeout(window.traccion.databaseHealthCheck(), HEALTH_CHECK_TIMEOUT_MS);
-    publishDatabaseStatus(result.status);
     consecutiveHealthCheckTimeouts = 0;
+    if (isActiveSqliteBusyResult(result)) {
+      consecutiveBusy += 1;
+      busySinceAt ??= new Date().toISOString();
+      updateDiagnostics({
+        lastFailureAt: new Date().toISOString(),
+        lastError: result.message,
+        consecutiveBusy,
+        busySinceAt,
+      });
+      // Una base ocupada no es por sí sola una desconexión. No desbloquear
+      // una desconexión anterior, ni iniciar una recarga de stores.
+      return;
+    }
+
+    resetBusyEpisode();
+    publishDatabaseStatus(result.status);
 
     if (!result.ok) {
       consecutiveFailures += 1;
@@ -224,6 +263,7 @@ async function runHealthCheck(): Promise<void> {
 
     await completeRecovery();
   } catch (error) {
+    resetBusyEpisode();
     consecutiveFailures += 1;
     const message = error instanceof Error ? error.message : 'Error verificando SQLite.';
     const timedOut = isHealthCheckResponseTimeout(error);
@@ -300,6 +340,7 @@ export function stopDatabaseHealthMonitor(): void {
   checkInProgress = false;
   consecutiveFailures = 0;
   consecutiveHealthCheckTimeouts = 0;
+  resetBusyEpisode();
   blockedByHealthMonitor = false;
   publishDatabaseConnectivityBlock(false, undefined, 'health-monitor');
   publishDatabaseConnectivityState('connected');

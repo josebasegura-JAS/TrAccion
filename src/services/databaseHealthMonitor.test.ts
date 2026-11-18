@@ -77,6 +77,83 @@ beforeEach(() => {
   mocks.forceExternalDataRefreshAfterRecovery.mockResolvedValue(undefined);
 });
 
+describe('databaseHealthMonitor · contención SQLite', () => {
+  it('no trata SQLITE_BUSY como pérdida de red y espera 20 s tras tres fallos', async () => {
+    const busyResult = {
+      ok: false, status: activeStatus,
+      checkedAt: '2026-11-18T12:00:00.000Z',
+      message: 'No se puede verificar la base SQLite compartida: SqliteError: database is locked (SQLITE_BUSY)',
+    };
+    const databaseHealthCheck = vi.fn().mockResolvedValue(busyResult);
+    installFakeWindow(databaseHealthCheck);
+    const monitor = await import('./databaseHealthMonitor');
+    monitor.startDatabaseHealthMonitor();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(databaseHealthCheck).toHaveBeenCalledTimes(3);
+    expect(monitor.getConnectionDiagnostics().consecutiveBusy).toBe(3);
+    expect(monitor.getConnectionDiagnostics().busySinceAt).not.toBeNull();
+    expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+      true, expect.any(String), 'health-monitor',
+    );
+    expect(mocks.stopExternalDataSyncPolling).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(19_999);
+    expect(databaseHealthCheck).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(databaseHealthCheck).toHaveBeenCalledTimes(4);
+    monitor.stopDatabaseHealthMonitor();
+  });
+
+  it('recupera el intervalo original y limpia diagnóstico cuando SQLite responde', async () => {
+    const databaseHealthCheck = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, status: activeStatus, checkedAt: '2026-11-18T12:00:00Z',
+        message: 'SQLITE_BUSY: database is locked',
+      })
+      .mockResolvedValue({
+        ok: true, status: activeStatus, checkedAt: '2026-11-18T12:00:05Z',
+        message: 'Conexión con la base compartida verificada.',
+      });
+    installFakeWindow(databaseHealthCheck);
+    const monitor = await import('./databaseHealthMonitor');
+    monitor.startDatabaseHealthMonitor();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(monitor.getConnectionDiagnostics().consecutiveBusy).toBe(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(monitor.getConnectionDiagnostics().consecutiveBusy).toBe(0);
+    expect(monitor.getConnectionDiagnostics().busySinceAt).toBeNull();
+    expect(mocks.publishDatabaseConnectivityBlock).not.toHaveBeenCalledWith(
+      true, expect.any(String), 'health-monitor',
+    );
+    monitor.stopDatabaseHealthMonitor();
+  });
+
+  it('sigue bloqueando la edición ante una caída de red real, incluso tras BUSY', async () => {
+    const databaseHealthCheck = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, status: activeStatus, checkedAt: '2026-11-18T12:00:00Z',
+        message: 'SQLITE_BUSY',
+      })
+      .mockResolvedValueOnce({
+        ok: false, status: errorStatus, checkedAt: '2026-11-18T12:00:05Z',
+        message: 'SMB no disponible',
+      });
+    installFakeWindow(databaseHealthCheck);
+    const monitor = await import('./databaseHealthMonitor');
+    monitor.startDatabaseHealthMonitor();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(mocks.publishDatabaseConnectivityBlock).toHaveBeenCalledWith(
+      true, expect.stringContaining('SMB no disponible'), 'health-monitor',
+    );
+    expect(monitor.getConnectionDiagnostics().consecutiveBusy).toBe(0);
+    monitor.stopDatabaseHealthMonitor();
+  });
+});
+
 describe('databaseHealthMonitor', () => {
   it('mantiene el estado conectado cuando el chequeo de la base compartida es correcto', async () => {
     const databaseHealthCheck = vi.fn().mockResolvedValue({
