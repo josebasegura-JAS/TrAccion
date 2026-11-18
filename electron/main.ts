@@ -4,7 +4,7 @@ import { startSqliteWorkerProbeSupervisor } from './sqliteWorkerProbeSupervisor.
 import { startLocalInstanceUpdateListener } from './localUpdateInstances.js';
 import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
 import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics.js';
-import { app, BrowserWindow, dialog, ipcMain, Menu, utilityProcess } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -261,8 +261,8 @@ function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: Bro
   setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow, rendererReady), remainingMs);
 }
 function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt = Date.now(), setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void): BrowserWindow {
-  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? ' · ENTORNO DE PRUEBAS (DATOS FICTICIOS)' : ''}${isMultiuserTestClientB ? ' · PRUEBA MULTIUSUARIO B (BASE REAL)' : ''}`;
-  const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: mainWindowTitle, backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, ...(process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? { partition: 'persist:traccion-tests-only' } : {}) } });
+  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${isMultiuserTestClientB ? ' · PRUEBA MULTIUSUARIO B (BASE REAL)' : ''}`;
+  const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: mainWindowTitle, backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   // El <title> del renderer no debe sustituir el título corporativo/versionado de la ventana.
   mainWindow.webContents.on('page-title-updated', (event) => {
     event.preventDefault();
@@ -316,18 +316,8 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   ipcMain.on('app:boot-visible', onBootVisible);
   ipcMain.on('app:renderer-ready', onRendererReady);
   mainWindow.once('closed', () => { clearTimeout(forceShowTimer); ipcMain.removeListener('app:boot-visible', onBootVisible); ipcMain.removeListener('app:renderer-ready', onRendererReady); setConnectivityIssueNotifier?.(null); });
-  // The environment hint drives ONLY the permanent blue visual warning.
-  // SQLite security continues to check process environment + database UUID.
-  const isTestEnvironment = process.env.TRACCION_DATABASE_ENVIRONMENT === 'test';
-  if (isDev) {
-    const target = new URL(devServerUrl);
-    if (isTestEnvironment) target.searchParams.set('traccionEnvironment', 'test');
-    mainWindow.loadURL(target.href).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'),
-      isTestEnvironment ? { query: { traccionEnvironment: 'test' } } : undefined)
-      .catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
-  }
+  if (isDev) mainWindow.loadURL(devServerUrl).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
+  else mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
   return mainWindow;
 }
 
@@ -343,17 +333,6 @@ async function registerIpcHandlers(): Promise<void> {
 }
 
 if (!app.requestSingleInstanceLock()) {
-  // Selecting another environment while an earlier TrAcción instance remains
-  // alive used to quit silently, making Production appear broken. Never start
-  // a second writer or redirect the existing instance to another database.
-  dialog.showMessageBoxSync({
-    type: 'warning',
-    title: 'TrAcción · Otra instancia abierta',
-    message: 'TrAcción ya está abierta en este equipo.',
-    detail: 'Cierra completamente la otra instancia (también si está en la pantalla de reconexión) y vuelve a iniciar TrAcción para seleccionar Producción o Pruebas. No se ha cambiado ninguna base de datos.',
-    buttons: ['Entendido'],
-    noLink: true,
-  });
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -476,22 +455,9 @@ if (!app.requestSingleInstanceLock()) {
       updateSplashStep(splashWindow, 'database', 'active');
       updateSplashStep(splashWindow, 'services', 'active');
       await Promise.all([
-        persistence.initializeSqlitePersistence().then((databaseStatus) => {
-          if (!databaseStatus.ready || databaseStatus.phase !== 'active' ||
-              databaseStatus.environment !==
-                (process.env.TRACCION_DATABASE_ENVIRONMENT === 'test' ? 'test' : 'production')) {
-            // A fallback/read-only status is not a successful connection.
-            // The normal UI must remain available for diagnosis and Settings,
-            // but the splash must not claim the selected SQLite is connected.
-            const message = databaseStatus.message ??
-              'La base de datos seleccionada no se ha podido activar.';
-            console.error('[startup] SQLite del entorno seleccionado no conectada.', message);
-            updateSplashStep(splashWindow, 'database', 'error', message);
-            startupMark('SQLite no conectada; edición bloqueada');
-          } else {
-            startupMark('SQLite inicializada');
-            updateSplashStep(splashWindow, 'database', 'done');
-          }
+        persistence.initializeSqlitePersistence().then(() => {
+          startupMark('SQLite inicializada');
+          updateSplashStep(splashWindow, 'database', 'done');
         }).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
           updateSplashStep(splashWindow, 'database', 'error', message || 'No se pudo inicializar la base de datos.');

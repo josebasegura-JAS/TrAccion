@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from 'better-sqlite3';
 import { createDatabaseLockManager } from './databaseLockManager.js';
-import { createSqliteIndependentActivityTracker, sqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
+import { createSqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
 
 const testPaths = vi.hoisted(() => ({ userData: '' }));
 
@@ -63,15 +63,7 @@ function buildDependencies(
   };
 
   return {
-    // Test double of the Online Backup API: the real backup implementation
-    // is verified separately with SQLite; these tests exercise scheduling,
-    // deduplication and shutdown coordination, not SQLite file semantics.
-    getDatabase: () => ({
-      backup: async (destination: string) => {
-        const { copyFile } = await import('node:fs/promises');
-        await copyFile(databasePath, destination);
-      },
-    }) as unknown as Database,
+    getDatabase: () => ({}) as Database,
     getStatus: () => activeStatus(databasePath),
     acquireLock: acquireLock ?? (async () => lock),
     releaseLock: async () => undefined,
@@ -87,106 +79,6 @@ function buildDependencies(
   };
 }
 
-describe('PR492B · admisión completa de lista, poda y restauración', () => {
-  it('no consulta ni poda respaldos durante la cesión congelada', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492b-list-'));
-    testPaths.userData = dir;
-    const service = createLocalBackupService(buildDependencies(path.join(dir, 'shared.sqlite')));
-    const ticket = sqliteIndependentActivityTracker.beginFreeze();
-    try {
-      await expect(service.listLocalBackups()).rejects.toThrow('suspendida');
-      expect(sqliteIndependentActivityTracker.snapshot()).toMatchObject({active:0,frozen:true});
-    } finally {
-      sqliteIndependentActivityTracker.abortFreeze(ticket);
-      rmSync(dir,{recursive:true,force:true});
-    }
-  });
-
-  it('no admite restauraciones ni sus prebackups mientras la barrera esté congelada', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492b-restore-'));
-    testPaths.userData = dir;
-    const service = createLocalBackupService(buildDependencies(path.join(dir, 'shared.sqlite')));
-    const ticket = sqliteIndependentActivityTracker.beginFreeze();
-    try {
-      await expect(service.restoreLocalBackup('no-valid-backup.sqlite')).rejects.toThrow('suspendida');
-      await expect(service.createManualLocalBackup()).rejects.toThrow('suspendida');
-      expect(sqliteIndependentActivityTracker.snapshot()).toMatchObject({active:0,frozen:true});
-    } finally {
-      sqliteIndependentActivityTracker.abortFreeze(ticket);
-      rmSync(dir,{recursive:true,force:true});
-    }
-  });
-
-  it('mantiene la reserva hasta finalizar realmente el trabajo de la restauración', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492b-drain-'));
-    testPaths.userData = dir;
-    const tracker = createSqliteIndependentActivityTracker();
-    let release!: () => void;
-    const hold = new Promise<void>(resolve => { release=resolve; });
-    const deps = buildDependencies(path.join(dir,'shared.sqlite'));
-    deps.trackActivity = (label, operation) =>
-      tracker.run(label, async () => { await hold; return operation(); });
-    const service = createLocalBackupService(deps);
-    const restoring = service.restoreLocalBackup('invalid.sqlite');
-    const ticket = tracker.beginFreeze();
-    let drained = false;
-    const drain = tracker.waitForDrain(ticket).then(() => { drained = true; });
-    try {
-      await Promise.resolve();
-      expect(tracker.snapshot()).toMatchObject({active:1,frozen:true});
-      expect(drained).toBe(false);
-    } finally {
-      release();
-      await restoring;
-      await drain;
-      tracker.abortFreeze(ticket);
-      rmSync(dir,{recursive:true,force:true});
-    }
-    expect(drained).toBe(true);
-  });
-});
-
-describe('PR492A · admisión obligatoria de backups sin inyector legacy', () => {
-  it('deniega el backup manual cuando el freeze global ya está activo', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492a-backup-'));
-    const databasePath = path.join(dir, 'shared.sqlite');
-    testPaths.userData = dir;
-    const dependencies = buildDependencies(databasePath);
-    // A deliberately legacy caller without trackActivity MUST NOT bypass
-    // the main-process SQLite handoff barrier.
-    expect(dependencies.trackActivity).toBeUndefined();
-    const service = createLocalBackupService(dependencies);
-    const ticket = sqliteIndependentActivityTracker.beginFreeze();
-    try {
-      await expect(service.createManualLocalBackup()).rejects.toThrow('suspendida');
-      expect(sqliteIndependentActivityTracker.snapshot()).toMatchObject({
-        active: 0, frozen: true,
-      });
-    } finally {
-      sqliteIndependentActivityTracker.abortFreeze(ticket);
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('preserva el tracker inyectado, sin reemplazarlo por la reserva global', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-pr492a-injected-'));
-    const databasePath = path.join(dir, 'shared.sqlite');
-    testPaths.userData = dir;
-    const tracker = createSqliteIndependentActivityTracker();
-    const dependencies = buildDependencies(databasePath);
-    dependencies.trackActivity = (label, operation) => tracker.run(label, operation);
-    const service = createLocalBackupService(dependencies);
-    const ticket = tracker.beginFreeze();
-    try {
-      await expect(service.createManualLocalBackup()).rejects.toThrow('suspendida');
-      expect(tracker.snapshot()).toMatchObject({active:0, frozen:true});
-    } finally {
-      tracker.abortFreeze(ticket);
-      rmSync(dir, { recursive:true, force:true });
-    }
-  });
-});
-
 describe('localBackupService - cierre sin backup redundante', () => {
   let rootDir: string;
   let databasePath: string;
@@ -201,23 +93,6 @@ describe('localBackupService - cierre sin backup redundante', () => {
   afterEach(() => {
     vi.useRealTimers();
     rmSync(rootDir, { recursive: true, force: true });
-  });
-
-  it('PR503: un backup nativo fallido no se publica en SMB desde una copia anterior', async () => {
-    const dependencies = buildDependencies(databasePath);
-    dependencies.getDatabase = () => ({
-      backup: async () => { throw new Error('native backup failed'); },
-    }) as unknown as Database;
-    const service = createLocalBackupService(dependencies);
-    service.enqueueLocalBackup('save:pr503');
-    await service.flushPendingLocalBackup();
-
-    const { existsSync } = await import('node:fs');
-    const backupDir = path.join(testPaths.userData, 'sqlite-local-backup');
-    expect(existsSync(path.join(backupDir, 'traccion-local-backup.sqlite'))).toBe(false);
-    expect(existsSync(`${databasePath}.backup-coordination.json`)).toBe(false);
-    const shared = readdirSync(rootDir).filter((name) => /^traccion-backup-.*\.sqlite$/.test(name));
-    expect(shared).toEqual([]);
   });
 
   it('no crea backup de cierre si la sesión no ha modificado nada', async () => {

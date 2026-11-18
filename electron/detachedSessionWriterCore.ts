@@ -5,7 +5,6 @@
  * exclusiva, lock SMB del coordinador y verificación de identidad.
  */
 import type { Database } from 'better-sqlite3';
-import { createDetachedReceiptTransactionHooks, type DetachedCommitIdentity } from './detachedWriterCommitReceipt.js';
 import { createSesionesRepository, type ConditionalSqliteComiteSessionRecord } from './persistence/sesionesRepository.js';
 import { isUpdatedAtRow } from './persistence/sqlitePersistenceHelpers.js';
 import type { ConditionalSqliteTaskSaveResult, DatabaseStatus } from './sqlitePersistence.js';
@@ -20,7 +19,6 @@ export interface DetachedSessionSave {
 export async function saveDetachedSessionRecord(
   db: Database,
   input: DetachedSessionSave,
-  receipt?: DetachedCommitIdentity,
 ): Promise<ConditionalSqliteTaskSaveResult> {
   if (!input || !['comite', 'paritaria', 'actas'].includes(input.module) ||
       typeof input.ownerId !== 'string' || !input.ownerId.trim() ||
@@ -39,9 +37,7 @@ export async function saveDetachedSessionRecord(
     isDefaultPath: false,
     lockPath: ':external-smb-lock:',
   };
-  const receiptHooks = receipt ? createDetachedReceiptTransactionHooks(receipt) : null;
   const repo = createSesionesRepository({
-    ...(receiptHooks ?? {}),
     safeDatabaseOperation: async operation => operation(),
     getSqliteStatus: () => status,
     requireDatabase: () => db,

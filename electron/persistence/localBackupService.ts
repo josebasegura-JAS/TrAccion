@@ -1,6 +1,5 @@
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { sqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
 import type { Database } from 'better-sqlite3';
 import { recordMultiuserMetric } from '../multiuserPerformanceDiagnostics.js';
 import { getDailyLocalBackupWeekdayName } from './maintenanceQueries.js';
@@ -176,18 +175,13 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   // añade varios segundos de E/S sobre la base compartida sin aportar datos nuevos.
   let backupRevision = 0;
   let backedUpRevision = 0;
-  // Never run a backup without admission tracking. Legacy callers that do
-  // not inject trackActivity still participate in the shared main-process
-  // freeze/drain barrier; this is NOT a substitute for distributed SMB locks.
-  const trackActivity = dependencies.trackActivity ??
-    (<T>(label: string, operation: () => Promise<T>): Promise<T> =>
-      sqliteIndependentActivityTracker.run(label, operation));
 
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
     backupWorkRunning += 1;
     try {
-      return await trackActivity('sqlite:backup-live-full', () =>
-        writeLocalBackupArtifactsTracked(reason, force));
+      return await (dependencies.trackActivity
+        ? dependencies.trackActivity('sqlite:backup-live-full', () => writeLocalBackupArtifactsTracked(reason, force))
+        : writeLocalBackupArtifactsTracked(reason, force));
     } finally {
       backupWorkRunning -= 1;
     }
@@ -267,30 +261,25 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
             console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
           }
 
-          if (coreSqliteBackupOk) {
-            try {
-              await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, liveSnapshotPath);
-            } catch (error) {
-              coreSqliteBackupOk = false;
-              console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
-            }
+          try {
+            await writeSharedSqliteBackup(currentStatus.path, backupTimestamp, liveSnapshotPath);
+          } catch (error) {
+            coreSqliteBackupOk = false;
+            console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
           }
 
-          if (coreSqliteBackupOk) {
-            try {
-              const dailyBackupPreferences = await readDatabasePreferences();
-              await writeDailyLocalBackup(
-                currentStatus.path,
-                dailyBackupPreferences,
-                getDailyLocalBackupWeekdayName,
-                liveSnapshotPath,
-              );
-            } catch (error) {
-              console.warn('No se ha podido crear la copia diaria local SQLite.', error);
-            }
+          try {
+            const dailyBackupPreferences = await readDatabasePreferences();
+            await writeDailyLocalBackup(
+              currentStatus.path,
+              dailyBackupPreferences,
+              getDailyLocalBackupWeekdayName,
+              liveSnapshotPath,
+            );
+          } catch (error) {
+            console.warn('No se ha podido crear la copia diaria local SQLite.', error);
           }
 
-          if (coreSqliteBackupOk) {
           try {
             const secondaryDir = (await readDatabasePreferences()).secondaryBackupDirectoryPath;
             if (secondaryDir) {
@@ -309,7 +298,6 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
             }
           } catch (error) {
             console.warn('No se ha podido crear la copia de respaldo secundaria.', error);
-          }
           }
 
           if (coreSqliteBackupOk) {
@@ -437,8 +425,9 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
     backupWorkRunning += 1;
     try {
-      return await trackActivity('sqlite:backup-shutdown-full', () =>
-        writeShutdownLocalBackupArtifactsTracked());
+      return await (dependencies.trackActivity
+        ? dependencies.trackActivity('sqlite:backup-shutdown-full', () => writeShutdownLocalBackupArtifactsTracked())
+        : writeShutdownLocalBackupArtifactsTracked());
     } finally {
       backupWorkRunning -= 1;
     }
@@ -797,12 +786,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     pauseSchedulingForHandoff,
     resumeSchedulingAfterAbortedHandoff,
     createShutdownLocalBackup,
-    // External entrypoints must reserve the handoff barrier BEFORE any await.
-    // Restoration may invoke a pre-backup; nested admission is supported by
-    // the tracker while its root operation remains active.
-    createManualLocalBackup: () => trackActivity('sqlite:backup-manual-lifecycle', createManualLocalBackup),
-    listLocalBackups: () => trackActivity('sqlite:backup-list-prune', listLocalBackups),
-    restoreLocalBackup: (fileName) =>
-      trackActivity('sqlite:backup-restore-lifecycle', () => restoreLocalBackup(fileName)),
+    createManualLocalBackup,
+    listLocalBackups,
+    restoreLocalBackup,
   };
 }

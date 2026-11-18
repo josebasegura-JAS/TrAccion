@@ -7,7 +7,6 @@
  * simultáneo con Electron main.
  */
 import type { Database } from 'better-sqlite3';
-import { createDetachedReceiptTransactionHooks, type DetachedCommitIdentity } from './detachedWriterCommitReceipt.js';
 import { createTaskRepository, type ConditionalSqliteTaskRecord } from './persistence/taskRepository.js';
 import { findForeignTaskEditingLock } from './persistence/recordLocks.js';
 import {
@@ -28,7 +27,6 @@ export interface DetachedTaskSave {
 export async function saveDetachedTaskRecord(
   db: Database,
   input: DetachedTaskSave,
-  receipt?: DetachedCommitIdentity,
 ): Promise<ConditionalSqliteTaskSaveResult> {
   if (!input || typeof input.ownerId !== 'string' || !input.ownerId.trim() ||
       !input.record || typeof input.record.id !== 'string' || !input.record.id.trim() ||
@@ -46,9 +44,7 @@ export async function saveDetachedTaskRecord(
     isDefaultPath: false,
     lockPath: ':external-smb-lock:',
   };
-  const receiptHooks = receipt ? createDetachedReceiptTransactionHooks(receipt) : null;
   const repo = createTaskRepository({
-    ...(receiptHooks ?? {}),
     safeDatabaseOperation: async (operation) => operation(),
     getSqliteStatus: () => status,
     requireDatabase: () => db,

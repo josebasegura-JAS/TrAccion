@@ -7,9 +7,6 @@
  */
 import type { createSqliteIndependentActivityTracker } from './sqliteIndependentActivityTracker.js';
 import { createSqliteWriterOperationLedger } from './sqliteWriterOperationLedger.js';
-import type { DurableWriterJournal, SqliteReconciliationEvidence } from './durableWriterJournal.js';
-import { verifyDetachedSqliteCommitAfterExit } from './detachedWriterCommitReceipt.js';
-import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
 import {
   createSqliteEngineOwnershipFence,
   type SqliteQueueState,
@@ -21,8 +18,6 @@ type IndependentActivityBarrier = Pick<
 >;
 
 export interface WriterHandoffDependencies {
-  /** Optional until production activation; MUST be provided for production. */
-  durableJournal?: DurableWriterJournal;
   /**
    * Barrera de admisión fuera de la cola IPC. Es OBLIGATORIA: sin ella,
    * un heartbeat, backup o lector readonly podría entrar tras el preflight.
@@ -36,8 +31,6 @@ export interface WriterHandoffDependencies {
   closeMainHandle: () => Promise<void>;
   /** Resuelve solo cuando el proceso hijo confirma inicio y propiedad única. */
   startWriter: (generation: number) => Promise<{ generation: number }>;
-  /** Independent check against actual shared .lockdir AFTER the child starts. */
-  verifyWorkerSmbOwnership: (generation: number) => Promise<void>;
 }
 
 export function createSqliteWriterHandoffCoordinator(
@@ -58,11 +51,6 @@ export function createSqliteWriterHandoffCoordinator(
   }
 
   async function performHandoff(): Promise<number> {
-    // A journal from a previous process may contain orphaned operations.
-    // Refuse to transfer ownership even when the in-memory ledger is empty.
-    if (deps.durableJournal?.unsettled().length) {
-      throw new Error('Journal durable con escrituras no conciliadas: cesión SQLite bloqueada.');
-    }
     // beginHandoff impide admitir operaciones nuevas inmediatamente.
     const ticket = fence.beginHandoff(deps.inspectQueue());
     let closeAttempted = false;
@@ -88,15 +76,6 @@ export function createSqliteWriterHandoffCoordinator(
       if (ready.generation !== ticket) {
         throw new Error('El proceso SQLite auxiliar no coincide con la generación de cesión.');
       }
-      // No confiar solo en READY IPC: comprobar lock SMB real antes de
-      // publicar ownership worker. La comprobación debe fallar ante corte SMB.
-      await deps.verifyWorkerSmbOwnership(ticket);
-      deps.independentActivity.assertFrozenTicket(freezeTicket);
-      // An EXIT callback may have quarantined this generation while the
-      // asynchronous SMB read was in flight. Never publish a dead worker.
-      if (fence.snapshot().owner !== 'main-closed') {
-        throw new Error('Worker SQLite terminó o quedó incierto durante la cesión.');
-      }
       fence.confirmWorkerStarted(ticket);
       // Seguir congelado mientras el worker sea propietario, incluso si
       // posteriormente entra en cuarentena por salida incierta.
@@ -119,21 +98,6 @@ export function createSqliteWriterHandoffCoordinator(
     }
   }
 
-  function reconcileWriterOperationVerified(
-    id: string, generation: number, evidence?: SqliteReconciliationEvidence,
-  ): void {
-    if (fence.snapshot().owner !== 'quarantine' ||
-        fence.snapshot().generation !== generation ||
-        confirmedExitGeneration !== generation) {
-      throw new Error('Conciliación SQLite requiere cuarentena, generación correcta y exit confirmado.');
-    }
-    if (deps.durableJournal) {
-      if (!evidence) throw new Error('Conciliación durable exige evidencia SQLite explícita.');
-      deps.durableJournal.reconcileVerified(id, generation, evidence);
-    }
-    operationLedger.reconcile(id, generation);
-  }
-
   return {
     handoff(): Promise<number> {
       if (pending) return pending;
@@ -146,74 +110,32 @@ export function createSqliteWriterHandoffCoordinator(
       return job;
     },
     /** Registrar ANTES de enviar una escritura. La capa de transporte no reintenta. */
-    registerWriterOperation(id: string, generation: number, receiptBacked = false): void {
+    registerWriterOperation(id: string, generation: number): void {
       assertCurrentWorker(generation);
-      // Durable write-ahead record BEFORE the message can be sent.
-      deps.durableJournal?.recordSubmitted(id, generation, receiptBacked);
       operationLedger.begin(id, generation);
     },
     acknowledgeWriterOperation(id: string, generation: number): void {
       assertCurrentWorker(generation);
-      deps.durableJournal?.recordAcknowledged(id, generation);
       operationLedger.acknowledge(id, generation);
     },
-    reconcileWriterOperation(id: string, generation: number, evidence?: SqliteReconciliationEvidence): void {
-      // PR491: a caller-provided reference is NOT trustworthy commit proof.
-      // Durable operations can only be settled by the independent SQLite verifier.
-      if (deps.durableJournal) {
-        throw new Error('Journal durable: conciliación directa prohibida; verificar recibo SQLite real.');
-      }
-      reconcileWriterOperationVerified(id, generation, evidence);
-    },
-    /**
-     * PR483: recovery of RECEIPTED writes only, using evidence read from the
-     * actual SQLite file after confirmed EXIT. No caller-supplied ACK or
-     * arbitrary reference can claim a commit through this path.
-     *
-     * A supervisor must own the recovery barrier; never expose this to UI.
-     */
-    reconcileReceiptedWriterOperation(
-      id: string, generation: number, databasePath: string,
-      expected: ExpectedSqliteIdentity,
-    ): SqliteReconciliationEvidence {
+    reconcileWriterOperation(id: string, generation: number): void {
       if (fence.snapshot().owner !== 'quarantine' ||
           fence.snapshot().generation !== generation ||
           confirmedExitGeneration !== generation) {
-        throw new Error('La comprobación de commit requiere cuarentena y EXIT confirmado.');
+        throw new Error('Conciliación SQLite requiere cuarentena, generación correcta y exit confirmado.');
       }
-      if (!deps.durableJournal) {
-        throw new Error('La conciliación con SQLite requiere journal durable.');
-      }
-      const entry = deps.durableJournal.unsettled().find(e =>
-        e.id === id && e.generation === generation && e.databaseUuid === expected.databaseUuid);
-      if (!entry) {
-        throw new Error('Operación no pendiente o identidad incompatible para conciliación SQLite.');
-      }
-      if (entry.receiptBacked !== true) {
-        throw new Error('Operación sin recibo transaccional: no puede probarse ausencia de commit.');
-      }
-      if (!operationLedger.unsettledIdsForGeneration(generation).includes(id)) {
-        // Across a main-process restart, the journal survives but the in-memory
-        // operation ledger does not. Do not fabricate recovered ledger state.
-        throw new Error('Journal huérfano tras reinicio: conciliación asistida pendiente.');
-      }
-      const evidence = verifyDetachedSqliteCommitAfterExit(databasePath, expected,
-        { operationId: id, generation, databaseUuid: expected.databaseUuid }, true);
-      reconcileWriterOperationVerified(id, generation, evidence);
-      return evidence;
+      operationLedger.reconcile(id, generation);
     },
     pendingWriterOperationIds(generation: number): string[] {
       return operationLedger.unsettledIdsForGeneration(generation);
     },
     workerUncertain(generation: number): void {
       fence.markWorkerUncertain(generation);
-      deps.durableJournal?.markGenerationUnknown(generation);
       operationLedger.markGenerationUncertain(generation);
     },
     workerExited(generation: number): void {
       fence.markWorkerExited(generation);
       confirmedExitGeneration = generation;
-      deps.durableJournal?.markGenerationUnknown(generation);
       operationLedger.markGenerationUncertain(generation);
     },
     restoreMainAfterReconciliation(
@@ -223,19 +145,15 @@ export function createSqliteWriterHandoffCoordinator(
     ): void {
       // Un booleano del llamador no puede sustituir al libro de operaciones.
       // Rechazar también operaciones en vuelo no marcadas todavía como 'unknown'.
-      if (deps.durableJournal?.unsettled().length) {
-        throw new Error('Journal durable contiene operaciones de resultado no conciliado, incluso tras reinicio.');
-      }
       if (operationLedger.hasUnsettledOperations()) {
         throw new Error('Quedan escrituras SQLite pendientes o de resultado incierto; reconciliar antes de reabrir.');
       }
-      if (activeFreezeTicket === null) {
-        throw new Error('Cesión sin ticket de actividad independiente; requiere intervención.');
-      }
-      deps.independentActivity.assertFrozenTicket(activeFreezeTicket);
       fence.restoreMainAfterVerification(
         generation, deps.inspectQueue(), identityVerified, allUncertainWritesReconciled,
       );
+      if (activeFreezeTicket === null) {
+        throw new Error('Cesión sin ticket de actividad independiente; requiere intervención.');
+      }
       deps.independentActivity.abortFreeze(activeFreezeTicket);
       activeFreezeTicket = null;
       confirmedExitGeneration = null;

@@ -48,9 +48,6 @@ let timerId: number | null = null;
 let checkInProgress = false;
 let consecutiveFailures = 0;
 let consecutiveHealthCheckTimeouts = 0;
-// Un fallo aislado del verificador auxiliar con la SQLite localmente activa
-// no demuestra desconexión SMB. Los errores reales de estado sí bloquean ya.
-let consecutiveUnconfirmedHealthFailures = 0;
 let blockedByHealthMonitor = false;
 // Cada cambio de conexión confirmado invalida recuperaciones antiguas.
 let recoveryGeneration = 0;
@@ -214,22 +211,10 @@ async function runHealthCheck(): Promise<void> {
     if (!result.ok) {
       consecutiveFailures += 1;
       updateDiagnostics({ lastFailureAt: new Date().toISOString(), lastError: result.message, consecutiveFailures });
-      const locallyActive = result.status.ready && result.status.phase === 'active' &&
-        result.status.isDefaultPath === false;
-      consecutiveUnconfirmedHealthFailures = locallyActive
-        ? consecutiveUnconfirmedHealthFailures + 1 : 0;
-      if (locallyActive && !blockedByHealthMonitor && consecutiveUnconfirmedHealthFailures < 2) {
-        // A refused/timed-out health worker is not itself proof that SQLite
-        // disconnected. This remains a warning; writes still obey native
-        // SQLite, heartbeat and SMB lock gates independently.
-        console.warn('[sqlite-health] Verificación aislada fallida; SQLite sigue activa. Se repetirá antes de declarar desconexión.');
-        return;
-      }
       blockEditing(`${CONNECTIVITY_MESSAGE} ${result.message}`);
       return;
     }
 
-    consecutiveUnconfirmedHealthFailures = 0;
     updateDiagnostics({ lastSuccessAt: new Date().toISOString(), lastError: null, consecutiveFailures: 0 });
     if (!blockedByHealthMonitor) {
       consecutiveFailures = 0;
@@ -240,7 +225,6 @@ async function runHealthCheck(): Promise<void> {
     await completeRecovery();
   } catch (error) {
     consecutiveFailures += 1;
-    consecutiveUnconfirmedHealthFailures = 0;
     const message = error instanceof Error ? error.message : 'Error verificando SQLite.';
     const timedOut = isHealthCheckResponseTimeout(error);
     consecutiveHealthCheckTimeouts = timedOut ? consecutiveHealthCheckTimeouts + 1 : 0;
@@ -316,7 +300,6 @@ export function stopDatabaseHealthMonitor(): void {
   checkInProgress = false;
   consecutiveFailures = 0;
   consecutiveHealthCheckTimeouts = 0;
-  consecutiveUnconfirmedHealthFailures = 0;
   blockedByHealthMonitor = false;
   publishDatabaseConnectivityBlock(false, undefined, 'health-monitor');
   publishDatabaseConnectivityState('connected');

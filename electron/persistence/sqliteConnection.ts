@@ -1,5 +1,4 @@
 import { createRequire } from 'node:module';
-import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import { pruneLocalStorageBackups } from './maintenanceQueries.js';
 import {
@@ -18,11 +17,6 @@ export function openSqliteDatabase(
   databasePath: string,
   options: OpenSqliteDatabaseOptions,
 ): Database {
-  // Admission is checked at the native opening boundary as defense in depth.
-  // Even an autonomous caller that bypasses a repository-level guard must not
-  // create another SQLite handle after main ownership has been ceded.
-  // This does not replace freeze/drain of work already admitted.
-  sqliteEngineOwnershipFence.assertMayEnterMain();
   const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
   const db = new BetterSqlite3(databasePath);
   db.pragma(`busy_timeout = ${options.busyTimeoutMs}`);

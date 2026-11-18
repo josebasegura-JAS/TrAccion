@@ -1,6 +1,5 @@
 /** PR9D-4C: puente Electron para lecturas de módulos JSON readonly. */
 import { utilityProcess } from 'electron';
-import { runIsolatedSqliteReadUnderHandoffBarrier } from './isolatedSqliteReadAdmission.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ExpectedSqliteIdentity } from './persistence/sqliteIntegrityVerification.js';
@@ -15,7 +14,7 @@ export function readJsonModuleInUtilityProcess(
   expected: ExpectedSqliteIdentity,
   table: IsolatedJsonTable,
 ): Promise<SqliteJsonRecord[]> {
-  return runIsolatedSqliteReadUnderHandoffBarrier('json', () => runJsonReadWorker({
+  return runJsonReadWorker({
     databasePath, expected, table,
     createChild: () => {
       const child = utilityProcess.fork(path.join(__dirname, 'jsonReadWorker.js'), [], {
@@ -28,5 +27,5 @@ export function readJsonModuleInUtilityProcess(
         onExit: handler => { child.on('exit', handler); },
       };
     },
-  }));
+  });
 }

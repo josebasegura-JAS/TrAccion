@@ -1,6 +1,4 @@
 import { stat } from 'node:fs/promises';
-import { sqliteIndependentActivityTracker } from '../sqliteIndependentActivityTracker.js';
-import { sqliteEngineOwnershipFence } from '../sqliteEngineOwnershipFence.js';
 import type { Database } from 'better-sqlite3';
 import { computeHeaviestTables, type TableSizeBreakdownEntry } from './maintenanceQueries.js';
 import type { DatabaseLockInfo, DatabaseStatus } from '../sqlitePersistence.js';
@@ -37,7 +35,7 @@ export interface VacuumMaintenanceDependencies {
  * Ejecuta VACUUM sobre la base SQLite activa, reescribiendo el archivo completo
  * para liberar espacio en disco y actualizando estadísticas con ANALYZE.
  */
-async function performVacuumDatabase(
+export async function vacuumDatabase(
   dependencies: VacuumMaintenanceDependencies,
   reason: string,
 ): Promise<VacuumResult> {
@@ -113,7 +111,7 @@ async function performVacuumDatabase(
  * Lanza VACUUM en segundo plano si ha pasado el intervalo programado desde el
  * último compactado. Pensado para el cierre de la app.
  */
-async function performScheduledVacuumIfDue(dependencies: VacuumMaintenanceDependencies): Promise<void> {
+export async function runScheduledVacuumIfDue(dependencies: VacuumMaintenanceDependencies): Promise<void> {
   const currentDatabase = dependencies.getDatabase();
   const currentStatus = dependencies.getStatus();
   if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
@@ -129,10 +127,10 @@ async function performScheduledVacuumIfDue(dependencies: VacuumMaintenanceDepend
     return;
   }
 
-  await performVacuumDatabase(dependencies, 'scheduled');
+  await vacuumDatabase(dependencies, 'scheduled');
 }
 
-async function performGetVacuumStatus(dependencies: VacuumMaintenanceDependencies): Promise<VacuumStatus> {
+export async function getVacuumStatus(dependencies: VacuumMaintenanceDependencies): Promise<VacuumStatus> {
   const currentDatabase = dependencies.getDatabase();
   const currentStatus = dependencies.getStatus();
   const lastVacuumAt = currentDatabase && currentStatus.ready ? readLastVacuumAt(currentDatabase) : null;
@@ -161,38 +159,4 @@ function writeLastVacuumAt(db: Database, timestamp: string): void {
 
 function isMetadataRow(row: unknown): row is { value: string } {
   return Boolean(row) && typeof row === 'object' && typeof (row as { value?: unknown }).value === 'string';
-}
-
-/**
- * Protect direct consumers of this repository, not just sqlitePersistence's
- * maintenance gate. A scheduled operation is tracked from the initial status
- * read until its SQL, heartbeat and SMB lease have actually completed.
- * Existing maintenance-gate callers reenter their already-admitted context.
- */
-function runVacuumUnderHandoffBarrier<T>(
-  label: string, operation: () => Promise<T>,
-): Promise<T> {
-  sqliteEngineOwnershipFence.assertMayEnterMain();
-  return sqliteIndependentActivityTracker.run(label, operation);
-}
-
-export function vacuumDatabase(
-  dependencies: VacuumMaintenanceDependencies, reason: string,
-): Promise<VacuumResult> {
-  return runVacuumUnderHandoffBarrier('sqlite:vacuum-full', () =>
-    performVacuumDatabase(dependencies, reason));
-}
-
-export function runScheduledVacuumIfDue(
-  dependencies: VacuumMaintenanceDependencies,
-): Promise<void> {
-  return runVacuumUnderHandoffBarrier('sqlite:vacuum-scheduled-full', () =>
-    performScheduledVacuumIfDue(dependencies));
-}
-
-export function getVacuumStatus(
-  dependencies: VacuumMaintenanceDependencies,
-): Promise<VacuumStatus> {
-  return runVacuumUnderHandoffBarrier('sqlite:vacuum-status-full', () =>
-    performGetVacuumStatus(dependencies));
 }
