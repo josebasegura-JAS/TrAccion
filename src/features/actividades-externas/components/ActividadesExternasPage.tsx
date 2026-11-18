@@ -30,7 +30,7 @@ const ACTIVIDADES_EXTERNAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Edición y eliminación',
     items: [
-      'Editar permite corregir actividad, fecha, remuneración y observaciones RRLL, conservando la resolución del Comité.',
+      'Editar permite corregir actividad, fecha, remuneración y observaciones RRLL, conservando la resolución del Comité de Dirección.',
       'Eliminar pide confirmación y borra la solicitud de la base compartida. Comprueba los datos antes de confirmar.',
       'Si otro usuario ha modificado la solicitud, TrAcción evita sobrescribirla y solicita recargar.',
     ],
@@ -125,7 +125,7 @@ export function ActividadesExternasPage() {
       const person = employees.find((item) => item.empleado === record.empleado && !item.deletedAt);
       const puesto = person?.puestoOrganizativo?.trim() || person?.puestoNomina?.trim();
       const email = person?.email?.trim() || record.email.trim();
-      const mail = buildActividadMail(record, puesto);
+      const mail = buildActividadMail({ ...record, nombre: person?.nombreApellidos?.trim() || record.nombre }, puesto);
       const result = await window.traccion.createOutlookDraft({ ...mail, to: email ? [email] : [], cc: [] });
       if (!result.ok) { setMessage(`${approvalNote}${result.message}`); return; }
       const saved = await setComunicacion(record.id, 'borrador');
@@ -207,9 +207,9 @@ export function ActividadesExternasPage() {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {([
           { heading: 'Pendientes de RRLL', description: 'Solicitudes pendientes de revisión inicial por Relaciones Laborales.', states: ['pendiente'], icon: 'rrll' },
-          { heading: 'Pendientes de Comité de Dirección', description: 'Propuestas favorables pendientes de resolución por el Comité.', states: ['propuesta'], icon: 'comite' },
+          { heading: 'Pendientes de Comité de Dirección', description: 'Propuestas favorables pendientes de resolución por el Comité de Dirección.', states: ['propuesta'], icon: 'comite' },
           { heading: 'Autorizadas', description: 'Actividades externas aprobadas por el Comité de Dirección.', states: ['autorizada'], icon: 'ok' },
-          { heading: 'Histórico de rechazadas y denegadas', description: 'Solicitudes rechazadas por RRLL o denegadas por el Comité.', states: ['rechazada_rrll', 'denegada'], icon: 'history' },
+          { heading: 'Histórico de rechazadas y denegadas', description: 'Solicitudes rechazadas por RRLL o denegadas por el Comité de Dirección.', states: ['rechazada_rrll', 'denegada'], icon: 'history' },
         ] as const).map((group) => {
           const groupRecords = visible.filter((record) => (group.states as readonly string[]).includes(record.estado));
           if (group.icon === 'history' && !showHistory) return <div key={group.heading} className="lg:col-span-2"><button type="button" onClick={() => setShowHistory(true)} className="rounded-lg border border-metro-border px-3 py-2 text-xs text-metro-text">Mostrar histórico de rechazadas y denegadas ({groupRecords.length})</button></div>;
@@ -293,7 +293,7 @@ export function ActividadesExternasPage() {
         <label className="block text-xs font-semibold">Observaciones de RRLL
           <textarea value={editRrllNotes} onChange={(event) => setEditRrllNotes(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm text-metro-text"/>
         </label>
-        <p className="text-xs text-metro-muted">Se conservan la resolución del Comité, sus observaciones y el estado de comunicación. Si ya se comunicó, revisa si procede enviar una actualización.</p>
+        <p className="text-xs text-metro-muted">Se conservan la resolución del Comité de Dirección, sus observaciones y el estado de comunicación. Si ya se comunicó, revisa si procede enviar una actualización.</p>
         <div className="flex justify-end gap-2">
           <button type="button" disabled={busy} onClick={() => setEditing(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
           <button type="submit" disabled={busy || !editActivity.trim() || !editDate} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Guardar cambios</button>
@@ -304,7 +304,7 @@ export function ActividadesExternasPage() {
     {resolution && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
       <div role="dialog" aria-modal="true" aria-label="Resolver solicitud" className="w-full max-w-lg space-y-3 rounded-xl border border-metro-border bg-metro-panel p-5 text-metro-text">
         <h3 className="font-bold">{resolution.estado === 'propuesta' ? 'Elevar al Comité de Dirección' : resolution.estado === 'rechazada_rrll' ? 'Rechazar en RRLL' : resolution.estado === 'autorizada' ? 'Aprobar en Comité de Dirección' : 'Denegar en Comité de Dirección'} solicitud de {resolution.record.nombre}</h3>
-        <p className="text-xs text-metro-muted">{resolution.estado === 'propuesta' ? 'Puedes añadir observaciones de RRLL.' : resolution.estado === 'autorizada' ? 'Puedes indicar observaciones de aprobación.' : 'Indica el motivo del rechazo o denegación.'} Las observaciones se incorporarán al borrador de Outlook.</p>
+        <p className="text-xs text-metro-muted">{resolution.estado === 'propuesta' ? 'Puedes añadir observaciones de RRLL.' : resolution.estado === 'autorizada' ? 'Puedes indicar observaciones internas de aprobación.' : 'Indica el motivo del rechazo o denegación.'} Las observaciones quedarán en el registro; el borrador favorable utiliza el texto predefinido.</p>
         <label htmlFor="actividad-resolution-notes" className="block text-xs font-semibold">Observaciones {(resolution.estado === 'denegada' || resolution.estado === 'rechazada_rrll') ? '(obligatorias)' : '(opcionales)'}</label>
         <textarea id="actividad-resolution-notes" autoFocus value={reason} onChange={(event) => setReason(event.target.value)} rows={4} className="w-full rounded-lg border border-metro-border bg-metro-surface p-2 text-sm"/>
         <div className="flex justify-end gap-2"><button type="button" onClick={() => setResolution(null)} className="rounded-lg border border-metro-border px-3 py-2 text-xs">Cancelar</button>
