@@ -32,6 +32,8 @@ interface PendingTaskSave {
 
 // Solo en memoria: nunca se reenvía una escritura incierta automáticamente.
 const pendingTaskSaves = new Map<string, PendingTaskSave>();
+// Un alta indeterminada debe verificarse antes de intentar crear de nuevo.
+const pendingTaskCreates = new Set<string>();
 
 function isIndeterminateSave(message: string): boolean {
   return /resultado (?:es )?indeterminado|operación puede seguir en curso|superó el límite de \d+ ms/i.test(message);
@@ -138,13 +140,63 @@ export async function createTaskWithConcurrencyCheck(
   draft: TaskDraft,
   seguimientoText: string | undefined,
   setState: SetTaskCrudState,
+  taskId?: string,
 ): Promise<TaskUpdateResult> {
-  const task = buildNewTask(draft, seguimientoText);
+  // El editor proporciona un ID estable por formulario. En el registro se guarda
+  // el mismo marcador para reconocer un alta propia tras un timeout o al
+  // reintentar asociar los circuitos de Coordinación.
+  const task = buildNewTask(draft, seguimientoText, taskId ? { taskId } : undefined);
+  if (taskId) task.lastSaveAttemptId = taskId;
+
+  const confirmCreatedTask = (persisted: Task): TaskUpdateResult => {
+    setState((state) => {
+      const tasks = [...state.tasks.filter((record) => record.id !== persisted.id), persisted].map(normalizeTask);
+      return { tasks, selectedTaskId: isTaskClosed(persisted) ? firstActiveTaskId(tasks) : persisted.id };
+    });
+    return { ok: true, message: 'Se ha confirmado el alta anterior sin duplicar la tarea.', recordId: persisted.id };
+  };
 
   try {
     if (hasTaskSqliteRepository()) {
-      const saveResult = await persistTaskDirectly(task, null);
-      if (!saveResult.ok) return saveResult;
+      if (taskId) {
+        // Leer por ID es obligatorio en los reintentos. Si una escritura anterior
+        // continuaba después del timeout IPC, la cola no adelanta esta lectura.
+        let persisted: Task | undefined;
+        try {
+          persisted = (await readTasksForStore('all', taskId)).find((record) => record.id === taskId);
+        } catch {
+          return { ok: false, message: 'No se puede verificar todavía si el alta anterior terminó. Conserva el formulario y vuelve a pulsar Guardar para comprobarlo; no se ha enviado otra escritura.' };
+        }
+        if (persisted) {
+          pendingTaskCreates.delete(taskId);
+          return persisted.lastSaveAttemptId === taskId
+            ? confirmCreatedTask(persisted)
+            : { ok: false, message: 'El identificador de la tarea ya existe con otro origen. No se ha duplicado ni sobrescrito ningún registro.' };
+        }
+        if (pendingTaskCreates.delete(taskId)) {
+          return { ok: false, message: 'El alta anterior no figura en SQLite. No se ha enviado otra escritura. Revisa el formulario y vuelve a pulsar Guardar si deseas crearla.' };
+        }
+      }
+
+      let saveResult: TaskUpdateResult;
+      try {
+        saveResult = await persistTaskDirectly(task, null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (taskId && isIndeterminateSave(message)) {
+          pendingTaskCreates.add(taskId);
+          return { ok: false, message: 'El alta puede terminar después del tiempo de espera. Conserva el formulario y pulsa Guardar otra vez solo para comprobar el resultado; no se enviará otra escritura.' };
+        }
+        throw error;
+      }
+      if (!saveResult.ok) {
+        if (taskId && isIndeterminateSave(saveResult.message)) {
+          pendingTaskCreates.add(taskId);
+          return { ok: false, message: 'El alta puede terminar después del tiempo de espera. Conserva el formulario y pulsa Guardar otra vez solo para comprobar el resultado; no se enviará otra escritura.' };
+        }
+        return saveResult;
+      }
+      if (taskId) pendingTaskCreates.delete(taskId);
 
       enqueueAuditEvent({
         module: 'tareas', entityId: task.id, action: 'created', summary: 'Registro creado', changes: [],
