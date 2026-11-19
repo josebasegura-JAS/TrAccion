@@ -1,6 +1,7 @@
 import { app } from 'electron';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 export const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
@@ -95,8 +96,18 @@ export async function readDatabasePreferences(): Promise<DatabasePreferences> {
 }
 
 export async function writeDatabasePreferences(preferences: DatabasePreferences): Promise<void> {
-  await mkdir(path.dirname(getPreferencesPath()), { recursive: true });
-  await writeFile(getPreferencesPath(), JSON.stringify(preferences, null, 2), 'utf8');
+  const preferencesPath = getPreferencesPath();
+  await mkdir(path.dirname(preferencesPath), { recursive: true });
+  // Publicar únicamente JSON completo: escribir y renombrar en la misma carpeta.
+  // Un nombre temporal exclusivo evita interferencias entre dos guardados locales.
+  const temporaryPath = `${preferencesPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, JSON.stringify(preferences, null, 2), { encoding: 'utf8', flag: 'wx' });
+    await rename(temporaryPath, preferencesPath);
+  } finally {
+    // Si falla escribir o publicar, el fichero anterior queda intacto.
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
 }
 
 export async function getConfiguredDatabaseDirectory(): Promise<{
