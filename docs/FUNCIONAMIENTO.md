@@ -66,8 +66,6 @@ Secciones sin fórmula exacta: describen una invariancia funcional o un flujo; n
 
 ---
 
-- **Apertura SQLite:** si falla la configuración PRAGMA, comprobación de esquema, migración o limpieza inicial, se cierra explícitamente el handle nativo antes de propagar el error original. No se altera el camino de apertura correcta ni la política de migración. Prueba: `electron/persistence/sqliteConnection.test.ts`.
-
 ## 4. Tareas
 
 ### 4.1. Concepto y entradas
@@ -476,6 +474,8 @@ Las rutas de Excel automáticos, plantillas Word, actualizaciones y otros recurs
 ---
 
 ## 20. Persistencia, multiusuario y refresco
+
+- **Apertura SQLite:** si falla la configuración PRAGMA, comprobación de esquema, migración o limpieza inicial, se cierra explícitamente el handle nativo antes de propagar el error original. No se altera el camino de apertura correcta ni la política de migración. Prueba: `electron/persistence/sqliteConnection.test.ts`.
 
 - Los módulos que trabajan sobre datos compartidos deben persistir en SQLite conforme a la arquitectura vigente.
 - Un guardado no debe darse visualmente por definitivo si la persistencia real ha fallado.
