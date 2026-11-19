@@ -27,7 +27,7 @@ interface TaskStateStore {
   load: () => void;
   reloadFromStorage: () => Promise<void>;
   loadHistoricalTasks: () => Promise<void>;
-  createWithConcurrencyCheck: (draft: TaskDraft, seguimientoText?: string) => Promise<TaskUpdateResult>;
+  createWithConcurrencyCheck: (draft: TaskDraft, seguimientoText?: string, taskId?: string) => Promise<TaskUpdateResult>;
   createManyFromImport: (
     drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>,
   ) => Promise<Record<string, string>>;
@@ -183,8 +183,8 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
       set({ isLoadingHistoricalTasks: false });
     }
   },
-  createWithConcurrencyCheck: (draft, seguimientoText) =>
-    createTaskWithConcurrencyCheck(draft, seguimientoText, set),
+  createWithConcurrencyCheck: (draft, seguimientoText, taskId) =>
+    createTaskWithConcurrencyCheck(draft, seguimientoText, set, taskId),
   createManyFromImport: (drafts) =>
     createManyTasksFromImport(drafts, get(), set, () =>
       get().reloadFromStorage(),

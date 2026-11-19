@@ -80,6 +80,8 @@ Secciones sin fórmula exacta: describen una invariancia funcional o un flujo; n
 - Una tarea puede acumular seguimientos, actuaciones pendientes y anotaciones sin sustituir el histórico anterior.
 - Al editar, la aplicación obtiene bloqueo compartido y comprueba la versión vigente antes de guardar; un conflicto obliga a reconciliar en lugar de sobrescribir.
 - Si el guardado vence el plazo IPC, su resultado es **incierto**: al repetir la acción se debe comprobar el identificador de intento anterior antes de considerar una nueva escritura. El timeout por sí mismo no demuestra fallo de SQLite.
+- **Alta de tarea:** el formulario conserva un mismo ID mientras permanezca abierto. Tras un timeout, la siguiente pulsación solo consulta SQLite; si encuentra el ID con su marcador de creación, confirma el alta sin duplicar ni auditar otra vez. Si la lectura falla, conserva el formulario y no reenvía; si confirma que no existe, informa y exige otra pulsación explícita antes de escribir. También evita duplicar el alta cuando falla después la asociación con Coordinación.
+- **Límite:** el flujo alternativo `createTaskOverride` mantiene su propia gestión de creación y no se modifica en esta corrección.
 - La recuperación de red no debe sustituir un borrador modificado sin informar ni perder innecesariamente la posición de tabla.
 - **Origen y pruebas:** `src/features/tareas/store/taskCrud.ts`, `src/components/task-editor/useTaskEditorController.ts`, `src/features/tareas/store/taskCrud.uncertainSave.test.ts`.
 
