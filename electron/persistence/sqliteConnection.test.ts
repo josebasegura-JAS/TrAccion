@@ -1,7 +1,8 @@
+import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CURRENT_SCHEMA_VERSION, readCurrentSchemaVersion } from './schemaMigrations';
 import { openSqliteDatabase } from './sqliteConnection';
 
@@ -38,6 +39,18 @@ describe('sqliteConnection — openSqliteDatabase', () => {
 
     expect(readCurrentSchemaVersion(db!)).toBe(CURRENT_SCHEMA_VERSION);
     db!.close();
+  });
+
+  it('cierra el handle nativo cuando falla un PRAGMA durante la inicialización', () => {
+    const closeSpy = vi.spyOn(Database.prototype, 'close');
+    try {
+      // La conexión nativa se abre antes de configurar el busy_timeout.
+      // NaN fuerza un PRAGMA inválido sin cambiar esquemas ni datos.
+      expect(() => openSqliteDatabase(databasePath, { busyTimeoutMs: Number.NaN })).toThrow();
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      closeSpy.mockRestore();
+    }
   });
 
   it('reabre sin errores una base de datos ya existente y migrada', () => {
