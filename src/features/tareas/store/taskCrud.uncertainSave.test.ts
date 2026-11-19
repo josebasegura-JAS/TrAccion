@@ -112,9 +112,11 @@ describe('Tareas: resolver un guardado de resultado incierto sin reintento', () 
 });
 
 describe('Tareas: alta con ID estable y resultado incierto', () => {
-  const createId = 'task-create-stable-regression';
+  let createId: string;
+  let createSequence = 0;
   const ownAttempt = () => ({ ...task, id: createId, titulo: draft.titulo, lastSaveAttemptId: createId });
   beforeEach(() => {
+    createId = `task-create-stable-regression-${++createSequence}`;
     vi.resetAllMocks();
     vi.mocked(hasTaskSqliteRepository).mockReturnValue(true);
     read.mockResolvedValue([]);
