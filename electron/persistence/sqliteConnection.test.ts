@@ -1,7 +1,8 @@
+import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CURRENT_SCHEMA_VERSION, readCurrentSchemaVersion } from './schemaMigrations';
 import { openSqliteDatabase } from './sqliteConnection';
 
@@ -38,6 +39,25 @@ describe('sqliteConnection — openSqliteDatabase', () => {
 
     expect(readCurrentSchemaVersion(db!)).toBe(CURRENT_SCHEMA_VERSION);
     db!.close();
+  });
+
+  it('cierra el handle nativo si rechaza un esquema más reciente', () => {
+    const original = openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 });
+    try {
+      original.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
+        .run(CURRENT_SCHEMA_VERSION + 1, '2026-11-19T00:00:00.000Z');
+    } finally {
+      original.close();
+    }
+
+    const closeSpy = vi.spyOn(Database.prototype, 'close');
+    try {
+      expect(() => openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 }))
+        .toThrow(/Actualiza TrAcción/);
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      closeSpy.mockRestore();
+    }
   });
 
   it('reabre sin errores una base de datos ya existente y migrada', () => {
