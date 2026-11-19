@@ -168,10 +168,18 @@ export async function createTaskWithConcurrencyCheck(
           return { ok: false, message: 'No se puede verificar todavía si el alta anterior terminó. Conserva el formulario y vuelve a pulsar Guardar para comprobarlo; no se ha enviado otra escritura.' };
         }
         if (persisted) {
-          pendingTaskCreates.delete(taskId);
-          return persisted.lastSaveAttemptId === taskId
-            ? confirmCreatedTask(persisted)
-            : { ok: false, message: 'El identificador de la tarea ya existe con otro origen. No se ha duplicado ni sobrescrito ningún registro.' };
+          const wasPending = pendingTaskCreates.delete(taskId);
+          if (persisted.lastSaveAttemptId !== taskId) {
+            return { ok: false, message: 'El identificador de la tarea ya existe con otro origen. No se ha duplicado ni sobrescrito ningún registro.' };
+          }
+          // El éxito tras timeout no pasó por la rama de auditoría original.
+          // Una segunda comprobación no debe auditar otra vez la misma alta.
+          if (wasPending) {
+            enqueueAuditEvent({
+              module: 'tareas', entityId: taskId, action: 'created', summary: 'Registro creado', changes: [],
+            });
+          }
+          return confirmCreatedTask(persisted);
         }
         if (pendingTaskCreates.delete(taskId)) {
           return { ok: false, message: 'El alta anterior no figura en SQLite. No se ha enviado otra escritura. Revisa el formulario y vuelve a pulsar Guardar si deseas crearla.' };
