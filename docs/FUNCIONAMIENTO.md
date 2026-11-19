@@ -445,6 +445,8 @@ El módulo debe permitir distinguir y consultar la documentación ya enviada/reg
 
 ## 19. Ajustes
 
+- **Preferencias SQLite locales:** `sqlite-preferences.json` se escribe primero en un fichero temporal exclusivo y se publica por renombrado en el mismo directorio. Si falla la serialización o publicación se conserva el archivo anterior; la lectura de configuraciones antiguas no cambia. Pruebas: `electron/persistence/databasePreferences.test.ts`.
+
 ### 19.1. Base de datos
 
 - Permite configurar y comprobar la SQLite compartida.

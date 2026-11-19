@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -90,6 +90,41 @@ describe('databasePreferences', () => {
       updatesDirectoryPath: '/red/updates',
       expectedDatabaseUuid: null,
     });
+  });
+
+  it('publica las preferencias completas sin dejar ficheros temporales', async () => {
+    await writeDatabasePreferences({
+      customDirectoryPath: '/red/datos',
+      secondaryBackupDirectoryPath: null,
+      dailyLocalBackupEnabled: true,
+      dailyLocalBackupRetentionDays: 7,
+      dailyLocalBackupDirectoryPath: null,
+      updatesDirectoryPath: null,
+    });
+
+    expect(JSON.parse(readFileSync(getPreferencesPath(), 'utf8'))).toMatchObject({
+      customDirectoryPath: '/red/datos',
+    });
+    expect(readdirSync(userDataDir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('si falla la serialización conserva intacto el fichero anterior', async () => {
+    const previous = {
+      customDirectoryPath: '/red/original',
+      secondaryBackupDirectoryPath: null,
+      dailyLocalBackupEnabled: true,
+      dailyLocalBackupRetentionDays: 7,
+      dailyLocalBackupDirectoryPath: null,
+      updatesDirectoryPath: null,
+    };
+    await writeDatabasePreferences(previous);
+    const originalContent = readFileSync(getPreferencesPath(), 'utf8');
+    const circular: Record<string, unknown> = { ...previous };
+    circular.self = circular;
+    await expect(writeDatabasePreferences(circular as unknown as Parameters<typeof writeDatabasePreferences>[0])).rejects.toThrow();
+    expect(existsSync(getPreferencesPath())).toBe(true);
+    expect(readFileSync(getPreferencesPath(), 'utf8')).toBe(originalContent);
+    expect(readdirSync(userDataDir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
   });
 
   it('readDatabasePreferences recorta dailyLocalBackupRetentionDays al rango válido (1-7)', async () => {
