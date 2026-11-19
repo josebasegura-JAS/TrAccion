@@ -49,7 +49,7 @@ export function openSqliteDatabase(
     // Un fallo en PRAGMA, lectura del esquema, migración o mantenimiento no
     // debe dejar el handle nativo abierto (especialmente sobre SMB).
     try {
-      if (db.open) db.close();
+      db.close();
     } catch {
       // Conservar el error original de inicialización para el diagnóstico.
     }
