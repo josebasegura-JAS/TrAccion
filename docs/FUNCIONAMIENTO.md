@@ -66,6 +66,8 @@ Secciones sin fórmula exacta: describen una invariancia funcional o un flujo; n
 
 ---
 
+- **Preferencias SQLite locales:** `sqlite-preferences.json` se escribe primero en un fichero temporal exclusivo y se publica por renombrado en el mismo directorio. Si falla la serialización o publicación se conserva el archivo anterior; la lectura de configuraciones antiguas no cambia. Pruebas: `electron/persistence/databasePreferences.test.ts`.
+
 ## 4. Tareas
 
 ### 4.1. Concepto y entradas
