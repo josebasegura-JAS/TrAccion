@@ -41,12 +41,19 @@ describe('sqliteConnection — openSqliteDatabase', () => {
     db!.close();
   });
 
-  it('cierra el handle nativo cuando falla un PRAGMA durante la inicialización', () => {
+  it('cierra el handle nativo si rechaza un esquema más reciente', () => {
+    const original = openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 });
+    try {
+      original.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
+        .run(CURRENT_SCHEMA_VERSION + 1, '2026-11-19T00:00:00.000Z');
+    } finally {
+      original.close();
+    }
+
     const closeSpy = vi.spyOn(Database.prototype, 'close');
     try {
-      // La conexión nativa se abre antes de configurar el busy_timeout.
-      // NaN fuerza un PRAGMA inválido sin cambiar esquemas ni datos.
-      expect(() => openSqliteDatabase(databasePath, { busyTimeoutMs: Number.NaN })).toThrow();
+      expect(() => openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 }))
+        .toThrow(/Actualiza TrAcción/);
       expect(closeSpy).toHaveBeenCalledTimes(1);
     } finally {
       closeSpy.mockRestore();
