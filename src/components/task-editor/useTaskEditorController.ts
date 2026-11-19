@@ -10,6 +10,7 @@ import {
   type TaskSeguimientoEntry,
 } from '../../features/tareas/domain/task';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
+import { createTaskId } from '../../features/tareas/store/taskMutations';
 import { loadFreshTaskAfterLock, hasUnsavedTaskEditorChanges } from './taskEditorLockSnapshot';
 import { useEditorShortcuts } from '../../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../../hooks/useRecoverableDraft';
@@ -119,6 +120,8 @@ export function useTaskEditorController({
   const [saveStatusIsError, setSaveStatusIsError] = useState(false);
   const [loadedIdentity, setLoadedIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState(task?.updatedAt ?? null);
+  // Se conserva para todos los intentos del mismo formulario, incluso tras timeout.
+  const createTaskIdRef = useRef<string | null>(null);
   const pendingTrackingSaveRef = useRef<{
     taskId: string;
     attemptId: string;
@@ -284,6 +287,7 @@ export function useTaskEditorController({
     const identity = `${mode}:${task?.id ?? 'new'}`;
     if (identity === loadedIdentity) return;
 
+    createTaskIdRef.current = null;
     const nextDraft = toDraft(task);
     const nextTrackingDate = todayIsoDate();
 
@@ -456,9 +460,12 @@ export function useTaskEditorController({
         unionName: sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : null,
         areaName: selectedAreaTarget || null,
       };
+      // Un reintento no debe crear un segundo ID. Los overrides conservan su
+      // propio protocolo y no se modifican en esta corrección acotada.
+      if (!createTaskOverride) createTaskIdRef.current ??= createTaskId();
       const result = createTaskOverride
         ? await createTaskOverride({ draft, seguimientoText: seguimientoForSave, targets })
-        : await createTask(draft, seguimientoForSave);
+        : await createTask(draft, seguimientoForSave, createTaskIdRef.current!);
       if (!result.ok) {
         setSaveStatus(result.message);
         setSaveStatusIsError(true);
