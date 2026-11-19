@@ -66,6 +66,8 @@ Secciones sin fórmula exacta: describen una invariancia funcional o un flujo; n
 
 ---
 
+- **Apertura SQLite:** si falla la configuración PRAGMA, comprobación de esquema, migración o limpieza inicial, se cierra explícitamente el handle nativo antes de propagar el error original. No se altera el camino de apertura correcta ni la política de migración. Prueba: `electron/persistence/sqliteConnection.test.ts`.
+
 ## 4. Tareas
 
 ### 4.1. Concepto y entradas
