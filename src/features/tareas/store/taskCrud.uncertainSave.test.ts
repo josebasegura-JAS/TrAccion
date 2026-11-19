@@ -135,7 +135,7 @@ describe('Tareas: alta con ID estable y resultado incierto', () => {
     const second = await createTaskWithConcurrencyCheck(draft, undefined, s.set, createId);
     expect(second).toMatchObject({ ok: true, recordId: createId });
     expect(save).toHaveBeenCalledTimes(1);
-    expect(enqueueAuditEvent).not.toHaveBeenCalled();
+    expect(enqueueAuditEvent).toHaveBeenCalledTimes(1);
     expect(s.current().tasks.some((entry) => entry.id === createId)).toBe(true);
   });
 
