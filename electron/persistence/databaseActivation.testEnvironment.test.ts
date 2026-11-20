@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-describe('arranque aislado con SQLite test', () => {
+// Migraciones y fsync de SQLite en Windows CI pueden superar los 5 s por\n// test, como ocurre en sqliteConnection.test.ts. Es un límite de prueba,\n// no un cambio del timeout operativo de la aplicación.\ndescribe('arranque aislado con SQLite test', () => {
   let directory: string;
   let originalArgs: string[];
   let requestedLocks: number;
@@ -68,7 +68,7 @@ describe('arranque aislado con SQLite test', () => {
     } finally {
       activated.database.close();
     }
-  });
+  }, 30_000);
 
   it('rechaza la base real antes de crear lock o escribir en su carpeta', async () => {
     const productionDir = path.join(directory, 'produccion');
@@ -89,5 +89,5 @@ describe('arranque aislado con SQLite test', () => {
     try { expect(readDatabaseIdentity(verified)?.environment).toBe('production'); }
     finally { verified.close(); }
     expect(existsSync(dbPath + '.lockdir')).toBe(false);
-  });
+  }, 30_000);
 });
