@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { hostname, userInfo } from 'node:os';
 import { performance } from 'node:perf_hooks';
@@ -373,12 +373,29 @@ export function createDatabaseLockManager(
 
   async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
     await mkdir(lockPath);
-    await writeFile(getLockInfoPath(lockPath), JSON.stringify(lock, null, 2), 'utf8');
+    try {
+      // Nunca truncar el propietario de una adquisición posterior. En SMB un
+      // writeFile retrasado puede continuar después de que otro equipo haya
+      // recuperado y recreado el directorio vacío.
+      await writeFile(getLockInfoPath(lockPath), JSON.stringify(lock, null, 2), {
+        encoding: 'utf8',
+        flag: 'wx',
+      });
+    } catch (error) {
+      // No hacer rmdir aquí: después de una pausa de red el directorio puede
+      // haber sido recreado por otro proceso. La recuperación conservadora de
+      // directorios vacíos se encarga de los restos verificables.
+      console.warn('[sqlite-lock] No se ha podido publicar owner.json de forma exclusiva.', error);
+      throw error;
+    }
 
     const confirmedLock = await readLock(lockPath);
-    if (confirmedLock?.ownerId !== lock.ownerId) {
-      await releaseLock(lockPath, lock);
-      throw new Error('Otro proceso ganó la carrera de lock SQLite en SMB.');
+    if (confirmedLock?.ownerId !== lock.ownerId ||
+        confirmedLock.pid !== lock.pid ||
+        confirmedLock.createdAt !== lock.createdAt) {
+      // releaseLock solo es aplicable a leases ya registrados; nunca intentar
+      // limpiar una identidad que no podemos demostrar que sigue siendo propia.
+      throw new Error('No se ha podido confirmar la identidad exacta del bloqueo SQLite en SMB.');
     }
   }
 
@@ -781,16 +798,41 @@ export function createDatabaseLockManager(
   }
 
   async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-    const currentLock = await readLock(lockPath);
-    if (currentLock?.ownerId !== lock.ownerId) {
-      throw new Error('El bloqueo SQLite de sesión ya no pertenece a esta instancia.');
+    // El handle sigue ligado al mismo objeto de archivo aunque otro proceso
+    // renombre owner.json durante una recuperación. No abrir una segunda vez
+    // por ruta para escribir: esa ruta podría pertenecer ya a otro propietario.
+    const ownerPath = getLockInfoPath(lockPath);
+    const handle = await open(ownerPath, 'r+');
+    try {
+      const currentLock = parseLockPayload(await handle.readFile('utf8'), ownerPath);
+      if (currentLock.ownerId !== lock.ownerId ||
+          currentLock.pid !== lock.pid ||
+          currentLock.createdAt !== lock.createdAt) {
+        throw new Error('El bloqueo SQLite de sesión ya no pertenece a esta adquisición.');
+      }
+
+      const payload = Buffer.from(JSON.stringify({
+        ...currentLock,
+        updatedAt: new Date().toISOString(),
+      }, null, 2), 'utf8');
+      // Posición explícita: readFile ha avanzado el cursor del handle.
+      // A diferencia de writeFile(ownerPath), no abre ni trunca una ruta que
+      // otro proceso pueda haber recreado mientras la E/S estaba retenida.
+      await handle.write(payload, 0, payload.length, 0);
+      await handle.truncate(payload.length);
+    } finally {
+      await handle.close();
     }
 
-    await writeFile(
-      getLockInfoPath(lockPath),
-      JSON.stringify({ ...currentLock, updatedAt: new Date().toISOString() }, null, 2),
-      'utf8',
-    );
+    // Detecta una sustitución durante la renovación. Esta comprobación NO
+    // garantiza exclusión absoluta ante pausas >TTL; SQLite sigue siendo
+    // la protección transaccional.
+    const confirmed = await readLock(lockPath);
+    if (confirmed?.ownerId !== lock.ownerId ||
+        confirmed.pid !== lock.pid ||
+        confirmed.createdAt !== lock.createdAt) {
+      throw new Error('El bloqueo SQLite cambió de propietario durante el heartbeat.');
+    }
   }
 
   function startDatabaseLockHeartbeat(
