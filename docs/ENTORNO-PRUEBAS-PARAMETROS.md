@@ -34,7 +34,8 @@ También funciona Producción sin parámetro, conservando los accesos anteriores
 - La base `production` y `test` nunca se intercambian; se valida la identidad existente *antes* de tomar el lock de arranque, migrar o respaldar.
 - Las SQLite legadas sin identidad se rechazan en Pruebas. Solo una base **nueva y ausente** se inicializa vacía como `test`.
 - Cambiar de carpeta estando en Pruebas **no copia** la base anterior ni importa producción.
-- La restauración de backups con identidad distinta o sin identidad test se rechaza.
+- La restauración de backups (incluido JSON) está **desactivada íntegramente en Pruebas**, hasta auditar los orígenes y destinos.
+- La liberación administrativa de un lock en Pruebas exige comprobar previamente que el archivo SQLite tiene identidad `test`; nunca opera sobre la base real si se seleccionó por error.
 - Las actualizaciones automáticas quedan desactivadas para Pruebas; el ejecutable experimental debe ser instalado manualmente por IT.
 - Los logs y backups locales usan el perfil de prueba; los bloqueos SMB se crean junto al archivo SQLite test, no en el directorio de Producción.
 
@@ -54,6 +55,6 @@ También funciona Producción sin parámetro, conservando los accesos anteriores
 4. Seleccionar base `test` en Producción: error seguro y ninguna escritura.
 5. Crear carpeta de ensayo vacía desde Ajustes: inicialización `test`, UUID independiente y conexión funcional.
 6. Reiniciar test/producción: conserva las identidades y la separación.
-7. Intentar restaurar en Pruebas backup `production`: operación bloqueada.
+7. Intentar restaurar cualquier backup desde Pruebas: operación bloqueada.
 8. Intentar aplicar una actualización automática en Pruebas: bloqueada.
 9. Dos clientes Windows con SQLite test sobre SMB: guardar y leer tareas simultáneas y probar cortes de red sin tocar producción.
