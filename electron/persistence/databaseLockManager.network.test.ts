@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { performance } from 'node:perf_hooks';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { computeOperationLockRetryDelayMs, createDatabaseLockManager } from './databaseLockManager.js';
+import { computeOperationLockRetryDelayMs, createDatabaseLockManager, EMPTY_LOCK_OBSERVATION_MS } from './databaseLockManager.js';
 
 describe('integridad de locks durante cambios de red (sin servidor SMB real)', () => {
   let directory: string;
@@ -20,6 +21,49 @@ describe('integridad de locks durante cambios de red (sin servidor SMB real)', (
     expect(computeOperationLockRetryDelayMs(1, 0)).toBeGreaterThanOrEqual(50);
     expect(computeOperationLockRetryDelayMs(9, 0.99)).toBeLessThanOrEqual(180);
     expect(computeOperationLockRetryDelayMs(4, 0)).not.toBe(computeOperationLockRetryDelayMs(4, 0.9));
+  });
+
+  it('distingue un directorio sin owner.json de un EISDIR genérico y no lo trata como libre', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-b' });
+    const lockPath = manager.getLockPath(dbPath);
+    mkdirSync(lockPath);
+    await expect(manager.readLock(lockPath)).rejects.toThrow('falta owner.json');
+    expect(existsSync(lockPath)).toBe(true);
+  });
+
+  it('recupera un .lockdir realmente vacío solo tras observación repetida, sin borrar ficheros', async () => {
+    let clockOffsetMs = 0;
+    const manager = createDatabaseLockManager({
+      getOwnerId: () => 'equipo-b',
+      monotonicNowMs: () => performance.now() + clockOffsetMs,
+    });
+    const lockPath = manager.getLockPath(dbPath);
+    mkdirSync(lockPath);
+
+    await expect(manager.acquireLock(dbPath, 140)).rejects.toThrow('owner.json');
+    expect(existsSync(lockPath)).toBe(true); // No borrarlo en el primer intento.
+
+    clockOffsetMs = EMPTY_LOCK_OBSERVATION_MS + 100;
+    const acquired = await manager.acquireLock(dbPath, 1_000);
+    expect(acquired.ownerId).toBe('equipo-b');
+    await manager.releaseLock(lockPath, acquired);
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it('nunca recupera automáticamente un directorio que contenga archivos desconocidos', async () => {
+    let clockOffsetMs = 0;
+    const manager = createDatabaseLockManager({
+      getOwnerId: () => 'equipo-b',
+      monotonicNowMs: () => performance.now() + clockOffsetMs,
+    });
+    const lockPath = manager.getLockPath(dbPath);
+    mkdirSync(lockPath);
+    writeFileSync(path.join(lockPath, 'owner.json.reclaim-sin-finalizar'), 'no borrar', 'utf8');
+    await expect(manager.acquireLock(dbPath, 140)).rejects.toThrow();
+    clockOffsetMs = EMPTY_LOCK_OBSERVATION_MS + 100;
+    await expect(manager.acquireLock(dbPath, 140)).rejects.toThrow();
+    expect(existsSync(lockPath)).toBe(true);
+    expect(existsSync(path.join(lockPath, 'owner.json.reclaim-sin-finalizar'))).toBe(true);
   });
 
   it('no elimina un lock con metadatos transitoriamente incompletos', async () => {

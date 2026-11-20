@@ -589,6 +589,7 @@ async function activateDatabase(
   );
   database = activated.database;
   status = activated.status;
+  nextStartupReconnectAt = 0;
   healthBusyTracker.reset();
   return status;
 }
@@ -609,13 +610,23 @@ export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
   try {
     return await activateDatabase(configured.directoryPath, configured.isDefaultPath, null);
   } catch (error) {
-    const currentLock = await readLock(lockPath);
+    // La consulta de metadatos también puede fallar cuando SMB oculta
+    // temporalmente owner.json. No permitir que este segundo error se escape
+    // del catch: antes dejaba el splash colgado sin crear la ventana principal.
+    let currentLock: DatabaseLockInfo | null = null;
+    let lockInspectionError: string | null = null;
+    try {
+      currentLock = await readLock(lockPath);
+    } catch (inspectionError) {
+      lockInspectionError = inspectionError instanceof Error ? inspectionError.message : String(inspectionError);
+      console.warn('[sqlite-startup] Bloqueo no verificable; conservamos edición suspendida.', inspectionError);
+    }
     status = {
       ready: false,
       engine: 'better-sqlite3',
       phase: isSqliteCorruptionError(error)
         ? 'error'
-        : error instanceof Error && error.message.startsWith('Base ocupada')
+        : lockInspectionError || (error instanceof Error && error.message.startsWith('Base ocupada'))
           ? 'locked'
           : 'fallback',
       path: databasePath,
@@ -625,9 +636,11 @@ export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
       lock: currentLock ?? undefined,
       message: isSqliteCorruptionError(error)
         ? `Base de datos SQLite dañada: ${error instanceof Error ? error.message : 'error desconocido'}. Restaura una copia de seguridad antes de seguir trabajando.`
-        : error instanceof Error
-          ? error.message
-          : 'SQLite no está disponible. La edición permanece bloqueada hasta recuperar la base de datos compartida.',
+        : `${error instanceof Error ? error.message : 'SQLite no disponible.'}` +
+          (lockInspectionError ? ` El bloqueo compartido no es verificable: ${lockInspectionError}` : '') +
+          (configured.isDefaultPath
+            ? ' Configura la base compartida en Ajustes. La edición permanece bloqueada.'
+            : ' TrAcción reintentará la conexión; la edición permanece bloqueada.'),
     };
   }
 
@@ -703,6 +716,10 @@ async function safeDatabaseMigrationOperation<T>(
 // ya serializada. Nunca reintenta automáticamente escrituras inciertas.
 const healthFileFailureTracker = createSqliteHealthFileFailureTracker();
 const healthBusyTracker = createSqliteHealthBusyTracker();
+// Una conexión que falló DURANTE el arranque no se recuperaba: el health-check
+// anterior solo podía verificar un handle que ya estuviese activo.
+const STARTUP_RECONNECT_INTERVAL_MS = 30_000;
+let nextStartupReconnectAt = 0;
 
 export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   const checkedAt = new Date().toISOString();
@@ -740,6 +757,25 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       return { ok: false, status: getSqliteStatus(), checkedAt, message: status.message ?? message };
     }
   }
+  // Reintentar la activación después de un fallo de arranque, pero solo
+  // desde la cola IPC y sin reenviar escrituras inciertas. La validación de
+  // identidad y esquema sigue siendo la misma que durante el arranque.
+  const initialUnavailable = status;
+  if (initialUnavailable && !initialUnavailable.ready &&
+      (initialUnavailable.phase === 'locked' || initialUnavailable.phase === 'fallback') &&
+      !initialUnavailable.isDefaultPath && !sqliteIoRecoveryRequired &&
+      Date.now() >= nextStartupReconnectAt) {
+    nextStartupReconnectAt = Date.now() + STARTUP_RECONNECT_INTERVAL_MS;
+    try {
+      await activateDatabase(path.dirname(initialUnavailable.path), false, null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      status = { ...initialUnavailable, ready: false, message:
+        `SQLite compartida todavía no disponible: ${message}. Se reintentará la conexión sin habilitar escrituras.` };
+      writeHealthDiagnostic('failed', 'sin-etapa', error);
+    }
+  }
+
   // Consultar el estado interno, no la proyección temporal 'locked' del
   // getter: la verificación es la única que puede levantar el bloqueo.
   const currentStatus = status ?? getSqliteStatus();

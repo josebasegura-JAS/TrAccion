@@ -103,6 +103,34 @@ describe('sqlitePersistence — caracterización de fachada', () => {
     expect(status.message).toContain('No hay una base de datos compartida configurada');
   });
 
+  it('PR524: un .lockdir vacío no deja la pantalla inicial bloqueada, se recupera y abre la base', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    mkdirSync(`${layout.databasePath}.lockdir`);
+    const persistence = await importPersistence();
+
+    const status = await persistence.initializeSqlitePersistence();
+    expect(status.ready).toBe(true);
+    expect(status.phase).toBe('active');
+    expect(status.isDefaultPath).toBe(false);
+    await persistence.closeSqlitePersistence();
+  }, 25_000);
+
+  it('PR524: una base ausente al arrancar se vuelve a activar desde el health-check', async () => {
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await importPersistence();
+    const first = await persistence.initializeSqlitePersistence();
+    expect(first.ready).toBe(false);
+    expect(first.isDefaultPath).toBe(false);
+
+    createSharedDatabase(layout.databasePath);
+    const result = await persistence.checkSqliteHealth();
+    expect(result.ok).toBe(true);
+    expect(persistence.getSqliteStatus().ready).toBe(true);
+    expect(persistence.getSqliteStatus().path).toBe(layout.databasePath);
+    await persistence.closeSqlitePersistence();
+  }, 20_000);
+
   it('activa una base compartida existente y conserva su identidad en el estado', async () => {
     createSharedDatabase(layout.databasePath);
     writePreferences(layout.userData, layout.sharedDirectory);
