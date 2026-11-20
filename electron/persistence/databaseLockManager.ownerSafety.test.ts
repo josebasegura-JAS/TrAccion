@@ -88,6 +88,21 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
     expect(existsSync(lockPath)).toBe(false);
   });
 
+  it('un error de escritura posterior a mkdir nunca confirma la adquisición ni borra a ciegas', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'cliente-A' });
+    const lockPath = manager.getLockPath(databasePath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    hooks.beforeWrite = async (target) => {
+      if (target === ownerPath) throw new Error('fallo-SMB-simulado');
+    };
+
+    await expect(manager.acquireLock(databasePath, 130)).rejects.toThrow();
+    expect(existsSync(lockPath)).toBe(true);
+    expect(existsSync(ownerPath)).toBe(false);
+    // La recuperación del directorio vacío requiere una observación estable
+    // posterior; borrarlo inmediatamente podría interferir con otro cliente.
+  });
+
   it('un heartbeat atrasado opera sobre su handle original y no trunca owner.json ajeno', async () => {
     const a = createDatabaseLockManager({ getOwnerId: () => 'cliente-A' });
     const lockPath = a.getLockPath(databasePath);
