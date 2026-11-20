@@ -1,6 +1,7 @@
 import { app, screen } from 'electron';
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { parseTraccionEnvironment } from './persistence/traccionEnvironment.js';
 
 const isMultiuserTestClientB = process.argv.includes('--traccion-test-user-b');
 function prepareSecondClientProfile(): boolean {
@@ -32,7 +33,24 @@ function prepareSecondClientProfile(): boolean {
   }
 }
 
-const multiuserProfileReady = prepareSecondClientProfile();
+// Cambiar userData antes de que main.js o cualquiera de sus servicios lea
+// preferencias, ownerId, backups y logs. No copiar nunca preferencias de
+// producción al perfil de pruebas.
+let environmentProfileReady = true;
+try {
+  const environment = parseTraccionEnvironment(process.argv);
+  if (environment === 'test') {
+    const current = app.getPath('userData');
+    const testProfile = path.join(path.dirname(current), path.basename(current) + '-entorno-pruebas');
+    mkdirSync(testProfile, { recursive: true });
+    app.setPath('userData', testProfile);
+  }
+} catch (error) {
+  environmentProfileReady = false;
+  console.error('[startup] Parámetro o perfil de entorno inválido:', error);
+}
+
+const multiuserProfileReady = environmentProfileReady && prepareSecondClientProfile();
 
 const MAIN_WINDOW_TITLE_PREFIX = 'Cuadro de Mando RRLL - TrAcción';
 
