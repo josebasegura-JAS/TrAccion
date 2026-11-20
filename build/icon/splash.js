@@ -54,6 +54,15 @@
     refreshProgress();
   };
 
+  window.__traccionSplashShowFatal = () => {
+    const actions = document.getElementById('startupFailureActions');
+    if (actions) actions.hidden = false;
+    const card = document.querySelector('.splash-card');
+    if (card) card.setAttribute('aria-busy', 'false');
+  };
+  const closeButton = document.getElementById('closeFailedStartup');
+  if (closeButton) closeButton.addEventListener('click', () => window.close());
+
   const first = document.querySelector('[data-step="electron"]');
   if (first) {
     first.dataset.status = 'active';
