@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { closeOtherLocalInstancesForUpdate } from './localUpdateInstances.js';
 import path from 'node:path';
+import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { tmpdir } from 'node:os';
 
 const UPDATE_MANIFEST_FILE_NAME = 'version.json';
@@ -221,6 +222,10 @@ export async function checkForAppUpdate(
   currentVersion: string,
   updatesDirectoryPath: string | null,
 ): Promise<AppUpdateCheckResult> {
+  if (getTraccionEnvironment() === 'test') {
+    return { updateAvailable: false, currentVersion, latestVersion: null, mandatory: false,
+      notes: null, message: 'Las actualizaciones automáticas están desactivadas en el entorno PRUEBAS.' };
+  }
   const baseResult = {
     currentVersion,
     mandatory: false,
@@ -272,6 +277,9 @@ export async function applyAppUpdate(
   currentVersion: string,
   updatesDirectoryPath: string | null,
 ): Promise<AppUpdateApplyResult> {
+  if (getTraccionEnvironment() === 'test') {
+    return { ok: false, message: 'Las actualizaciones automáticas están desactivadas en el entorno PRUEBAS.' };
+  }
   if (!isPortableExecutable()) {
     return { ok: false, message: 'La actualización automática solo está disponible en el ejecutable portable de Windows.' };
   }
