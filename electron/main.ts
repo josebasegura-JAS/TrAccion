@@ -19,6 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = !app.isPackaged;
 
+const isIsolatedTestEnvironment = process.argv.includes('--traccion-env=test');
 const isMultiuserTestClientB = process.argv.includes('--traccion-test-user-b');
 
 
@@ -361,7 +362,7 @@ function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: Bro
   setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow, rendererReady), remainingMs);
 }
 function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt = Date.now(), setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void): BrowserWindow {
-  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${isMultiuserTestClientB ? ' · PRUEBA MULTIUSUARIO B (BASE REAL)' : ''}`;
+  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${isIsolatedTestEnvironment ? ' · PRUEBAS · BASE AISLADA' : ''}${isMultiuserTestClientB ? ' · CLIENTE B' : ''}`;
   const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: mainWindowTitle, backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   // El <title> del renderer no debe sustituir el título corporativo/versionado de la ventana.
   mainWindow.webContents.on('page-title-updated', (event) => {
