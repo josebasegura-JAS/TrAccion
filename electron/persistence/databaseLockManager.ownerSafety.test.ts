@@ -10,6 +10,7 @@ import { createDatabaseLockManager, EMPTY_LOCK_OBSERVATION_MS } from './database
 const hooks = vi.hoisted(() => ({
   beforeWrite: null as null | ((target: string) => Promise<void>),
   afterOpen: null as null | ((target: string) => Promise<void>),
+  afterClose: null as null | ((target: string) => void),
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -22,7 +23,13 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     },
     open: async (...args: Parameters<typeof actual.open>) => {
       const handle = await actual.open(...args);
-      if (hooks.afterOpen) await hooks.afterOpen(String(args[0]));
+      const target = String(args[0]);
+      const originalClose = handle.close.bind(handle);
+      handle.close = async () => {
+        try { return await originalClose(); }
+        finally { hooks.afterClose?.(target); }
+      };
+      if (hooks.afterOpen) await hooks.afterOpen(target);
       return handle;
     },
   };
@@ -35,6 +42,7 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
   beforeEach(() => {
     hooks.beforeWrite = null;
     hooks.afterOpen = null;
+    hooks.afterClose = null;
     directory = mkdtempSync(path.join(tmpdir(), 'traccion-pr526-lock-'));
     databasePath = path.join(directory, 'traccion.sqlite');
   });
@@ -43,6 +51,7 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
     vi.useRealTimers();
     hooks.beforeWrite = null;
     hooks.afterOpen = null;
+    hooks.afterClose = null;
     rmSync(directory, { recursive: true, force: true });
   });
 
@@ -119,6 +128,9 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
 
     let notifyOpen!: () => void;
     const openAttempted = new Promise<void>((resolve) => { notifyOpen = resolve; });
+    let notifyClosed!: () => void;
+    const heartbeatFinished = new Promise<void>((resolve) => { notifyClosed = resolve; });
+    hooks.afterClose = (target) => { if (target === ownerPath) notifyClosed(); };
     let renameRejected = false;
     let switched = false;
     hooks.afterOpen = async (target) => {
@@ -144,15 +156,14 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
     try {
       await vi.advanceTimersByTimeAsync(10_100);
       await openAttempted;
-      // Dejar finalizar el read/write/close del handle y sus continuaciones.
-      await vi.waitFor(() => {
-        const actual = JSON.parse(readFileSync(ownerPath, 'utf8'));
-        if (switched) expect(actual).toEqual(ownerB);
-        else {
-          expect(renameRejected).toBe(true);
-          expect(actual.ownerId).toBe('cliente-A');
-        }
-      });
+      // Comprobar tras finalizar físicamente el handle, no antes del write.
+      await heartbeatFinished;
+      const actual = JSON.parse(readFileSync(ownerPath, 'utf8'));
+      if (switched) expect(actual).toEqual(ownerB);
+      else {
+        expect(renameRejected).toBe(true);
+        expect(actual.ownerId).toBe('cliente-A');
+      }
     } finally {
       clearInterval(timer);
       vi.useRealTimers();
