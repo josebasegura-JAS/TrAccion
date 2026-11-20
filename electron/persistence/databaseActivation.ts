@@ -96,7 +96,13 @@ export async function activateSqliteDatabase(
   const startupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(lockPath, startupLock);
 
   try {
-    if (!(await databaseExistsReliably(databasePath))) {
+    // Segunda validación después de obtener el lock: otro proceso podría
+    // haber publicado la SQLite entre el stat anterior y esta adquisición.
+    const existsAfterLock = await databaseExistsReliably(databasePath);
+    if (existsAfterLock && environment === 'test') {
+      assertDatabaseEnvironmentBeforeWrite(databasePath, 'test');
+    }
+    if (!existsAfterLock) {
       if (environment !== 'test') {
         throw new Error(
           `No se encuentra la base de datos compartida configurada: ${databasePath}. ` +
