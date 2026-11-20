@@ -17,14 +17,14 @@ describe('health-check SQLite: limite de contención del hilo principal', () => 
     try {
       db.pragma('busy_timeout = 15000');
       expect(withTemporarySqliteBusyTimeout(db, 500, () => {
-        expect(db.pragma('busy_timeout', { simple: true })).toBe(500);
+        expect((db.pragma('busy_timeout') as Array<{ timeout: number }>)[0]?.timeout).toBe(500);
         return 42;
       })).toBe(42);
-      expect(db.pragma('busy_timeout', { simple: true })).toBe(15000);
+      expect((db.pragma('busy_timeout') as Array<{ timeout: number }>)[0]?.timeout).toBe(15000);
       expect(() => withTemporarySqliteBusyTimeout(db, 500, () => {
         throw new Error('fallo inyectado');
       })).toThrow('fallo inyectado');
-      expect(db.pragma('busy_timeout', { simple: true })).toBe(15000);
+      expect((db.pragma('busy_timeout') as Array<{ timeout: number }>)[0]?.timeout).toBe(15000);
     } finally {
       db.close();
     }
@@ -45,7 +45,7 @@ describe('health-check SQLite: limite de contención del hilo principal', () => 
         expect(() => withTemporarySqliteBusyTimeout(reader, 50, () =>
           readCurrentSchemaVersion(reader))).toThrow();
         expect(performance.now() - start).toBeLessThan(2_000);
-        expect(reader.pragma('busy_timeout', { simple: true })).toBe(15000);
+        expect((reader.pragma('busy_timeout') as Array<{ timeout: number }>)[0]?.timeout).toBe(15000);
       } finally {
         writer.exec('ROLLBACK');
       }
@@ -80,7 +80,7 @@ describe('health-check SQLite: limite de contención del hilo principal', () => 
     try {
       db.pragma('busy_timeout = 15000');
       expect(() => withTemporarySqliteBusyTimeout(db, -1, () => null)).toThrow();
-      expect(db.pragma('busy_timeout', { simple: true })).toBe(15000);
+      expect((db.pragma('busy_timeout') as Array<{ timeout: number }>)[0]?.timeout).toBe(15000);
     } finally {
       db.close();
     }

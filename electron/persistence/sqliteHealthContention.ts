@@ -26,7 +26,11 @@ export function withTemporarySqliteBusyTimeout<T>(
   if (!Number.isSafeInteger(busyTimeoutMs) || busyTimeoutMs < 0) {
     throw new Error('Timeout de health-check SQLite inválido.');
   }
-  const originalTimeout: unknown = db.pragma('busy_timeout', { simple: true });
+  // Los tipos nativos del proyecto declaran pragma(source) (sin segunda
+  // opción). SQLite devuelve [{ timeout: N }] para PRAGMA busy_timeout.
+  const rows: unknown = db.pragma('busy_timeout');
+  const first = Array.isArray(rows) ? rows[0] as { timeout?: unknown } | undefined : undefined;
+  const originalTimeout = first?.timeout;
   if (typeof originalTimeout !== 'number' || !Number.isSafeInteger(originalTimeout)) {
     throw new Error('No se pudo consultar el busy_timeout original de SQLite.');
   }
