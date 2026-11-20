@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { hostname, userInfo } from 'node:os';
 import { performance } from 'node:perf_hooks';
@@ -22,6 +22,9 @@ import {
  * explícitamente como solo lectura siguen usando el lock exclusivo.
  */
 const LOCK_TTL_MS = 30 * 1000;
+/** Observación monotónica mínima antes de intentar retirar un .lockdir vacío. */
+export const EMPTY_LOCK_OBSERVATION_MS = 5_000;
+const MISSING_LOCK_OWNER_CODE = 'TRACCION_LOCK_OWNER_MISSING';
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
 const STARTUP_LOCK_RETRY_MS = 250;
@@ -173,6 +176,7 @@ export function createDatabaseLockManager(
   // un Windows adelantado podría considerar caducada una escritura viva.
   // El mapa se limita para evitar crecimiento sin límite en sesiones largas.
   const staleObservations = new Map<string, { updatedAt: string; firstSeenMs: number }>();
+  const emptyLockObservations = new Map<string, number>();
   const monotonicNowMs = dependencies.monotonicNowMs ?? (() => performance.now());
 
 
@@ -281,22 +285,87 @@ export function createDatabaseLockManager(
       }
     }
 
-    // Compatibilidad con el formato antiguo: `.lockdir` como fichero JSON.
+    // Distinguir el formato antiguo (archivo JSON) del actual (directorio).
+    // Intentar readFile(.lockdir) cuando es un directorio produce EISDIR,
+    // especialmente visible en Windows/SMB. Ese error no demuestra caída de red.
+    let lockPathType: Awaited<ReturnType<typeof stat>>;
+    try {
+      lockPathType = await stat(lockPath);
+    } catch (statError) {
+      if (isMissingPathError(statError)) return null;
+      throw createErrorWithCause(
+        `No se puede consultar el directorio de bloqueo SQLite: ${formatFsError(statError)}`,
+        statError,
+      );
+    }
+    if (lockPathType.isDirectory()) {
+      // No convertir en 'libre': otro equipo puede estar escribiendo owner.json
+      // o la caché SMB puede retrasar su visibilidad.
+      const error = new Error(
+        'El directorio de bloqueo SQLite existe, pero falta owner.json. ' +
+        'Se comprobará si está vacío antes de recuperarlo sin eliminar bloqueos ajenos.',
+      ) as Error & { code: string };
+      error.code = MISSING_LOCK_OWNER_CODE;
+      throw error;
+    }
+    if (!lockPathType.isFile()) {
+      throw new Error('La ruta de bloqueo SQLite no es ni un archivo antiguo ni un directorio válido.');
+    }
+    // Compatibilidad con el formato anterior: .lockdir era un archivo JSON.
     try {
       const raw = await readFile(lockPath, 'utf8');
       return parseLockPayload(raw, lockPath);
     } catch (legacyError) {
-      if (isMissingPathError(legacyError)) {
-        return null;
-      }
-
-      // Si lockPath es un directorio pero owner.json aún no existe (otra
-      // instancia está justo creándolo), no es un lock libre. Se trata como
-      // lectura transitoria y acquireLock reintentará.
+      if (isMissingPathError(legacyError)) return null;
       throw createErrorWithCause(
-        `El directorio de bloqueo SQLite existe, pero sus metadatos no se han podido leer todavía: ${formatFsError(legacyError)}`,
+        `No se han podido leer los metadatos del bloqueo SQLite antiguo: ${formatFsError(legacyError)}`,
         legacyError,
       );
+    }
+  }
+
+  /**
+   * Un lock sin owner.json NO es automáticamente abandonado. Solo intentamos
+   * retirar el directorio tras dos observaciones vacías separadas por reloj
+   * monotónico. rmdir es atómico y falla si cualquier otro cliente ya creó
+   * owner.json o cualquier fichero (incluidas cuarentenas).
+   *
+   * No borra NINGÚN archivo y tampoco libera un lock con propietario válido.
+   */
+  async function reclaimEmptyOwnerlessLockDirectory(lockPath: string): Promise<boolean> {
+    const now = monotonicNowMs();
+    let entries: string[];
+    try {
+      entries = await readdir(lockPath);
+    } catch {
+      emptyLockObservations.delete(lockPath);
+      return false;
+    }
+    if (entries.length !== 0) {
+      emptyLockObservations.delete(lockPath);
+      return false;
+    }
+    const firstSeen = emptyLockObservations.get(lockPath);
+    if (firstSeen === undefined || now < firstSeen) {
+      emptyLockObservations.set(lockPath, now);
+      return false;
+    }
+    if (now - firstSeen < EMPTY_LOCK_OBSERVATION_MS) return false;
+    try {
+      // Repetir la lectura inmediatamente antes del rmdir, sin inferir que la
+      // ausencia del archivo en una comprobación anterior sigue vigente.
+      if ((await readdir(lockPath)).length !== 0) {
+        emptyLockObservations.delete(lockPath);
+        return false;
+      }
+      await rmdir(lockPath);
+      emptyLockObservations.delete(lockPath);
+      console.info('[sqlite-lock] Directorio de bloqueo vacío recuperado sin eliminar metadatos.');
+      return true;
+    } catch {
+      // ENOTEMPTY, ENOENT, EACCES o pérdida de SMB: conservar / reintentar.
+      emptyLockObservations.delete(lockPath);
+      return false;
     }
   }
 
@@ -428,11 +497,24 @@ export function createDatabaseLockManager(
         existingLock = await readLock(lockPath);
         lastLock = existingLock;
         lastReadError = null;
+        emptyLockObservations.delete(lockPath);
       } catch (error) {
         lastReadError = error;
-        // Puede ser un owner.json a medio escribir o un problema SMB
-        // transitorio. Nunca lo interpretamos como "lock libre".
-        await removeCorruptStaleLock(lockPath);
+        if (getFsErrorCode(error) === MISSING_LOCK_OWNER_CODE) {
+          // Solo el rmdir de un directorio realmente vacío puede liberar un
+          // lock huérfano. Si SMB niega la operación, no se fuerza nada.
+          if (await reclaimEmptyOwnerlessLockDirectory(lockPath)) {
+            lastReadError = null;
+            continue;
+          }
+        } else {
+          emptyLockObservations.delete(lockPath);
+        }
+        // Un owner.json corrupto, un bloqueo de otro equipo o un error de
+        // red son casos distintos: nunca se retira contenido no verificable.
+        if (retryAttempt === 0 || retryAttempt % 25 === 0) {
+          await removeCorruptStaleLock(lockPath);
+        }
         await retryAfterContention();
         continue;
       }
