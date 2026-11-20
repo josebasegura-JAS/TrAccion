@@ -638,7 +638,9 @@ export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
         ? `Base de datos SQLite dañada: ${error instanceof Error ? error.message : 'error desconocido'}. Restaura una copia de seguridad antes de seguir trabajando.`
         : `${error instanceof Error ? error.message : 'SQLite no disponible.'}` +
           (lockInspectionError ? ` El bloqueo compartido no es verificable: ${lockInspectionError}` : '') +
-          ' TrAcción seguirá intentando conectar; la edición permanece bloqueada.',
+          (configured.isDefaultPath
+            ? ' Configura la base compartida en Ajustes. La edición permanece bloqueada.'
+            : ' TrAcción reintentará la conexión; la edición permanece bloqueada.'),
     };
   }
 
