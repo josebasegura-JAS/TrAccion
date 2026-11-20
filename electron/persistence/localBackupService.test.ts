@@ -94,6 +94,43 @@ describe('localBackupService - cierre sin backup redundante', () => {
     rmSync(rootDir, { recursive: true, force: true });
   });
 
+  it('deniega reinicio cuando hay una copia pendiente y lo permite después de completarla', async () => {
+    const service = createLocalBackupService(buildDependencies(databasePath));
+    expect(service.getRestartSafetySnapshot()).toEqual({
+      activeBackupOperations: 0, queuedBackupOperations: 0, pendingBackupRevisions: 0,
+    });
+    service.enqueueLocalBackup('save:test');
+    expect(service.getRestartSafetySnapshot().pendingBackupRevisions).toBe(1);
+    await service.flushPendingLocalBackup();
+    expect(service.getRestartSafetySnapshot()).toEqual({
+      activeBackupOperations: 0, queuedBackupOperations: 0, pendingBackupRevisions: 0,
+    });
+  });
+
+  it('detecta un backup ejecutándose fuera de la cola IPC y conserva el bloqueo hasta liberarlo', async () => {
+    let release!: (value: DatabaseLockInfo) => void;
+    let signalStarted!: () => void;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const lock = new Promise<DatabaseLockInfo>((resolve) => { release = resolve; });
+    const acquireLock = vi.fn(() => {
+      signalStarted();
+      return lock;
+    });
+    const service = createLocalBackupService(buildDependencies(databasePath, acquireLock));
+    service.enqueueLocalBackup('save:test');
+    const flushing = service.flushPendingLocalBackup();
+    await started;
+    expect(service.getRestartSafetySnapshot().activeBackupOperations).toBe(1);
+    expect(service.getRestartSafetySnapshot().pendingBackupRevisions).toBe(1);
+    release({
+      ownerId: 'test-owner', username: 'test-user', hostname: 'test-host',
+      pid: 123, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+    await flushing;
+    expect(service.getRestartSafetySnapshot().activeBackupOperations).toBe(0);
+    expect(service.getRestartSafetySnapshot().pendingBackupRevisions).toBe(0);
+  });
+
   it('no crea backup de cierre si la sesión no ha modificado nada', async () => {
     const service = createLocalBackupService(buildDependencies(databasePath));
 
