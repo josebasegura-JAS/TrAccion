@@ -333,6 +333,8 @@ export function createDatabaseLockManager(
    * No borra NINGÚN archivo y tampoco libera un lock con propietario válido.
    */
   async function reclaimEmptyOwnerlessLockDirectory(lockPath: string): Promise<boolean> {
+    // No retirar jamás un lock que este proceso aún considera adquirido.
+    if (activeLocalLeases.has(lockPath) || localReleasesInFlight.has(lockPath)) return false;
     const now = monotonicNowMs();
     let entries: string[];
     try {
