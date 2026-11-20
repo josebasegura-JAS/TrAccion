@@ -248,7 +248,9 @@ ipcMain.handle('app:request-safe-restart', async (event, payload?: { automatic?:
       if (!safety.ok) return safety;
     }
 
-    app.relaunch();
+    // Conservar explícitamente --traccion-env=test tras un reinicio supervisado.
+    // Perderlo arrancaría el ejecutable como producción por defecto.
+    app.relaunch({ args: process.argv.slice(1) });
     restarting = true;
     isRendererCloseApproved = true;
     setImmediate(() => app.quit()); // ejecutar cierre ordenado y backup existente
