@@ -49,6 +49,14 @@ const sqliteIpcContext = new AsyncLocalStorage<SqliteIpcOperationContext>();
 
 let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
 let queuedOperations = 0;
+let restartDrainActive = false;
+/** Bloquea nuevos IPC SQLite tras verificar que no hay nada en ejecución. */
+export function beginSqliteRestartDrain(): boolean {
+  if (restartDrainActive || runningOperation !== null || queuedOperations !== 0) return false;
+  restartDrainActive = true;
+  return true;
+}
+export function cancelSqliteRestartDrain(): void { restartDrainActive = false; }
 // Mantener la reserva hasta que termine la operación REAL, incluso si el
 // llamante ya recibió timeout. No se permite crear otra comprobación detrás.
 const singleFlightOperations = new Map<string, Promise<unknown>>();
@@ -178,6 +186,9 @@ export function enqueueSqliteIpc<T>(
   operation: QueuedIpcOperation<T>,
   singleFlight = false,
 ): Promise<Awaited<T>> {
+  if (restartDrainActive) {
+    return Promise.reject(new Error('TrAcción está preparando un reinicio supervisado; no se admiten nuevas operaciones SQLite.'));
+  }
   if (singleFlight) {
     const existing = singleFlightOperations.get(operationName);
     if (existing) {
