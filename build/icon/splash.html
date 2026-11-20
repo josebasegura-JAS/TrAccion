@@ -153,6 +153,28 @@
         font-size: 10px;
         color: rgba(247,251,253,.52);
       }
+      [hidden] { display: none !important; }
+      .startup-failure-actions {
+        margin-top: 16px;
+        padding: 12px;
+        border: 1px solid rgba(255, 107, 114, .45);
+        border-radius: 12px;
+        background: rgba(180, 45, 58, .11);
+      }
+      .startup-failure-actions p {
+        margin: 0 0 10px;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .startup-failure-actions button {
+        border: 1px solid rgba(247,251,253,.35);
+        background: rgba(247,251,253,.09);
+        color: #f7fbfd;
+        padding: 9px 14px;
+        border-radius: 9px;
+        cursor: pointer;
+        font-weight: 600;
+      }
       @media (prefers-reduced-motion: reduce) {
         .spinner { animation: none; }
         .progress-bar { transition: none; }
@@ -176,6 +198,10 @@
         <div class="step pending" data-step="database" data-status="pending"><span class="icon">•</span><span class="label">Conectando y verificando base de datos</span><span class="elapsed"></span></div>
         <div class="step pending" data-step="services" data-status="pending"><span class="icon">•</span><span class="label">Preparando servicios internos</span><span class="elapsed"></span></div>
         <div class="step pending" data-step="interface" data-status="pending"><span class="icon">•</span><span class="label">Cargando datos e interfaz</span><span class="elapsed"></span></div>
+      </section>
+      <section class="startup-failure-actions" id="startupFailureActions" role="alert" hidden>
+        <p>No se han podido preparar los servicios necesarios. Puedes cerrar TrAcción y volver a abrirla cuando hayas comprobado la conexión. No se han realizado guardados.</p>
+        <button type="button" id="closeFailedStartup">Cerrar TrAcción</button>
       </section>
       <div class="footer">
         <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
