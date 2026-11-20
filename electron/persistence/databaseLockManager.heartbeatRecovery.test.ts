@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readFile } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { createDatabaseLockManager } from './databaseLockManager.js';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, readFile: vi.fn(actual.readFile) };
+  return { ...actual, open: vi.fn(actual.open) };
 });
 
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  vi.mocked(readFile).mockReset();
+  vi.mocked(open).mockReset();
 });
 
 describe('bloqueo de escrituras por pérdida de heartbeat SQLite', () => {
@@ -26,7 +26,7 @@ describe('bloqueo de escrituras por pérdida de heartbeat SQLite', () => {
   it('tras cinco fallos bloquea y permite recuperar solo mediante clearHeartbeatBlock', async () => {
     vi.useFakeTimers();
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    vi.mocked(readFile).mockRejectedValue(Object.assign(new Error('Sin acceso a SMB'), { code: 'EIO' }));
+    vi.mocked(open).mockRejectedValue(Object.assign(new Error('Sin acceso a SMB'), { code: 'EIO' }));
     const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
     const notifications: boolean[] = [];
     manager.setConnectivityIssueNotifier((issue) => notifications.push(issue.blocked));
@@ -51,14 +51,14 @@ describe('bloqueo de escrituras por pérdida de heartbeat SQLite', () => {
     }
   });
 
-  it('no inicia una segunda lectura SMB mientras la primera permanece pendiente', async () => {
+  it('no inicia una segunda apertura SMB mientras la primera permanece pendiente', async () => {
     vi.useFakeTimers();
-    vi.mocked(readFile).mockImplementation(() => new Promise<never>(() => undefined));
+    vi.mocked(open).mockImplementation(() => new Promise<never>(() => undefined));
     const manager = createDatabaseLockManager({ getOwnerId: () => 'equipo-a' });
     const timer = manager.startDatabaseLockHeartbeat('Z:/inaccesible.lockdir', lock);
     try {
       await vi.advanceTimersByTimeAsync(60_000);
-      expect(vi.mocked(readFile)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(open)).toHaveBeenCalledTimes(1);
       // La comprobación de salud no debe desbloquear si la operación de
       // heartbeat que no responde todavía tiene resultado indeterminado.
       expect(manager.clearHeartbeatBlock()).toBe(false);
