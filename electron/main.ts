@@ -152,7 +152,7 @@ async function rendererAllowsSafeRestart(mainWindow: BrowserWindow, automatic: b
   try {
     const expression = automatic
       ? 'window.__traccionCanAutoRestart ? window.__traccionCanAutoRestart() === true : false'
-      : 'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() === true : false';
+      : 'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : false';
     return (await mainWindow.webContents.executeJavaScript(expression, true)) === true;
   } catch {
     return false; // No poder consultar el editor nunca autoriza un reinicio.
