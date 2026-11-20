@@ -1,8 +1,8 @@
 import path from 'node:path';
+import { open, stat } from 'node:fs/promises';
 import type { Database } from 'better-sqlite3';
 import {
   ensureDirectoryIsUsable,
-  fileExists,
   prepareDatabaseFile,
 } from './databaseFileSystem.js';
 import {
@@ -19,6 +19,21 @@ import { openSqliteDatabase } from './sqliteConnection.js';
 import { CURRENT_SCHEMA_VERSION } from './schemaMigrations.js';
 import { getTraccionEnvironment } from './traccionEnvironment.js';
 import type { DatabaseLockInfo } from './sqliteLockLifecycle.js';
+
+/**
+ * No confundir error SMB (EACCES/EIO/UNKNOWN) con ENOENT: ante duda
+ * no se autoriza creación de base de prueba.
+ */
+async function databaseExistsReliably(databasePath: string): Promise<boolean> {
+  try {
+    const entry = await stat(databasePath);
+    if (!entry.isFile()) throw new Error('La ruta SQLite existe, pero no es un archivo regular.');
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
 
 export interface DatabaseActivationDependencies {
   ownerId: string;
@@ -69,7 +84,7 @@ export async function activateSqliteDatabase(
 
   const environment = getTraccionEnvironment();
   // Rechazar primero la base incompatible: sin escribir probes ni lockdir.
-  if (await fileExists(databasePath)) {
+  if (await databaseExistsReliably(databasePath)) {
     assertDatabaseEnvironmentBeforeWrite(databasePath, environment);
   }
   if (environment === 'test' && sourceDatabasePath !== null) {
@@ -81,7 +96,7 @@ export async function activateSqliteDatabase(
   const startupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(lockPath, startupLock);
 
   try {
-    if (!(await fileExists(databasePath))) {
+    if (!(await databaseExistsReliably(databasePath))) {
       if (environment !== 'test') {
         throw new Error(
           `No se encuentra la base de datos compartida configurada: ${databasePath}. ` +
@@ -89,6 +104,10 @@ export async function activateSqliteDatabase(
         );
       }
       // Crear exclusivamente una base vacía test, nunca copiar producción.
+      // La operación exclusiva O_EXCL falla si otro cliente creó SQLite
+      // entre el stat y nuestra publicación; nunca abrir sin comprobar.
+      const handle = await open(databasePath, 'wx');
+      await handle.close();
       const newTestDb = openSqliteDatabase(databasePath, { busyTimeoutMs: dependencies.busyTimeoutMs });
       newTestDb.close();
     }
