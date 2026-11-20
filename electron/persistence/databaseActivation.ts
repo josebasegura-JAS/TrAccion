@@ -12,10 +12,12 @@ import {
 } from './databasePreferences.js';
 import {
   inspectAndEnsureDatabaseIdentity,
+  assertDatabaseEnvironmentBeforeWrite,
   readDatabaseIdentity,
 } from './databaseIdentity.js';
 import { openSqliteDatabase } from './sqliteConnection.js';
 import { CURRENT_SCHEMA_VERSION } from './schemaMigrations.js';
+import { getTraccionEnvironment } from './traccionEnvironment.js';
 import type { DatabaseLockInfo } from './sqliteLockLifecycle.js';
 
 export interface DatabaseActivationDependencies {
@@ -65,17 +67,30 @@ export async function activateSqliteDatabase(
     );
   }
 
+  const environment = getTraccionEnvironment();
+  // Rechazar primero la base incompatible: sin escribir probes ni lockdir.
+  if (await fileExists(databasePath)) {
+    assertDatabaseEnvironmentBeforeWrite(databasePath, environment);
+  }
+  if (environment === 'test' && sourceDatabasePath !== null) {
+    throw new Error('Pruebas no copia automáticamente SQLite de otra carpeta.');
+  }
   await ensureDirectoryIsUsable(directoryPath);
 
   const startupLock = await dependencies.acquireStartupLock(databasePath);
   const startupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(lockPath, startupLock);
 
   try {
-    if (!isDefaultPath && sourceDatabasePath === null && !(await fileExists(databasePath))) {
-      throw new Error(
-        `No se encuentra la base de datos compartida configurada: ${databasePath}. ` +
-          'TrAcción permanecerá bloqueado hasta recuperar esa base o corregir la ruta en Ajustes.',
-      );
+    if (!(await fileExists(databasePath))) {
+      if (environment !== 'test') {
+        throw new Error(
+          `No se encuentra la base de datos compartida configurada: ${databasePath}. ` +
+            'TrAcción permanecerá bloqueado hasta recuperar esa base o corregir la ruta en Ajustes.',
+        );
+      }
+      // Crear exclusivamente una base vacía test, nunca copiar producción.
+      const newTestDb = openSqliteDatabase(databasePath, { busyTimeoutMs: dependencies.busyTimeoutMs });
+      newTestDb.close();
     }
 
     await prepareDatabaseFile(databasePath, sourceDatabasePath);
@@ -89,7 +104,8 @@ export async function activateSqliteDatabase(
       !preferences.expectedDatabaseUuid || sourceDatabasePath !== null || configuredDirectoryMatches;
     const identityInspection = inspectAndEnsureDatabaseIdentity(databasePath, {
       expectedDatabaseUuid: preferences.expectedDatabaseUuid ?? null,
-      allowLegacyBootstrap,
+      allowLegacyBootstrap: environment === 'test' ? true : allowLegacyBootstrap,
+      expectedEnvironment: environment,
     });
 
     const database = openSqliteDatabase(databasePath, {
