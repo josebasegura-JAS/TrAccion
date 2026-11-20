@@ -554,10 +554,16 @@ if (!app.requestSingleInstanceLock()) {
 
       updateSplashStep(splashWindow, 'database', 'active');
       updateSplashStep(splashWindow, 'services', 'active');
-      await Promise.all([
-        persistence.initializeSqlitePersistence().then(() => {
-          startupMark('SQLite inicializada');
-          updateSplashStep(splashWindow, 'database', 'done');
+      // Un bloqueo de la base compartida NO debe impedir crear el dashboard.
+      // Los servicios IPC sí son necesarios para que Ajustes y el monitor
+      // puedan indicar el estado de la base y reintentar la conexión.
+      const [databaseInitialization, ipcRegistration] = await Promise.allSettled([
+        persistence.initializeSqlitePersistence().then((dbStatus) => {
+          startupMark('Estado inicial SQLite obtenido');
+          updateSplashStep(
+            splashWindow, 'database', dbStatus.ready ? 'done' : 'error',
+            dbStatus.ready ? undefined : dbStatus.message ?? 'La base compartida no está disponible; edición bloqueada.',
+          );
         }).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
           updateSplashStep(splashWindow, 'database', 'error', message || 'No se pudo inicializar la base de datos.');
@@ -572,6 +578,10 @@ if (!app.requestSingleInstanceLock()) {
           throw error;
         }),
       ]);
+      if (ipcRegistration.status === 'rejected') throw ipcRegistration.reason;
+      if (databaseInitialization.status === 'rejected') {
+        console.error('[startup] SQLite no pudo inicializarse; se abrirá el dashboard con la edición bloqueada.', databaseInitialization.reason);
+      }
       logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
 
       updateSplashStep(splashWindow, 'interface', 'active');
@@ -581,6 +591,14 @@ if (!app.requestSingleInstanceLock()) {
       app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(null, Date.now(), persistence.setDatabaseConnectivityIssueNotifier); });
     } catch (error: unknown) {
       console.error('[startup] Error durante el arranque de TrAcción.', error);
+      // Error irrecuperable en servicios IPC: hacer visible el fallo y ofrecer
+      // cierre, en lugar de mantener indefinidamente la pantalla al 80 %.
+      updateSplashStep(splashWindow, 'interface', 'error',
+        error instanceof Error ? error.message : 'No se ha podido preparar la interfaz.');
+      if (!splashWindow.isDestroyed()) {
+        void splashWindow.webContents.executeJavaScript('window.__traccionSplashShowFatal?.()', true)
+          .catch(() => undefined);
+      }
     }
   });
   app.on('before-quit', (event) => {
