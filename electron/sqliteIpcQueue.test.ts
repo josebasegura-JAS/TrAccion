@@ -7,6 +7,8 @@ vi.mock('./sqliteIncidentJournal.js', () => ({
 }));
 import {
   enqueueSqliteIpc,
+  beginSqliteRestartDrain,
+  cancelSqliteRestartDrain,
   getSqliteIpcQueueDiagnostics,
   isCurrentSqliteIpcReadOnly,
   isSqliteIpcReadOnlyOperation,
@@ -20,6 +22,7 @@ describe('enqueueSqliteIpc', () => {
   });
 
   afterEach(() => {
+    cancelSqliteRestartDrain();
     vi.useRealTimers();
   });
 
@@ -382,6 +385,26 @@ describe('enqueueSqliteIpc', () => {
     expect(firstCallback).toHaveBeenCalledTimes(1);
     expect(nextCallback).toHaveBeenCalledTimes(1);
     expect(getSqliteIpcQueueDiagnostics().runningOperation).toBeNull();
+  });
+
+
+  it('deniega drain con IPC en vuelo y bloquea nuevas operaciones tras entrar en reinicio', async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => { finish = resolve; });
+    const first = enqueueSqliteIpc('tasks:save-record', () => pending);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(beginSqliteRestartDrain()).toBe(false);
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    await first;
+    expect(beginSqliteRestartDrain()).toBe(true);
+    const action = vi.fn(async () => 'should-not-run');
+    await expect(enqueueSqliteIpc('tasks:save-record', action)).rejects.toThrow('reinicio supervisado');
+    expect(action).not.toHaveBeenCalled();
+    cancelSqliteRestartDrain();
+    const resumed = enqueueSqliteIpc('tasks:load-records', action);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await resumed).toBe('should-not-run');
   });
 
   it('health-check dispone de tiempo de recuperación sin ampliar los guardados ordinarios', () => {

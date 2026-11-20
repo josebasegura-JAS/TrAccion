@@ -2,7 +2,8 @@ import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
 import { registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
 import { startSqliteWorkerProbeSupervisor } from './sqliteWorkerProbeSupervisor.js';
 import { startLocalInstanceUpdateListener } from './localUpdateInstances.js';
-import { getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
+import { beginSqliteRestartDrain, cancelSqliteRestartDrain, getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
+import { assessSafeRestart, isAutomaticRestartCooldownOver } from './safeRestartPolicy.js';
 import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics.js';
 import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
@@ -123,8 +124,41 @@ async function requestRendererAppClose(mainWindow: BrowserWindow): Promise<void>
   }
 }
 
-// Reinicio voluntario: respeta la confirmación de formularios y el cierre SQLite existente.
+// Los reinicios manuales y automáticos comparten exactamente las mismas
+// comprobaciones de seguridad y el procedimiento normal de cierre.
 let restartRequestInProgress = false;
+const autoRestartGuardPath = () => path.join(app.getPath('userData'), 'sqlite-auto-restart-guard.json');
+
+async function getLastAutomaticRestartAt(): Promise<number | null> {
+  try {
+    const raw = await readFile(autoRestartGuardPath(), 'utf8');
+    const value: unknown = JSON.parse(raw);
+    const timestamp = value && typeof value === 'object' && 'at' in value
+      ? (value as { at: unknown }).at : null;
+    if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
+      throw new Error('La marca local de reinicio automático es inválida.');
+    }
+    return timestamp;
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error &&
+        (error as { code?: unknown }).code === 'ENOENT') return null;
+    // Ante lectura dudosa, no habilitar otro reinicio automático.
+    throw error;
+  }
+}
+
+async function rendererAllowsSafeRestart(mainWindow: BrowserWindow, automatic: boolean): Promise<boolean> {
+  if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return false;
+  try {
+    const expression = automatic
+      ? 'window.__traccionCanAutoRestart ? window.__traccionCanAutoRestart() === true : false'
+      : 'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : false';
+    return (await mainWindow.webContents.executeJavaScript(expression, true)) === true;
+  } catch {
+    return false; // No poder consultar el editor nunca autoriza un reinicio.
+  }
+}
+
 ipcMain.handle('database:ipc-queue-diagnostics', () => getSqliteIpcQueueDiagnostics());
 // Resumen agregado sin contenidos ni identificadores personales.
 ipcMain.handle('performance:multiuser-report', () => getMultiuserPerformanceReport());
@@ -143,25 +177,85 @@ ipcMain.handle('app:main-watchdog-report', () => {
   } catch { return []; }
 });
 
-ipcMain.handle('app:request-safe-restart', async (event) => {
-  if (restartRequestInProgress || isShutdownInProgress) return { ok: false, message: 'Ya se está cerrando TrAcción.' };
-  // No iniciar cierre/reapertura mientras SQLite tenga una operación en curso
-  // o en cola: el timeout IPC no cancela escrituras ni libera su resultado.
-  const queue = getSqliteIpcQueueDiagnostics();
-  if (queue.runningOperation || queue.queuedOperations > 0 || queue.timedOut) {
-    return { ok: false, message: 'SQLite sigue realizando operaciones. No se iniciará el reinicio para evitar interrumpir un guardado. Vuelve a intentarlo cuando termine.' };
+ipcMain.handle('app:request-safe-restart', async (event, payload?: { automatic?: unknown }) => {
+  if (restartRequestInProgress || isShutdownInProgress) {
+    return { ok: false, message: 'Ya se está preparando el cierre de TrAcción.' };
   }
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || window.isDestroyed()) return { ok: false, message: 'La ventana ya no está disponible.' };
+  const automatic = payload?.automatic === true;
   restartRequestInProgress = true;
+  let drainAcquired = false;
+  let restarting = false;
   try {
-    const approved = await rendererAllowsAppClose(window);
-    if (!approved) return { ok: false, message: 'Reinicio cancelado para conservar los cambios.' };
-    isRendererCloseApproved = true;
+    const persistence = await loadSqlitePersistenceModule();
+    const restartSafety = () => assessSafeRestart(
+      getSqliteIpcQueueDiagnostics(),
+      persistence.getSqliteRestartBackupSnapshot(),
+      getSqliteIncidentReport().uncertain.length,
+    );
+    let safety = restartSafety();
+    if (!safety.ok) return safety;
+
+    if (automatic) {
+      const sqliteStatus = persistence.getSqliteStatus();
+      if (sqliteStatus.isDefaultPath || (sqliteStatus.ready && sqliteStatus.phase === 'active')) {
+        return { ok: false, message: 'No se ha confirmado una incidencia SQLite activa que justifique reinicio automático.' };
+      }
+      let previousAt: number | null;
+      try {
+        previousAt = await getLastAutomaticRestartAt();
+      } catch {
+        return { ok: false, message: 'No se puede comprobar el límite de reinicios automáticos; se mantiene la sesión.' };
+      }
+      if (!isAutomaticRestartCooldownOver(previousAt, Date.now())) {
+        return { ok: false, message: 'Reinicio automático omitido para evitar un bucle de reinicios durante 30 minutos.' };
+      }
+    }
+
+    const approved = await rendererAllowsSafeRestart(window, automatic);
+    if (!approved) {
+      return { ok: false, message: automatic
+        ? 'Reinicio automático cancelado: hay cambios sin guardar o la interfaz no permite comprobarlos.'
+        : 'Reinicio cancelado: conserva los cambios pendientes o vuelve a intentarlo.' };
+    }
+    // Comprobar de nuevo tras la espera asíncrona del renderer: durante un
+    // diálogo podrían haber empezado escrituras o backups. Entrar en drain
+    // hace que las nuevas peticiones IPC SQLite sean rechazadas, no encoladas.
+    safety = restartSafety();
+    if (!safety.ok) return safety;
+    if (!beginSqliteRestartDrain()) {
+      return { ok: false, message: 'Ha empezado otra operación SQLite antes del cierre; reinicio cancelado.' };
+    }
+    drainAcquired = true;
+    safety = restartSafety();
+    if (!safety.ok) return safety;
+
+    if (automatic) {
+      // Marca local ANTES de relanzar. Si el cierre falla, no repetiremos el
+      // intento automáticamente en un bucle de arranque.
+      try {
+        await writeFile(autoRestartGuardPath(), JSON.stringify({ at: Date.now() }), 'utf8');
+      } catch {
+        return { ok: false, message: 'No se pudo registrar el reinicio automático; se conserva la sesión.' };
+      }
+      // El chequeo silencioso no abre diálogos y debe seguir siendo válido.
+      if (!(await rendererAllowsSafeRestart(window, true))) {
+        return { ok: false, message: 'Han aparecido cambios sin guardar; reinicio automático cancelado.' };
+      }
+      safety = restartSafety();
+      if (!safety.ok) return safety;
+    }
+
     app.relaunch();
-    setImmediate(() => app.quit());
+    restarting = true;
+    isRendererCloseApproved = true;
+    setImmediate(() => app.quit()); // ejecutar cierre ordenado y backup existente
     return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'No se pudo preparar el reinicio supervisado.' };
   } finally {
+    if (drainAcquired && !restarting) cancelSqliteRestartDrain();
     restartRequestInProgress = false;
   }
 });

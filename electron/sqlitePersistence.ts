@@ -411,6 +411,13 @@ function getLocalBackupService(): LocalBackupService {
   return localBackupServiceInstance;
 }
 
+/** Diagnóstico local sin realizar E/S ni iniciar el servicio de copias. */
+export function getSqliteRestartBackupSnapshot(): ReturnType<LocalBackupService['getRestartSafetySnapshot']> {
+  return localBackupServiceInstance?.getRestartSafetySnapshot() ?? {
+    activeBackupOperations: 0, queuedBackupOperations: 0, pendingBackupRevisions: 0,
+  };
+}
+
 // --- Bloqueo de la base compartida (SMB) ------------------------------
 // La fachada singleton de lock/heartbeat vive en sqliteLockLifecycle.ts.
 // Aquí se mantienen únicamente las operaciones que dependen del estado vivo

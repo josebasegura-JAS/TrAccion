@@ -179,7 +179,7 @@ interface TraccionApi {
   notifyRendererReady?: () => void;
   getWindowsUser?: () => Promise<string>;
   getAppVersion?: () => Promise<string>;
-  requestSafeRestart?: () => Promise<{ ok: boolean; message?: string }>;
+  requestSafeRestart?: (options?: { automatic?: boolean }) => Promise<{ ok: boolean; message?: string }>;
   getSqliteQueueDiagnostics?: () => Promise<{ queuedOperations: number; runningOperation: string | null; runningMs: number | null; timedOut: boolean }>;
   getMainWatchdogReport?: () => Promise<Array<{ at: string; phase: string; durationMs: number; thresholdMs: number }>>;
   getSqliteIncidentReport?: () => Promise<{ events: Array<{ id: string; at: string; operation: string; phase: string; outcome?: string }>; uncertain: Array<{ id: string; at: string; operation: string; phase: string; outcome?: string }> }>;

@@ -119,6 +119,7 @@ export interface LocalBackupService {
   createShutdownLocalBackup: () => Promise<ShutdownBackupMetrics>;
   createManualLocalBackup: () => Promise<void>;
   listLocalBackups: () => Promise<LocalBackupEntry[]>;
+  getRestartSafetySnapshot: () => { activeBackupOperations: number; queuedBackupOperations: number; pendingBackupRevisions: number };
   restoreLocalBackup: (fileName: string) => Promise<RestoreLocalBackupResult>;
 }
 
@@ -160,8 +161,17 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   // añade varios segundos de E/S sobre la base compartida sin aportar datos nuevos.
   let backupRevision = 0;
   let backedUpRevision = 0;
+  let activeBackupOperations = 0;
+  let queuedBackupOperations = 0;
+  const getRestartSafetySnapshot = () => ({
+    activeBackupOperations,
+    queuedBackupOperations,
+    pendingBackupRevisions: Math.max(0, backupRevision - backedUpRevision),
+  });
 
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
+    activeBackupOperations += 1;
+    try {
     const currentDatabase = dependencies.getDatabase();
     const currentStatus = dependencies.getStatus();
     if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
@@ -307,6 +317,9 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       }
       throw error;
     }
+    } finally {
+      activeBackupOperations -= 1;
+    }
   };
 
   const schedulePendingBackup = (): void => {
@@ -317,6 +330,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       const revision = backupRevision;
       pendingLocalBackupReason = null;
 
+      queuedBackupOperations += 1;
       localBackupQueue = localBackupQueue
         .then(async () => {
           const ok = await writeLocalBackupArtifacts(reason);
@@ -332,6 +346,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           dependencies.enqueueErrorLogger?.(error);
         })
         .finally(() => {
+          queuedBackupOperations -= 1;
           // Reintento siempre acotado a una nueva ventana, nunca un ciclo
           // rápido ante contención SMB. Si hubo nuevas escrituras durante
           // la copia también se incluyen en la siguiente ventana.
@@ -366,6 +381,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
+    activeBackupOperations += 1;
+    try {
     const totalStartedAt = Date.now();
     const emptyMetrics = (): ShutdownBackupMetrics => ({
       totalMs: Date.now() - totalStartedAt,
@@ -501,6 +518,9 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         return emptyMetrics();
       }
       throw error;
+    }
+    } finally {
+      activeBackupOperations -= 1;
     }
   };
 
@@ -713,6 +733,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     createShutdownLocalBackup,
     createManualLocalBackup,
     listLocalBackups,
+    getRestartSafetySnapshot,
     restoreLocalBackup,
   };
 }

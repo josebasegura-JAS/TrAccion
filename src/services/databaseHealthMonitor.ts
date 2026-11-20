@@ -6,6 +6,7 @@ import {
   stopExternalDataSyncPolling,
 } from './externalDataSync';
 import { publishDatabaseConnectivityState } from './databaseConnectivityState';
+import { isAutomaticRestartDue } from './safeRestartPolicy';
 
 const HEALTHY_CHECK_INTERVAL_MS = 5_000;
 const RECONNECT_FAST_INTERVAL_MS = 2_000;
@@ -37,8 +38,10 @@ export interface ConnectionDiagnostics {
   checking: boolean;
   consecutiveBusy: number;
   busySinceAt: string | null;
+  unavailableSinceAt: string | null;
+  autoRestartMessage: string | null;
 }
-let diagnostics: ConnectionDiagnostics = { lastSuccessAt: null, lastFailureAt: null, lastError: null, consecutiveFailures: 0, lastCheckDurationMs: null, checking: false, consecutiveBusy: 0, busySinceAt: null };
+let diagnostics: ConnectionDiagnostics = { lastSuccessAt: null, lastFailureAt: null, lastError: null, consecutiveFailures: 0, lastCheckDurationMs: null, checking: false, consecutiveBusy: 0, busySinceAt: null, unavailableSinceAt: null, autoRestartMessage: null };
 const diagnosticsListeners = new Set<() => void>();
 function updateDiagnostics(patch: Partial<ConnectionDiagnostics>): void {
   diagnostics = { ...diagnostics, ...patch };
@@ -56,6 +59,8 @@ let consecutiveFailures = 0;
 let consecutiveHealthCheckTimeouts = 0;
 let consecutiveBusy = 0;
 let busySinceAt: string | null = null;
+let unavailableSinceAt: string | null = null;
+let automaticRestartAttempted = false;
 let blockedByHealthMonitor = false;
 // Cada cambio de conexión confirmado invalida recuperaciones antiguas.
 let recoveryGeneration = 0;
@@ -139,6 +144,40 @@ function markPotentialNetworkTransition(message: string, confirmedOffline = fals
 function isActiveSqliteBusyResult(result: { ok: boolean; status: { ready: boolean; phase: string }; message: string }): boolean {
   return !result.ok && result.status.ready && result.status.phase === 'active'
     && /\bSQLITE_(?:BUSY|LOCKED)\b/i.test(result.message);
+}
+
+function markUnavailable(): void {
+  if (unavailableSinceAt !== null) return;
+  unavailableSinceAt = new Date().toISOString();
+  automaticRestartAttempted = false;
+  updateDiagnostics({ unavailableSinceAt, autoRestartMessage: null });
+}
+
+function resetUnavailableEpisode(): void {
+  unavailableSinceAt = null;
+  automaticRestartAttempted = false;
+  updateDiagnostics({ unavailableSinceAt: null, autoRestartMessage: null });
+}
+
+function maybeRequestAutomaticRestart(): void {
+  if (!monitorStarted || automaticRestartAttempted ||
+      !isAutomaticRestartDue(unavailableSinceAt, Date.now())) return;
+  const requestRestart = window.traccion?.requestSafeRestart;
+  if (!requestRestart) return;
+  automaticRestartAttempted = true; // Una sola solicitud por episodio.
+  updateDiagnostics({ autoRestartMessage: 'Comprobando si es seguro reiniciar automáticamente…' });
+  void requestRestart({ automatic: true }).then(
+    (response) => {
+      if (!response.ok && monitorStarted && unavailableSinceAt) {
+        updateDiagnostics({ autoRestartMessage: response.message ?? 'No se ha autorizado el reinicio automático.' });
+      }
+    },
+    () => {
+      if (monitorStarted && unavailableSinceAt) {
+        updateDiagnostics({ autoRestartMessage: 'No se ha podido solicitar el reinicio automático. Puedes usar el botón manual.' });
+      }
+    },
+  );
 }
 
 function resetBusyEpisode(): void {
@@ -239,6 +278,7 @@ async function runHealthCheck(): Promise<void> {
         consecutiveBusy,
         busySinceAt,
       });
+      markUnavailable();
       // Una base ocupada no es por sí sola una desconexión. No desbloquear
       // una desconexión anterior, ni iniciar una recarga de stores.
       return;
@@ -248,6 +288,7 @@ async function runHealthCheck(): Promise<void> {
     publishDatabaseStatus(result.status);
 
     if (!result.ok) {
+      markUnavailable();
       consecutiveFailures += 1;
       updateDiagnostics({ lastFailureAt: new Date().toISOString(), lastError: result.message, consecutiveFailures });
       blockEditing(`${CONNECTIVITY_MESSAGE} ${result.message}`);
@@ -257,11 +298,13 @@ async function runHealthCheck(): Promise<void> {
     updateDiagnostics({ lastSuccessAt: new Date().toISOString(), lastError: null, consecutiveFailures: 0 });
     if (!blockedByHealthMonitor) {
       consecutiveFailures = 0;
+      resetUnavailableEpisode();
       publishDatabaseConnectivityState('connected', result.message);
       return;
     }
 
     await completeRecovery();
+    resetUnavailableEpisode();
   } catch (error) {
     resetBusyEpisode();
     consecutiveFailures += 1;
@@ -275,11 +318,13 @@ async function runHealthCheck(): Promise<void> {
       // fallo real demostrado. La siguiente comprobación decidirá.
       console.warn('[sqlite-health] Comprobación lenta: se conserva la edición hasta confirmar una segunda espera.', message);
     } else {
+      markUnavailable();
       blockEditing(`${CONNECTIVITY_MESSAGE} ${message}`);
     }
   } finally {
     updateDiagnostics({ checking: false, lastCheckDurationMs: Math.round(performance.now() - checkStartedAt) });
     checkInProgress = false;
+    maybeRequestAutomaticRestart();
     scheduleNextCheck();
   }
 }
@@ -341,6 +386,7 @@ export function stopDatabaseHealthMonitor(): void {
   consecutiveFailures = 0;
   consecutiveHealthCheckTimeouts = 0;
   resetBusyEpisode();
+  resetUnavailableEpisode();
   blockedByHealthMonitor = false;
   publishDatabaseConnectivityBlock(false, undefined, 'health-monitor');
   publishDatabaseConnectivityState('connected');

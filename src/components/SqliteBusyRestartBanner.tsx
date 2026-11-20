@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { getConnectionDiagnostics, subscribeConnectionDiagnostics } from '../services/databaseHealthMonitor';
 
-import { shouldSuggestSqliteBusyRestart } from './sqliteBusyRestartPolicy';
+import { shouldSuggestSupervisedRestart } from '../services/safeRestartPolicy';
 
 export function SqliteBusyRestartBanner() {
   const [diagnostics, setDiagnostics] = useState(getConnectionDiagnostics);
   const [restarting, setRestarting] = useState(false);
   const [result, setResult] = useState('');
   useEffect(() => subscribeConnectionDiagnostics(() => setDiagnostics(getConnectionDiagnostics())), []);
-  const suggest = shouldSuggestSqliteBusyRestart(diagnostics.busySinceAt, diagnostics.consecutiveBusy, Date.now());
+  const suggest = shouldSuggestSupervisedRestart(diagnostics.unavailableSinceAt, Date.now());
 
   useEffect(() => {
     if (!suggest && result) setResult('');
@@ -39,10 +39,11 @@ export function SqliteBusyRestartBanner() {
       <div className="flex flex-wrap items-center gap-3">
         <AlertTriangle size={20} className="shrink-0 text-amber-400" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <strong>SQLite lleva más de dos minutos ocupada</strong>
+          <strong>La base de datos lleva más de dos minutos sin responder correctamente</strong>
           <p className="mt-1 text-xs text-metro-muted">
-            TrAcción está detectando bloqueos repetidos en las comprobaciones. Puedes continuar esperando o solicitar un reinicio supervisado. No se reiniciará automáticamente.
+            TrAcción mantiene la edición protegida. Puedes solicitar un reinicio supervisado; tras cinco minutos intentará uno automáticamente solo si no hay operaciones, copias o cambios pendientes. De lo contrario, seguirá bloqueada para proteger tus datos.
           </p>
+          {diagnostics.autoRestartMessage && <p className="mt-2 text-xs" role="status">{diagnostics.autoRestartMessage}</p>}
           {result && <p className="mt-2 text-xs" role="status">{result}</p>}
         </div>
         <button
