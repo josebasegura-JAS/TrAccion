@@ -17,7 +17,10 @@ vi.mock('electron', () => ({
   },
 }));
 
-// Migraciones y fsync de SQLite en Windows CI pueden superar los 5 s por\n// test, como ocurre en sqliteConnection.test.ts. Es un límite de prueba,\n// no un cambio del timeout operativo de la aplicación.\ndescribe('arranque aislado con SQLite test', () => {
+// Migraciones y fsync de SQLite en Windows CI pueden superar los 5 s por
+// test, como ocurre en sqliteConnection.test.ts. Es un límite de prueba,
+// no un cambio del timeout operativo de la aplicación.
+describe('arranque aislado con SQLite test', () => {
   let directory: string;
   let originalArgs: string[];
   let requestedLocks: number;
