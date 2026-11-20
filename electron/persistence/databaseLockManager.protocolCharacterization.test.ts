@@ -5,9 +5,11 @@ import {
   rmSync,
   unlinkSync,
   renameSync,
+  rmdirSync,
+  mkdirSync,
   writeFileSync,
 } from 'node:fs';
-import { rename, unlink } from 'node:fs/promises';
+import { rename, rmdir, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { performance } from 'node:perf_hooks';
 import path from 'node:path';
@@ -17,7 +19,7 @@ import { createDatabaseLockManager, type DatabaseLockInfo } from './databaseLock
 // temporización dependientes de la carga de CI ni requerir un servidor real.
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, unlink: vi.fn(actual.unlink), rename: vi.fn(actual.rename) };
+  return { ...actual, unlink: vi.fn(actual.unlink), rename: vi.fn(actual.rename), rmdir: vi.fn(actual.rmdir) };
 });
 
 describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
@@ -29,12 +31,14 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     dbPath = path.join(directory, 'traccion.sqlite');
     vi.mocked(unlink).mockImplementation(async (target) => { unlinkSync(target); });
     vi.mocked(rename).mockImplementation(async (oldPath, newPath) => { renameSync(oldPath, newPath); });
+    vi.mocked(rmdir).mockImplementation(async (target) => { rmdirSync(target); });
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.mocked(unlink).mockReset();
     vi.mocked(rename).mockReset();
+    vi.mocked(rmdir).mockReset();
     rmSync(directory, { recursive: true, force: true });
   });
 
@@ -186,6 +190,33 @@ describe('caracterización del protocolo .lockdir (sin SMB real)', () => {
     }
     const acquiredByOther = await other.acquireLock(dbPath, 300);
     await other.releaseLock(lockPath, acquiredByOther);
+  });
+
+  it('PR524: si aparece owner.json justo antes del rmdir, no se libera el lock de otro equipo', async () => {
+    let offset = 0;
+    const manager = createDatabaseLockManager({
+      getOwnerId: () => 'equipo-a', monotonicNowMs: () => performance.now() + offset,
+    });
+    const lockPath = manager.getLockPath(dbPath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    mkdirSync(lockPath);
+
+    await expect(manager.acquireLock(dbPath, 160)).rejects.toThrow();
+    offset = 6_000;
+    const newOwner = makeOwner('equipo-b', new Date().toISOString());
+    let appeared = false;
+    vi.mocked(rmdir).mockImplementation(async (target) => {
+      if (String(target) === lockPath && !appeared) {
+        writeFileSync(ownerPath, JSON.stringify(newOwner), 'utf8');
+        appeared = true;
+      }
+      rmdirSync(target);
+    });
+
+    await expect(manager.acquireLock(dbPath, 220)).rejects.toThrow();
+    expect(appeared).toBe(true);
+    expect(existsSync(ownerPath)).toBe(true);
+    expect((await manager.readLock(lockPath))?.ownerId).toBe('equipo-b');
   });
 
   it('PR7C: no borra un owner.json corrupto aunque el directorio parezca viejo', async () => {
