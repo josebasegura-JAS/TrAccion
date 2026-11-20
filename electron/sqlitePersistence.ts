@@ -1,7 +1,6 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
-import { assertDatabaseEnvironmentBeforeWrite } from './persistence/databaseIdentity.js';
 import { getSqliteIpcQueueDiagnostics, runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import {
   createVolatileOwnerId,
@@ -77,7 +76,7 @@ import {
   type DatabaseConnectivityIssuePayload,
   type DatabaseLockInfo,
 } from './persistence/sqliteLockLifecycle.js';
-import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
+import { assertDatabaseEnvironmentBeforeWrite, readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { verifySqliteIntegrityReadOnly } from './persistence/sqliteIntegrityVerification.js';
 import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
 import {
