@@ -147,6 +147,7 @@ export function ConnectionRecoverySplash() {
             <RotateCw size={15} aria-hidden="true" />{restarting ? 'Preparando reinicio…' : 'Reiniciar TrAcción'}
           </button>
         </div>}
+        {diagnostics.autoRestartMessage && <p role="status" className="mt-3 text-xs text-[#f5be56]">{diagnostics.autoRestartMessage}</p>}
         {restartError && <p role="alert" className="mt-3 text-xs text-[#ff8a91]">{restartError}</p>}
         <p className="mt-4 text-[11px] text-white/45">Los formularios abiertos permanecen en pantalla y no se pueden utilizar hasta recuperar la conexión.</p>
       </div>
