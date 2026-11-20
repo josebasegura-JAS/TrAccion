@@ -189,7 +189,9 @@ export function App() {
   useEffect(() => {
     const appWindow = window as Window & {
       __traccionConfirmAppClose?: () => Promise<boolean>;
+      __traccionCanAutoRestart?: () => boolean;
     };
+    appWindow.__traccionCanAutoRestart = () => !hasDirtyEditors();
     appWindow.__traccionConfirmAppClose = async () => {
       if (!hasDirtyEditors()) return true;
       return confirm(
@@ -204,6 +206,7 @@ export function App() {
     };
     return () => {
       delete appWindow.__traccionConfirmAppClose;
+      delete appWindow.__traccionCanAutoRestart;
     };
   }, [confirm]);
 
