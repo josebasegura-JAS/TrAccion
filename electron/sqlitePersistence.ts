@@ -79,6 +79,12 @@ import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { verifySqliteIntegrityReadOnly } from './persistence/sqliteIntegrityVerification.js';
 import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
 import {
+  createSqliteHealthBusyTracker,
+  withTemporarySqliteBusyTimeout,
+  SQLITE_HEALTH_BUSY_TIMEOUT_MS,
+  SQLITE_HEALTH_BUSY_STATUS_MESSAGE,
+} from './persistence/sqliteHealthContention.js';
+import {
   describeSqliteRecoveryError,
   shouldWriteSqliteHealthDiagnostic,
   writeSqliteRecoveryDiagnostic,
@@ -469,6 +475,7 @@ function resetRepositoryMigrationState(): void {
 }
 
 function closeDatabase(): void {
+  healthBusyTracker.reset();
   if (database) {
     database.close();
     database = null;
@@ -575,6 +582,7 @@ async function activateDatabase(
   );
   database = activated.database;
   status = activated.status;
+  healthBusyTracker.reset();
   return status;
 }
 
@@ -634,6 +642,11 @@ async function safeDatabaseOperation<T>(
   if (sqliteIoRecoveryRequired) {
     throw new Error('SQLite suspendida tras un error de E/S. Espera la recuperación verificada de la base compartida.');
   }
+  if (healthBusyTracker.isDegraded()) {
+    // No repetir lecturas ni escrituras sobre un handle cuyo esquema lleva
+    // varios health-checks fallando; solo el propio health-check lo rehabilita.
+    throw new Error(SQLITE_HEALTH_BUSY_STATUS_MESSAGE);
+  }
   const currentStatus = getSqliteStatus();
 
   for (let attempt = 0; attempt <= SQLITE_BUSY_RETRY_DELAYS_MS.length; attempt += 1) {
@@ -682,6 +695,7 @@ async function safeDatabaseMigrationOperation<T>(
 // PR9B: el contador es local al proceso y solo decide si solicitar una reapertura
 // ya serializada. Nunca reintenta automáticamente escrituras inciertas.
 const healthFileFailureTracker = createSqliteHealthFileFailureTracker();
+const healthBusyTracker = createSqliteHealthBusyTracker();
 
 export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
   const checkedAt = new Date().toISOString();
@@ -719,7 +733,9 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       return { ok: false, status: getSqliteStatus(), checkedAt, message: status.message ?? message };
     }
   }
-  const currentStatus = getSqliteStatus();
+  // Consultar el estado interno, no la proyección temporal 'locked' del
+  // getter: la verificación es la única que puede levantar el bloqueo.
+  const currentStatus = status ?? getSqliteStatus();
 
   if (!currentStatus.ready || currentStatus.phase !== 'active' || currentStatus.isDefaultPath) {
     writeHealthDiagnostic('skipped', 'sin-etapa');
@@ -735,6 +751,16 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     };
   }
 
+  if (!healthBusyTracker.shouldProbe(performance.now())) {
+    writeHealthDiagnostic('skipped', 'sin-etapa');
+    return {
+      ok: false,
+      status: getSqliteStatus(),
+      checkedAt,
+      message: `${SQLITE_HEALTH_BUSY_STATUS_MESSAGE} Nueva comprobación aplazada para evitar bloquear Electron.`,
+    };
+  }
+
   // Un timeout IPC no cancela la operación SQLite subyacente. Una consulta
   // SELECT 1 desde este canal podría dar un falso positivo de recuperación
   // mientras una escritura anterior sigue bloqueada o con resultado incierto.
@@ -747,15 +773,20 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     }
 
     const db = requireDatabase();
-    diagnostic.stage('consulta', () => db.prepare('SELECT 1 AS ok').get());
-    const schemaVersion = diagnostic.stage('esquema', () => readCurrentSchemaVersion(db));
-    if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
-      throw new Error(
-        `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
-      );
-    }
-
-    const identity = diagnostic.stage('identidad', () => readDatabaseIdentity(db));
+    // La lectura real del esquema puede agotar 15 s de busy_timeout y congelar
+    // repetidamente el proceso principal. Reducir el límite SOLO durante esta
+    // comprobación y restaurarlo incluso si SQLITE_BUSY lanza una excepción.
+    // Las escrituras conservan su timeout original y no se reintentan aquí.
+    const identity = withTemporarySqliteBusyTimeout(db, SQLITE_HEALTH_BUSY_TIMEOUT_MS, () => {
+      diagnostic.stage('consulta', () => db.prepare('SELECT 1 AS ok').get());
+      const schemaVersion = diagnostic.stage('esquema', () => readCurrentSchemaVersion(db));
+      if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
+        throw new Error(
+          `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
+        );
+      }
+      return diagnostic.stage('identidad', () => readDatabaseIdentity(db));
+    });
     if (!identity || !currentStatus.databaseUuid || identity.databaseUuid !== currentStatus.databaseUuid) {
       throw new Error('La identidad de la base SQLite ha cambiado durante la sesión.');
     }
@@ -763,6 +794,7 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       throw new Error('Los metadatos de la base SQLite ya no coinciden con la base validada al iniciar.');
     }
 
+    healthBusyTracker.reset();
     // Esta comprobación se ejecuta dentro de la cola IPC, después de
     // comprobar fichero, SELECT, esquema e identidad. Nunca rehabilitar
     // escrituras si sigue pendiente una E/S de heartbeat anterior.
@@ -794,6 +826,12 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
     } else {
       healthFileFailureTracker.reset();
     }
+    if (isSqliteBusyOrLockedError(error) &&
+        (failedStage === 'consulta' || failedStage === 'esquema' || failedStage === 'identidad')) {
+      healthBusyTracker.observeBusy(performance.now());
+    } else {
+      healthBusyTracker.reset();
+    }
     if (isSqliteIoError(error) || recurrentFileFailure) suspendDatabaseAfterIoError(error);
     writeHealthDiagnostic('failed', (failedStage as SqliteRecoveryStage | null) ?? 'sin-etapa', error);
     // El mensaje original de better-sqlite3 puede ser "database is locked"
@@ -817,6 +855,10 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
 
 export function getSqliteStatus(): DatabaseStatus {
   const fallbackPath = getDatabasePathForDirectory(getDefaultDatabaseDirectory());
+
+  if (status?.ready && status.phase === 'active' && healthBusyTracker.isDegraded()) {
+    return { ...status, ready: false, phase: 'locked', message: SQLITE_HEALTH_BUSY_STATUS_MESSAGE };
+  }
 
   if (status?.ready && status.phase === 'active' && isDatabaseWriteBlockedByHeartbeat()) {
     return {
