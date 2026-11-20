@@ -154,6 +154,53 @@ describe('databaseHealthMonitor · contención SQLite', () => {
   });
 });
 
+describe('databaseHealthMonitor · reinicio supervisado', () => {
+  it('solicita un solo reinicio automático a los cinco minutos de indisponibilidad y conserva el motivo del rechazo', async () => {
+    const databaseHealthCheck = vi.fn().mockResolvedValue({
+      ok: false, status: errorStatus, checkedAt: '2026-11-20T09:00:00.000Z',
+      message: 'Acceso a SQLite interrumpido.',
+    });
+    const fakeWindow = installFakeWindow(databaseHealthCheck);
+    const requestSafeRestart = vi.fn().mockResolvedValue({
+      ok: false, message: 'Hay copias SQLite pendientes.',
+    });
+    Object.assign(fakeWindow.traccion, { requestSafeRestart });
+    const monitor = await import('./databaseHealthMonitor');
+    try {
+      monitor.startDatabaseHealthMonitor();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(requestSafeRestart).not.toHaveBeenCalled();
+      expect(monitor.getConnectionDiagnostics().unavailableSinceAt).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(5 * 60_000 + 5_000);
+      expect(requestSafeRestart).toHaveBeenCalledTimes(1);
+      expect(requestSafeRestart).toHaveBeenCalledWith({ automatic: true });
+      expect(monitor.getConnectionDiagnostics().autoRestartMessage).toContain('copias SQLite pendientes');
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(requestSafeRestart).toHaveBeenCalledTimes(1);
+    } finally {
+      monitor.stopDatabaseHealthMonitor();
+    }
+  });
+
+  it('olvida el episodio de indisponibilidad cuando la comprobación se recupera', async () => {
+    const check = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: errorStatus, checkedAt: '2026-11-20', message: 'SMB inaccesible' })
+      .mockResolvedValue({ ok: true, status: activeStatus, checkedAt: '2026-11-20', message: 'Conexión recuperada.' });
+    installFakeWindow(check);
+    const monitor = await import('./databaseHealthMonitor');
+    try {
+      monitor.startDatabaseHealthMonitor();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(monitor.getConnectionDiagnostics().unavailableSinceAt).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(monitor.getConnectionDiagnostics().unavailableSinceAt).toBeNull();
+      expect(monitor.getConnectionDiagnostics().autoRestartMessage).toBeNull();
+    } finally {
+      monitor.stopDatabaseHealthMonitor();
+    }
+  });
+});
+
 describe('databaseHealthMonitor', () => {
   it('mantiene el estado conectado cuando el chequeo de la base compartida es correcto', async () => {
     const databaseHealthCheck = vi.fn().mockResolvedValue({
