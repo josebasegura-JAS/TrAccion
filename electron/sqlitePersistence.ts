@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
+import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { getSqliteIpcQueueDiagnostics, runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import {
   createVolatileOwnerId,
@@ -1893,7 +1894,7 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
       const nextStatus = await activateDatabase(
         normalizedDirectoryPath,
         false,
-        previousDatabasePath,
+        getTraccionEnvironment() === 'test' ? null : previousDatabasePath,
       );
       await writeDatabasePreferences({
         ...(await readDatabasePreferences()),
