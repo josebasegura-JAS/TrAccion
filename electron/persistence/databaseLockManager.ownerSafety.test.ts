@@ -103,7 +103,7 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
     // posterior; borrarlo inmediatamente podría interferir con otro cliente.
   });
 
-  it('un heartbeat atrasado opera sobre su handle original y no trunca owner.json ajeno', async () => {
+  it('el heartbeat no modifica la identidad ajena incluso ante un rename concurrente', async () => {
     const a = createDatabaseLockManager({ getOwnerId: () => 'cliente-A' });
     const lockPath = a.getLockPath(databasePath);
     const ownerPath = a.getLockInfoPath(lockPath);
@@ -116,22 +116,43 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
+    let notifyOpen!: () => void;
+    const openAttempted = new Promise<void>((resolve) => { notifyOpen = resolve; });
+    let renameRejected = false;
     let switched = false;
     hooks.afterOpen = async (target) => {
-      if (target !== ownerPath || switched) return;
-      switched = true;
-      // El handle original de A ya está abierto. Simular la sustitución del
-      // nombre justo antes del read/write de la renovación.
-      renameSync(ownerPath, path.join(lockPath, 'owner.json.reclaim-simulado'));
-      writeFileSync(ownerPath, JSON.stringify(ownerB), 'utf8');
+      if (target !== ownerPath || switched || renameRejected) return;
+      // Señal determinista: esperar realmente a que el heartbeat abra el handle.
+      // Windows puede rechazar el rename de un archivo abierto (EPERM/EACCES).
+      try {
+        renameSync(ownerPath, path.join(lockPath, 'owner.json.reclaim-simulado'));
+        writeFileSync(ownerPath, JSON.stringify(ownerB), 'utf8');
+        switched = true;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY') throw error;
+        renameRejected = true;
+      } finally {
+        notifyOpen();
+      }
     };
 
-    vi.useFakeTimers();
+    // Simular solo los intervalos, no la E/S asíncrona real de fs/promises.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const timer = a.startDatabaseLockHeartbeat(lockPath, leaseA);
     try {
       await vi.advanceTimersByTimeAsync(10_100);
-      expect(switched).toBe(true);
-      expect(JSON.parse(readFileSync(ownerPath, 'utf8'))).toEqual(ownerB);
+      await openAttempted;
+      // Dejar finalizar el read/write/close del handle y sus continuaciones.
+      await vi.waitFor(() => {
+        const actual = JSON.parse(readFileSync(ownerPath, 'utf8'));
+        if (switched) expect(actual).toEqual(ownerB);
+        else {
+          expect(renameRejected).toBe(true);
+          expect(actual.ownerId).toBe('cliente-A');
+        }
+      });
     } finally {
       clearInterval(timer);
       vi.useRealTimers();
