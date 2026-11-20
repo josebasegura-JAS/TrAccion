@@ -99,6 +99,7 @@ export function Header({
   onViewChange: (target: { view: AppView; recordId?: string; responsibleFilter?: string }) => void;
 }) {
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
+  const [isTestEnvironment, setIsTestEnvironment] = useState(false);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
   const breadcrumb = useMemo(() => formatBreadcrumbLabel(getNavigationBreadcrumb(activeView)), [activeView]);
   const ModuleIcon = useMemo(() => getNavigationIcon(activeView), [activeView]);
@@ -110,6 +111,14 @@ export function Header({
   const userInitials = useMemo(() => getUserInitials(windowsUserName), [windowsUserName]);
 
   useEffect(() => subscribeToAppNavigation(onViewChange), [onViewChange]);
+
+  useEffect(() => {
+    let mounted = true;
+    window.traccion?.getAppEnvironment?.()
+      .then((environment) => { if (mounted) setIsTestEnvironment(environment === 'test'); })
+      .catch(() => { /* Mantener cabecera normal si no está disponible el IPC. */ });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -150,6 +159,17 @@ export function Header({
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5 lg:justify-end">
+          {isTestEnvironment ? (
+            <div
+              role="status"
+              aria-label={dbStatus?.ready && dbStatus.environment === 'test' ? 'Entorno de pruebas conectado' : 'Entorno de pruebas sin conexión'}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-sky-300/60 bg-sky-500/20 px-2.5 py-1.5 text-[10px] font-extrabold tracking-[0.09em] text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+              title={dbStatus?.ready && dbStatus.environment === 'test' ? 'Conectado a la base de PRUEBAS' : 'Modo PRUEBAS: base sin confirmar o no conectada'}
+            >
+              <span className={`h-2 w-2 rounded-full ${dbStatus?.ready && dbStatus.environment === 'test' ? 'bg-emerald-400' : 'bg-amber-400'}`} aria-hidden="true" />
+              PRUEBAS
+            </div>
+          ) : null}
           <TaskNotificationsBell windowsUserName={windowsUserName} onViewChange={onViewChange} />
 
           <div className="flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.045] px-2 py-1 shadow-sm shadow-slate-950/15 lg:min-w-[180px]">

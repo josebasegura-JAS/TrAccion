@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
+import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { getSqliteIpcQueueDiagnostics, runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import {
   createVolatileOwnerId,
@@ -75,7 +76,7 @@ import {
   type DatabaseConnectivityIssuePayload,
   type DatabaseLockInfo,
 } from './persistence/sqliteLockLifecycle.js';
-import { readDatabaseIdentity } from './persistence/databaseIdentity.js';
+import { assertDatabaseEnvironmentBeforeWrite, readDatabaseIdentity } from './persistence/databaseIdentity.js';
 import { verifySqliteIntegrityReadOnly } from './persistence/sqliteIntegrityVerification.js';
 import { createSqliteStageDiagnostic } from './persistence/sqliteStageDiagnostic.js';
 import {
@@ -458,6 +459,16 @@ export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | n
  * La acción sigue requiriendo confirmación del usuario en Ajustes.
  */
 export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLockResult> {
+  if (getTraccionEnvironment() === 'test') {
+    try {
+      // Si test apunta por error a producción, nunca renombrar ni borrar
+      // su owner.json mediante las herramientas de administración.
+      assertDatabaseEnvironmentBeforeWrite(getSqliteStatus().path, 'test');
+    } catch {
+      return { ok: false, status: getSqliteStatus(),
+        message: 'No se libera el lock: no se ha podido verificar una SQLite del entorno PRUEBAS.' };
+    }
+  }
   return forceReleaseDatabaseLockWithRecovery({
     getStatus: getSqliteStatus,
     readLock,
@@ -1011,6 +1022,12 @@ export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
 }
 
 export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
+  if (getTraccionEnvironment() === 'test') {
+    // Habilitar restauraciones test requiere auditoría específica de orígenes
+    // y destinos: por ahora ninguna copia puede reemplazar la SQLite real.
+    return { ok: false, status: getSqliteStatus(),
+      message: 'La restauración de copias está desactivada en el entorno PRUEBAS.' };
+  }
   return getLocalBackupService().restoreLocalBackup(fileName);
 }
 
@@ -1893,7 +1910,7 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
       const nextStatus = await activateDatabase(
         normalizedDirectoryPath,
         false,
-        previousDatabasePath,
+        getTraccionEnvironment() === 'test' ? null : previousDatabasePath,
       );
       await writeDatabasePreferences({
         ...(await readDatabasePreferences()),

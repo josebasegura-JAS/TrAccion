@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import { CURRENT_SCHEMA_VERSION, readCurrentSchemaVersion } from './schemaMigrations.js';
+import { getTraccionEnvironment, type TraccionEnvironment } from './traccionEnvironment.js';
 
 const require = createRequire(import.meta.url);
 
@@ -72,6 +73,7 @@ function looksLikeLegacyTraccionDatabase(db: Database): boolean {
 export interface InspectDatabaseIdentityOptions {
   expectedDatabaseUuid?: string | null;
   allowLegacyBootstrap?: boolean;
+  expectedEnvironment?: TraccionEnvironment;
 }
 
 export interface DatabaseIdentityInspection {
@@ -85,6 +87,7 @@ export function inspectAndEnsureDatabaseIdentity(
 ): DatabaseIdentityInspection {
   const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
   const db = new BetterSqlite3(databasePath, { readonly: false, fileMustExist: true });
+  const expectedEnvironment = options.expectedEnvironment ?? getTraccionEnvironment();
 
   try {
     const applicationId = readMetadata(db, APPLICATION_ID_KEY);
@@ -107,9 +110,9 @@ export function inspectAndEnsureDatabaseIdentity(
           `La SQLite seleccionada pertenece a otra aplicación (${applicationId}). No se ha modificado el fichero.`,
         );
       }
-      if (environment !== TRACCION_DATABASE_ENVIRONMENT) {
+      if (environment !== expectedEnvironment) {
         throw new Error(
-          `La base pertenece al entorno "${environment}" y esta instalación solo admite "${TRACCION_DATABASE_ENVIRONMENT}".`,
+          `La base pertenece al entorno "${environment}" y esta instalación solo admite "${expectedEnvironment}".`,
         );
       }
       if (options.expectedDatabaseUuid && databaseUuid !== options.expectedDatabaseUuid) {
@@ -139,7 +142,7 @@ export function inspectAndEnsureDatabaseIdentity(
       applicationId: TRACCION_APPLICATION_ID,
       databaseUuid: options.expectedDatabaseUuid ?? randomUUID(),
       createdAt: new Date().toISOString(),
-      environment: TRACCION_DATABASE_ENVIRONMENT,
+      environment: expectedEnvironment,
     };
 
     const assignIdentity = db.transaction(() => {
@@ -151,6 +154,35 @@ export function inspectAndEnsureDatabaseIdentity(
     assignIdentity();
 
     return { identity: nextIdentity, bootstrappedLegacyIdentity: true };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Comprobación de identidad previa a locks, pruebas de escritura, migraciones y
+ * restauraciones. El modo de pruebas no debe tocar una base existente con
+ * identidad de producción; tampoco admite bases legadas sin identificación.
+ */
+export function assertDatabaseEnvironmentBeforeWrite(
+  databasePath: string,
+  expectedEnvironment: TraccionEnvironment = getTraccionEnvironment(),
+): void {
+  const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
+  const db = new BetterSqlite3(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    const appId = readMetadata(db, APPLICATION_ID_KEY);
+    const environment = readMetadata(db, ENVIRONMENT_KEY);
+    const id = readMetadata(db, DATABASE_UUID_KEY);
+    if (expectedEnvironment === 'test' && (!appId || !environment || !id)) {
+      throw new Error('Pruebas rechaza una SQLite existente sin identidad test completa.');
+    }
+    if (appId && appId !== TRACCION_APPLICATION_ID) {
+      throw new Error('SQLite de otra aplicación: se rechaza sin modificarla.');
+    }
+    if (environment && environment !== expectedEnvironment) {
+      throw new Error(`Entorno incompatible: base ${environment}, instancia ${expectedEnvironment}. No se ha modificado SQLite.`);
+    }
   } finally {
     db.close();
   }

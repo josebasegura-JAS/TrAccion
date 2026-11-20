@@ -6,6 +6,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 import { applyAppUpdate, checkForAppUpdate } from '../appUpdate.js';
 import { userInfo } from 'node:os';
 import {
@@ -75,6 +76,7 @@ export function registerCoreDatabaseIpc(): void {
       return 'Usuario local';
     }
   });
+  ipcMain.handle('app:environment', () => getTraccionEnvironment());
   ipcMain.handle('database:status', () => getSqliteStatus());
   // Serializar con lecturas y escrituras: no reabrir un handle mientras
   // una operación SQLite anterior continúa ejecutándose tras un timeout IPC.
