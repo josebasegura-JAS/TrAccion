@@ -390,7 +390,8 @@ export function createDatabaseLockManager(
     }
 
     const confirmedLock = await readLock(lockPath);
-    if (confirmedLock?.ownerId !== lock.ownerId ||
+    if (!confirmedLock ||
+        confirmedLock.ownerId !== lock.ownerId ||
         confirmedLock.pid !== lock.pid ||
         confirmedLock.createdAt !== lock.createdAt) {
       // releaseLock solo es aplicable a leases ya registrados; nunca intentar
