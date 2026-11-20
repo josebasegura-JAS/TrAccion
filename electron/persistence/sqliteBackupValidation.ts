@@ -2,9 +2,9 @@ import { createRequire } from 'node:module';
 import type { Database } from 'better-sqlite3';
 import {
   TRACCION_APPLICATION_ID,
-  TRACCION_DATABASE_ENVIRONMENT,
 } from './databaseIdentity.js';
 import { CURRENT_SCHEMA_VERSION, readCurrentSchemaVersion } from './schemaMigrations.js';
+import { getTraccionEnvironment } from './traccionEnvironment.js';
 
 const require = createRequire(import.meta.url);
 
@@ -56,6 +56,7 @@ export function validateSqliteBackupForRestore(
   options: SqliteBackupValidationOptions = {},
 ): SqliteBackupValidationResult {
   const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
+  const expectedEnvironment = getTraccionEnvironment();
   let db: Database | null = null;
 
   try {
@@ -99,9 +100,9 @@ export function validateSqliteBackupForRestore(
       if (applicationId !== TRACCION_APPLICATION_ID) {
         throw validationError(`pertenece a otra aplicación (${applicationId}) y no se restaurará.`);
       }
-      if (environment !== TRACCION_DATABASE_ENVIRONMENT) {
+      if (environment !== expectedEnvironment) {
         throw validationError(
-          `pertenece al entorno "${environment}" y esta instalación solo admite "${TRACCION_DATABASE_ENVIRONMENT}".`,
+          `pertenece al entorno "${environment}" y esta instalación solo admite "${expectedEnvironment}".`,
         );
       }
       if (options.expectedDatabaseUuid && databaseUuid !== options.expectedDatabaseUuid) {
@@ -111,6 +112,9 @@ export function validateSqliteBackupForRestore(
       return { schemaVersion, databaseUuid, legacyIdentity: false };
     }
 
+    if (expectedEnvironment === 'test') {
+      throw validationError('no tiene identidad test y no puede restaurarse en el entorno de pruebas.');
+    }
     // Las copias legacy anteriores a la identidad explícita siguen siendo válidas
     // si conservan la estructura nuclear y un schema que esta build sabe migrar.
     return { schemaVersion, databaseUuid: null, legacyIdentity: true };
