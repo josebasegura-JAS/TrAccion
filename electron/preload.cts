@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('traccion', {
   notifyRendererReady: () => ipcRenderer.send('app:renderer-ready'),
   getWindowsUser: () => ipcRenderer.invoke('app:get-windows-user'),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  getAppEnvironment: () => ipcRenderer.invoke('app:environment'),
   requestSafeRestart: (options?: { automatic?: boolean }) => ipcRenderer.invoke('app:request-safe-restart', options),
   getSqliteQueueDiagnostics: () => ipcRenderer.invoke('database:ipc-queue-diagnostics'),
   getSqliteIncidentReport: () => ipcRenderer.invoke('database:incident-report'),
