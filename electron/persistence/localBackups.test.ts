@@ -246,7 +246,7 @@ describe('localBackups', () => {
       db.prepare('UPDATE records SET value = ? WHERE id = 1').run('changed');
       const copy = new Database(destination, { readonly: true, fileMustExist: true });
       try {
-        expect(copy.pragma('quick_check', { simple: true })).toBe('ok');
+        expect(copy.pragma('quick_check')).toEqual([{ quick_check: 'ok' }]);
         expect(copy.prepare('SELECT * FROM records').all()).toEqual([{ id: 1, value: 'original' }]);
       } finally {
         copy.close();
