@@ -131,3 +131,72 @@ describe('protección de cambios sin guardar', () => {
     expect(getDirtyEditorCount()).toBe(0);
   });
 });
+
+describe('regresión: pérdida temporal del permiso de edición', () => {
+  it('conserva un borrador anterior al abrir un registro bloqueado y lo ofrece al adquirir permiso', async () => {
+    writeRecoverableDraft(key, changed);
+    const editor = draftEditor(initial, false);
+    expect(readRecoverableDraft(key)?.value).toEqual(changed);
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    act(() => { window.dispatchEvent(new Event('beforeunload')); });
+    expect(readRecoverableDraft(key)?.value).toEqual(changed);
+    await act(async () => {
+      editor.rerender({ current: initial, active: true, storageKey: key });
+    });
+    expect(mocks.recover).toHaveBeenCalledWith(changed);
+  });
+
+  it('persiste la última edición inmediatamente si pierde el bloqueo antes del debounce', () => {
+    const editor = draftEditor();
+    editor.rerender({ current: changed, active: true, storageKey: key });
+    act(() => vi.advanceTimersByTime(100));
+    expect(readRecoverableDraft(key)).toBeNull();
+    editor.rerender({ current: changed, active: false, storageKey: key });
+    expect(readRecoverableDraft(key)?.value).toEqual(changed);
+    act(() => { window.dispatchEvent(new Event('beforeunload')); });
+    expect(readRecoverableDraft(key)?.value).toEqual(changed);
+  });
+
+  it('no pide recuperar un borrador sobre la edición viva al recuperar el bloqueo', () => {
+    const editor = draftEditor(changed);
+    act(() => vi.advanceTimersByTime(500));
+    editor.rerender({ current: changed, active: false, storageKey: key });
+    editor.rerender({ current: changed, active: true, storageKey: key });
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(mocks.recover).not.toHaveBeenCalled();
+    expect(readRecoverableDraft(key)?.value).toEqual(changed);
+  });
+
+  it('mantiene la protección de cierre y reinicio después de perder el bloqueo', async () => {
+    const editor = renderHook(({ enabled }) => useUnsavedChanges({
+      currentValue: changed, initialValue: initial, enabled, onDiscard: mocks.discard,
+    }), { initialProps: { enabled: true } });
+    editor.rerender({ enabled: false });
+    expect(editor.result.current.isDirty).toBe(true);
+    expect(getDirtyEditorCount()).toBe(1);
+    mocks.confirm.mockResolvedValueOnce(false);
+    await act(async () => editor.result.current.requestClose());
+    expect(mocks.discard).not.toHaveBeenCalled();
+    expect(mocks.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('no registra como modificado un formulario que nunca ha permitido editar', () => {
+    const editor = renderHook(() => useUnsavedChanges({
+      currentValue: changed, initialValue: initial, enabled: false, onDiscard: mocks.discard,
+    }));
+    expect(editor.result.current.isDirty).toBe(false);
+    expect(getDirtyEditorCount()).toBe(0);
+  });
+
+  it('no copia modificaciones a un registro distinto abierto en solo lectura', () => {
+    const editor = draftEditor(changed);
+    act(() => vi.advanceTimersByTime(500));
+    const other = buildRecoverableDraftKey('tareas', 'other');
+    const existing = { titulo: 'Borrador independiente' };
+    writeRecoverableDraft(other, existing);
+    editor.rerender({ current: initial, active: false, storageKey: other });
+    act(() => { window.dispatchEvent(new Event('beforeunload')); });
+    expect(readRecoverableDraft(other)?.value).toEqual(existing);
+    expect(readRecoverableDraft(key)?.value).toEqual(changed);
+  });
+});
