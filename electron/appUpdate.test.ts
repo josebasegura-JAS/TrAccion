@@ -167,11 +167,12 @@ describe('script de aplicación del actualizador', () => {
 
     expect(script).toContain('set "CURRENT=C:\\Apps\\Traccion 1.2.exe"');
     expect(script).toContain('set "TARGET=C:\\Apps\\Traccion 1.2.exe"');
-    expect(script).toContain('if /I "%CURRENT%"=="%TARGET%" goto :launch');
+    expect(script).toContain('move /-Y "%CURRENT%" "%PREVIOUS%"');
+    expect(script).toContain('move /-Y "%PREVIOUS%" "%CURRENT%"');
     expect(script).toContain('start "" "%TARGET%"');
   });
 
-  it('permite un salto de rama y elimina el ejecutable anterior después de copiar el nuevo', () => {
+  it('permite un salto de rama sin eliminar el ejecutable anterior', () => {
     const script = buildUpdateApplyScript(
       'C:\\Apps\\Traccion 1.2.exe',
       'C:\\Apps\\Traccion 2.0.exe',
@@ -179,7 +180,9 @@ describe('script de aplicación del actualizador', () => {
     );
 
     expect(script).toContain('set "TARGET=C:\\Apps\\Traccion 2.0.exe"');
-    expect(script.indexOf('copy /Y "%SOURCE%" "%TARGET%"')).toBeLessThan(script.indexOf('del /Q "%CURRENT%"'));
+    expect(script).not.toContain('del /Q "%CURRENT%"');
+    expect(script.indexOf('fc /B "%SOURCE%" "%CANDIDATE%"')).toBeLessThan(script.indexOf('move /-Y "%CANDIDATE%" "%TARGET%"'));
+    expect(script).toContain('fc /B "%SOURCE%" "%TARGET%"');
     expect(script).toContain('start "" "%TARGET%"');
   });
 
@@ -190,7 +193,7 @@ describe('script de aplicación del actualizador', () => {
       'C:\\Temp\\TrAccion-nueva.exe',
     );
 
-    expect(script).toContain('if !ATTEMPTS! GEQ 120 goto :giveup');
+    expect(script).toContain('if %ATTEMPTS% GEQ 120 goto :discard_candidate');
     expect(script).toContain(':giveup');
     expect(script).toContain('if exist "%CURRENT%" start "" "%CURRENT%"');
   });
