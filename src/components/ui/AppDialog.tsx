@@ -100,12 +100,12 @@ export function AppDialog({
         aria-describedby={messageId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className={`flex max-h-[calc(100vh-2rem)] w-full max-w-md scale-100 flex-col overflow-hidden rounded-2xl border p-5 font-sans text-metro-text opacity-100 shadow-2xl transition duration-150 ${panelClassName}`}
+        className={`relative flex max-h-[calc(100vh-2rem)] w-full max-w-md scale-100 flex-col overflow-hidden rounded-2xl border p-5 font-sans text-metro-text opacity-100 shadow-2xl transition duration-150 ${panelClassName}`}
         data-managed-modal="true"
         role="dialog"
         tabIndex={-1}
       >
-        <div className="flex min-h-0 flex-1 items-start gap-3 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 items-start gap-3 overflow-y-auto pr-7">
           <div className={`${notificationLayout.icon} ${getIconClassName({ danger, mode, type })}`}>
             {getDialogIcon({ danger, mode, type })}
           </div>
@@ -113,11 +113,6 @@ export function AppDialog({
             <h2 className={notificationLayout.dialogTitle} id={titleId}>{resolvedTitle}</h2>
             <p className={notificationLayout.dialogMessage} id={messageId}>{message}</p>
           </div>
-          {(mode === 'alert' || onCancel) && (
-            <button aria-label="Cerrar diálogo" className={notificationLayout.dismiss} onClick={mode === 'confirm' ? onCancel : onConfirm} type="button">
-              <X aria-hidden="true" size={16} />
-            </button>
-          )}
         </div>
 
         <div className="mt-5 flex shrink-0 justify-end gap-2">
@@ -141,6 +136,11 @@ export function AppDialog({
             {resolvedConfirmLabel}
           </button>
         </div>
+        {(mode === 'alert' || onCancel) && (
+          <button aria-label="Cerrar diálogo" className={`${notificationLayout.dismiss} absolute right-5 top-5`} onClick={mode === 'confirm' ? onCancel : onConfirm} type="button">
+            <X aria-hidden="true" size={16} />
+          </button>
+        )}
       </div>
     </div>
   );
