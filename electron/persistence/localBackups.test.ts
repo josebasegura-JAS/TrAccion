@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import Database from 'better-sqlite3';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -44,6 +45,7 @@ const {
   pruneShutdownLocalBackups,
   shouldCreateRotatedLocalBackup,
   writeDailyLocalBackup,
+  writeSharedSqliteBackup,
 } = await import('./localBackups');
 
 const DEFAULT_PREFERENCES = {
@@ -234,4 +236,51 @@ describe('localBackups', () => {
 
     expect(await shouldCreateRotatedLocalBackup('save:teletrabajo')).toBe(false);
   });
+  it('genera una copia SQLite nativa íntegra e independiente de escrituras posteriores', async () => {
+    const source = path.join(userDataDir, 'real.sqlite');
+    const destination = path.join(userDataDir, 'backup.sqlite');
+    const db = new Database(source);
+    try {
+      db.exec('CREATE TABLE records (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO records VALUES (1, \'original\')');
+      expect(await backupSqliteDatabase(db, source, destination)).toBe('native');
+      db.prepare('UPDATE records SET value = ? WHERE id = 1').run('changed');
+      const copy = new Database(destination, { readonly: true, fileMustExist: true });
+      try {
+        expect(copy.pragma('quick_check', { simple: true })).toBe('ok');
+        expect(copy.prepare('SELECT * FROM records').all()).toEqual([{ id: 1, value: 'original' }]);
+      } finally {
+        copy.close();
+      }
+    } finally {
+      db.close();
+    }
+  }, 20000);
+
+  it('publica desde la instantánea y conserva solo tres respaldos compartidos sin tocar la base', async () => {
+    const source = path.join(userDataDir, 'traccion.sqlite');
+    const snapshot = path.join(userDataDir, 'snapshot.sqlite');
+    writeFileSync(source, 'live');
+    writeFileSync(snapshot, 'snapshot');
+    for (let day = 1; day <= 5; day++) {
+      await writeSharedSqliteBackup(source, '2026-11-0' + day, snapshot);
+    }
+    expect(readdirSync(userDataDir).filter(isSharedSqliteBackupFileName).sort()).toEqual([
+      'traccion-backup-2026-11-03.sqlite',
+      'traccion-backup-2026-11-04.sqlite',
+      'traccion-backup-2026-11-05.sqlite',
+    ]);
+    expect(readFileSync(source, 'utf8')).toBe('live');
+    expect(readFileSync(snapshot, 'utf8')).toBe('snapshot');
+    expect(readFileSync(getSharedSqliteBackupPath(source, '2026-11-05'), 'utf8')).toBe('snapshot');
+  });
+
+  it('no elimina respaldos anteriores cuando falla la publicación de la nueva copia', async () => {
+    const source = path.join(userDataDir, 'traccion.sqlite');
+    const previous = ['01', '02', '03'].map(day => 'traccion-backup-2026-11-' + day + '.sqlite');
+    previous.forEach(name => writeFileSync(path.join(userDataDir, name), 'previous'));
+    await expect(writeSharedSqliteBackup(source, '2026-11-04', path.join(userDataDir, 'missing.sqlite'))).rejects.toThrow();
+    expect(readdirSync(userDataDir).sort()).toEqual(previous);
+    previous.forEach(name => expect(readFileSync(path.join(userDataDir, name), 'utf8')).toBe('previous'));
+  });
+
 });
