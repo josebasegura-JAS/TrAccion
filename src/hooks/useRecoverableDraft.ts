@@ -76,6 +76,8 @@ export function useRecoverableDraft<T>({
 } {
   const { confirm, dialogNode } = useAppDialog();
   const readyRef = useRef(false);
+  // Un permiso de escritura perdido no invalida los cambios locales.
+  const initializedKeyRef = useRef<string | null>(null);
   const currentRef = useRef(currentValue);
   const initialRef = useRef(initialValue);
   const onRecoverRef = useRef(onRecover);
@@ -87,25 +89,23 @@ export function useRecoverableDraft<T>({
   const currentSerialized = useMemo(() => serialize(currentValue), [currentValue]);
   const initialSerialized = useMemo(() => serialize(initialValue), [initialValue]);
 
-  const isDirty = enabled && currentSerialized !== initialSerialized;
+  const isDirty = currentSerialized !== initialSerialized;
 
   const clearDraft = useCallback(() => clearRecoverableDraft(storageKey), [storageKey]);
 
   useEffect(() => {
     let cancelled = false;
+    if (initializedKeyRef.current === storageKey) return;
     readyRef.current = false;
 
-    if (!enabled) {
-      clearRecoverableDraft(storageKey);
-      readyRef.current = true;
-      return () => {
-        cancelled = true;
-      };
-    }
+    // Una apertura en solo lectura no debe eliminar ni reemplazar un borrador
+    // anterior. Se ofrecerá recuperarlo cuando el registro permita editar.
+    if (!enabled) return;
 
     const stored = readRecoverableDraft<T>(storageKey);
     if (!stored || serialize(stored.value) === initialSerialized) {
       if (stored) clearRecoverableDraft(storageKey);
+      initializedKeyRef.current = storageKey;
       readyRef.current = true;
       return () => {
         cancelled = true;
@@ -128,6 +128,7 @@ export function useRecoverableDraft<T>({
         clearRecoverableDraft(storageKey);
       }
 
+      initializedKeyRef.current = storageKey;
       readyRef.current = true;
     });
 
@@ -137,7 +138,14 @@ export function useRecoverableDraft<T>({
   }, [confirm, enabled, initialSerialized, storageKey]);
 
   useEffect(() => {
-    if (!enabled || !readyRef.current) return;
+    if (!readyRef.current || initializedKeyRef.current !== storageKey) return;
+
+    // Al perder el bloqueo, conservar inmediatamente el último cambio, incluso
+    // si aún no había transcurrido el debounce. No se escribe en SQLite.
+    if (!enabled) {
+      if (isDirty) writeRecoverableDraft(storageKey, currentValue);
+      return;
+    }
 
     if (!isDirty) {
       clearRecoverableDraft(storageKey);
@@ -152,12 +160,10 @@ export function useRecoverableDraft<T>({
   }, [currentValue, enabled, isDirty, storageKey]);
 
   useEffect(() => {
-    if (!enabled) return;
-
     const handleBeforeUnload = () => {
-      if (!readyRef.current) return;
+      if (!readyRef.current || initializedKeyRef.current !== storageKey) return;
       if (serialize(currentRef.current) === serialize(initialRef.current)) {
-        clearRecoverableDraft(storageKey);
+        if (enabled) clearRecoverableDraft(storageKey);
         return;
       }
       writeRecoverableDraft(storageKey, currentRef.current);
