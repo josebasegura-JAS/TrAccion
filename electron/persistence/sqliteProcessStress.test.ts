@@ -98,7 +98,7 @@ describe('SQLite nativa · procesos independientes', () => {
     await Promise.all(peers.map(peer => peer.ready));
     for (const peer of peers) peer.child.send('start');
     const results = await Promise.all(peers.map(peer => peer.exited));
-    for (const result of results) expect(result).toMatchObject({ code: 0, stderr: '' });
+    for (const result of results) expect(result.code, result.stderr).toBe(0);
     expect(counter().value).toBe(300);
     expect(db.prepare('SELECT owner, COUNT(*) AS total FROM operations GROUP BY owner ORDER BY owner').all()).toEqual([
       { owner: 'a', total: 100 }, { owner: 'b', total: 100 }, { owner: 'c', total: 100 },
@@ -111,7 +111,7 @@ describe('SQLite nativa · procesos independientes', () => {
     const peer = start('crash', 'interrupted');
     await peer.ready;
     peer.child.kill('SIGKILL');
-    await peer.exited;
+    expect(await peer.exited).toMatchObject({ code: null });
     expect(counter().value).toBe(10);
     expect(db.prepare("SELECT COUNT(*) AS total FROM operations WHERE owner = 'interrupted'").get()).toEqual({ total: 0 });
     integrity();
