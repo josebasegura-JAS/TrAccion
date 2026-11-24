@@ -160,7 +160,12 @@ export function registerCoreDatabaseIpc(): void {
     const updatesDirectoryPath = await getUpdatesDirectory();
     return checkForAppUpdate(app.getVersion(), updatesDirectoryPath);
   });
+  let updateRequestPending = false;
   ipcMain.handle('app-update:apply', async (event) => {
+    if (updateRequestPending) return { ok: false, message: 'Ya hay una actualización en preparación.' };
+    updateRequestPending = true;
+    let prepared = false;
+    try {
     // Verificar también el editor de la instancia que inicia la actualización.
     // No preparar un .cmd que pueda reemplazar el EXE si aquí hay cambios pendientes.
     const initiatingWindow = BrowserWindow.fromWebContents(event.sender);
@@ -169,17 +174,25 @@ export function registerCoreDatabaseIpc(): void {
     }
     try {
       const approved: unknown = await initiatingWindow.webContents.executeJavaScript(
-        'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : true',
+        'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : false',
         true,
       );
-      if (approved === false) {
+      if (approved !== true) {
         return { ok: false, message: 'Actualización cancelada para conservar los cambios sin guardar.' };
       }
     } catch {
       return { ok: false, message: 'No se ha podido verificar el estado de edición. La actualización no continuará.' };
     }
     const updatesDirectoryPath = await getUpdatesDirectory();
-    const result = await applyAppUpdate(app.getVersion(), updatesDirectoryPath);
+    const result = await applyAppUpdate(app.getVersion(), updatesDirectoryPath, async () => {
+      if (initiatingWindow.isDestroyed() || initiatingWindow.webContents.isDestroyed()) return false;
+      try {
+        return (await initiatingWindow.webContents.executeJavaScript(
+          'window.__traccionCanAutoRestart ? window.__traccionCanAutoRestart() === true : false', true,
+        )) === true;
+      } catch { return false; }
+    });
+    prepared = result.ok;
     if (result.ok) {
       // app.quit() dispara el cierre ordenado habitual (copia de seguridad
       // de SQLite incluida vía el listener de before-quit ya existente); el
@@ -188,6 +201,9 @@ export function registerCoreDatabaseIpc(): void {
       setImmediate(() => app.quit());
     }
     return result;
+    } finally {
+      if (!prepared) updateRequestPending = false;
+    }
   });
   ipcMain.handle('database:get-daily-local-backup-settings', () => getDailyLocalBackupSettings());
   ipcMain.handle('database:set-daily-local-backup-enabled', async (_event, payload: unknown) => {
