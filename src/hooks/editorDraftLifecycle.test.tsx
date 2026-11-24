@@ -138,6 +138,8 @@ describe('regresión: pérdida temporal del permiso de edición', () => {
     const editor = draftEditor(initial, false);
     expect(readRecoverableDraft(key)?.value).toEqual(changed);
     expect(mocks.confirm).not.toHaveBeenCalled();
+    act(() => editor.result.current.clearDraft());
+    expect(readRecoverableDraft(key)?.value).toEqual(changed);
     act(() => { window.dispatchEvent(new Event('beforeunload')); });
     expect(readRecoverableDraft(key)?.value).toEqual(changed);
     await act(async () => {
