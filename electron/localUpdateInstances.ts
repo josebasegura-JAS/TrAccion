@@ -47,6 +47,7 @@ function sendMessage(peer: PeerRegistration, message: PeerMessage): Promise<Peer
     socket.setTimeout(message.kind === 'prepare' ? LOCAL_PEER_TIMEOUT_MS : LOCAL_CLOSE_RESPONSE_MS,
       () => fail(new Error('La otra instancia no respondió a tiempo.')));
     socket.on('error', fail);
+    socket.on('close', () => fail(new Error('La otra instancia cerró la conexión sin confirmar.')));
     socket.on('connect', () => socket.write(JSON.stringify(message) + '\n'));
     socket.on('data', (part: Buffer) => {
       received += part.toString('utf8');
@@ -87,6 +88,7 @@ async function getOtherLocalPeers(): Promise<PeerRegistration[]> {
       continue;
     }
     if (
+      !registration || typeof registration !== 'object' ||
       !Number.isSafeInteger(registration.pid) ||
       registration.pid <= 0 ||
       !Number.isSafeInteger(registration.port) ||
@@ -161,6 +163,7 @@ export async function closeOtherLocalInstancesForUpdate(): Promise<PeerResponse>
 export async function startLocalInstanceUpdateListener(
   canClose: () => Promise<boolean>,
   close: () => void,
+  canCloseNow: () => Promise<boolean> = canClose,
 ): Promise<() => void> {
   if (process.platform !== 'win32' || !process.env.PORTABLE_EXECUTABLE_FILE) return () => undefined;
 
@@ -174,6 +177,7 @@ export async function startLocalInstanceUpdateListener(
 
   const server: Server = createServer((socket) => {
     socket.setTimeout(LOCAL_PEER_TIMEOUT_MS, () => socket.destroy());
+    socket.on('error', () => socket.destroy());
     let received = '';
     let handled = false;
     socket.on('data', (part: Buffer) => {
@@ -190,21 +194,32 @@ export async function startLocalInstanceUpdateListener(
         socket.end(JSON.stringify({ ok: false, message: 'Solicitud local inválida.' }) + '\n');
         return;
       }
-      if (request.secret !== secret || typeof request.token !== 'string') {
+      if (!request || typeof request !== 'object' || request.secret !== secret || typeof request.token !== 'string') {
         socket.end(JSON.stringify({ ok: false, message: 'Solicitud local no autorizada.' }) + '\n');
         return;
       }
       if (request.kind === 'prepare' && !closing) {
         void canClose().then((approved) => {
-          if (approved) {
+          if (approved === true && !closing) {
             preparedToken = request.token;
             preparedAt = Date.now();
           }
-          socket.end(JSON.stringify({ ok: approved, message: approved ? 'Cierre permitido.' : 'Hay cambios pendientes o se canceló el cierre.' }) + '\n');
+          socket.end(JSON.stringify({ ok: approved === true && !closing, message: approved === true ? 'Cierre permitido.' : 'Hay cambios pendientes o se canceló el cierre.' }) + '\n');
         }).catch(() => socket.end(JSON.stringify({ ok: false, message: 'No se pudo confirmar el estado de edición.' }) + '\n'));
-      } else if (request.kind === 'close' && request.token === preparedToken && Date.now() - preparedAt < 180_000) {
+      } else if (request.kind === 'close' && !closing && request.token === preparedToken && Date.now() - preparedAt < 180_000) {
         closing = true;
-        socket.end(JSON.stringify({ ok: true, message: 'Iniciando cierre ordenado.' }) + '\n', () => setImmediate(close));
+        preparedToken = null;
+        void Promise.resolve().then(canCloseNow).then((approved) => {
+          if (approved !== true || socket.destroyed) {
+            closing = false;
+            if (!socket.destroyed) socket.end(JSON.stringify({ ok: false, message: 'El estado de edición cambió; actualización cancelada.' }) + '\n');
+            return;
+          }
+          socket.end(JSON.stringify({ ok: true, message: 'Iniciando cierre ordenado.' }) + '\n', () => setImmediate(close));
+        }).catch(() => {
+          closing = false;
+          socket.end(JSON.stringify({ ok: false, message: 'No se pudo confirmar el cierre final.' }) + '\n');
+        });
       } else {
         socket.end(JSON.stringify({ ok: false, message: 'Cierre no preparado o autorización caducada.' }) + '\n');
       }
