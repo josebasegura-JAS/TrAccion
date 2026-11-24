@@ -113,6 +113,11 @@ export function AppDialog({
             <h2 className={notificationLayout.dialogTitle} id={titleId}>{resolvedTitle}</h2>
             <p className={notificationLayout.dialogMessage} id={messageId}>{message}</p>
           </div>
+          {(mode === 'alert' || onCancel) && (
+            <button aria-label="Cerrar diálogo" className={notificationLayout.dismiss} onClick={mode === 'confirm' ? onCancel : onConfirm} type="button">
+              <X aria-hidden="true" size={16} />
+            </button>
+          )}
         </div>
 
         <div className="mt-5 flex shrink-0 justify-end gap-2">
