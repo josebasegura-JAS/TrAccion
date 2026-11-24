@@ -51,8 +51,19 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}', 'electron/**/*.ts', 'scripts/*.mjs'],
       exclude: ['**/*.d.ts', '**/*.{test,spec}.{ts,tsx,mjs}', 'src/test/**'],
       reporter: ['text', 'json', 'json-summary', 'html'],
-      // Suelo medido en df62803d; no imponer un porcentaje ficticio del 80 %.
-      thresholds: { lines: 40, statements: 40, functions: 49, branches: 70 },
+      // Baseline Windows CI #546: 1852 tests; 50.60/50.60/54.07/74.88.
+      // Los umbrales por glob se calculan conjuntamente para los archivos
+      // coincidentes, sin exigir el mismo porcentaje a cada archivo.
+      thresholds: {
+        lines: 50, statements: 50, functions: 53, branches: 74,
+        'electron/persistence/**': { lines: 75, statements: 75, functions: 84, branches: 82 },
+        'electron/ipc/**': { lines: 77, statements: 77, functions: 79, branches: 90 },
+        'electron/main.ts': { lines: 74, statements: 74, functions: 81, branches: 74 },
+        'electron/appUpdate.ts': { lines: 93, statements: 93, functions: 98, branches: 81 },
+        'electron/persistence/recordLocks.ts': { lines: 96, statements: 96, functions: 91, branches: 94 },
+        'electron/persistence/localBackups.ts': { lines: 97, statements: 97, functions: 98, branches: 95 },
+        'src/components/task-editor/**': { lines: 66, statements: 66, functions: 49, branches: 67 },
+      },
     },
     globals: true,
     setupFiles: './src/test/setup.ts',
