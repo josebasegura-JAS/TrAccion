@@ -18,18 +18,25 @@ const mocks = vi.hoisted(() => ({
   migrate: vi.fn(() => ({ ready: true })),
   backup: vi.fn(() => ({ ready: true })),
   status: { ready: true, phase: 'active' },
+  initiatingWindow: vi.fn<() => { isDestroyed: () => boolean; webContents: { executeJavaScript: () => Promise<unknown> } } | null>(() => null),
+  confirmUpdate: vi.fn(async () => true),
+  applyUpdate: vi.fn(async () => ({ ok: false, message: 'Actualización cancelada' })),
+  checkUpdate: vi.fn(),
+  updatesDirectory: vi.fn(async () => 'test-updates'),
+  quit: vi.fn(),
 }));
 vi.mock('electron', () => ({
-  app: { getVersion: () => 'test' },
-  BrowserWindow: { fromWebContents: () => null },
+  app: { getVersion: () => 'test', quit: mocks.quit },
+  BrowserWindow: { fromWebContents: mocks.initiatingWindow },
   dialog: { showOpenDialog: mocks.dialog },
   ipcMain: { handle: (channel: string, handler: (event: unknown, payload?: unknown) => unknown) => mocks.handlers.set(channel, handler) },
 }));
 vi.mock('../sqliteIpcQueue.js', () => ({ enqueueSqliteIpc: mocks.enqueue }));
 vi.mock('../persistence/traccionEnvironment.js', () => ({ getTraccionEnvironment: vi.fn() }));
-vi.mock('../appUpdate.js', () => ({ applyAppUpdate: vi.fn(), checkForAppUpdate: vi.fn() }));
+vi.mock('../appUpdate.js', () => ({ applyAppUpdate: mocks.applyUpdate, checkForAppUpdate: mocks.checkUpdate }));
 vi.mock('../sqlitePersistence.js', () => ({
   getSqliteStatus: () => mocks.status,
+  getUpdatesDirectory: mocks.updatesDirectory,
   savePersistedRecordIfUnchanged: mocks.write,
   savePersistedRecordsIfUnchanged: mocks.batch,
   getPersistedRecordSnapshot: mocks.read,
@@ -58,6 +65,9 @@ function invoke(channel: string, payload?: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
+  mocks.initiatingWindow.mockReturnValue(null);
+  mocks.confirmUpdate.mockResolvedValue(true);
+  mocks.applyUpdate.mockResolvedValue({ ok: false, message: 'Actualización cancelada' });
   registerCoreDatabaseIpc();
 });
 
@@ -173,5 +183,52 @@ describe('IPC central de SQLite', () => {
   it('normaliza un identificador de restauración no textual a vacío para el servicio', () => {
     expect(invoke('database:restore-local-backup', { id: 123 })).toMatchObject({ ok: false });
     expect(mocks.restore).toHaveBeenCalledWith('');
+  });
+});
+
+describe('IPC de actualización', () => {
+  function availableWindow() {
+    mocks.initiatingWindow.mockReturnValue({ isDestroyed: () => false, webContents: { executeJavaScript: mocks.confirmUpdate } });
+  }
+  it('rechaza una petición sin ventana iniciadora', async () => {
+    expect(await invoke('app-update:apply')).toMatchObject({ ok: false });
+    expect(mocks.applyUpdate).not.toHaveBeenCalled();
+    expect(mocks.quit).not.toHaveBeenCalled();
+  });
+  it('respeta la negativa a descartar cambios', async () => {
+    availableWindow();
+    mocks.confirmUpdate.mockResolvedValueOnce(false);
+    expect(await invoke('app-update:apply')).toMatchObject({ ok: false, message: expect.stringContaining('sin guardar') });
+    expect(mocks.applyUpdate).not.toHaveBeenCalled();
+  });
+  it('no prepara la actualización cuando falla la consulta al renderer', async () => {
+    availableWindow();
+    mocks.confirmUpdate.mockRejectedValueOnce(new Error('renderer no disponible'));
+    expect(await invoke('app-update:apply')).toMatchObject({ ok: false });
+    expect(mocks.applyUpdate).not.toHaveBeenCalled();
+  });
+  it('mantiene abierta la aplicación si la preparación falla', async () => {
+    availableWindow();
+    expect(await invoke('app-update:apply')).toMatchObject({ ok: false });
+    expect(mocks.applyUpdate).toHaveBeenCalledWith('test', 'test-updates');
+    expect(mocks.quit).not.toHaveBeenCalled();
+  });
+  it('solicita cierre ordenado solo después de preparar correctamente la actualización', async () => {
+    availableWindow();
+    mocks.applyUpdate.mockResolvedValueOnce({ ok: true, message: 'Preparado' });
+    vi.useFakeTimers();
+    try {
+      expect(await invoke('app-update:apply')).toMatchObject({ ok: true });
+      expect(mocks.quit).not.toHaveBeenCalled();
+      await vi.runAllTimersAsync();
+      expect(mocks.quit).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('consulta la versión usando el directorio configurado', async () => {
+    mocks.checkUpdate.mockReturnValueOnce({ updateAvailable: true });
+    expect(await invoke('app-update:check')).toEqual({ updateAvailable: true });
+    expect(mocks.checkUpdate).toHaveBeenCalledWith('test', 'test-updates');
   });
 });
