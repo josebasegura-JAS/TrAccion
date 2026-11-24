@@ -1,5 +1,5 @@
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -209,6 +209,21 @@ describe('seguridad del indicador de actualización', () => {
   });
 });
 
+// Lanzar por ruta absoluta: el runner de Vitest no tiene por qué resolver
+// scripts por nombre desde cwd. Con /s se retira solo la pareja exterior
+// de comillas de CMD; Node no debe volver a escapar las comillas internas.
+function runPublicationScript(staging: string): string {
+  const scriptPath = path.join(staging, 'apply.cmd');
+  const result = spawnSync(process.env.ComSpec || 'cmd.exe',
+    ['/d', '/s', '/c', '""' + scriptPath + '""'], {
+      cwd: staging, timeout: 10000, windowsHide: true,
+      windowsVerbatimArguments: true, encoding: 'utf8',
+    });
+  const output = [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n');
+  expect(result.status, output).toBe(0);
+  return output;
+}
+
 describe('publicación reversible del ejecutable en Windows', () => {
   const windowsIt = process.platform === 'win32' ? it : it.skip;
   windowsIt.each([true, false])('conserva versión anterior y publica bytes exactos (misma rama: %s)', sameBranch => {
@@ -226,12 +241,12 @@ describe('publicación reversible del ejecutable en Windows', () => {
       const script = buildUpdateApplyScript(current, target, source)
         .replace('@echo off', '@echo on')
         .replace(/ >NUL 2>&1/g, '')
-        .replace('start "" "%TARGET%"', 'cmd.exe /d /c exit /b 0')
+        .replace('start "" "%TARGET%"', 'ver >NUL')
         .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
         .replace('(goto) 2>nul & del "%~f0" & rd "%~dp0"', 'exit /b 0');
       const scriptPath = path.join(staging, 'apply.cmd');
       writeFileSync(scriptPath, script);
-      const output = execFileSync('cmd.exe', ['/d', '/c', 'apply.cmd'], { cwd: staging, timeout: 10000, windowsHide: true, encoding: 'utf8' });
+      const output = runPublicationScript(staging);
       expect(readdirSync(dir), output).toContain(path.basename(target));
       expect(readFileSync(target, 'utf8'), output).toBe('version nueva');
       const previous = sameBranch
@@ -255,11 +270,11 @@ describe('publicación reversible del ejecutable en Windows', () => {
       const script = buildUpdateApplyScript(current, target, source)
         .replace('@echo off', '@echo on')
         .replace(/ >NUL 2>&1/g, '')
-        .replace('start "" "%TARGET%"', 'cmd.exe /d /c exit /b 0')
+        .replace('start "" "%TARGET%"', 'ver >NUL')
         .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
         .replace('(goto) 2>nul & del "%~f0" & rd "%~dp0"', 'exit /b 0');
       writeFileSync(path.join(staging, 'apply.cmd'), script);
-      execFileSync('cmd.exe', ['/d', '/c', 'apply.cmd'], { cwd: staging, timeout: 10000, windowsHide: true });
+      runPublicationScript(staging);
       expect(readFileSync(current, 'utf8')).toBe('original');
       expect(readFileSync(target, 'utf8')).toBe('destino existente');
     } finally { rmSync(dir, { recursive: true, force: true }); }
