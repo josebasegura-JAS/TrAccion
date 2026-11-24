@@ -17,4 +17,15 @@ describe('selección de entorno por parámetro antes de SQLite', () => {
       ['--traccion-env=test '],
     ]) expect(() => parseTraccionEnvironment(args)).toThrow('Parámetro de entorno inválido');
   });
+  it('no admite dos parámetros de entorno aunque sean idénticos', () => {
+    expect(() => parseTraccionEnvironment(['--traccion-env=test', '--traccion-env=test'])).toThrow('Parámetro de entorno inválido');
+  });
+
+  it('mantiene el entorno de pruebas con argumentos de actualización y cliente B', () => {
+    expect(parseTraccionEnvironment(['Traccion.exe', '--traccion-update-relaunch', '--traccion-env=test', '--traccion-test-user-b'])).toBe('test');
+  });
+
+  it('no confunde los argumentos de cliente con la selección de entorno', () => {
+    expect(parseTraccionEnvironment(['Traccion.exe', '--traccion-test-user-b'])).toBe('production');
+  });
 });
