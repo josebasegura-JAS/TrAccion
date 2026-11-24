@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   maintenance: vi.fn(() => ({ ok: true })),
   changeDirectory: vi.fn(() => ({ ready: true })),
   dialog: vi.fn(async () => ({ canceled: true, filePaths: [] as string[] })),
+  restore: vi.fn(() => ({ ok: false, message: 'respaldo no válido' })),
+  migrate: vi.fn(() => ({ ready: true })),
+  backup: vi.fn(() => ({ ready: true })),
   status: { ready: true, phase: 'active' },
 }));
 vi.mock('electron', () => ({
@@ -40,6 +43,9 @@ vi.mock('../sqlitePersistence.js', () => ({
   forceReleaseDatabaseLock: mocks.maintenance,
   runDataIntegrityAuditNow: mocks.maintenance,
   changeSqliteDirectory: mocks.changeDirectory,
+  restoreLocalBackup: mocks.restore,
+  migrateLocalStorageSnapshot: mocks.migrate,
+  createLocalStorageBackup: mocks.backup,
 }));
 
 import { registerCoreDatabaseIpc } from './registerCoreDatabaseIpc.js';
@@ -139,5 +145,33 @@ describe('IPC central de SQLite', () => {
     await invoke('database:select-directory', { path: 'ignored-renderer-path' });
     expect(mocks.changeDirectory).toHaveBeenCalledWith('test-directory');
     expect(mocks.enqueue).toHaveBeenCalledWith('database:select-directory', expect.any(Function));
+  });
+  it.each(['database:backup-local-storage', 'database:migrate-local-storage'])('%s rechaza entradas sin un array de registros', (channel) => {
+    for (const payload of [null, {}, { records: null }, { records: 'bad' }]) {
+      expect(invoke(channel, payload)).toEqual(mocks.status);
+    }
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(mocks.backup).not.toHaveBeenCalled();
+    expect(mocks.migrate).not.toHaveBeenCalled();
+  });
+
+  it.each(['database:backup-local-storage', 'database:migrate-local-storage'])('%s delega el conjunto de registros por la cola', (channel) => {
+    const payload = { records: [{ key: 'test', value: '{}' }] };
+    invoke(channel, payload);
+    expect(mocks.enqueue).toHaveBeenCalledWith(channel, expect.any(Function));
+    const operation = channel === 'database:backup-local-storage' ? mocks.backup : mocks.migrate;
+    expect(operation).toHaveBeenCalledWith(payload);
+  });
+
+  it('encola la restauración solicitada y devuelve el resultado del servicio', () => {
+    const channel = 'database:restore-local-backup';
+    expect(invoke(channel, { id: 'test-backup' })).toEqual({ ok: false, message: 'respaldo no válido' });
+    expect(mocks.enqueue).toHaveBeenCalledWith(channel, expect.any(Function));
+    expect(mocks.restore).toHaveBeenCalledWith('test-backup');
+  });
+
+  it('normaliza un identificador de restauración no textual a vacío para el servicio', () => {
+    expect(invoke('database:restore-local-backup', { id: 123 })).toMatchObject({ ok: false });
+    expect(mocks.restore).toHaveBeenCalledWith('');
   });
 });
