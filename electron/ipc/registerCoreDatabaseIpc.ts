@@ -166,41 +166,41 @@ export function registerCoreDatabaseIpc(): void {
     updateRequestPending = true;
     let prepared = false;
     try {
-    // Verificar también el editor de la instancia que inicia la actualización.
-    // No preparar un .cmd que pueda reemplazar el EXE si aquí hay cambios pendientes.
-    const initiatingWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!initiatingWindow || initiatingWindow.isDestroyed()) {
-      return { ok: false, message: 'No se ha podido identificar la ventana que solicita la actualización.' };
-    }
-    try {
-      const approved: unknown = await initiatingWindow.webContents.executeJavaScript(
-        'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : false',
-        true,
-      );
-      if (approved !== true) {
-        return { ok: false, message: 'Actualización cancelada para conservar los cambios sin guardar.' };
+      // Verificar también el editor de la instancia que inicia la actualización.
+      // No preparar un .cmd que pueda reemplazar el EXE si aquí hay cambios pendientes.
+      const initiatingWindow = BrowserWindow.fromWebContents(event.sender);
+      if (!initiatingWindow || initiatingWindow.isDestroyed()) {
+        return { ok: false, message: 'No se ha podido identificar la ventana que solicita la actualización.' };
       }
-    } catch {
-      return { ok: false, message: 'No se ha podido verificar el estado de edición. La actualización no continuará.' };
-    }
-    const updatesDirectoryPath = await getUpdatesDirectory();
-    const result = await applyAppUpdate(app.getVersion(), updatesDirectoryPath, async () => {
-      if (initiatingWindow.isDestroyed() || initiatingWindow.webContents.isDestroyed()) return false;
       try {
-        return (await initiatingWindow.webContents.executeJavaScript(
-          'window.__traccionCanAutoRestart ? window.__traccionCanAutoRestart() === true : false', true,
-        )) === true;
-      } catch { return false; }
-    });
-    prepared = result.ok;
-    if (result.ok) {
-      // app.quit() dispara el cierre ordenado habitual (copia de seguridad
-      // de SQLite incluida vía el listener de before-quit ya existente); el
-      // .bat lanzado por applyAppUpdate espera a que este proceso muera de
-      // verdad antes de sustituir el .exe y relanzar.
-      setImmediate(() => app.quit());
-    }
-    return result;
+        const approved: unknown = await initiatingWindow.webContents.executeJavaScript(
+          'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : false',
+          true,
+        );
+        if (approved !== true) {
+          return { ok: false, message: 'Actualización cancelada para conservar los cambios sin guardar.' };
+        }
+      } catch {
+        return { ok: false, message: 'No se ha podido verificar el estado de edición. La actualización no continuará.' };
+      }
+      const updatesDirectoryPath = await getUpdatesDirectory();
+      const result = await applyAppUpdate(app.getVersion(), updatesDirectoryPath, async () => {
+        if (initiatingWindow.isDestroyed() || initiatingWindow.webContents.isDestroyed()) return false;
+        try {
+          return (await initiatingWindow.webContents.executeJavaScript(
+            'window.__traccionCanAutoRestart ? window.__traccionCanAutoRestart() === true : false', true,
+          )) === true;
+        } catch { return false; }
+      });
+      prepared = result.ok;
+      if (result.ok) {
+        // app.quit() dispara el cierre ordenado habitual (copia de seguridad
+        // de SQLite incluida vía el listener de before-quit ya existente); el
+        // .bat lanzado por applyAppUpdate espera a que este proceso muera de
+        // verdad antes de sustituir el .exe y relanzar.
+        setImmediate(() => app.quit());
+      }
+      return result;
     } finally {
       if (!prepared) updateRequestPending = false;
     }
