@@ -209,17 +209,17 @@ describe('seguridad del indicador de actualización', () => {
   });
 });
 
-// Lanzar por ruta absoluta: el runner de Vitest no tiene por qué resolver
-// scripts por nombre desde cwd. Con /s se retira solo la pareja exterior
-// de comillas de CMD; Node no debe volver a escapar las comillas internas.
+// Ejecutar el batch mediante CALL desde stdin: evita el doble análisis de
+// comillas de /s /c y la resolución del script desde el cwd del runner.
+// El marcador prueba que CMD realmente entró en el batch.
 function runPublicationScript(staging: string): string {
   const scriptPath = path.join(staging, 'apply.cmd');
-  const result = spawnSync(process.env.ComSpec || 'cmd.exe',
-    ['/d', '/s', '/c', '""' + scriptPath + '""'], {
-      cwd: staging, timeout: 10000, windowsHide: true,
-      windowsVerbatimArguments: true, encoding: 'utf8',
-    });
+  const result = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/q'], {
+    input: 'call "' + scriptPath + '"\r\nexit /b %errorlevel%\r\n',
+    timeout: 15000, windowsHide: true, encoding: 'utf8',
+  });
   const output = [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n');
+  expect(output, 'Script: ' + scriptPath + '\n' + output).toContain('TRACCION_TEST_BATCH_ENTERED');
   expect(result.status, output).toBe(0);
   return output;
 }
@@ -239,7 +239,7 @@ describe('publicación reversible del ejecutable en Windows', () => {
       // Ejecutar el script real de publicación, sin arrancar ficheros ficticios
       // ni borrar el propio script durante la prueba.
       const script = buildUpdateApplyScript(current, target, source)
-        .replace('@echo off', '@echo on')
+        .replace('@echo off', '@echo on\r\necho TRACCION_TEST_BATCH_ENTERED')
         .replace(/ >NUL 2>&1/g, '')
         .replace('start "" "%TARGET%"', 'ver >NUL')
         .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
@@ -268,7 +268,7 @@ describe('publicación reversible del ejecutable en Windows', () => {
       writeFileSync(target, 'destino existente');
       writeFileSync(source, 'nuevo');
       const script = buildUpdateApplyScript(current, target, source)
-        .replace('@echo off', '@echo on')
+        .replace('@echo off', '@echo on\r\necho TRACCION_TEST_BATCH_ENTERED')
         .replace(/ >NUL 2>&1/g, '')
         .replace('start "" "%TARGET%"', 'ver >NUL')
         .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
