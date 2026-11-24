@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   computeHeaviestTables,
   getDailyLocalBackupWeekdayName,
@@ -95,6 +95,21 @@ describe('maintenanceQueries — funciones SQL puras', () => {
       );
     });
 
+    it('resuelve empates por id y conserva intactas las tablas de negocio', () => {
+      db.exec('CREATE TABLE business_data (id INTEGER PRIMARY KEY, value TEXT)');
+      db.prepare('INSERT INTO business_data VALUES (?, ?)').run(1, 'intacto');
+      const insert = db.prepare('INSERT INTO local_storage_backups VALUES (?, ?, ?)');
+      db.transaction(() => {
+        for (let id = 1; id <= 10; id += 1) insert.run(id, '2026-06-10T00:00:00Z', '{}');
+      })();
+      pruneLocalStorageBackups(db);
+      pruneLocalStorageBackups(db);
+      expect(db.prepare('SELECT id FROM local_storage_backups ORDER BY id').all()).toEqual(
+        [4, 5, 6, 7, 8, 9, 10].map(id => ({ id })),
+      );
+      expect(db.prepare('SELECT * FROM business_data').all()).toEqual([{ id: 1, value: 'intacto' }]);
+    });
+
     it('de verdad libera espacio en disco tras VACUUM (caso real que motivó la poda)', () => {
       const insert = db.prepare(
         'INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)',
@@ -149,6 +164,22 @@ describe('maintenanceQueries — funciones SQL puras', () => {
       // El resto de tablas (incluida tabla_pequena) deben venir después, nunca antes.
       const smallIndex = breakdown.findIndex((entry) => entry.table === 'tabla_pequena');
       expect(smallIndex).toBeGreaterThan(0);
+    });
+
+    it('recurre al recuento de filas si dbstat no está disponible', () => {
+      db.exec('CREATE TABLE small (id INTEGER); CREATE TABLE large (id INTEGER); INSERT INTO small VALUES (1); INSERT INTO large VALUES (1), (2), (3)');
+      const prepare = db.prepare.bind(db);
+      const spy = vi.spyOn(db, 'prepare').mockImplementation((sql) => {
+        if (sql.includes('FROM dbstat')) throw new Error('no such table: dbstat');
+        return prepare(sql);
+      });
+      try {
+        expect(computeHeaviestTables(db, 1)).toEqual([
+          { table: 'large', sizeBytes: 0, rowCount: 3, isExactSize: false },
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('respeta el límite de resultados solicitado', () => {

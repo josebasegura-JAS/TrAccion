@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -107,4 +107,88 @@ describe('restoreValidatedSqliteBackup', () => {
     expect(result.rollbackSnapshotPath).toBeTruthy();
     expect(result.rollbackSnapshotPath && readFileSync(result.rollbackSnapshotPath, 'utf8')).toBe('BASE-ORIGINAL');
   });
+  it('restaura correctamente y elimina sidecars y snapshot temporal', async () => {
+    const directory = tempDirectory();
+    const targetDatabasePath = path.join(directory, 'traccion.sqlite');
+    const backupPath = path.join(directory, 'backup.sqlite');
+    writeFileSync(targetDatabasePath, 'BASE-ORIGINAL');
+    writeFileSync(backupPath, 'BASE-RESPALDO');
+    writeFileSync(targetDatabasePath + '-wal', 'old');
+    writeFileSync(targetDatabasePath + '-shm', 'old');
+    const initial = status(targetDatabasePath, false, 'fallback');
+    const active = status(targetDatabasePath, true, 'active');
+    const close = vi.fn(async () => undefined);
+    const result = await restoreValidatedSqliteBackup({
+      backupPath, targetDatabasePath, directoryPath: directory, isDefaultPath: false, currentStatus: initial,
+      dependencies: {
+        getDatabase: () => null,
+        getStatus: () => active,
+        withDatabaseOperationLock: async <T>(_databasePath: string, operation: () => Promise<T>) => operation(),
+        backupExistingDatabase: async () => undefined,
+        closeDatabaseAndReleaseLock: close,
+        activateDatabase: async () => active,
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.status).toEqual(active);
+    expect(result.rollbackSnapshotPath).toBeNull();
+    expect(readFileSync(targetDatabasePath, 'utf8')).toBe('BASE-RESPALDO');
+    expect(existsSync(targetDatabasePath + '-wal')).toBe(false);
+    expect(existsSync(targetDatabasePath + '-shm')).toBe(false);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('conserva la base original si no se obtiene el lock de restauración', async () => {
+    const directory = tempDirectory();
+    const targetDatabasePath = path.join(directory, 'traccion.sqlite');
+    const backupPath = path.join(directory, 'backup.sqlite');
+    writeFileSync(targetDatabasePath, 'BASE-ORIGINAL');
+    writeFileSync(backupPath, 'BASE-RESPALDO');
+    const initial = status(targetDatabasePath, false, 'locked');
+    const close = vi.fn(async () => undefined);
+    const activate = vi.fn(async () => initial);
+    const result = await restoreValidatedSqliteBackup({
+      backupPath, targetDatabasePath, directoryPath: directory, isDefaultPath: false, currentStatus: initial,
+      dependencies: {
+        getDatabase: () => null,
+        getStatus: () => initial,
+        withDatabaseOperationLock: async () => { throw new Error('lock ocupado'); },
+        backupExistingDatabase: async () => undefined,
+        closeDatabaseAndReleaseLock: close,
+        activateDatabase: activate,
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(initial);
+    expect(result.rollbackSnapshotPath).toBeNull();
+    expect(readFileSync(targetDatabasePath, 'utf8')).toBe('BASE-ORIGINAL');
+    expect(close).not.toHaveBeenCalled();
+    expect(activate).not.toHaveBeenCalled();
+  });
+
+  it('recupera la base original si desaparece el archivo de respaldo antes de copiar', async () => {
+    const directory = tempDirectory();
+    const targetDatabasePath = path.join(directory, 'traccion.sqlite');
+    const backupPath = path.join(directory, 'missing.sqlite');
+    writeFileSync(targetDatabasePath, 'BASE-ORIGINAL');
+    const initial = status(targetDatabasePath, false, 'fallback');
+    const active = status(targetDatabasePath, true, 'active');
+    const activate = vi.fn(async () => active);
+    const result = await restoreValidatedSqliteBackup({
+      backupPath, targetDatabasePath, directoryPath: directory, isDefaultPath: false, currentStatus: initial,
+      dependencies: {
+        getDatabase: () => null,
+        getStatus: () => active,
+        withDatabaseOperationLock: async <T>(_databasePath: string, operation: () => Promise<T>) => operation(),
+        backupExistingDatabase: async () => undefined,
+        closeDatabaseAndReleaseLock: async () => undefined,
+        activateDatabase: activate,
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.rollbackSnapshotPath).toBeNull();
+    expect(readFileSync(targetDatabasePath, 'utf8')).toBe('BASE-ORIGINAL');
+    expect(activate).toHaveBeenCalledTimes(1);
+  });
+
 });
