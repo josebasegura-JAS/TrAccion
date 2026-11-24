@@ -79,6 +79,18 @@ describe('database identity', () => {
     expect(result.identity.databaseUuid.length).toBeGreaterThan(20);
   });
 
+  it('no asigna el UUID esperado a una base legacy aunque se permita bootstrap', () => {
+    const databasePath = createLegacyDatabase();
+    expect(() => inspectAndEnsureDatabaseIdentity(databasePath, {
+      expectedDatabaseUuid: 'uuid-de-la-base-original',
+      allowLegacyBootstrap: true,
+    })).toThrow(/perdido su identidad/);
+    const db = new Database(databasePath, { readonly: true });
+    try {
+      expect(db.prepare("SELECT value FROM app_metadata WHERE key = 'database_uuid'").get()).toBeUndefined();
+    } finally { db.close(); }
+  });
+
   it('rechaza un UUID distinto al vinculado al equipo', () => {
     const databasePath = createLegacyDatabase();
 
