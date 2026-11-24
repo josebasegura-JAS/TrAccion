@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { open, stat } from 'node:fs/promises';
 import type { Database } from 'better-sqlite3';
 import {
@@ -93,9 +92,10 @@ export async function activateSqliteDatabase(
   await ensureDirectoryIsUsable(directoryPath);
 
   const startupLock = await dependencies.acquireStartupLock(databasePath);
-  const startupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(lockPath, startupLock);
-
+  let startupLockHeartbeat: ReturnType<typeof setInterval> | undefined;
+  let database: Database | null = null;
   try {
+    startupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(lockPath, startupLock);
     // Segunda validación después de obtener el lock: otro proceso podría
     // haber publicado la SQLite entre el stat anterior y esta adquisición.
     const existsAfterLock = await databaseExistsReliably(databasePath);
@@ -121,22 +121,23 @@ export async function activateSqliteDatabase(
     await prepareDatabaseFile(databasePath, sourceDatabasePath);
 
     const preferences = await readDatabasePreferences();
-    const configuredDirectoryMatches = Boolean(
-      preferences.customDirectoryPath &&
-        path.resolve(preferences.customDirectoryPath) === path.resolve(directoryPath),
-    );
-    const allowLegacyBootstrap =
-      !preferences.expectedDatabaseUuid || sourceDatabasePath !== null || configuredDirectoryMatches;
+    // Una base ya vinculada no puede adoptar el UUID esperado si carece de identidad.
+    const allowLegacyBootstrap = !preferences.expectedDatabaseUuid;
     const identityInspection = inspectAndEnsureDatabaseIdentity(databasePath, {
       expectedDatabaseUuid: preferences.expectedDatabaseUuid ?? null,
-      allowLegacyBootstrap: environment === 'test' ? true : allowLegacyBootstrap,
+      allowLegacyBootstrap,
       expectedEnvironment: environment,
     });
 
-    const database = openSqliteDatabase(databasePath, {
+    database = openSqliteDatabase(databasePath, {
       busyTimeoutMs: dependencies.busyTimeoutMs,
     });
-    const identity = readDatabaseIdentity(database) ?? identityInspection.identity;
+    const identity = readDatabaseIdentity(database);
+    if (!identity || identity.databaseUuid !== identityInspection.identity.databaseUuid ||
+        identity.applicationId !== identityInspection.identity.applicationId ||
+        identity.environment !== identityInspection.identity.environment) {
+      throw new Error('La identidad SQLite cambió durante la activación.');
+    }
 
     try {
       database.prepare('DELETE FROM editing_locks WHERE owner_id = ?').run(dependencies.ownerId);
@@ -170,7 +171,12 @@ export async function activateSqliteDatabase(
     return { database, status };
   } catch (error) {
     clearInterval(startupLockHeartbeat);
-    await dependencies.releaseLock(lockPath, startupLock);
+    try { database?.close(); } catch (closeError) {
+      console.warn('[sqlite-activation] No se pudo cerrar la conexión fallida.', closeError);
+    }
+    try { await dependencies.releaseLock(lockPath, startupLock); } catch (releaseError) {
+      console.warn('[sqlite-activation] No se pudo liberar el bloqueo de activación.', releaseError);
+    }
     throw error;
   }
 }
