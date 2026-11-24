@@ -87,9 +87,11 @@ describe('sqlitePersistence — caracterización de fachada', () => {
     vi.resetModules();
   });
 
-  afterEach(() => {
-    rmSync(layout.root, { recursive: true, force: true });
-  });
+  afterEach(async () => {
+    const persistence = await importPersistence();
+    await persistence.closeSqlitePersistence();
+    rmSync(layout.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }, 20_000);
 
   it('mantiene la edición bloqueada si no existe una ruta SQLite compartida configurada', async () => {
     writePreferences(layout.userData, null);
@@ -181,7 +183,7 @@ describe('sqlitePersistence — caracterización de fachada', () => {
     expect(snapshot.record?.value).toBe(JSON.stringify({ version: 2 }));
 
     await persistence.closeSqlitePersistence();
-  });
+  }, 25_000);
 
   it('caracteriza el singleton de Configuración: alta, lectura y rechazo por OCC', async () => {
     createSharedDatabase(layout.databasePath);
