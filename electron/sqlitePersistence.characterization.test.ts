@@ -1,10 +1,23 @@
+import Database from 'better-sqlite3';
+import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 
-const testContext = vi.hoisted(() => ({ userDataPath: '' }));
+const testContext = vi.hoisted(() => ({ userDataPath: '', failStatPath: '', statFailures: 0 }));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, stat: async (...args: Parameters<typeof actual.stat>) => {
+    if (args[0] === testContext.failStatPath && testContext.statFailures > 0) {
+      testContext.statFailures -= 1;
+      throw Object.assign(new Error('Fallo de red inyectado'), { code: 'UNKNOWN', errno: -4094, syscall: 'stat' });
+    }
+    return actual.stat(...args);
+  } };
+});
 
 vi.mock('electron', () => ({
   app: {
@@ -84,10 +97,14 @@ describe('sqlitePersistence — caracterización de fachada', () => {
   beforeEach(() => {
     layout = createTestLayout();
     testContext.userDataPath = layout.userData;
+    testContext.failStatPath = '';
+    testContext.statFailures = 0;
     vi.resetModules();
   });
 
   afterEach(async () => {
+    testContext.statFailures = 0;
+    vi.restoreAllMocks();
     const persistence = await importPersistence();
     await persistence.closeSqlitePersistence();
     rmSync(layout.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -234,4 +251,91 @@ describe('sqlitePersistence — caracterización de fachada', () => {
     ) as { customDirectoryPath?: string | null };
     expect(preferences.customDirectoryPath).toBeNull();
   });
+  it('recupera una conexión tras un error SQLITE_IOERR sin reenviar la escritura fallida', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await importPersistence();
+    const initial = await persistence.initializeSqlitePersistence();
+    expect(initial.ready).toBe(true);
+    const first = await persistence.savePersistedRecordIfUnchanged({ key: 'recovery.test', value: '{"version":1}', expectedUpdatedAt: null });
+    expect(first.ok).toBe(true);
+    const originalPrepare = Database.prototype.prepare;
+    let injected = 0;
+    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: unknown, ...args: unknown[]) {
+      const sql = args[0];
+      if (typeof sql === 'string' && sql.includes('UPDATE persisted_records') && injected === 0) {
+        injected++;
+        throw Object.assign(new Error('error de E/S inyectado'), { code: 'SQLITE_IOERR' });
+      }
+      return originalPrepare.call(this as SqliteDatabase, sql as string);
+    });
+    try {
+      await expect(persistence.savePersistedRecordIfUnchanged({ key: 'recovery.test', value: '{"version":2}', expectedUpdatedAt: first.currentUpdatedAt })).rejects.toThrow('error de E/S');
+      expect(injected).toBe(1);
+      expect(persistence.getSqliteStatus()).toMatchObject({ ready: false, phase: 'fallback' });
+      await expect(persistence.savePersistedRecordIfUnchanged({ key: 'recovery.test', value: '{"version":3}', expectedUpdatedAt: first.currentUpdatedAt })).rejects.toThrow(/suspendida/);
+    } finally { prepare.mockRestore(); }
+    expect((await persistence.checkSqliteHealth()).ok).toBe(true);
+    expect(persistence.getSqliteStatus()).toMatchObject({ ready: true, databaseUuid: initial.databaseUuid });
+    const snapshot = await persistence.getPersistedRecordSnapshot('recovery.test');
+    expect(snapshot.record?.value).toBe('{"version":1}');
+    expect(snapshot.record?.updatedAt).toBe(first.currentUpdatedAt);
+    const explicit = await persistence.savePersistedRecordIfUnchanged({ key: 'recovery.test', value: '{"version":4}', expectedUpdatedAt: first.currentUpdatedAt });
+    expect(explicit.ok).toBe(true);
+  }, 30_000);
+
+  it('un fallo aislado de stat se recupera sin cambiar la identidad', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await importPersistence();
+    const initial = await persistence.initializeSqlitePersistence();
+    testContext.failStatPath = layout.databasePath;
+    testContext.statFailures = 1;
+    expect((await persistence.checkSqliteHealth()).ok).toBe(false);
+    expect((await persistence.checkSqliteHealth()).ok).toBe(true);
+    expect(persistence.getSqliteStatus()).toMatchObject({ ready: true, databaseUuid: initial.databaseUuid });
+  }, 25_000);
+
+  it('suspende la edición tras tres fallos consecutivos de stat y verifica la reapertura', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await importPersistence();
+    const initial = await persistence.initializeSqlitePersistence();
+    const saved = await persistence.savePersistedRecordIfUnchanged({ key: 'stat.test', value: '{"saved":true}', expectedUpdatedAt: null });
+    expect(saved.ok).toBe(true);
+    testContext.failStatPath = layout.databasePath;
+    testContext.statFailures = 3;
+    for (let i = 0; i < 3; i++) expect((await persistence.checkSqliteHealth()).ok).toBe(false);
+    expect(persistence.getSqliteStatus()).toMatchObject({ ready: false, phase: 'fallback' });
+    await expect(persistence.savePersistedRecordIfUnchanged({ key: 'stat.test', value: '{}', expectedUpdatedAt: saved.currentUpdatedAt })).rejects.toThrow(/suspendida/);
+    expect((await persistence.checkSqliteHealth()).ok).toBe(true);
+    expect(persistence.getSqliteStatus()).toMatchObject({ ready: true, databaseUuid: initial.databaseUuid });
+    expect((await persistence.getPersistedRecordSnapshot('stat.test')).record?.value).toBe('{"saved":true}');
+  }, 30_000);
+  it('un error de integridad transitorio exige recuperación verificada sin repetir el guardado', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await importPersistence();
+    const initial = await persistence.initializeSqlitePersistence();
+    expect(initial.ready).toBe(true);
+    const originalPrepare = Database.prototype.prepare;
+    let injected = 0;
+    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: unknown, ...args: unknown[]) {
+      const sql = args[0];
+      if (typeof sql === 'string' && sql.includes('INSERT OR IGNORE INTO persisted_records') && injected === 0) {
+        injected++;
+        throw new Error('database disk image is malformed');
+      }
+      return originalPrepare.call(this as SqliteDatabase, sql as string);
+    });
+    try {
+      const failed = await persistence.savePersistedRecordIfUnchanged({ key: 'integrity.test', value: '{}', expectedUpdatedAt: null });
+      expect(failed.ok).toBe(false);
+      expect(injected).toBe(1);
+      expect(persistence.getSqliteStatus()).toMatchObject({ ready: false, phase: 'fallback' });
+    } finally { prepare.mockRestore(); }
+    expect((await persistence.checkSqliteHealth()).ok).toBe(true);
+    expect(persistence.getSqliteStatus()).toMatchObject({ ready: true, databaseUuid: initial.databaseUuid });
+    expect((await persistence.getPersistedRecordSnapshot('integrity.test')).record).toBeNull();
+  }, 30_000);
 });
