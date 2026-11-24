@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, type ReactNode } from 'react';
 import { setEditorDirty, unregisterDirtyEditor } from '../services/dirtyEditors';
 import { useAppDialog } from './useAppDialog';
 
@@ -23,10 +23,15 @@ export function useUnsavedChanges({
 } {
   const editorId = useId();
   const { confirm, dialogNode } = useAppDialog();
-  const isDirty = useMemo(
-    () => enabled && serialize(currentValue) !== serialize(initialValue),
-    [currentValue, enabled, initialValue],
+  // Solo proteger diferencias de formularios que han permitido editar. Un
+  // bloqueo perdido posteriormente no equivale a descartar esas diferencias.
+  const hasBeenEnabled = useRef(enabled);
+  if (enabled) hasBeenEnabled.current = true;
+  const hasLocalChanges = useMemo(
+    () => serialize(currentValue) !== serialize(initialValue),
+    [currentValue, initialValue],
   );
+  const isDirty = hasBeenEnabled.current && hasLocalChanges;
 
   useEffect(() => {
     setEditorDirty(editorId, isDirty);
