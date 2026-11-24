@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw, X } from 'lucide-react';
 import { getConnectionDiagnostics, subscribeConnectionDiagnostics } from '../services/databaseHealthMonitor';
 
+import { notificationLayout } from './ui/notificationStyles';
 import { shouldSuggestSupervisedRestart } from '../services/safeRestartPolicy';
 
 export function SqliteBusyRestartBanner() {
   const [diagnostics, setDiagnostics] = useState(getConnectionDiagnostics);
+  const [dismissedSince, setDismissedSince] = useState<typeof diagnostics.unavailableSinceAt | undefined>(undefined);
   const [restarting, setRestarting] = useState(false);
   const [result, setResult] = useState('');
   useEffect(() => subscribeConnectionDiagnostics(() => setDiagnostics(getConnectionDiagnostics())), []);
@@ -16,6 +18,9 @@ export function SqliteBusyRestartBanner() {
   }, [suggest, result]);
 
   if (!suggest) return null;
+  if (dismissedSince !== undefined && dismissedSince === diagnostics.unavailableSinceAt) return (
+    <button type="button" className="text-xs text-metro-muted underline" onClick={() => setDismissedSince(undefined)}>Ver aviso de reinicio seguro</button>
+  );
 
   const requestRestart = async () => {
     if (restarting || !window.traccion?.requestSafeRestart) {
@@ -54,6 +59,7 @@ export function SqliteBusyRestartBanner() {
         >
           <RefreshCw size={14} /> {restarting ? 'Comprobando reinicio…' : 'Reiniciar TrAcción'}
         </button>
+        <button type="button" aria-label="Cerrar aviso de reinicio" className={notificationLayout.dismiss} onClick={() => setDismissedSince(diagnostics.unavailableSinceAt)}><X size={16} aria-hidden="true" /></button>
       </div>
     </section>
   );
