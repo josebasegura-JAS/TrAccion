@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { closeOtherLocalInstancesForUpdate } from './localUpdateInstances.js';
@@ -7,6 +7,7 @@ import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { tmpdir } from 'node:os';
 
 const UPDATE_MANIFEST_FILE_NAME = 'version.json';
+let updateInProgress = false;
 
 export interface AppUpdateCheckResult {
   updateAvailable: boolean;
@@ -131,7 +132,7 @@ export function buildUpdateApplyScript(
     'goto :cleanup',
     ':cleanup',
     'del /Q "%SOURCE%" >NUL 2>&1',
-    '(goto) 2>nul & del "%~f0"',
+    '(goto) 2>nul & del "%~f0" & rd "%~dp0"',
     '',
   ].join('\r\n');
 }
@@ -276,6 +277,29 @@ export async function checkForAppUpdate(
 export async function applyAppUpdate(
   currentVersion: string,
   updatesDirectoryPath: string | null,
+  confirmBeforeLaunch: () => Promise<boolean> = async () => true,
+): Promise<AppUpdateApplyResult> {
+  if (updateInProgress) return { ok: false, message: 'Ya hay una actualización en preparación.' };
+  updateInProgress = true;
+  let launched = false;
+  let stagingDir: string | null = null;
+  try {
+    const result = await prepareAppUpdate(currentVersion, updatesDirectoryPath, confirmBeforeLaunch, (directory) => { stagingDir = directory; });
+    launched = result.ok;
+    return result;
+  } finally {
+    if (!launched) {
+      if (stagingDir) await rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+      updateInProgress = false;
+    }
+  }
+}
+
+async function prepareAppUpdate(
+  currentVersion: string,
+  updatesDirectoryPath: string | null,
+  confirmBeforeLaunch: () => Promise<boolean>,
+  registerStaging: (directory: string) => void,
 ): Promise<AppUpdateApplyResult> {
   if (getTraccionEnvironment() === 'test') {
     return { ok: false, message: 'Las actualizaciones automáticas están desactivadas en el entorno PRUEBAS.' };
@@ -304,13 +328,15 @@ export async function applyAppUpdate(
   }
 
   const sourcePath = path.join(updatesDirectoryPath, manifest.fileName);
-  const stagingDir = path.join(tmpdir(), 'traccion-update-staging');
-  const stagedDownloadPath = path.join(stagingDir, manifest.fileName);
-  const stagedExePath = path.join(stagingDir, 'TrAccion-nueva.exe');
-
+  let stagingDir: string;
+  let stagedExePath: string;
   try {
-    await rm(stagingDir, { recursive: true, force: true });
-    await mkdir(stagingDir, { recursive: true });
+    const stagingRoot = path.join(tmpdir(), 'traccion-update-staging');
+    await mkdir(stagingRoot, { recursive: true });
+    stagingDir = await mkdtemp(path.join(stagingRoot, 'attempt-'));
+    registerStaging(stagingDir);
+    const stagedDownloadPath = path.join(stagingDir, manifest.fileName);
+    stagedExePath = path.join(stagingDir, 'TrAccion-nueva.exe');
     await copyFile(sourcePath, stagedDownloadPath);
     await verifySha256(stagedDownloadPath, manifest.sha256);
     await rename(stagedDownloadPath, stagedExePath);
@@ -339,7 +365,14 @@ export async function applyAppUpdate(
 
   try {
     await writeFile(scriptPath, batScript, 'utf8');
+    if (!(await confirmBeforeLaunch())) {
+      return { ok: false, message: 'Actualización cancelada: hay cambios sin guardar o no se puede confirmar el cierre.' };
+    }
     const child = spawn('cmd.exe', ['/c', scriptPath], { detached: true, stdio: 'ignore', windowsHide: true });
+    await new Promise<void>((resolve, reject) => {
+      child.on('error', reject);
+      child.once('spawn', resolve);
+    });
     child.unref();
   } catch (error) {
     return { ok: false, message: `No se ha podido iniciar el proceso de actualización: ${error instanceof Error ? error.message : String(error)}` };
