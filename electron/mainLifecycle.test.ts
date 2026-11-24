@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
-  const execute = vi.fn(async () => true);
+  const execute = vi.fn<() => Promise<unknown>>(async () => true);
   const window = { isDestroyed: () => false, webContents: { isDestroyed: () => false, executeJavaScript: execute } };
   const handlers = new Map<string, (event: unknown, payload?: unknown) => unknown>();
   const events = new Map<string, (...args: unknown[]) => unknown>();
@@ -163,6 +163,24 @@ describe('reinicio supervisado del proceso principal', () => {
 });
 
 describe('cierre ordenado del proceso principal', () => {
+  it('no autoriza el cierre cuando el renderer rechaza la comprobación', async () => {
+    mocks.execute.mockRejectedValueOnce(new Error('renderer no disponible'));
+    expect(beforeQuit()).toHaveBeenCalledTimes(1);
+    await vi.runAllTimersAsync();
+    expect(mocks.quit).not.toHaveBeenCalled();
+    expect(mocks.close).not.toHaveBeenCalled();
+    mocks.execute.mockResolvedValueOnce(true);
+    expect(beforeQuit()).toHaveBeenCalledTimes(1);
+    await vi.runAllTimersAsync();
+    expect(mocks.quit).toHaveBeenCalledTimes(1);
+  });
+  it.each([undefined, null, 'true'])('no autoriza una respuesta no afirmativa (%s)', async (response) => {
+    mocks.execute.mockResolvedValueOnce(response);
+    expect(beforeQuit()).toHaveBeenCalledTimes(1);
+    await vi.runAllTimersAsync();
+    expect(mocks.quit).not.toHaveBeenCalled();
+    expect(mocks.close).not.toHaveBeenCalled();
+  });
   it('no cierra SQLite si el usuario decide seguir editando', async () => {
     mocks.execute.mockResolvedValueOnce(false);
     expect(beforeQuit()).toHaveBeenCalledTimes(1);
