@@ -168,8 +168,8 @@ describe('script de aplicación del actualizador', () => {
 
     expect(script).toContain('set "CURRENT=C:\\Apps\\Traccion 1.2.exe"');
     expect(script).toContain('set "TARGET=C:\\Apps\\Traccion 1.2.exe"');
-    expect(script).toContain('move /-Y "%CURRENT%" "%PREVIOUS%"');
-    expect(script).toContain('move /-Y "%PREVIOUS%" "%CURRENT%"');
+    expect(script).toContain('ren "%CURRENT%" "%%~nxF"');
+    expect(script).toContain('ren "%PREVIOUS%" "%%~nxF"');
     expect(script).toContain('start "" "%TARGET%"');
   });
 
@@ -182,8 +182,8 @@ describe('script de aplicación del actualizador', () => {
 
     expect(script).toContain('set "TARGET=C:\\Apps\\Traccion 2.0.exe"');
     expect(script).not.toContain('del /Q "%CURRENT%"');
-    expect(script.indexOf('fc /B "%SOURCE%" "%CANDIDATE%"')).toBeLessThan(script.indexOf('move /-Y "%CANDIDATE%" "%TARGET%"'));
-    expect(script).toContain('fc /B "%SOURCE%" "%TARGET%"');
+    expect(script.indexOf(' /B "%SOURCE%" "%CANDIDATE%"')).toBeLessThan(script.indexOf('ren "%CANDIDATE%" "%%~nxF"'));
+    expect(script).toContain(' /B "%SOURCE%" "%TARGET%"');
     expect(script).toContain('start "" "%TARGET%"');
   });
 
@@ -224,13 +224,16 @@ describe('publicación reversible del ejecutable en Windows', () => {
       // Ejecutar el script real de publicación, sin arrancar ficheros ficticios
       // ni borrar el propio script durante la prueba.
       const script = buildUpdateApplyScript(current, target, source)
-        .replace('start "" "%TARGET%"', 'ver >NUL')
+        .replace('@echo off', '@echo on')
+        .replaceAll(' >NUL 2>&1', '')
+        .replace('start "" "%TARGET%"', 'cmd.exe /d /c exit /b 0')
         .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
         .replace('(goto) 2>nul & del "%~f0" & rd "%~dp0"', 'exit /b 0');
       const scriptPath = path.join(staging, 'apply.cmd');
       writeFileSync(scriptPath, script);
-      execFileSync('cmd.exe', ['/d', '/c', 'apply.cmd'], { cwd: staging, timeout: 10000, windowsHide: true });
-      expect(readFileSync(target, 'utf8')).toBe('version nueva');
+      const output = execFileSync('cmd.exe', ['/d', '/c', 'apply.cmd'], { cwd: staging, timeout: 10000, windowsHide: true, encoding: 'utf8' });
+      expect(readdirSync(dir), output).toContain(path.basename(target));
+      expect(readFileSync(target, 'utf8'), output).toBe('version nueva');
       const previous = sameBranch
         ? path.join(dir, readdirSync(dir).find(name => name.includes('.previous-'))!)
         : current;
@@ -250,7 +253,9 @@ describe('publicación reversible del ejecutable en Windows', () => {
       writeFileSync(target, 'destino existente');
       writeFileSync(source, 'nuevo');
       const script = buildUpdateApplyScript(current, target, source)
-        .replace('start "" "%TARGET%"', 'ver >NUL')
+        .replace('@echo off', '@echo on')
+        .replaceAll(' >NUL 2>&1', '')
+        .replace('start "" "%TARGET%"', 'cmd.exe /d /c exit /b 0')
         .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
         .replace('(goto) 2>nul & del "%~f0" & rd "%~dp0"', 'exit /b 0');
       writeFileSync(path.join(staging, 'apply.cmd'), script);
