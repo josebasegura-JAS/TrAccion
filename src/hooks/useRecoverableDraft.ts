@@ -91,11 +91,16 @@ export function useRecoverableDraft<T>({
 
   const isDirty = currentSerialized !== initialSerialized;
 
-  const clearDraft = useCallback(() => clearRecoverableDraft(storageKey), [storageKey]);
+  const clearDraft = useCallback(() => {
+    // Cerrar una consulta que nunca pudo recuperar su borrador no es un
+    // descarte explícito de ese borrador anterior.
+    if (initializedKeyRef.current === storageKey) clearRecoverableDraft(storageKey);
+  }, [storageKey]);
 
   useEffect(() => {
     let cancelled = false;
     if (initializedKeyRef.current === storageKey) return;
+    initializedKeyRef.current = null;
     readyRef.current = false;
 
     // Una apertura en solo lectura no debe eliminar ni reemplazar un borrador
