@@ -92,6 +92,7 @@ let isShutdownInProgress = false;
 let isRendererCloseApproved = false;
 let isCloseConfirmationInProgress = false;
 let shutdownWindow: BrowserWindow | null = null;
+let startupSplashWindow: BrowserWindow | null = null;
 
 function loadSqlitePersistenceModule(): Promise<SqlitePersistenceModule> {
   sqlitePersistenceModulePromise ??= import('./sqlitePersistence.js');
@@ -99,16 +100,16 @@ function loadSqlitePersistenceModule(): Promise<SqlitePersistenceModule> {
 }
 
 async function rendererAllowsAppClose(mainWindow: BrowserWindow): Promise<boolean> {
-  if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return true;
+  if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return false;
   try {
     const approved: unknown = await mainWindow.webContents.executeJavaScript(
-      'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : true',
+      'window.__traccionConfirmAppClose ? window.__traccionConfirmAppClose() : false',
       true,
     );
-    return approved !== false;
+    return approved === true;
   } catch (error) {
     console.warn('No se ha podido consultar el estado de cambios sin guardar antes del cierre.', error);
-    return true;
+    return false;
   }
 }
 
@@ -313,6 +314,8 @@ type SplashStepStatus = 'pending' | 'active' | 'done' | 'error';
 
 function createSplashWindow(): BrowserWindow {
   const splashWindow = new BrowserWindow({ width: 500, height: 540, resizable: false, movable: true, minimizable: false, maximizable: false, closable: true, frame: false, show: false, alwaysOnTop: true, skipTaskbar: true, title: 'Cargando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  startupSplashWindow = splashWindow;
+  splashWindow.once('closed', () => { if (startupSplashWindow === splashWindow) startupSplashWindow = null; });
   splashWindow.center();
   splashWindow.once('ready-to-show', () => {
     if (!splashWindow.isDestroyed()) splashWindow.show();
@@ -452,7 +455,7 @@ if (!app.requestSingleInstanceLock()) {
     try {
       const unregisterLocalPeer = await startLocalInstanceUpdateListener(
         async () => {
-          const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed());
+          const window = BrowserWindow.getAllWindows().find((candidate) => candidate !== startupSplashWindow && candidate !== shutdownWindow && !candidate.isDestroyed());
           return window ? rendererAllowsAppClose(window) : false;
         },
         () => {

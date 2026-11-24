@@ -132,6 +132,9 @@ export function inspectAndEnsureDatabaseIdentity(
       };
     }
 
+    if (options.expectedDatabaseUuid) {
+      throw new Error('La base vinculada ha perdido su identidad SQLite. No se reasignará automáticamente su UUID.');
+    }
     if (!options.allowLegacyBootstrap || !looksLikeLegacyTraccionDatabase(db)) {
       throw new Error(
         'El fichero SQLite seleccionado no se reconoce como una base de datos de TrAcción. No se ha migrado ni modificado.',
@@ -140,7 +143,7 @@ export function inspectAndEnsureDatabaseIdentity(
 
     const nextIdentity: DatabaseIdentity = {
       applicationId: TRACCION_APPLICATION_ID,
-      databaseUuid: options.expectedDatabaseUuid ?? randomUUID(),
+      databaseUuid: randomUUID(),
       createdAt: new Date().toISOString(),
       environment: expectedEnvironment,
     };
