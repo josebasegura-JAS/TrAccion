@@ -175,6 +175,7 @@ describe('cierre ordenado del proceso principal', () => {
     mocks.windows.mockReturnValue([]);
     mocks.close.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
     expect(beforeQuit()).toHaveBeenCalledTimes(1);
+    await vi.dynamicImportSettled();
     await vi.runAllTimersAsync();
     expect(mocks.close).toHaveBeenCalledTimes(1);
     expect(beforeQuit()).toHaveBeenCalledTimes(1);
@@ -185,5 +186,19 @@ describe('cierre ordenado del proceso principal', () => {
     expect(mocks.destroy).toHaveBeenCalledTimes(1);
     expect(mocks.quit).toHaveBeenCalledTimes(1);
     expect(beforeQuit()).not.toHaveBeenCalled();
+  });
+});
+
+describe('admisión al arranque', () => {
+  it('sale sin inicializar SQLite cuando no obtiene el bloqueo de instancia', async () => {
+    vi.resetModules();
+    mocks.events.clear();
+    mocks.handlers.clear();
+    mocks.ready.mockClear();
+    mocks.single.mockReturnValueOnce(false);
+    await import('./main.js');
+    expect(mocks.quit).toHaveBeenCalledTimes(1);
+    expect(mocks.ready).not.toHaveBeenCalled();
+    expect(mocks.events.has('before-quit')).toBe(false);
   });
 });
