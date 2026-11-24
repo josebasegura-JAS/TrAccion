@@ -4,14 +4,16 @@ import { useEditorShortcuts } from './useEditorShortcuts';
 
 function Harness({
   canSave = true,
+  enabled = true,
   onClose,
   onSave,
 }: {
   canSave?: boolean;
+  enabled?: boolean;
   onClose: () => void;
   onSave: () => void;
 }) {
-  useEditorShortcuts({ canSave, onClose, onSave });
+  useEditorShortcuts({ canSave, enabled, onClose, onSave });
   return null;
 }
 
@@ -70,5 +72,47 @@ describe('useEditorShortcuts', () => {
 
     expect(onClose).not.toHaveBeenCalled();
     expect(onSave).not.toHaveBeenCalled();
+  });
+  it('ignora la repetición automática de Ctrl+S', () => {
+    const onSave = vi.fn();
+    render(<Harness onClose={vi.fn()} onSave={onSave} />);
+    dispatchShortcut({ key: 's', ctrlKey: true });
+    const repeated = dispatchShortcut({ key: 's', ctrlKey: true, repeat: true });
+    expect(repeated.defaultPrevented).toBe(true);
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('no intercepta combinaciones con Alt o Shift', () => {
+    const onSave = vi.fn();
+    render(<Harness onClose={vi.fn()} onSave={onSave} />);
+    expect(dispatchShortcut({ key: 's', ctrlKey: true, altKey: true }).defaultPrevented).toBe(false);
+    expect(dispatchShortcut({ key: 's', ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('respeta la composición de texto y eventos ya consumidos', () => {
+    const onClose = vi.fn();
+    const onSave = vi.fn();
+    render(<Harness onClose={onClose} onSave={onSave} />);
+    dispatchShortcut({ key: 'Escape', isComposing: true });
+    const consumed = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, cancelable: true });
+    consumed.preventDefault();
+    window.dispatchEvent(consumed);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('no deja listeners activos al deshabilitar o desmontar', () => {
+    const onClose = vi.fn();
+    const onSave = vi.fn();
+    const view = render(<Harness enabled={false} onClose={onClose} onSave={onSave} />);
+    dispatchShortcut({ key: 'Escape' });
+    view.rerender(<Harness enabled onClose={onClose} onSave={onSave} />);
+    dispatchShortcut({ key: 's', metaKey: true });
+    view.unmount();
+    dispatchShortcut({ key: 'Escape' });
+    dispatchShortcut({ key: 's', ctrlKey: true });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 });
