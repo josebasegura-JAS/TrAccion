@@ -54,7 +54,7 @@ describe('mantenimiento VACUUM SQLite', () => {
     expect(result.sizeAfterBytes).not.toBeNull();
     expect(result.sizeAfterBytes!).toBeLessThan(result.sizeBeforeBytes!);
     expect(db.prepare('SELECT id, value FROM business_data').all()).toEqual([{ id: 1, value: 'x'.repeat(4000) }]);
-    expect(db.pragma('quick_check', { simple: true })).toBe('ok');
+    expect(db.pragma('quick_check')).toEqual([{ quick_check: 'ok' }]);
     expect((await getVacuumStatus(deps)).lastVacuumAt).toEqual(expect.any(String));
     expect(deps.releaseLock).toHaveBeenCalledWith(status.lockPath, lock);
   }, 20000);
