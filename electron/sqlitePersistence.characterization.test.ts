@@ -261,12 +261,13 @@ describe('sqlitePersistence — caracterización de fachada', () => {
     expect(first.ok).toBe(true);
     const originalPrepare = Database.prototype.prepare;
     let injected = 0;
-    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: SqliteDatabase, sql: string) {
-      if (sql.includes('UPDATE persisted_records') && injected === 0) {
+    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: unknown, ...args: unknown[]) {
+      const sql = args[0];
+      if (typeof sql === 'string' && sql.includes('UPDATE persisted_records') && injected === 0) {
         injected++;
         throw Object.assign(new Error('error de E/S inyectado'), { code: 'SQLITE_IOERR' });
       }
-      return originalPrepare.call(this, sql);
+      return originalPrepare.call(this as SqliteDatabase, sql as string);
     });
     try {
       await expect(persistence.savePersistedRecordIfUnchanged({ key: 'recovery.test', value: '{"version":2}', expectedUpdatedAt: first.currentUpdatedAt })).rejects.toThrow('error de E/S');
@@ -319,12 +320,13 @@ describe('sqlitePersistence — caracterización de fachada', () => {
     expect(initial.ready).toBe(true);
     const originalPrepare = Database.prototype.prepare;
     let injected = 0;
-    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: SqliteDatabase, sql: string) {
-      if (sql.includes('INSERT OR IGNORE INTO persisted_records') && injected === 0) {
+    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: unknown, ...args: unknown[]) {
+      const sql = args[0];
+      if (typeof sql === 'string' && sql.includes('INSERT OR IGNORE INTO persisted_records') && injected === 0) {
         injected++;
         throw new Error('database disk image is malformed');
       }
-      return originalPrepare.call(this, sql);
+      return originalPrepare.call(this as SqliteDatabase, sql as string);
     });
     try {
       const failed = await persistence.savePersistedRecordIfUnchanged({ key: 'integrity.test', value: '{}', expectedUpdatedAt: null });
