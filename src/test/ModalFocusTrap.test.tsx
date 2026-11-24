@@ -98,8 +98,12 @@ describe('modal focus trap', () => {
     const confirm = screen.getByRole('button', { name: 'Continuar' });
 
     await waitFor(() => expect(cancel).toHaveFocus());
-    confirm.focus();
+    const close = screen.getByRole('button', { name: 'Cerrar diálogo' });
+    close.focus();
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(cancel).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(close).toHaveFocus();
+    expect(confirm).not.toHaveFocus();
   });
 });
