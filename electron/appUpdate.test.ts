@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -205,5 +206,57 @@ describe('seguridad del indicador de actualización', () => {
     const { applyAppUpdate } = await import('./appUpdate.js');
     const result = await applyAppUpdate('1.2.1', null);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('publicación reversible del ejecutable en Windows', () => {
+  const windowsIt = process.platform === 'win32' ? it : it.skip;
+  windowsIt.each([true, false])('conserva versión anterior y publica bytes exactos (misma rama: %s)', sameBranch => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-update-script-'));
+    try {
+      const staging = path.join(dir, 'attempt-test');
+      mkdirSync(staging);
+      const current = path.join(dir, 'Traccion 1.2.exe');
+      const target = sameBranch ? current : path.join(dir, 'Traccion 2.0.exe');
+      const source = path.join(staging, 'TrAccion-nueva.exe');
+      writeFileSync(current, 'version anterior');
+      writeFileSync(source, 'version nueva');
+      // Ejecutar el script real de publicación, sin arrancar ficheros ficticios
+      // ni borrar el propio script durante la prueba.
+      const script = buildUpdateApplyScript(current, target, source)
+        .replace('start "" "%TARGET%"', 'ver >NUL')
+        .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
+        .replace('(goto) 2>nul & del "%~f0" & rd "%~dp0"', 'exit /b 0');
+      const scriptPath = path.join(staging, 'apply.cmd');
+      writeFileSync(scriptPath, script);
+      execFileSync('cmd.exe', ['/d', '/c', 'apply.cmd'], { cwd: staging, timeout: 10000, windowsHide: true });
+      expect(readFileSync(target, 'utf8')).toBe('version nueva');
+      const previous = sameBranch
+        ? path.join(dir, readdirSync(dir).find(name => name.includes('.previous-'))!)
+        : current;
+      expect(readFileSync(previous, 'utf8')).toBe('version anterior');
+      expect(readdirSync(dir).some(name => name.includes('.pending-'))).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+  windowsIt('no sobrescribe un destino de otra rama que ya existe', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-update-collision-'));
+    try {
+      const staging = path.join(dir, 'attempt-test');
+      mkdirSync(staging);
+      const current = path.join(dir, 'Traccion 1.2.exe');
+      const target = path.join(dir, 'Traccion 2.0.exe');
+      const source = path.join(staging, 'TrAccion-nueva.exe');
+      writeFileSync(current, 'original');
+      writeFileSync(target, 'destino existente');
+      writeFileSync(source, 'nuevo');
+      const script = buildUpdateApplyScript(current, target, source)
+        .replace('start "" "%TARGET%"', 'ver >NUL')
+        .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
+        .replace('(goto) 2>nul & del "%~f0" & rd "%~dp0"', 'exit /b 0');
+      writeFileSync(path.join(staging, 'apply.cmd'), script);
+      execFileSync('cmd.exe', ['/d', '/c', 'apply.cmd'], { cwd: staging, timeout: 10000, windowsHide: true });
+      expect(readFileSync(current, 'utf8')).toBe('original');
+      expect(readFileSync(target, 'utf8')).toBe('destino existente');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
