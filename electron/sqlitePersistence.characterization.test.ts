@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import type { Database as SqliteDatabase } from 'better-sqlite3';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -260,7 +261,7 @@ describe('sqlitePersistence — caracterización de fachada', () => {
     expect(first.ok).toBe(true);
     const originalPrepare = Database.prototype.prepare;
     let injected = 0;
-    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: Database.Database, sql: string) {
+    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: SqliteDatabase, sql: string) {
       if (sql.includes('UPDATE persisted_records') && injected === 0) {
         injected++;
         throw Object.assign(new Error('error de E/S inyectado'), { code: 'SQLITE_IOERR' });
@@ -309,5 +310,30 @@ describe('sqlitePersistence — caracterización de fachada', () => {
     expect((await persistence.checkSqliteHealth()).ok).toBe(true);
     expect(persistence.getSqliteStatus()).toMatchObject({ ready: true, databaseUuid: initial.databaseUuid });
     expect((await persistence.getPersistedRecordSnapshot('stat.test')).record?.value).toBe('{"saved":true}');
+  }, 30_000);
+  it('un error de integridad transitorio exige recuperación verificada sin repetir el guardado', async () => {
+    createSharedDatabase(layout.databasePath);
+    writePreferences(layout.userData, layout.sharedDirectory);
+    const persistence = await importPersistence();
+    const initial = await persistence.initializeSqlitePersistence();
+    expect(initial.ready).toBe(true);
+    const originalPrepare = Database.prototype.prepare;
+    let injected = 0;
+    const prepare = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: SqliteDatabase, sql: string) {
+      if (sql.includes('INSERT OR IGNORE INTO persisted_records') && injected === 0) {
+        injected++;
+        throw new Error('database disk image is malformed');
+      }
+      return originalPrepare.call(this, sql);
+    });
+    try {
+      const failed = await persistence.savePersistedRecordIfUnchanged({ key: 'integrity.test', value: '{}', expectedUpdatedAt: null });
+      expect(failed.ok).toBe(false);
+      expect(injected).toBe(1);
+      expect(persistence.getSqliteStatus()).toMatchObject({ ready: false, phase: 'fallback' });
+    } finally { prepare.mockRestore(); }
+    expect((await persistence.checkSqliteHealth()).ok).toBe(true);
+    expect(persistence.getSqliteStatus()).toMatchObject({ ready: true, databaseUuid: initial.databaseUuid });
+    expect((await persistence.getPersistedRecordSnapshot('integrity.test')).record).toBeNull();
   }, 30_000);
 });
