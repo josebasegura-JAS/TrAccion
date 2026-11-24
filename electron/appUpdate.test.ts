@@ -225,7 +225,7 @@ describe('publicación reversible del ejecutable en Windows', () => {
       // ni borrar el propio script durante la prueba.
       const script = buildUpdateApplyScript(current, target, source)
         .replace('@echo off', '@echo on')
-        .replaceAll(' >NUL 2>&1', '')
+        .replace(/ >NUL 2>&1/g, '')
         .replace('start "" "%TARGET%"', 'cmd.exe /d /c exit /b 0')
         .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
         .replace('(goto) 2>nul & del "%~f0" & rd "%~dp0"', 'exit /b 0');
@@ -254,7 +254,7 @@ describe('publicación reversible del ejecutable en Windows', () => {
       writeFileSync(source, 'nuevo');
       const script = buildUpdateApplyScript(current, target, source)
         .replace('@echo off', '@echo on')
-        .replaceAll(' >NUL 2>&1', '')
+        .replace(/ >NUL 2>&1/g, '')
         .replace('start "" "%TARGET%"', 'cmd.exe /d /c exit /b 0')
         .replace('if exist "%CURRENT%" start "" "%CURRENT%"', 'rem fallback')
         .replace('(goto) 2>nul & del "%~f0" & rd "%~dp0"', 'exit /b 0');
