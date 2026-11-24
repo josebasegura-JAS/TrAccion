@@ -19,8 +19,8 @@ describe('mantenimiento VACUUM SQLite', () => {
     return {
       getDatabase: () => db,
       getStatus: () => status,
-      acquireLock: vi.fn(async (_path: string, _wait?: number) => lock),
-      releaseLock: vi.fn(async (_path: string, _lock: DatabaseLockInfo) => undefined),
+      acquireLock: vi.fn(async () => lock),
+      releaseLock: vi.fn(async () => undefined),
       getLockPath: (file: string) => file + '.lockdir',
       startDatabaseLockHeartbeat: vi.fn(() => setInterval(() => undefined, 1000)),
       isLockContentionError: (error: unknown) => error instanceof Error && error.message === 'LOCKED',
