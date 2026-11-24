@@ -1,11 +1,12 @@
 import { ExcelBackupRetryBanner } from './components/ExcelBackupRetryBanner';
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, LockKeyhole } from 'lucide-react';
+import { AlertTriangle, LockKeyhole, X } from 'lucide-react';
 import { nextWriteError } from './services/persistenceNotificationPolicy';
 import { AppUpdateChecker } from './components/AppUpdateChecker';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { BackgroundActivityIndicator } from './components/BackgroundActivityIndicator';
 import { TooltipLayer } from './components/ui/TooltipLayer';
+import { notificationLayout } from './components/ui/notificationStyles';
 import { ToastProvider } from './components/ui/Toast';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -98,16 +99,21 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
 
 function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
   const [feedback, setFeedback] = useState<PersistenceFeedback | null>(null);
+  const [dismissed, setDismissed] = useState<PersistenceFeedback | null>(null);
   useEffect(() => subscribeToPersistenceFeedback((nextFeedback) => {
     setFeedback((current) => nextWriteError(current, nextFeedback));
   }), []);
   if (!feedback) return null;
   const isLockIssue = isTemporarySqliteLockMessage(feedback.message || '');
+  if (dismissed === feedback) return (
+    <button type="button" className="text-xs text-metro-muted underline" onClick={() => setDismissed(null)}>Ver error de guardado pendiente</button>
+  );
   return (
     <section className="persistence-error-banner" role="alert" aria-live="assertive"><AlertTriangle size={20} aria-hidden="true" />
       <div><strong>Error de guardado</strong><p>{feedback.message || 'No se han podido guardar los últimos cambios. Revisa la conexión o la persistencia antes de continuar editando.'}</p>
         {isLockIssue && <button className="persistence-error-banner__action" onClick={onGoToAjustes} type="button">Ver bloqueo en Ajustes</button>}
       </div>
+      <button type="button" aria-label="Cerrar aviso de guardado" className={notificationLayout.dismiss} onClick={() => setDismissed(feedback)}><X size={16} aria-hidden="true" /></button>
     </section>
   );
 }

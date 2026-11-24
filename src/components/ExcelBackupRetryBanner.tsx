@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
+import { notificationLayout } from './ui/notificationStyles';
 import {
   EXCEL_BACKUP_FAILURE_EVENT,
   EXCEL_BACKUP_SUCCESS_EVENT,
@@ -40,6 +42,7 @@ function taskFailure(bridge: TaskWordBridge): ExcelBackupFailure {
 
 export function ExcelBackupRetryBanner() {
   const [failures, setFailures] = useState<ExcelBackupFailure[]>(persistedFailuresForBanner);
+  const [collapsed, setCollapsed] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -54,6 +57,7 @@ export function ExcelBackupRetryBanner() {
 
     const unsubscribe = bridge.onBackupFailure?.(() => {
       const failure = taskFailure(bridge);
+      setCollapsed(false);
       persistExcelBackupFailure(failure);
       setFailures((current) => upsertExcelBackupFailure(current, failure));
       setErrors((current) => {
@@ -68,6 +72,7 @@ export function ExcelBackupRetryBanner() {
   useEffect(() => {
     const onFailure = (event: Event) => {
       const failure = (event as CustomEvent<ExcelBackupFailure>).detail;
+      setCollapsed(false);
       setFailures((current) => upsertExcelBackupFailure(current, failure));
       setErrors((current) => {
         const next = { ...current };
@@ -93,6 +98,11 @@ export function ExcelBackupRetryBanner() {
   }, []);
 
   if (failures.length === 0) return null;
+  if (collapsed) return (
+    <button type="button" onClick={() => setCollapsed(false)} className="fixed bottom-5 right-5 z-[120] rounded-lg border border-red-400/50 bg-red-950 px-3 py-2 text-xs text-red-50 shadow-lg">
+      Ver respaldos Excel pendientes ({failures.length})
+    </button>
+  );
 
   const retry = async (failure: ExcelBackupFailure) => {
     if (busyId || !failure.retry) return;
@@ -121,9 +131,10 @@ export function ExcelBackupRetryBanner() {
       role="alert"
       className="fixed bottom-5 right-5 z-[120] max-h-[min(32rem,calc(100vh-2rem))] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-red-400/50 bg-red-950 p-4 text-sm text-red-50 shadow-2xl"
     >
-      <p className="font-bold">
-        {failures.length === 1 ? 'Respaldo Excel pendiente' : `${failures.length} respaldos Excel pendientes`}
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-bold">{failures.length === 1 ? 'Respaldo Excel pendiente' : `${failures.length} respaldos Excel pendientes`}</p>
+        <button type="button" aria-label="Cerrar aviso de respaldos Excel" className={notificationLayout.dismiss} onClick={() => setCollapsed(true)}><X size={16} aria-hidden="true" /></button>
+      </div>
       <p className="mt-1 text-xs text-red-100/80">
         Los datos de TrAcción están guardados. Estos avisos permanecen aunque reinicies la aplicación y desaparecen cuando cada Excel vuelve a generarse correctamente.
       </p>
