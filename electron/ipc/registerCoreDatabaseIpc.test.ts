@@ -18,9 +18,9 @@ const mocks = vi.hoisted(() => ({
   migrate: vi.fn(() => ({ ready: true })),
   backup: vi.fn(() => ({ ready: true })),
   status: { ready: true, phase: 'active' },
-  initiatingWindow: vi.fn<() => { isDestroyed: () => boolean; webContents: { executeJavaScript: () => Promise<unknown> } } | null>(() => null),
+  initiatingWindow: vi.fn<() => { isDestroyed: () => boolean; webContents: { executeJavaScript: () => Promise<unknown>; isDestroyed: () => boolean } } | null>(() => null),
   confirmUpdate: vi.fn(async () => true),
-  applyUpdate: vi.fn(async () => ({ ok: false, message: 'Actualización cancelada' })),
+  applyUpdate: vi.fn<(version: string, directory: string, confirm: () => Promise<boolean>) => Promise<{ ok: boolean; message: string }>>(async () => ({ ok: false, message: 'Actualización cancelada' })),
   checkUpdate: vi.fn(),
   updatesDirectory: vi.fn(async () => 'test-updates'),
   quit: vi.fn(),
@@ -188,7 +188,7 @@ describe('IPC central de SQLite', () => {
 
 describe('IPC de actualización', () => {
   function availableWindow() {
-    mocks.initiatingWindow.mockReturnValue({ isDestroyed: () => false, webContents: { executeJavaScript: mocks.confirmUpdate } });
+    mocks.initiatingWindow.mockReturnValue({ isDestroyed: () => false, webContents: { executeJavaScript: mocks.confirmUpdate, isDestroyed: () => false } });
   }
   it('rechaza una petición sin ventana iniciadora', async () => {
     expect(await invoke('app-update:apply')).toMatchObject({ ok: false });
@@ -210,7 +210,7 @@ describe('IPC de actualización', () => {
   it('mantiene abierta la aplicación si la preparación falla', async () => {
     availableWindow();
     expect(await invoke('app-update:apply')).toMatchObject({ ok: false });
-    expect(mocks.applyUpdate).toHaveBeenCalledWith('test', 'test-updates');
+    expect(mocks.applyUpdate).toHaveBeenCalledWith('test', 'test-updates', expect.any(Function));
     expect(mocks.quit).not.toHaveBeenCalled();
   });
   it('solicita cierre ordenado solo después de preparar correctamente la actualización', async () => {
@@ -230,5 +230,26 @@ describe('IPC de actualización', () => {
     mocks.checkUpdate.mockReturnValueOnce({ updateAvailable: true });
     expect(await invoke('app-update:check')).toEqual({ updateAvailable: true });
     expect(mocks.checkUpdate).toHaveBeenCalledWith('test', 'test-updates');
+  });
+});
+
+describe('IPC: regresiones de seguridad del actualizador', () => {
+  it('rechaza una confirmación final negativa sin cerrar la aplicación', async () => {
+    mocks.initiatingWindow.mockReturnValue({ isDestroyed: () => false, webContents: { executeJavaScript: mocks.confirmUpdate, isDestroyed: () => false } });
+    mocks.confirmUpdate.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.applyUpdate.mockImplementationOnce(async (_version, _directory, confirm) => ({ ok: await confirm(), message: 'Resultado final' }));
+    expect(await invoke('app-update:apply')).toMatchObject({ ok: false });
+    expect(mocks.confirmUpdate).toHaveBeenCalledTimes(2);
+    expect(mocks.quit).not.toHaveBeenCalled();
+  });
+  it('no permite dos solicitudes IPC simultáneas mientras espera confirmación', async () => {
+    mocks.initiatingWindow.mockReturnValue({ isDestroyed: () => false, webContents: { executeJavaScript: mocks.confirmUpdate, isDestroyed: () => false } });
+    let finish!: (value: boolean) => void;
+    mocks.confirmUpdate.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const first = invoke('app-update:apply');
+    expect(await invoke('app-update:apply')).toMatchObject({ ok: false, message: expect.stringContaining('en preparación') });
+    finish(false);
+    expect(await first).toMatchObject({ ok: false });
+    expect(mocks.applyUpdate).not.toHaveBeenCalled();
   });
 });
