@@ -183,8 +183,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     await mkdir(backupDirectory, { recursive: true });
 
     // PR8B: compartir la misma cola exclusiva por ruta que las escrituras
-    // normales. La adquisición reentrante interior mantiene el heartbeat del
-    // backup prolongado sin permitir solapamiento entre callbacks locales.
+    // normales. El gestor de la operación exclusiva mantiene el heartbeat;
+    // la adquisición interior conserva la referencia al mismo propietario.
     try {
       return await dependencies.withDatabaseOperationLock(currentStatus.path, async () => {
         let backupLock: DatabaseLockInfo;
@@ -201,7 +201,6 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         const acquiredAfterMs = Date.now() - startedAt;
         const backupLockPath = dependencies.getLockPath(currentStatus.path);
         const sharedMarkerPath = `${currentStatus.path}${SHARED_BACKUP_MARKER_SUFFIX}`;
-        const backupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(backupLockPath, backupLock);
 
         try {
           // El lock es global entre ordenadores. Si otro equipo ya respaldó
@@ -304,7 +303,6 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           console.info(`[backup-perf] copiaViva=${Date.now() - startedAt} ms, esperaLock=${acquiredAfterMs} ms, éxito=${coreSqliteBackupOk}.`);
           return coreSqliteBackupOk;
         } finally {
-          clearInterval(backupLockHeartbeat);
           await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
             console.warn('No se ha podido liberar el bloqueo SQLite de respaldo local.', error);
           });
@@ -402,8 +400,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     await mkdir(backupDirectory, { recursive: true });
 
     // PR8B: compartir la misma cola exclusiva por ruta que las escrituras
-    // normales. La adquisición reentrante interior mantiene el heartbeat del
-    // backup prolongado sin permitir solapamiento entre callbacks locales.
+    // normales. El gestor de la operación exclusiva mantiene el heartbeat;
+    // la adquisición interior conserva la referencia al mismo propietario.
     try {
       return await dependencies.withDatabaseOperationLock(currentStatus.path, async () => {
         let backupLock: DatabaseLockInfo;
@@ -418,7 +416,6 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         }
 
         const backupLockPath = dependencies.getLockPath(currentStatus.path);
-        const backupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(backupLockPath, backupLock);
 
         try {
           const prepareStartedAt = Date.now();
@@ -506,7 +503,6 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
             dailySqliteMs,
           };
         } finally {
-          clearInterval(backupLockHeartbeat);
           await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
             console.warn('No se ha podido liberar el bloqueo SQLite de respaldo de cierre.', error);
           });
