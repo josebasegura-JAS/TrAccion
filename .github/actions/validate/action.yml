@@ -34,9 +34,9 @@ runs:
         for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
           $log = Join-Path $env:RUNNER_TEMP "traccion-npm-ci-attempt-$attempt.log"
           Write-Host "npm ci: intento $attempt de $maxAttempts"
-          & npm ci --include=dev --no-audit --no-fund *>&1 |
-            ForEach-Object { "$_" | Tee-Object -FilePath $log -Append }
+          & npm ci --include=dev --prefer-offline --no-audit --no-fund *> $log
           $exitCode = $LASTEXITCODE
+          Get-Content -Path $log | Write-Host
           if ($exitCode -eq 0) {
             Write-Host "Dependencias instaladas correctamente."
             break
@@ -80,7 +80,8 @@ runs:
       shell: pwsh
       run: |
         $timer = [System.Diagnostics.Stopwatch]::StartNew()
-        npm run test:coverage
+        # Ensayo E2: conservar la suite y cobertura, comparar cuatro workers.
+        npm run test:coverage -- --maxWorkers=4 --minWorkers=4
         $testExitCode = $LASTEXITCODE
         $timer.Stop()
         New-Item -ItemType Directory -Force -Path audit-results | Out-Null
