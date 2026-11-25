@@ -170,4 +170,93 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
       await a.releaseLock(lockPath, leaseA);
     }
   });
+  it('renueva el lock de una operación exclusiva larga y espera la renovación antes de liberar', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'cliente-A' });
+    const lockPath = manager.getLockPath(databasePath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    let finishOperation!: () => void;
+    const operationGate = new Promise<void>(resolve => { finishOperation = resolve; });
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    let continueHeartbeat!: () => void;
+    const heartbeatGate = new Promise<void>(resolve => { continueHeartbeat = resolve; });
+    let announceHeartbeat!: () => void;
+    const heartbeatStarted = new Promise<void>(resolve => { announceHeartbeat = resolve; });
+    hooks.afterOpen = async target => {
+      if (target === ownerPath) {
+        announceHeartbeat();
+        await heartbeatGate;
+      }
+    };
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    vi.setSystemTime(new Date('2026-11-25T07:00:00.000Z'));
+    const operation = manager.withDatabaseOperationLock(databasePath, async () => {
+      entered();
+      await operationGate;
+      return 'done';
+    });
+    try {
+      await started;
+      const initial = await manager.readLock(lockPath);
+      await vi.advanceTimersByTimeAsync(10_100);
+      await heartbeatStarted;
+      finishOperation();
+      // La operación ya terminó, pero el propietario aún no debe retirarse.
+      await Promise.resolve();
+      expect(existsSync(ownerPath)).toBe(true);
+      expect((await manager.readLock(lockPath))?.updatedAt).toBe(initial?.updatedAt);
+      continueHeartbeat();
+      expect(await operation).toBe('done');
+      expect(existsSync(lockPath)).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      finishOperation();
+      continueHeartbeat();
+      await operation;
+    }
+  }, 15_000);
+
+  it('una operación asíncrona mantiene renovado el propietario más allá del TTL observado', async () => {
+    let observed = 0;
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'cliente-A' });
+    const observer = createDatabaseLockManager({
+      getOwnerId: () => 'cliente-B', monotonicNowMs: () => observed,
+    });
+    const lockPath = manager.getLockPath(databasePath);
+    let finish!: () => void;
+    const gate = new Promise<void>(resolve => { finish = resolve; });
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    vi.setSystemTime(new Date('2026-11-25T07:00:00.000Z'));
+    const operation = manager.withDatabaseOperationLock(databasePath, async () => {
+      entered();
+      await gate;
+    });
+    try {
+      await started;
+      const initial = (await observer.readLock(lockPath))!;
+      expect(observer.isLockStale(initial)).toBe(false);
+      for (let step = 1; step <= 4; step++) {
+        let closed!: () => void;
+        const heartbeatClosed = new Promise<void>(resolve => { closed = resolve; });
+        hooks.afterClose = () => closed();
+        await vi.advanceTimersByTimeAsync(10_000);
+        await heartbeatClosed;
+        // La confirmación final del heartbeat lee owner.json de nuevo.
+        // Esperar esa lectura antes de iniciar el siguiente tick.
+        const current = (await observer.readLock(lockPath))!;
+        observed = step * 10_000;
+        expect(current.updatedAt).not.toBe(initial.updatedAt);
+        expect(observer.isLockStale(current)).toBe(false);
+        // Drenar la E/S real pendiente antes de adelantar otra vez el reloj.
+        await new Promise<void>(resolve => setTimeout(resolve, 20));
+      }
+    } finally {
+      finish();
+      await operation;
+    }
+    expect(existsSync(lockPath)).toBe(false);
+  }, 15_000);
+
 });
