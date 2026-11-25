@@ -2,7 +2,7 @@ import { configurePersistenceUserDataPath } from './persistence/persistenceRunti
 import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { createEngineDispatcher } from './sqliteEngineTransport.js';
 import { createPersistenceOperations } from './sqliteEngineOperations.js';
-import { enqueueSqliteIpc } from './sqliteIpcQueue.js';
+import { runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
 import { isEngineRequest } from './sqliteEngineTransport.js';
 
 const port = process.parentPort;
@@ -34,13 +34,13 @@ port.on('message', (event: { data: unknown }) => {
   if (request.operation === 'closeSqlitePersistence') closing = true;
   // Conservar el contexto de escritura incluso para lecturas que migren datos.
   // El cliente admite una sola petición simultánea; no se reintentan peticiones.
-  void enqueueSqliteIpc('engine:operation', () => dispatch(request)).then((response) => {
+  void runCurrentSqliteIpcAsWrite(() => dispatch(request)).then((response) => {
     if (request.operation === 'closeSqlitePersistence' && response?.kind === 'engine:result') closed = true;
     port.postMessage({ kind: 'engine:status', status: persistence.getSqliteStatus() });
     if (response) port.postMessage(response);
   }).catch((error: unknown) => {
-    // Un timeout de la cola no demuestra que la operación haya terminado.
-    // No responder como fallo definitivo ni admitir un nuevo propietario.
+    // No se ha podido confirmar el resultado. El cliente mantiene el canal
+    // reservado hasta su propio timeout; no admite otro propietario.
     console.error('[sqlite-engine]', error);
   });
 });
