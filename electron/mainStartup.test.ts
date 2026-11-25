@@ -46,7 +46,7 @@ vi.mock('node:fs/promises', () => ({ writeFile: mocks.write, readFile: vi.fn() }
 vi.mock('./sqlitePersistence.js', () => ({ initializeSqlitePersistence: mocks.initialize, setDatabaseConnectivityIssueNotifier: mocks.notifier }));
 vi.mock('./sqliteIpcQueue.js', () => ({ beginSqliteRestartDrain: vi.fn(), cancelSqliteRestartDrain: vi.fn(), getSqliteIpcQueueDiagnostics: vi.fn() }));
 vi.mock('./sqliteIncidentJournal.js', () => ({ getSqliteIncidentReport: vi.fn() }));
-vi.mock('./mainWatchdogBridge.js', () => ({ registerMainWatchdogOperationSender: vi.fn() }));
+vi.mock('./mainWatchdogBridge.js', () => ({ registerMainWatchdogOperationSender: vi.fn(), notifyMainWatchdogOperation: vi.fn() }));
 vi.mock('./sqliteWorkerProbeSupervisor.js', () => ({ startSqliteWorkerProbeSupervisor: vi.fn() }));
 vi.mock('./localUpdateInstances.js', () => ({ startLocalInstanceUpdateListener: vi.fn(async () => () => undefined) }));
 vi.mock('./multiuserPerformanceDiagnostics.js', () => ({ getMultiuserPerformanceReport: vi.fn() }));
@@ -105,6 +105,50 @@ function signal(name: string, sender: unknown) {
   handler({ sender });
 }
 describe('arranque del proceso principal', () => {
+
+  it('avisa de arranque lento sin abrir dashboard ni repetir la activación pendiente', async () => {
+    let finish!: (value: { ready: boolean; message: string }) => void;
+    mocks.initialize.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await boot();
+    expect(mocks.windows).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(mocks.windows[0].webContents.executeJavaScript).toHaveBeenCalledWith('window.__traccionSplashShowSlow?.()', true);
+    expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('Arranque pendiente tras 30 segundos'), 'utf8');
+    expect(mocks.initialize).toHaveBeenCalledTimes(1);
+    expect(mocks.windows).toHaveLength(1);
+    finish({ ready: true, message: '' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mainWindow()).toBeDefined();
+    expect(mocks.initialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('aplaza el cierre hasta que la activación termina y nunca abre el dashboard tras cancelar', async () => {
+    let finish!: (value: { ready: boolean; message: string }) => void;
+    mocks.initialize.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await boot();
+    const preventDefault = vi.fn();
+    const quit = mocks.events.get('before-quit')!;
+    quit({ preventDefault });
+    quit({ preventDefault });
+    expect(preventDefault).toHaveBeenCalledTimes(2);
+    expect(mocks.quit).not.toHaveBeenCalled();
+    expect(mocks.windows[0].webContents.executeJavaScript).toHaveBeenCalledWith('window.__traccionSplashShowClosing?.()', true);
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(mocks.quit).not.toHaveBeenCalled();
+    expect(mocks.windows).toHaveLength(1);
+    finish({ ready: true, message: '' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.quit).toHaveBeenCalledTimes(1);
+    expect(mocks.windows).toHaveLength(1);
+    expect(mocks.initialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('no muestra aviso de demora si el arranque ya terminó', async () => {
+    await boot();
+    signal('app:renderer-ready', mainWindow().webContents);
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(mocks.windows[0].webContents.executeJavaScript).not.toHaveBeenCalledWith('window.__traccionSplashShowSlow?.()', true);
+  });
   it('crea el dashboard aunque SQLite devuelva no disponible', async () => {
     mocks.initialize.mockResolvedValueOnce({ ready: false, message: 'Sin conexión SMB' });
     await boot();

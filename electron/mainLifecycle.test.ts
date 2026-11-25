@@ -45,7 +45,7 @@ vi.mock('./sqliteIpcQueue.js', () => ({
   getSqliteIpcQueueDiagnostics: () => mocks.queue,
 }));
 vi.mock('./sqliteIncidentJournal.js', () => ({ getSqliteIncidentReport: mocks.incident }));
-vi.mock('./mainWatchdogBridge.js', () => ({ registerMainWatchdogOperationSender: vi.fn() }));
+vi.mock('./mainWatchdogBridge.js', () => ({ registerMainWatchdogOperationSender: vi.fn(), notifyMainWatchdogOperation: vi.fn() }));
 vi.mock('./sqliteWorkerProbeSupervisor.js', () => ({ startSqliteWorkerProbeSupervisor: vi.fn() }));
 vi.mock('./localUpdateInstances.js', () => ({ startLocalInstanceUpdateListener: vi.fn() }));
 vi.mock('./multiuserPerformanceDiagnostics.js', () => ({ getMultiuserPerformanceReport: vi.fn() }));

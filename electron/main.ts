@@ -1,5 +1,5 @@
 import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
-import { registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
+import { notifyMainWatchdogOperation, registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
 import { startSqliteWorkerProbeSupervisor } from './sqliteWorkerProbeSupervisor.js';
 import { startLocalInstanceUpdateListener } from './localUpdateInstances.js';
 import { beginSqliteRestartDrain, cancelSqliteRestartDrain, getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
@@ -93,6 +93,9 @@ let isRendererCloseApproved = false;
 let isCloseConfirmationInProgress = false;
 let shutdownWindow: BrowserWindow | null = null;
 let startupSplashWindow: BrowserWindow | null = null;
+let startupInProgress = false;
+let startupCloseRequested = false;
+const startupWarningMs = 30_000;
 
 function loadSqlitePersistenceModule(): Promise<SqlitePersistenceModule> {
   sqlitePersistenceModulePromise ??= import('./sqlitePersistence.js');
@@ -316,12 +319,31 @@ function createSplashWindow(): BrowserWindow {
   const splashWindow = new BrowserWindow({ width: 500, height: 540, resizable: false, movable: true, minimizable: false, maximizable: false, closable: true, frame: false, show: false, alwaysOnTop: true, skipTaskbar: true, title: 'Cargando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   startupSplashWindow = splashWindow;
   splashWindow.once('closed', () => { if (startupSplashWindow === splashWindow) startupSplashWindow = null; });
+  splashWindow.on('close', (event) => {
+    if (!startupInProgress) return;
+    event.preventDefault();
+    requestStartupClose();
+  });
   splashWindow.center();
   splashWindow.once('ready-to-show', () => {
     if (!splashWindow.isDestroyed()) splashWindow.show();
   });
   splashWindow.loadFile(splashHtmlPath).catch(() => undefined);
   return splashWindow;
+}
+
+// No cerrar ni volver a inicializar SQLite mientras una activación anterior
+// pueda seguir ejecutando E/S. El cierre solicitado se realiza al asentarse.
+function requestStartupClose(): void {
+  if (startupCloseRequested) return;
+  startupCloseRequested = true;
+  startupMark('Cierre solicitado durante arranque');
+  saveStartupReport();
+  const splash = startupSplashWindow;
+  if (splash && !splash.isDestroyed()) {
+    void splash.webContents.executeJavaScript('window.__traccionSplashShowClosing?.()', true)
+      .catch(() => undefined);
+  }
 }
 
 function updateSplashStep(
@@ -548,7 +570,16 @@ if (!app.requestSingleInstanceLock()) {
     }
     Menu.setApplicationMenu(null);
     const splashStartedAt = Date.now();
+    startupInProgress = true;
     const splashWindow = createSplashWindow();
+    const startupWarning = setTimeout(() => {
+      startupMark('Arranque pendiente tras 30 segundos');
+      saveStartupReport();
+      if (!splashWindow.isDestroyed() && !startupCloseRequested) {
+        void splashWindow.webContents.executeJavaScript('window.__traccionSplashShowSlow?.()', true)
+          .catch(() => undefined);
+      }
+    }, startupWarningMs);
     await waitForSplashPaint(splashWindow);
     startupMark('Splash principal preparado');
     updateSplashStep(splashWindow, 'electron', 'done');
@@ -556,11 +587,15 @@ if (!app.requestSingleInstanceLock()) {
     logStartupPhase(startupStartedAt, 'splash visible');
 
     try {
+      if (startupCloseRequested) return;
+      notifyMainWatchdogOperation('start', 'startup:load-persistence');
       const persistence = await loadSqlitePersistenceModule().catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         updateSplashStep(splashWindow, 'persistence', 'error', message || 'No se pudo cargar el motor de datos.');
         throw error;
       });
+      notifyMainWatchdogOperation('finish', 'startup:load-persistence');
+      if (startupCloseRequested) return;
       updateSplashStep(splashWindow, 'persistence', 'done');
       startupMark('Motor SQLite importado');
       logStartupPhase(startupStartedAt, 'persistence module loaded');
@@ -570,6 +605,7 @@ if (!app.requestSingleInstanceLock()) {
       // Un bloqueo de la base compartida NO debe impedir crear el dashboard.
       // Los servicios IPC sí son necesarios para que Ajustes y el monitor
       // puedan indicar el estado de la base y reintentar la conexión.
+      notifyMainWatchdogOperation('start', 'startup:initialize-sqlite');
       const [databaseInitialization, ipcRegistration] = await Promise.allSettled([
         persistence.initializeSqlitePersistence().then((dbStatus) => {
           startupMark('Estado inicial SQLite obtenido');
@@ -581,13 +617,15 @@ if (!app.requestSingleInstanceLock()) {
           const message = error instanceof Error ? error.message : String(error);
           updateSplashStep(splashWindow, 'database', 'error', message || 'No se pudo inicializar la base de datos.');
           throw error;
-        }),
+        }).finally(() => notifyMainWatchdogOperation('finish', 'startup:initialize-sqlite')),
         registerIpcHandlers().then(() => {
           startupMark('Servicios IPC registrados');
           updateSplashStep(splashWindow, 'services', 'done');
         }).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
           updateSplashStep(splashWindow, 'services', 'error', message || 'No se pudieron preparar los servicios internos.');
+          startupMark('Fallo al registrar servicios IPC');
+          saveStartupReport();
           throw error;
         }),
       ]);
@@ -597,6 +635,7 @@ if (!app.requestSingleInstanceLock()) {
       }
       logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
 
+      if (startupCloseRequested) return;
       updateSplashStep(splashWindow, 'interface', 'active');
       startupMark('Creación de ventana principal');
       createWindow(splashWindow, splashStartedAt, persistence.setDatabaseConnectivityIssueNotifier);
@@ -612,12 +651,27 @@ if (!app.requestSingleInstanceLock()) {
         void splashWindow.webContents.executeJavaScript('window.__traccionSplashShowFatal?.()', true)
           .catch(() => undefined);
       }
+    } finally {
+      clearTimeout(startupWarning);
+      notifyMainWatchdogOperation('finish', 'startup:load-persistence');
+      notifyMainWatchdogOperation('finish', 'startup:initialize-sqlite');
+      startupInProgress = false;
+      if (startupCloseRequested) {
+        startupMark('Inicialización finalizada; cierre solicitado');
+        saveStartupReport();
+        app.quit();
+      }
     }
   });
   app.on('before-quit', (event) => {
     if (isQuitAfterSqlitePersistenceClosed) return;
+    if (startupInProgress) {
+      event.preventDefault();
+      requestStartupClose();
+      return;
+    }
     if (!isRendererCloseApproved && !isShutdownInProgress) {
-      const mainWindow = BrowserWindow.getAllWindows().find((candidate) => candidate !== shutdownWindow && !candidate.isDestroyed());
+      const mainWindow = BrowserWindow.getAllWindows().find((candidate) => candidate !== startupSplashWindow && candidate !== shutdownWindow && !candidate.isDestroyed());
       if (mainWindow) {
         event.preventDefault();
         void requestRendererAppClose(mainWindow);

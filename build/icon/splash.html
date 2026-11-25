@@ -26,6 +26,8 @@
       }
       .splash-card {
         width: 438px;
+        max-height: calc(100vh - 24px);
+        overflow-y: auto;
         padding: 24px 28px 22px;
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 28px;
@@ -166,6 +168,7 @@
         font-size: 12px;
         line-height: 1.5;
       }
+      .startup-failure-actions button:disabled { opacity: .55; cursor: default; }
       .startup-failure-actions button {
         border: 1px solid rgba(247,251,253,.35);
         background: rgba(247,251,253,.09);
@@ -200,7 +203,7 @@
         <div class="step pending" data-step="interface" data-status="pending"><span class="icon">•</span><span class="label">Cargando datos e interfaz</span><span class="elapsed"></span></div>
       </section>
       <section class="startup-failure-actions" id="startupFailureActions" role="alert" hidden>
-        <p>No se han podido preparar los servicios necesarios. Puedes cerrar TrAcción y volver a abrirla cuando hayas comprobado la conexión. No se han realizado guardados.</p>
+        <p id="startupFailureMessage">No se han podido preparar los servicios necesarios. Puedes cerrar TrAcción y volver a abrirla cuando hayas comprobado la conexión.</p>
         <button type="button" id="closeFailedStartup">Cerrar TrAcción</button>
       </section>
       <div class="footer">
