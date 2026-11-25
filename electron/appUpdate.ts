@@ -160,7 +160,7 @@ export function buildUpdateApplyScript(
     'del /Q "%SOURCE%" >NUL 2>&1',
     '(goto) 2>nul & del "%~f0" & rd "%~dp0"',
     '',
-  ].join('\\r\\n');
+  ].join('\r\n');
 }
 
 function validateUpdateFileName(fileName: string, version: string): string {
