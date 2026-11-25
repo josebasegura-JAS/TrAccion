@@ -17,6 +17,7 @@
     "portable:build": "node scripts/build-portable.mjs",
     "update-manifest:write": "node scripts/write-update-manifest.mjs",
     "test": "vitest run --fileParallelism=false",
+    "test:sqlite-engine:smoke": "tsc -p electron/tsconfig.json && electron dist-electron/sqliteEngineSmoke.js",
     "test:focused": "vitest run --fileParallelism=false",
     "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "typecheck:tests": "tsc -p tsconfig.tests.json --noEmit && tsc -p electron/tsconfig.tests.json --noEmit && tsc -p tsconfig.e2e.json --noEmit",
