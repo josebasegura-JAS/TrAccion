@@ -159,6 +159,25 @@ describe('checkForAppUpdate', () => {
 
 
 describe('script de aplicación del actualizador', () => {
+  it('genera un CMD con CRLF reales, una instrucción por línea y sin separadores escapados', () => {
+    const script = buildUpdateApplyScript(
+      'C:\\Apps\\Traccion 1.2.exe',
+      'C:\\Apps\\Traccion 1.2.exe',
+      'C:\\Temp\\attempt-test\\TrAccion-nueva.exe',
+    );
+    const lines = script.split('\r\n');
+    expect(lines.length).toBeGreaterThan(40);
+    expect(lines[0]).toBe('@echo off');
+    expect(lines[1]).toBe('setlocal EnableExtensions DisableDelayedExpansion');
+    expect(lines).toContain(':reserve_old');
+    expect(lines).toContain(':publish');
+    expect(lines).toContain(':restore_old');
+    expect(lines).toContain(':cleanup');
+    expect(lines[lines.length - 1]).toBe('');
+    expect(script).not.toContain('\\r\\n');
+    expect(script.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/);
+  });
+
   it('instala una revisión dentro de la misma rama y relanza el destino', () => {
     const script = buildUpdateApplyScript(
       'C:\\Apps\\Traccion 1.2.exe',
