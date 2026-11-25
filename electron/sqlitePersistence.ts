@@ -546,12 +546,18 @@ async function recoverDatabaseAfterIoError(): Promise<void> {
       if (!previous.databaseUuid || !previous.applicationId || !previous.environment) {
         throw new Error('No hay identidad SQLite suficiente para una recuperación automática segura.');
       }
-      verifySqliteIntegrityReadOnly(previous.path, {
+      const expectedIdentity = {
         databaseUuid: previous.databaseUuid,
         applicationId: previous.applicationId,
         environment: previous.environment,
         schemaVersion: previous.schemaVersion,
-      });
+      };
+      if (getTraccionEnvironment() === 'test' && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1') {
+        const { verifyIntegrityInWorker } = await import('./sqliteIntegrityWorkerClient.js');
+        await verifyIntegrityInWorker(previous.path, expectedIdentity);
+      } else {
+        verifySqliteIntegrityReadOnly(previous.path, expectedIdentity);
+      }
     }
 
     stage = 'reapertura';
