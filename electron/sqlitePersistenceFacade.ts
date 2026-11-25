@@ -12,8 +12,10 @@ import path from 'node:path';
 export type * from './sqlitePersistence.js';
 
 // Una vez seleccionado el motor remoto no existe fallback a SQLite local.
+let isolatedSelection: boolean | undefined;
 export function isIsolatedEngineEnabled(): boolean {
-  return getTraccionEnvironment() === 'test' && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1';
+  isolatedSelection ??= getTraccionEnvironment() === 'test' && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1';
+  return isolatedSelection;
 }
 
 let engine: Promise<ReturnType<typeof startIsolatedTestEngine>> | undefined;
