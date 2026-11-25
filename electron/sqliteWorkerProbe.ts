@@ -3,6 +3,7 @@
  * Comprueba la carga nativa, apertura, migraciones y lectura/escritura sin SMB.
  */
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
+import { createEngineDispatcher, type EngineOperation } from './sqliteEngineTransport.js';
 import { isSqliteWorkerProbeRequest } from './sqliteWorkerProbeProtocol.js';
 
 const port = process.parentPort;
@@ -21,9 +22,19 @@ try {
   db.close();
 }
 
+// Primera operación autorizada: diagnóstico sin acceso a datos reales.
+const dispatch = createEngineDispatcher(new Map<string, EngineOperation>([
+  ['probe', () => ({ sqliteAvailable: true })],
+]));
+
 port.on('message', (event: { data: unknown }) => {
   const message = event.data;
-  if (!isSqliteWorkerProbeRequest(message)) return;
+  if (!isSqliteWorkerProbeRequest(message)) {
+    void dispatch(message).then((response) => {
+      if (response) port.postMessage(response);
+    });
+    return;
+  }
   if (message.kind === 'probe:shutdown') {
     process.exit(0);
   }
