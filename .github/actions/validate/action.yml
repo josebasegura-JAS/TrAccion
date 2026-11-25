@@ -25,6 +25,8 @@ runs:
         python-version: '3.11'
     - name: Dependencias desde lockfile (reintentos ante fallo de descarga)
       shell: pwsh
+      env:
+        ELECTRON_SKIP_BINARY_DOWNLOAD: ${{ inputs.lane != 'electron' && '1' || '' }}
       run: |
         # npm ci es determinista con package-lock. Reintentar solo si falla
         # por un error de red transitorio (por ejemplo, el 504 de Electron).
@@ -88,6 +90,12 @@ runs:
         $reportExitCode = $LASTEXITCODE
         if ($testExitCode -ne 0) { exit $testExitCode }
         if ($reportExitCode -ne 0) { exit $reportExitCode }
+    - name: Cache Chromium de Playwright
+      if: ${{ inputs.lane == 'web' }}
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/ms-playwright' || '~/.cache/ms-playwright' }}
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
     - name: Instalar Chromium de Playwright
       if: ${{ inputs.lane == 'web' }}
       shell: pwsh
