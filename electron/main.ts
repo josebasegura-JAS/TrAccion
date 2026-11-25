@@ -1,5 +1,5 @@
 import { getSqliteIncidentReport } from './sqliteIncidentJournal.js';
-import { registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
+import { notifyMainWatchdogOperation, registerMainWatchdogOperationSender } from './mainWatchdogBridge.js';
 import { startSqliteWorkerProbeSupervisor } from './sqliteWorkerProbeSupervisor.js';
 import { startLocalInstanceUpdateListener } from './localUpdateInstances.js';
 import { beginSqliteRestartDrain, cancelSqliteRestartDrain, getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
@@ -587,11 +587,15 @@ if (!app.requestSingleInstanceLock()) {
     logStartupPhase(startupStartedAt, 'splash visible');
 
     try {
+      if (startupCloseRequested) return;
+      notifyMainWatchdogOperation('start', 'startup:load-persistence');
       const persistence = await loadSqlitePersistenceModule().catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         updateSplashStep(splashWindow, 'persistence', 'error', message || 'No se pudo cargar el motor de datos.');
         throw error;
       });
+      notifyMainWatchdogOperation('finish', 'startup:load-persistence');
+      if (startupCloseRequested) return;
       updateSplashStep(splashWindow, 'persistence', 'done');
       startupMark('Motor SQLite importado');
       logStartupPhase(startupStartedAt, 'persistence module loaded');
@@ -601,6 +605,7 @@ if (!app.requestSingleInstanceLock()) {
       // Un bloqueo de la base compartida NO debe impedir crear el dashboard.
       // Los servicios IPC sí son necesarios para que Ajustes y el monitor
       // puedan indicar el estado de la base y reintentar la conexión.
+      notifyMainWatchdogOperation('start', 'startup:initialize-sqlite');
       const [databaseInitialization, ipcRegistration] = await Promise.allSettled([
         persistence.initializeSqlitePersistence().then((dbStatus) => {
           startupMark('Estado inicial SQLite obtenido');
@@ -612,13 +617,15 @@ if (!app.requestSingleInstanceLock()) {
           const message = error instanceof Error ? error.message : String(error);
           updateSplashStep(splashWindow, 'database', 'error', message || 'No se pudo inicializar la base de datos.');
           throw error;
-        }),
+        }).finally(() => notifyMainWatchdogOperation('finish', 'startup:initialize-sqlite')),
         registerIpcHandlers().then(() => {
           startupMark('Servicios IPC registrados');
           updateSplashStep(splashWindow, 'services', 'done');
         }).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
           updateSplashStep(splashWindow, 'services', 'error', message || 'No se pudieron preparar los servicios internos.');
+          startupMark('Fallo al registrar servicios IPC');
+          saveStartupReport();
           throw error;
         }),
       ]);
@@ -646,6 +653,8 @@ if (!app.requestSingleInstanceLock()) {
       }
     } finally {
       clearTimeout(startupWarning);
+      notifyMainWatchdogOperation('finish', 'startup:load-persistence');
+      notifyMainWatchdogOperation('finish', 'startup:initialize-sqlite');
       startupInProgress = false;
       if (startupCloseRequested) {
         startupMark('Inicialización finalizada; cierre solicitado');
