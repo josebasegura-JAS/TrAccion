@@ -46,7 +46,7 @@ vi.mock('node:fs/promises', () => ({ writeFile: mocks.write, readFile: vi.fn() }
 vi.mock('./sqlitePersistence.js', () => ({ initializeSqlitePersistence: mocks.initialize, setDatabaseConnectivityIssueNotifier: mocks.notifier }));
 vi.mock('./sqliteIpcQueue.js', () => ({ beginSqliteRestartDrain: vi.fn(), cancelSqliteRestartDrain: vi.fn(), getSqliteIpcQueueDiagnostics: vi.fn() }));
 vi.mock('./sqliteIncidentJournal.js', () => ({ getSqliteIncidentReport: vi.fn() }));
-vi.mock('./mainWatchdogBridge.js', () => ({ registerMainWatchdogOperationSender: vi.fn() }));
+vi.mock('./mainWatchdogBridge.js', () => ({ registerMainWatchdogOperationSender: vi.fn(), notifyMainWatchdogOperation: vi.fn() }));
 vi.mock('./sqliteWorkerProbeSupervisor.js', () => ({ startSqliteWorkerProbeSupervisor: vi.fn() }));
 vi.mock('./localUpdateInstances.js', () => ({ startLocalInstanceUpdateListener: vi.fn(async () => () => undefined) }));
 vi.mock('./multiuserPerformanceDiagnostics.js', () => ({ getMultiuserPerformanceReport: vi.fn() }));
