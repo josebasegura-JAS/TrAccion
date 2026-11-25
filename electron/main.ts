@@ -5,7 +5,7 @@ import { startLocalInstanceUpdateListener } from './localUpdateInstances.js';
 import { beginSqliteRestartDrain, cancelSqliteRestartDrain, getSqliteIpcQueueDiagnostics } from './sqliteIpcQueue.js';
 import { assessSafeRestart, isAutomaticRestartCooldownOver } from './safeRestartPolicy.js';
 import { getMultiuserPerformanceReport } from './multiuserPerformanceDiagnostics.js';
-import { app, BrowserWindow, ipcMain, Menu, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, utilityProcess } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -389,7 +389,7 @@ function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: Bro
   setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow, rendererReady), remainingMs);
 }
 function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt = Date.now(), setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void): BrowserWindow {
-  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${isIsolatedTestEnvironment ? ' · PRUEBAS · BASE AISLADA' : ''}${isMultiuserTestClientB ? ' · CLIENTE B' : ''}${isIsolatedTestEnvironment && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1' ? ' · SQLite: MOTOR AISLADO' : ''}`;
+  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${isIsolatedTestEnvironment ? ' · PRUEBAS · BASE AISLADA' : ''}${isMultiuserTestClientB ? ' · CLIENTE B' : ''}${isIsolatedTestEnvironment && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1' ? ' · SQLite: MOTOR AISLADO · EXPERIMENTAL R2' : ''}`;
   const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: mainWindowTitle, backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   // El <title> del renderer no debe sustituir el título corporativo/versionado de la ventana.
   mainWindow.webContents.on('page-title-updated', (event) => {
@@ -426,7 +426,7 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     updateSplashStep(splashWindow, 'interface', 'error', 'La interfaz no confirmó el arranque en 60 segundos. Se abrirá para permitir el diagnóstico.');
     requestMainWindowShow(false);
   }, splashMaximumVisibleMs);
-  const onBootVisible = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(); };
+  const onBootVisible = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(!isIsolatedTestEnvironment); };
   // Solo la primera señal pertenece al arranque. Una recarga tardía del
   // renderer no debe añadir un segundo «React preparado» con minutos u horas.
   let hasRecordedRendererReady = false;
@@ -434,7 +434,27 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     if (event.sender !== mainWindow.webContents || hasRecordedRendererReady) return;
     hasRecordedRendererReady = true;
     startupMark('React preparado');
+    saveStartupReport();
     requestMainWindowShow();
+  };
+  const reportRendererFailure = (detail: string): void => {
+    startupMark('Fallo renderer: ' + detail.slice(0, 600));
+    saveStartupReport();
+  };
+  if (isIsolatedTestEnvironment) {
+    mainWindow.webContents.on('console-message', (_event, details) => {
+      if (details.level === 'error') reportRendererFailure(details.message);
+    });
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+      reportRendererFailure('Proceso renderer finalizado: ' + details.reason);
+      dialog.showErrorBox('TrAcción · Error de interfaz', 'El proceso de interfaz ha terminado: ' + details.reason + '. Consulta last-startup-performance.json.');
+    });
+  }
+  const handleMainLoadFailure = (error: unknown): void => {
+    reportRendererFailure(error instanceof Error ? error.message : String(error));
+    clearTimeout(forceShowTimer);
+    if (isIsolatedTestEnvironment) dialog.showErrorBox('TrAcción · Error de carga', 'No se pudo cargar la interfaz. Consulta last-startup-performance.json.');
+    showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
   };
   const rendererLoadStartedAt = Date.now();
   mainWindow.webContents.once('did-finish-load', () => {
@@ -444,8 +464,8 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   ipcMain.on('app:boot-visible', onBootVisible);
   ipcMain.on('app:renderer-ready', onRendererReady);
   mainWindow.once('closed', () => { clearTimeout(forceShowTimer); ipcMain.removeListener('app:boot-visible', onBootVisible); ipcMain.removeListener('app:renderer-ready', onRendererReady); setConnectivityIssueNotifier?.(null); });
-  if (isDev) mainWindow.loadURL(devServerUrl).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
-  else mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => { clearTimeout(forceShowTimer); showMainAfterSplash(splashWindow, mainWindow, splashStartedAt); });
+  if (isDev) mainWindow.loadURL(devServerUrl).catch(handleMainLoadFailure);
+  else mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(handleMainLoadFailure);
   return mainWindow;
 }
 
