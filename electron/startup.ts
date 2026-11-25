@@ -38,7 +38,15 @@ function prepareSecondClientProfile(): boolean {
 // producción al perfil de pruebas.
 let environmentProfileReady = true;
 try {
+  // El portable de esta rama experimental debe abrir pruebas con doble clic.
+  // Los lanzamientos de desarrollo conservan su comportamiento anterior.
+  if (app.isPackaged && !process.argv.some((arg) => arg.startsWith('--traccion-env'))) {
+    process.argv.push('--traccion-env=test');
+  }
   const environment = parseTraccionEnvironment(process.argv);
+  if (app.isPackaged && environment !== 'test') {
+    throw new Error('El portable experimental solo permite el entorno de pruebas.');
+  }
   if (environment === 'test') {
     const current = app.getPath('userData');
     const testProfile = path.join(path.dirname(current), path.basename(current) + '-entorno-pruebas');
