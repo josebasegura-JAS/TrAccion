@@ -543,7 +543,7 @@ if (!app.requestSingleInstanceLock()) {
       console.warn('[main-watchdog] No se pudo iniciar el supervisor independiente.', error);
     }
     // PR9C: prueba del aislamiento, desactivada en producción por defecto.
-    // Este proceso NO abre SQLite ni participa en los bloqueos SMB.
+    // Este proceso solo prueba SQLite en memoria; no participa en los bloqueos SMB.
     // Activación explícita: TRACCION_SQLITE_WORKER_PROBE=1
     if (process.env.TRACCION_SQLITE_WORKER_PROBE === '1') {
       try {
@@ -555,7 +555,7 @@ if (!app.requestSingleInstanceLock()) {
             return {
               postMessage: (message) => child.postMessage(message),
               kill: () => { child.kill(); return true; },
-              onMessage: (handler) => { child.on('message', (event) => handler(event.data)); },
+              onMessage: (handler) => { child.on('message', (message: unknown) => handler(message)); },
               onExit: (handler) => { child.on('exit', handler); },
             };
           },
