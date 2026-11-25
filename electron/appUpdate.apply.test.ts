@@ -118,8 +118,12 @@ describe('preparación de actualización portable', () => {
     });
     expect(await applyAppUpdate('1.2.1', updates)).toMatchObject({ ok: true });
     const script = path.join(staging, 'traccion-apply-update.cmd');
-    expect(await readFile(script, 'utf8')).toContain(path.join(root, 'Traccion 2.0.exe'));
-    expect(mocks.spawn).toHaveBeenCalledWith('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true });
+    const scriptText = await readFile(script, 'utf8');
+    expect(scriptText).toContain(path.join(root, 'Traccion 2.0.exe'));
+    expect(scriptText.split('\r\n')[0]).toBe('@echo off');
+    expect(scriptText.split('\r\n')).toContain(':publish');
+    expect(scriptText).not.toContain('\\r\\n');
+    expect(mocks.spawn).toHaveBeenCalledWith('cmd.exe', ['/d', '/c', 'traccion-apply-update.cmd'], { cwd: staging, detached: true, stdio: 'ignore', windowsHide: true });
     expect(mocks.unref).toHaveBeenCalledTimes(1);
     expect(await readFile(executable, 'utf8')).toBe('versión anterior');
   });

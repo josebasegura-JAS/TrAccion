@@ -98,38 +98,64 @@ export function buildUpdateApplyScript(
   targetExePath: string,
   stagedExePath: string,
 ): string {
+  // No se sobrescribe el EXE activo con una copia parcial. El candidato y
+  // la reserva están en el mismo directorio que el destino (rename local).
+  const attempt = path.basename(path.dirname(stagedExePath)).replace(/[^a-zA-Z0-9-]/g, '_');
+  const escape = (value: string) => {
+    if (/["\r\n]/.test(value)) throw new Error('Ruta de actualización no válida.');
+    return value.replace(/%/g, '%%');
+  };
   return [
     '@echo off',
-    'setlocal EnableExtensions EnableDelayedExpansion',
-    `set "CURRENT=${currentExePath}"`,
-    `set "TARGET=${targetExePath}"`,
-    `set "SOURCE=${stagedExePath}"`,
+    'setlocal EnableExtensions DisableDelayedExpansion',
+    `set "CURRENT=${escape(currentExePath)}"`,
+    `set "TARGET=${escape(targetExePath)}"`,
+    `set "SOURCE=${escape(stagedExePath)}"`,
+    `set "CANDIDATE=%TARGET%.pending-${attempt}"`,
+    `set "PREVIOUS=%CURRENT%.previous-${attempt}.exe"`,
     'set /a ATTEMPTS=0',
+    'if exist "%CANDIDATE%" goto :giveup',
+    'if exist "%PREVIOUS%" goto :giveup',
+    'if /I "%CURRENT%"=="%TARGET%" goto :copy_new',
+    'if exist "%TARGET%" goto :giveup',
     ':copy_new',
+    'copy /B /Y "%SOURCE%" "%CANDIDATE%" >NUL 2>&1',
+    'if errorlevel 1 goto :discard_candidate',
+    '"%SystemRoot%\\System32\\fc.exe" /B "%SOURCE%" "%CANDIDATE%" >NUL 2>&1',
+    'if errorlevel 1 goto :discard_candidate',
+    'if /I not "%CURRENT%"=="%TARGET%" goto :publish',
+    ':reserve_old',
     'set /a ATTEMPTS+=1',
-    'copy /Y "%SOURCE%" "%TARGET%" >NUL 2>&1',
-    'if errorlevel 1 (',
-    '  if !ATTEMPTS! GEQ 120 goto :giveup',
-    '  timeout /t 1 /nobreak >NUL',
-    '  goto :copy_new',
-    ')',
-    'if /I "%CURRENT%"=="%TARGET%" goto :launch',
-    'set /a ATTEMPTS=0',
-    ':remove_old',
-    'set /a ATTEMPTS+=1',
-    'del /Q "%CURRENT%" >NUL 2>&1',
-    'if exist "%CURRENT%" (',
-    '  if !ATTEMPTS! GEQ 120 goto :launch',
-    '  timeout /t 1 /nobreak >NUL',
-    '  goto :remove_old',
-    ')',
-    ':launch',
+    'for %%F in ("%PREVIOUS%") do ren "%CURRENT%" "%%~nxF" >NUL 2>&1',
+    'if not errorlevel 1 goto :publish',
+    'if %ATTEMPTS% GEQ 120 goto :discard_candidate',
+    'timeout /t 1 /nobreak >NUL',
+    'goto :reserve_old',
+    ':publish',
+    'if exist "%TARGET%" goto :restore_old',
+    'for %%F in ("%TARGET%") do ren "%CANDIDATE%" "%%~nxF" >NUL 2>&1',
+    'if errorlevel 1 goto :restore_old',
+    '"%SystemRoot%\\System32\\fc.exe" /B "%SOURCE%" "%TARGET%" >NUL 2>&1',
+    'if errorlevel 1 goto :invalid_target',
     'start "" "%TARGET%"',
+    'if errorlevel 1 goto :invalid_target',
+    'rem Conservar la version anterior para recuperacion manual; no asumir que START confirma arranque.',
     'goto :cleanup',
+    ':invalid_target',
+    'del /Q "%TARGET%" >NUL 2>&1',
+    ':restore_old',
+    'if /I not "%CURRENT%"=="%TARGET%" goto :discard_candidate',
+    'if not exist "%PREVIOUS%" goto :discard_candidate',
+    'if exist "%CURRENT%" goto :keep_reserve',
+    'for %%F in ("%CURRENT%") do ren "%PREVIOUS%" "%%~nxF" >NUL 2>&1',
+    'if errorlevel 1 goto :keep_reserve',
+    ':discard_candidate',
+    'del /Q "%CANDIDATE%" >NUL 2>&1',
     ':giveup',
-    'rem No se ha podido completar la actualización; se conserva y relanza la versión actual.',
     'if exist "%CURRENT%" start "" "%CURRENT%"',
     'goto :cleanup',
+    ':keep_reserve',
+    'rem No borrar la reserva ni ejecutar una version de estado incierto.',
     ':cleanup',
     'del /Q "%SOURCE%" >NUL 2>&1',
     '(goto) 2>nul & del "%~f0" & rd "%~dp0"',
@@ -361,14 +387,13 @@ async function prepareAppUpdate(
   const scriptPath = path.join(stagingDir, 'traccion-apply-update.cmd');
   // Restaurado el actualizador portable probado: sin dependencias de PowerShell.
   // El cierre ordenado y su indicador Electron los gestiona main.ts.
-  const batScript = buildUpdateApplyScript(currentExePath, targetExePath, stagedExePath);
-
   try {
+    const batScript = buildUpdateApplyScript(currentExePath, targetExePath, stagedExePath);
     await writeFile(scriptPath, batScript, 'utf8');
     if (!(await confirmBeforeLaunch())) {
       return { ok: false, message: 'Actualización cancelada: hay cambios sin guardar o no se puede confirmar el cierre.' };
     }
-    const child = spawn('cmd.exe', ['/c', scriptPath], { detached: true, stdio: 'ignore', windowsHide: true });
+    const child = spawn('cmd.exe', ['/d', '/c', 'traccion-apply-update.cmd'], { cwd: stagingDir, detached: true, stdio: 'ignore', windowsHide: true });
     await new Promise<void>((resolve, reject) => {
       child.on('error', reject);
       child.once('spawn', resolve);

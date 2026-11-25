@@ -462,6 +462,13 @@ if (!app.requestSingleInstanceLock()) {
           isRendererCloseApproved = true;
           app.quit();
         },
+        async () => {
+          const window = BrowserWindow.getAllWindows().find((candidate) => candidate !== startupSplashWindow && candidate !== shutdownWindow && !candidate.isDestroyed());
+          if (!window || window.webContents.isDestroyed()) return false;
+          try {
+            return (await window.webContents.executeJavaScript('window.__traccionCanAutoRestart ? window.__traccionCanAutoRestart() === true : false', true)) === true;
+          } catch { return false; }
+        },
       );
       app.on('will-quit', unregisterLocalPeer);
     } catch (error) {
