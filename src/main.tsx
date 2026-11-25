@@ -41,7 +41,7 @@ function renderFatalError(error: unknown): void {
       </div>
     </React.StrictMode>,
   );
-  window.traccion?.notifyRendererReady?.();
+  window.traccion?.notifyBootVisible?.();
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
