@@ -1,12 +1,24 @@
 /**
- * PR9C · utilityProcess experimental, sin acceso a SQLite ni a la red.
- * Demuestra que el proceso auxiliar responde a mensajes y puede finalizar.
+ * PR9C · utilityProcess experimental con SQLite exclusivamente en memoria.
+ * Comprueba la carga nativa, apertura, migraciones y lectura/escritura sin SMB.
  */
+import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 import { isSqliteWorkerProbeRequest } from './sqliteWorkerProbeProtocol.js';
 
 const port = process.parentPort;
 if (!port) {
   throw new Error('sqliteWorkerProbe debe iniciarse desde Electron utilityProcess.');
+}
+
+// No aceptar rutas externas: esta prueba nunca abre datos de producción.
+const db = openSqliteDatabase(':memory:', { busyTimeoutMs: 1000 });
+try {
+  db.exec('CREATE TEMP TABLE isolation_probe (value INTEGER NOT NULL)');
+  db.prepare('INSERT INTO isolation_probe (value) VALUES (?)').run(42);
+  const row = db.prepare('SELECT value FROM isolation_probe').get() as { value: number } | undefined;
+  if (row?.value !== 42) throw new Error('Falló la prueba SQLite del proceso auxiliar.');
+} finally {
+  db.close();
 }
 
 port.on('message', (event: { data: unknown }) => {
