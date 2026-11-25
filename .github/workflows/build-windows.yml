@@ -114,7 +114,7 @@ jobs:
               if (Test-Path -LiteralPath $report) {
                 try {
                   $data = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
-                  if (@($data.steps | Where-Object { $_.label -eq 'React preparado' }).Count -gt 0) {
+                  if ($data.environment -eq 'test' -and $data.engine -eq 'isolated' -and @($data.steps | Where-Object { $_.label -eq 'React preparado' }).Count -gt 0 -and @($data.steps | Where-Object { $_.label -like 'Fallo renderer:*' }).Count -eq 0) {
                     $ready = $true
                     break
                   }
@@ -130,6 +130,7 @@ jobs:
             # Solo el árbol de procesos del ejecutable lanzado sobre perfil temporal.
             & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
           }
+          exit 0
       - name: Conservar diagnóstico del arranque experimental
         if: always()
         uses: actions/upload-artifact@v4
