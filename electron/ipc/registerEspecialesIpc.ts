@@ -8,7 +8,7 @@ import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { createOutlookDraftCompat } from '../outlookDraftCompat.js';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from '../msgParser.js';
 import { validateConditionalJsonRecord } from './ipcHelpers.js';
-import { loadEspecialesRecipientRecordsSnapshot, saveEspecialesRecipientRecordIfUnchanged } from '../sqlitePersistence.js';
+import { loadEspecialesRecipientRecordsSnapshot, saveEspecialesRecipientRecordIfUnchanged } from '../sqlitePersistenceFacade.js';
 
 export function registerEspecialesIpc(): void {
   ipcMain.handle('especiales:load-recipient-records', () =>
