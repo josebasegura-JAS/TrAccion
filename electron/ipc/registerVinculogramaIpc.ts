@@ -8,7 +8,7 @@ import type { OpenDialogOptions } from 'electron';
 import { readFile } from 'node:fs/promises';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { assertDocxPath, validateConditionalJsonRecord } from './ipcHelpers.js';
-import { loadVinculogramaRecordsSnapshot, saveVinculogramaRecordIfUnchanged } from '../sqlitePersistence.js';
+import { loadVinculogramaRecordsSnapshot, saveVinculogramaRecordIfUnchanged } from '../sqlitePersistenceFacade.js';
 
 export function registerVinculogramaIpc(): void {
   ipcMain.handle('vinculograma:load-records', () =>
