@@ -13,8 +13,8 @@ import {
   loadTaskRecordsSnapshot,
   saveTaskRecordIfUnchanged,
   type SqliteTaskRecordsFilter,
-} from '../sqlitePersistence.js';
-import { saveTaskRecordsAtomically } from '../persistence/taskBatchPersistence.js';
+} from '../sqlitePersistenceFacade.js';
+import { saveTaskRecordsAtomically } from '../sqlitePersistenceFacade.js';
 import {
   clearOpenTasksWordDirectory,
   getOpenTasksWordDirectory,
