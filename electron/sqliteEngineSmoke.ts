@@ -35,8 +35,21 @@ async function run(): Promise<void> {
   if (peerRead.record?.value !== value) throw new Error('Cliente B no observa escritura de A.');
   const conflict = await peer.call('savePersistedRecordIfUnchanged', { key, value: 'conflict', expectedUpdatedAt: null });
   if (conflict.ok) throw new Error('Se ha aceptado una escritura con versión obsoleta.');
+  const unchanged = await engine.call('getPersistedRecordSnapshot', key);
+  if (unchanged.record?.value !== value) throw new Error('El conflicto alteró el registro original.');
   await peer.close();
   await engine.close();
+
+  // Reabrir únicamente después de confirmar la salida del propietario anterior.
+  const reopened = startIsolatedTestEngine(userData);
+  await reopened.ready;
+  const reopenedStatus = await reopened.call('initializeSqlitePersistence');
+  if (!reopenedStatus.ready || reopenedStatus.databaseUuid !== status.databaseUuid) {
+    throw new Error('No se recuperó la identidad tras el cierre ordenado.');
+  }
+  const persisted = await reopened.call('getPersistedRecordSnapshot', key);
+  if (persisted.record?.value !== value) throw new Error('El registro no sobrevivió al cierre.');
+  await reopened.close();
   await rm(root, { recursive: true, force: true });
   console.info('SQLite isolated smoke: OK');
 }
