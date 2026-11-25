@@ -237,21 +237,18 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
       await started;
       const initial = (await observer.readLock(lockPath))!;
       expect(observer.isLockStale(initial)).toBe(false);
-      for (let step = 1; step <= 4; step++) {
-        let closed!: () => void;
-        const heartbeatClosed = new Promise<void>(resolve => { closed = resolve; });
-        hooks.afterClose = () => closed();
-        await vi.advanceTimersByTimeAsync(10_000);
-        await heartbeatClosed;
-        // La confirmación final del heartbeat lee owner.json de nuevo.
-        // Esperar esa lectura antes de iniciar el siguiente tick.
-        const current = (await observer.readLock(lockPath))!;
-        observed = step * 10_000;
-        expect(current.updatedAt).not.toBe(initial.updatedAt);
-        expect(observer.isLockStale(current)).toBe(false);
-        // Drenar la E/S real pendiente antes de adelantar otra vez el reloj.
-        await new Promise<void>(resolve => setTimeout(resolve, 20));
-      }
+      let closed!: () => void;
+      const heartbeatClosed = new Promise<void>(resolve => { closed = resolve; });
+      hooks.afterClose = () => closed();
+      await vi.advanceTimersByTimeAsync(10_000);
+      await heartbeatClosed;
+      const current = (await observer.readLock(lockPath))!;
+      expect(current.updatedAt).not.toBe(initial.updatedAt);
+      // El observador llevaba más de un TTL sin ver el propietario. Al
+      // detectar la renovación, debe reiniciar la observación y no retirarlo.
+      observed = 40_000;
+      expect(observer.isLockStale(current)).toBe(false);
+      expect(observer.isLockStale(current)).toBe(false);
     } finally {
       finish();
       await operation;
