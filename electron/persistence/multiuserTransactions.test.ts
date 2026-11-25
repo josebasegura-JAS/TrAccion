@@ -91,6 +91,76 @@ describe('dos conexiones nativas sobre el mismo archivo SQLite', () => {
     expect(refresh(b)).toEqual(before);
     expect(backupA).toHaveBeenCalledTimes(1);
   });
+
+  it('rechaza la versión obsoleta incluso con el reloj fijo en el mismo milisegundo', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-25T07:00:00.000Z'));
+    const ra = repository(a, 'a', backupA);
+    const rb = repository(b, 'b', backupB);
+    const first = await ra.savePersistedRecordIfUnchanged(record('shared', 'original'));
+    expect(first.ok).toBe(true);
+    const remote = await rb.savePersistedRecordIfUnchanged(record('shared', 'remoto', first.currentUpdatedAt));
+    expect(remote.ok).toBe(true);
+    expect(Date.parse(remote.currentUpdatedAt!)).toBeGreaterThan(Date.parse(first.currentUpdatedAt!));
+    const before = refresh(b);
+    expect(await ra.savePersistedRecordIfUnchanged(record('shared', 'obsoleto', first.currentUpdatedAt))).toMatchObject({
+      ok: false, currentUpdatedAt: remote.currentUpdatedAt,
+    });
+    expect(row(b, 'shared')?.value_json).toBe(record('shared', 'remoto').value);
+    expect(refresh(b)).toEqual(before);
+    expect(backupA).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserva OCC atómico cuando el reloj de otro equipo va hacia atrás', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-25T07:00:00.000Z'));
+    const ra = repository(a, 'a', backupA);
+    const rb = repository(b, 'b', backupB);
+    const first = await ra.savePersistedRecordsIfUnchanged([record('one', 'original'), record('two', 'original')]);
+    expect(first.ok).toBe(true);
+    vi.setSystemTime(new Date('2026-11-25T06:00:00.000Z'));
+    const remote = await rb.savePersistedRecordsIfUnchanged([
+      record('one', 'remoto', first.currentUpdatedAt), record('two', 'remoto', first.currentUpdatedAt),
+    ]);
+    expect(remote.ok).toBe(true);
+    expect(Date.parse(remote.currentUpdatedAt!)).toBeGreaterThan(Date.parse(first.currentUpdatedAt!));
+    expect(await ra.savePersistedRecordsIfUnchanged([
+      record('one', 'obsoleto', first.currentUpdatedAt), record('three', 'nuevo'),
+    ])).toMatchObject({ ok: false, failedRecordKey: 'one', currentUpdatedAt: remote.currentUpdatedAt });
+    expect(row(b, 'one')?.value_json).toBe(record('one', 'remoto').value);
+    expect(row(b, 'two')?.value_json).toBe(record('two', 'remoto').value);
+    expect(row(b, 'three')).toBeUndefined();
+  });
+
+  it('el guardado incondicional y la migración invalidan versiones previas con reloj fijo', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-25T07:00:00.000Z'));
+    const ra = repository(a, 'a', backupA);
+    const rb = repository(b, 'b', backupB);
+    const seed = await ra.savePersistedRecordIfUnchanged(record('one', 'original'));
+    const before = refresh(b);
+    await ra.savePersistedRecord(record('one', 'directo'));
+    const direct = row(b, 'one')!;
+    expect(Date.parse(direct.updated_at)).toBeGreaterThan(Date.parse(seed.currentUpdatedAt!));
+    expect(refresh(b)).not.toEqual(before);
+    expect(await rb.savePersistedRecordIfUnchanged(record('one', 'obsoleto', seed.currentUpdatedAt))).toMatchObject({ ok: false });
+    await ra.migrateLocalStorageSnapshot({ records: [record('one', 'migrado')] });
+    expect(Date.parse(row(b, 'one')!.updated_at)).toBeGreaterThan(Date.parse(direct.updated_at));
+    expect(await rb.savePersistedRecordIfUnchanged(record('one', 'obsoleto', direct.updated_at))).toMatchObject({ ok: false });
+    expect(row(b, 'one')?.value_json).toBe(record('one', 'migrado').value);
+  });
+
+  it('dos escrituras de claves distintas por el mismo propietario generan refrescos distintos', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-25T07:00:00.000Z'));
+    const ra = repository(a, 'a', backupA);
+    const first = await ra.savePersistedRecordIfUnchanged(record('one', 'A'));
+    const before = refresh(b);
+    const second = await ra.savePersistedRecordIfUnchanged(record('two', 'B'));
+    expect(first.ok && second.ok).toBe(true);
+    expect(Date.parse(second.currentUpdatedAt!)).toBeGreaterThan(Date.parse(first.currentUpdatedAt!));
+    expect(refresh(b)).not.toEqual(before);
+  });
   it('un error SQL en la segunda escritura revierte incluso la primera y no genera respaldo', async () => {
     const ra = repository(a, 'a', backupA);
     b.exec("CREATE TRIGGER reject_second BEFORE INSERT ON persisted_records WHEN NEW.key = 'second' BEGIN SELECT RAISE(ABORT, 'fallo inyectado'); END");
