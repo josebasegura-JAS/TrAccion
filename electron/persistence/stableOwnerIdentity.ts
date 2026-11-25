@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { getPersistenceUserDataPath } from './persistenceRuntime.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import path from 'node:path';
@@ -6,7 +6,7 @@ import path from 'node:path';
 const OWNER_ID_FILE_NAME = 'traccion-owner-id.json';
 
 function getOwnerIdFilePath(): string {
-  return path.join(app.getPath('userData'), OWNER_ID_FILE_NAME);
+  return path.join(getPersistenceUserDataPath(), OWNER_ID_FILE_NAME);
 }
 
 /**
