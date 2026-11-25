@@ -43,6 +43,10 @@ runs:
           }
           $output = Get-Content -Path $log -Raw
           $transient = $output -match '(?i)(HTTPError: Response code (429|500|502|503|504)|\b(ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|ENOTFOUND)\b|Gateway Time-out)'
+          # Fallo temporal de extracción de cabeceras Node en el runner Windows.
+          # No confundirlo con un error de compilación C++ o de ABI.
+          $headerExtractionFailure = ($output -match '(?i)gyp ERR! error while extracting tarball TAR_ENTRY_ERROR ENOENT') -and ($output -match '(?i)node-gyp-tmp-') -and ($output -match '(?i)node-gyp|node-gyp rebuild')
+          $transient = $transient -or $headerExtractionFailure
           if (-not $transient -or $attempt -eq $maxAttempts) {
             Write-Error "npm ci falló con código $exitCode. Error no recuperable o máximo de intentos alcanzado."
             exit $exitCode
