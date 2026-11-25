@@ -53,7 +53,8 @@ function route<K extends SqliteEngineOperationName>(name: K) {
   return (...args: Parameters<(typeof legacy)[K]>): Promise<Awaited<ReturnType<(typeof legacy)[K]>>> => {
     if (isIsolatedEngineEnabled()) return remote((instance) => instance.call(name, ...args));
     const handler = legacy[name] as unknown as (...values: Parameters<(typeof legacy)[K]>) => ReturnType<(typeof legacy)[K]>;
-    return Promise.resolve(handler(...args));
+    // El camino histórico conserva exactamente el retorno del servicio original.
+    return handler(...args) as Promise<Awaited<ReturnType<(typeof legacy)[K]>>>;
   };
 }
 
