@@ -24,6 +24,18 @@ async function run(): Promise<void> {
   if (!saved.ok) throw new Error('No se guardó el registro temporal.');
   const read = await engine.call('getPersistedRecordSnapshot', key);
   if (read.record?.value !== value) throw new Error('Lectura SQLite no coincide con escritura.');
+  const secondProfile = path.join(root, 'profile-b');
+  await mkdir(secondProfile);
+  const peer = startIsolatedTestEngine(secondProfile);
+  await peer.ready;
+  await peer.call('initializeSqlitePersistence');
+  const peerStatus = await peer.call('changeSqliteDirectory', directory);
+  if (!peerStatus.ready || peerStatus.databaseUuid !== status.databaseUuid) throw new Error('Cliente B no conectado a la misma base test.');
+  const peerRead = await peer.call('getPersistedRecordSnapshot', key);
+  if (peerRead.record?.value !== value) throw new Error('Cliente B no observa escritura de A.');
+  const conflict = await peer.call('savePersistedRecordIfUnchanged', { key, value: 'conflict', expectedUpdatedAt: null });
+  if (conflict.ok) throw new Error('Se ha aceptado una escritura con versión obsoleta.');
+  await peer.close();
   await engine.close();
   await rm(root, { recursive: true, force: true });
   console.info('SQLite isolated smoke: OK');
