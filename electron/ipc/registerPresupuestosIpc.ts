@@ -5,7 +5,7 @@
  */
 import { ipcMain } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
-import { getSqliteStatus, loadPresupuestosRecordsSnapshot, savePresupuestosSnapshotIfUnchanged } from '../sqlitePersistence.js';
+import { getSqliteStatus, loadPresupuestosRecordsSnapshot, savePresupuestosSnapshotIfUnchanged } from '../sqlitePersistenceFacade.js';
 
 export function registerPresupuestosIpc(): void {
   ipcMain.handle('presupuestos:load-records', () =>
