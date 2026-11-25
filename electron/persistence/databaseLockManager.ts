@@ -721,6 +721,7 @@ export function createDatabaseLockManager(
         throw error;
       }
       const heldStartedAt = Date.now();
+      const heartbeat = createHeartbeatScope(lockPath, operationLock);
       let operationFailed = false;
       try {
         return await operation();
@@ -728,6 +729,8 @@ export function createDatabaseLockManager(
         operationFailed = true;
         throw error;
       } finally {
+        // No liberar mientras una renovación propia sigue usando owner.json.
+        await heartbeat.stop();
         await releaseLock(lockPath, operationLock).catch((error: unknown) => {
           operationFailed = true;
           console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
@@ -836,24 +839,33 @@ export function createDatabaseLockManager(
     }
   }
 
-  function startDatabaseLockHeartbeat(
-    lockPath: string,
-    lock: DatabaseLockInfo,
-  ): ReturnType<typeof setInterval> {
-    let inFlight = false;
-    return setInterval(() => {
-      // Un SMB bloqueado no debe acumular nuevos readFile/writeFile en libuv.
-      if (inFlight) return;
-      inFlight = true;
+  function createHeartbeatScope(lockPath: string, lock: DatabaseLockInfo) {
+    let pending: Promise<void> | null = null;
+    const timer = setInterval(() => {
+      if (pending) return;
       heartbeatOperationsInFlight += 1;
-      void heartbeatDatabaseLock(lockPath, lock)
+      pending = heartbeatDatabaseLock(lockPath, lock)
         .then(() => markHeartbeatRecovered())
         .catch((error: unknown) => markHeartbeatFailure(error))
         .finally(() => {
           heartbeatOperationsInFlight -= 1;
-          inFlight = false;
+          pending = null;
         });
     }, LOCK_HEARTBEAT_MS);
+    return {
+      timer,
+      async stop(): Promise<void> {
+        clearInterval(timer);
+        await pending;
+      },
+    };
+  }
+
+  function startDatabaseLockHeartbeat(
+    lockPath: string,
+    lock: DatabaseLockInfo,
+  ): ReturnType<typeof setInterval> {
+    return createHeartbeatScope(lockPath, lock).timer;
   }
 
   function setConnectivityIssueNotifier(
