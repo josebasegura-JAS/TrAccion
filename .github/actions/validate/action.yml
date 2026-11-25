@@ -81,7 +81,7 @@ runs:
       run: |
         $timer = [System.Diagnostics.Stopwatch]::StartNew()
         # Ensayo E2: conservar la suite y cobertura, comparar cuatro workers.
-        npm run test:coverage -- --maxWorkers=4 --minWorkers=4
+        npm run test:coverage:ci
         $testExitCode = $LASTEXITCODE
         $timer.Stop()
         New-Item -ItemType Directory -Force -Path audit-results | Out-Null
