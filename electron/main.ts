@@ -442,8 +442,8 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     saveStartupReport();
   };
   if (isIsolatedTestEnvironment) {
-    mainWindow.webContents.on('console-message', (_event, details) => {
-      if (details.level === 'error') reportRendererFailure(details.message);
+    mainWindow.webContents.on('console-message', (_event, level, message) => {
+      if (level === 3) reportRendererFailure(message);
     });
     mainWindow.webContents.on('render-process-gone', (_event, details) => {
       reportRendererFailure('Proceso renderer finalizado: ' + details.reason);
