@@ -3,6 +3,12 @@ name: Build Windows EXE
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      compression:
+        description: Compresión portable (normal para distribución, store para pruebas rápidas; EXE mayor)
+        type: choice
+        options: [normal, store]
+        default: normal
   workflow_call:
     inputs:
       format:
@@ -68,6 +74,7 @@ jobs:
       ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
       ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
       PACKAGE_FORMAT: ${{ inputs.format || 'portable' }}
+      TRACCION_PORTABLE_COMPRESSION: ${{ inputs.compression || 'normal' }}
     steps:
       - name: Exigir main y formato soportado
         shell: pwsh
@@ -81,15 +88,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: npm
       # electron-builder usa node-gyp interno que aún requiere distutils.
       # Fijar Python 3.11, ya probado en lane Electron, y no usar el Python
       # predeterminado del runner (puede ser 3.12+).
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      # Restaurar antes de npm ci y antes del incremento de versión.
+      - name: Cache de herramientas de empaquetado
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          key: ${{ runner.os }}-${{ runner.arch }}-electron-builder-v2-${{ hashFiles('package-lock.json') }}
       - name: Instalar dependencias para la distribución
         shell: pwsh
-        run: npm ci --include=dev --no-audit --no-fund
+        run: |
+          $timer = [System.Diagnostics.Stopwatch]::StartNew()
+          npm ci --include=dev --prefer-offline --no-audit --no-fund
+          $code = $LASTEXITCODE
+          $timer.Stop()
+          "Dependencias: $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s" >> $env:GITHUB_STEP_SUMMARY
+          exit $code
       - name: Verificar Visual Studio C++ antes de empaquetar
         shell: pwsh
         run: |
@@ -145,23 +167,26 @@ jobs:
           if ($newCounter -le $baseCounter) { throw 'El contador no ha aumentado.' }
       - name: Compilar código de producción para Windows
         shell: pwsh
-        run: npm run build
-      - name: Cache de herramientas de empaquetado
-        uses: actions/cache@v4
-        with:
-          path: |
-            .cache/electron
-            .cache/electron-builder
-          key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
+        run: |
+          $timer = [System.Diagnostics.Stopwatch]::StartNew()
+          npm run build
+          $code = $LASTEXITCODE
+          $timer.Stop()
+          "Compilación: $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s" >> $env:GITHUB_STEP_SUMMARY
+          exit $code
       - name: Empaquetar portable o directorio Windows
         shell: pwsh
         run: |
+          $timer = [System.Diagnostics.Stopwatch]::StartNew()
           if ($env:PACKAGE_FORMAT -eq 'zip') {
             npx electron-builder --win --x64 --dir
           } else {
             npm run portable:build
           }
-          exit $LASTEXITCODE
+          $code = $LASTEXITCODE
+          $timer.Stop()
+          "Empaquetado ($env:PACKAGE_FORMAT, $env:TRACCION_PORTABLE_COMPRESSION): $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s" >> $env:GITHUB_STEP_SUMMARY
+          exit $code
       - name: Validar paquete y crear manifiesto o ZIP
         shell: pwsh
         run: |
@@ -177,7 +202,9 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $exe = Join-Path 'release' $artifactName
             if (-not (Test-Path -LiteralPath $exe)) { throw 'Falta el portable esperado.' }
-            if ((Get-Item -LiteralPath $exe).Length -lt 20MB) { throw 'Portable anormalmente pequeño.' }
+            $exeBytes = (Get-Item -LiteralPath $exe).Length
+            "Tamaño EXE: $([math]::Round($exeBytes / 1MB, 2)) MiB" >> $env:GITHUB_STEP_SUMMARY
+            if ($exeBytes -lt 20MB) { throw 'Portable anormalmente pequeño.' }
             npm run update-manifest:write
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
