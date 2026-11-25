@@ -47,7 +47,7 @@ import {
   runDataIntegrityAuditNow,
   getCurrentDatabaseLockInfo,
   forceReleaseDatabaseLock,
-} from '../sqlitePersistence.js';
+} from '../sqlitePersistenceFacade.js';
 
 function normalizeRecordLockPayload(payload: unknown): { module: string; recordId: string } | null {
   if (!payload || typeof payload !== 'object') {

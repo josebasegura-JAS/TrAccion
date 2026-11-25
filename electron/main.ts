@@ -84,7 +84,7 @@ async function readShutdownPerformance(): Promise<PersistedShutdownPerformance |
   }
 }
 
-type SqlitePersistenceModule = typeof import('./sqlitePersistence.js');
+type SqlitePersistenceModule = typeof import('./sqlitePersistenceFacade.js');
 type ConnectivityIssueNotifier = Parameters<SqlitePersistenceModule['setDatabaseConnectivityIssueNotifier']>[0];
 let sqlitePersistenceModulePromise: Promise<SqlitePersistenceModule> | null = null;
 let isQuitAfterSqlitePersistenceClosed = false;
@@ -98,7 +98,7 @@ let startupCloseRequested = false;
 const startupWarningMs = 30_000;
 
 function loadSqlitePersistenceModule(): Promise<SqlitePersistenceModule> {
-  sqlitePersistenceModulePromise ??= import('./sqlitePersistence.js');
+  sqlitePersistenceModulePromise ??= import('./sqlitePersistenceFacade.js');
   return sqlitePersistenceModulePromise;
 }
 

@@ -13,7 +13,7 @@ import {
   saveCriteriosRrllRecordsIfUnchanged,
   saveActaTypeRecordIfUnchanged,
   saveActaTypeRecordsIfUnchanged,
-} from '../sqlitePersistence.js';
+} from '../sqlitePersistenceFacade.js';
 
 export function registerCriteriosRrllIpc(): void {
   ipcMain.handle('criterios-rrll:load-records', () =>

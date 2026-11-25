@@ -22,7 +22,7 @@ import {
   saveTeletrabajoRecordsIfUnchanged,
   saveTeletrabajoPuestoRecordIfUnchanged,
   saveTeletrabajoGrupoCoberturaRecordIfUnchanged,
-} from '../sqlitePersistence.js';
+} from '../sqlitePersistenceFacade.js';
 
 export function registerTeletrabajoIpc(): void {
   ipcMain.handle('teletrabajo-puestos:load-records', () =>

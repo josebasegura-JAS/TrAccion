@@ -20,7 +20,7 @@ import {
   importSessionHistoryAtomically,
   closeCoordinationWorkflowAtomically,
   createCoordinationTaskAtomically,
-} from '../sqlitePersistence.js';
+} from '../sqlitePersistenceFacade.js';
 
 export function registerSesionesIpc(): void {
 

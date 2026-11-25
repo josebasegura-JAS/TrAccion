@@ -17,6 +17,13 @@ const persistence = await import('./sqlitePersistence.js');
 const operations = createPersistenceOperations(persistence);
 const { saveTaskRecordsAtomically } = await import('./persistence/taskBatchPersistence.js');
 operations.set('saveTaskRecordsAtomically', (...args) => saveTaskRecordsAtomically(args[0] as Parameters<typeof saveTaskRecordsAtomically>[0]));
+const { removeTicketRestauranteCalendarWithPeopleAtomically } = await import('./persistence/ticketRestauranteAtomicCalendarRemoval.js');
+const { importTicketRestaurantePeopleAtomically } = await import('./persistence/ticketRestauranteAtomicPeopleImport.js');
+operations.set('removeTicketRestauranteCalendarWithPeopleAtomically', (...args) =>
+  removeTicketRestauranteCalendarWithPeopleAtomically(persistence.getSqliteStatus(), args[0] as Parameters<typeof removeTicketRestauranteCalendarWithPeopleAtomically>[1]));
+operations.set('importTicketRestaurantePeopleAtomically', (...args) =>
+  importTicketRestaurantePeopleAtomically(persistence.getSqliteStatus(), args[0] as Parameters<typeof importTicketRestaurantePeopleAtomically>[1]));
+persistence.setDatabaseConnectivityIssueNotifier((payload) => port.postMessage({ kind: 'engine:connectivity', payload }));
 let closing = false;
 let closed = false;
 const dispatch = createEngineDispatcher(operations);
@@ -29,6 +36,7 @@ port.on('message', (event: { data: unknown }) => {
   // El cliente admite una sola petición simultánea; no se reintentan peticiones.
   void enqueueSqliteIpc('engine:operation', () => dispatch(request)).then((response) => {
     if (request.operation === 'closeSqlitePersistence' && response?.kind === 'engine:result') closed = true;
+    port.postMessage({ kind: 'engine:status', status: persistence.getSqliteStatus() });
     if (response) port.postMessage(response);
   }).catch((error: unknown) => {
     // Un timeout de la cola no demuestra que la operación haya terminado.

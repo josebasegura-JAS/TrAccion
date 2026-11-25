@@ -8,7 +8,7 @@ import type { OpenDialogOptions } from 'electron';
 import { readFile } from 'node:fs/promises';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { assertDocxPath, validateConditionalJsonRecord } from './ipcHelpers.js';
-import { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged } from '../sqlitePersistence.js';
+import { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged } from '../sqlitePersistenceFacade.js';
 
 export function registerLicenciasSinSueldoIpc(): void {
   ipcMain.handle('licencias-sin-sueldo:load-records', () =>

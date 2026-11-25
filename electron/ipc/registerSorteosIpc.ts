@@ -5,7 +5,7 @@
  */
 import { ipcMain } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
-import { getSqliteStatus, loadSorteosRecordsSnapshot, saveSorteosSnapshotIfUnchanged } from '../sqlitePersistence.js';
+import { getSqliteStatus, loadSorteosRecordsSnapshot, saveSorteosSnapshotIfUnchanged } from '../sqlitePersistenceFacade.js';
 
 export function registerSorteosIpc(): void {
   ipcMain.handle('sorteos:load-records', () => enqueueSqliteIpc('sorteos:load-records', () => loadSorteosRecordsSnapshot()));
