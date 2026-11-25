@@ -110,7 +110,7 @@ export type SqliteEngineOperationName = typeof SQLITE_ENGINE_OPERATIONS[number];
 export function createPersistenceOperations(persistence: typeof Persistence): Map<string, EngineOperation> {
   const operations = new Map<string, EngineOperation>();
   for (const name of SQLITE_ENGINE_OPERATIONS) {
-    const handler = persistence[name] as EngineOperation;
+    const handler = persistence[name] as unknown as EngineOperation;
     operations.set(name, (...args) => handler(...args));
   }
   return operations;
