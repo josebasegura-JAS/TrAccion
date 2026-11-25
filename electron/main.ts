@@ -626,8 +626,7 @@ if (!app.requestSingleInstanceLock()) {
       // Los servicios IPC sí son necesarios para que Ajustes y el monitor
       // puedan indicar el estado de la base y reintentar la conexión.
       notifyMainWatchdogOperation('start', 'startup:initialize-sqlite');
-      const [databaseInitialization, ipcRegistration] = await Promise.allSettled([
-        persistence.initializeSqlitePersistence().then((dbStatus) => {
+      const databaseInitialization = persistence.initializeSqlitePersistence().then((dbStatus) => {
           startupMark('Estado inicial SQLite obtenido');
           updateSplashStep(
             splashWindow, 'database', dbStatus.ready ? 'done' : 'error',
@@ -637,8 +636,8 @@ if (!app.requestSingleInstanceLock()) {
           const message = error instanceof Error ? error.message : String(error);
           updateSplashStep(splashWindow, 'database', 'error', message || 'No se pudo inicializar la base de datos.');
           throw error;
-        }).finally(() => notifyMainWatchdogOperation('finish', 'startup:initialize-sqlite')),
-        registerIpcHandlers().then(() => {
+        }).finally(() => notifyMainWatchdogOperation('finish', 'startup:initialize-sqlite'));
+      const ipcRegistration = registerIpcHandlers().then(() => {
           startupMark('Servicios IPC registrados');
           updateSplashStep(splashWindow, 'services', 'done');
         }).catch((error: unknown) => {
@@ -647,11 +646,17 @@ if (!app.requestSingleInstanceLock()) {
           startupMark('Fallo al registrar servicios IPC');
           saveStartupReport();
           throw error;
-        }),
-      ]);
-      if (ipcRegistration.status === 'rejected') throw ipcRegistration.reason;
-      if (databaseInitialization.status === 'rejected') {
-        console.error('[startup] SQLite no pudo inicializarse; se abrirá el dashboard con la edición bloqueada.', databaseInitialization.reason);
+        });
+      // Observar inmediatamente el rechazo, incluso si el renderer se abre antes.
+      const databaseOutcome = databaseInitialization.catch((error: unknown) => {
+        console.error('[startup] SQLite no pudo inicializarse; edición bloqueada.', error);
+        startupMark('Fallo de inicialización SQLite');
+        saveStartupReport();
+      });
+      if (isIsolatedTestEnvironment) {
+        await ipcRegistration;
+      } else {
+        await Promise.all([databaseOutcome, ipcRegistration]);
       }
       logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
 
@@ -660,6 +665,9 @@ if (!app.requestSingleInstanceLock()) {
       startupMark('Creación de ventana principal');
       createWindow(splashWindow, splashStartedAt, persistence.setDatabaseConnectivityIssueNotifier);
       logStartupPhase(startupStartedAt, 'main window loading');
+      // En pruebas el HTML ya puede estar visible; no finalizar la fase de
+      // arranque hasta que la inicialización real haya terminado.
+      if (isIsolatedTestEnvironment) await databaseOutcome;
       app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(null, Date.now(), persistence.setDatabaseConnectivityIssueNotifier); });
     } catch (error: unknown) {
       console.error('[startup] Error durante el arranque de TrAcción.', error);
