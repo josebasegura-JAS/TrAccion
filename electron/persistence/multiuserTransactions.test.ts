@@ -1,3 +1,4 @@
+import { createMigratedTestFixture } from './testFixtures.js';
 import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -44,6 +45,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   dir = mkdtempSync(path.join(tmpdir(), 'traccion-two-connections-'));
   const file = path.join(dir, 'shared.sqlite');
+  createMigratedTestFixture(file);
   a = openSqliteDatabase(file, { busyTimeoutMs: 1000 });
   b = openSqliteDatabase(file, { busyTimeoutMs: 1000 });
   status = { ready: true, engine: 'better-sqlite3', phase: 'active', path: file, schemaVersion: 0, isDefaultPath: false, lockPath: file + '.lockdir' };
