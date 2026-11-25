@@ -54,14 +54,36 @@
     refreshProgress();
   };
 
-  window.__traccionSplashShowFatal = () => {
+  let startupState = 'normal';
+  function showStartupMessage(state, message) {
+    if (startupState === 'closing' && state !== 'closing') return;
+    startupState = state;
     const actions = document.getElementById('startupFailureActions');
-    if (actions) actions.hidden = false;
+    const detail = document.getElementById('startupFailureMessage');
     const card = document.querySelector('.splash-card');
-    if (card) card.setAttribute('aria-busy', 'false');
+    const button = document.getElementById('closeFailedStartup');
+    if (actions) actions.hidden = false;
+    if (detail) detail.textContent = message;
+    if (card) card.setAttribute('aria-busy', state === 'fatal' ? 'false' : 'true');
+    if (button) {
+      button.disabled = state === 'closing';
+      button.textContent = state === 'slow' ? 'Solicitar cierre seguro' : state === 'closing' ? 'Cierre solicitado' : 'Cerrar TrAcción';
+    }
+  }
+
+  window.__traccionSplashShowFatal = () => showStartupMessage('fatal',
+    'No se han podido preparar los servicios necesarios. Puedes cerrar TrAcción y volver a abrirla cuando hayas comprobado la conexión.');
+  window.__traccionSplashShowSlow = () => {
+    if (startupState !== 'normal') return;
+    showStartupMessage('slow', 'El arranque está tardando más de lo habitual. Comprueba el cable y la conexión a la carpeta compartida. Puedes seguir esperando o solicitar el cierre cuando termine la operación pendiente.');
   };
+  window.__traccionSplashShowClosing = () => showStartupMessage('closing',
+    'Cierre solicitado. Se espera a que finalice la operación pendiente para no interrumpir SQLite. No se iniciará otra conexión ni se abrirá el dashboard.');
   const closeButton = document.getElementById('closeFailedStartup');
   if (closeButton) closeButton.addEventListener('click', () => window.close());
+  // El renderer puede avisar incluso cuando el proceso principal no atiende
+  // su temporizador. No implica que SQLite haya terminado ni autoriza matarlo.
+  window.setTimeout(() => window.__traccionSplashShowSlow(), 30_000);
 
   const first = document.querySelector('[data-step="electron"]');
   if (first) {
