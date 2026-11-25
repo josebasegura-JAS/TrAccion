@@ -9,10 +9,10 @@ import { buildTicketRestaurantLoadWorkbook, type TicketRestaurantLoadRow } from 
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import {
   removeTicketRestauranteCalendarWithPeopleAtomically,
-} from '../persistence/ticketRestauranteAtomicCalendarRemoval.js';
+} from '../sqlitePersistenceFacade.js';
 import {
   importTicketRestaurantePeopleAtomically,
-} from '../persistence/ticketRestauranteAtomicPeopleImport.js';
+} from '../sqlitePersistenceFacade.js';
 import { validateConditionalJsonRecord, validateConditionalJsonRecordBatch } from './ipcHelpers.js';
 import {
   getSqliteStatus,
@@ -30,7 +30,7 @@ import {
   saveTicketRestauranteConfigRecordIfUnchanged,
   saveTicketRestauranteManutencionRecordIfUnchanged,
   saveTicketRestauranteManutencionRecordsIfUnchanged,
-} from '../sqlitePersistence.js';
+} from '../sqlitePersistenceFacade.js';
 
 export function registerTicketRestauranteIpc(): void {
   ipcMain.handle('ticket-restaurante-calendars:load-records', () =>
