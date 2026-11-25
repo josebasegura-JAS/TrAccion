@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { applyMigrations } from './schemaMigrations.js';
+import { createMigratedTestFixture } from './testFixtures.js';
 import { readDatabaseIdentity, inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 import { activateSqliteDatabase } from './databaseActivation.js';
 
@@ -78,9 +78,7 @@ describe('arranque aislado con SQLite test', () => {
     const { mkdirSync } = await import('node:fs');
     mkdirSync(productionDir);
     const dbPath = path.join(productionDir, 'traccion.sqlite');
-    const db = new Database(dbPath);
-    applyMigrations(db);
-    db.close();
+    createMigratedTestFixture(dbPath);
     inspectAndEnsureDatabaseIdentity(dbPath, {
       allowLegacyBootstrap: true, expectedEnvironment: 'production',
     });
