@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openSqliteDatabase } from './persistence/sqliteConnection.js';
+import { createMigratedTestFixture } from './persistence/testFixtures.js';
 
 const testContext = vi.hoisted(() => ({ userDataPath: '', failStatPath: '', statFailures: 0 }));
 
@@ -83,8 +83,7 @@ function writePreferences(userData: string, customDirectoryPath: string | null):
 }
 
 function createSharedDatabase(databasePath: string): void {
-  const db = openSqliteDatabase(databasePath, { busyTimeoutMs: 5_000 });
-  db.close();
+  createMigratedTestFixture(databasePath);
 }
 
 async function importPersistence() {
