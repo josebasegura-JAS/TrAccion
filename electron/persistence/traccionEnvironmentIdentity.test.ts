@@ -1,9 +1,9 @@
+import { createMigratedTestFixture } from './testFixtures.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { applyMigrations } from './schemaMigrations.js';
 import {
   assertDatabaseEnvironmentBeforeWrite,
   inspectAndEnsureDatabaseIdentity,
@@ -15,9 +15,7 @@ function createSchema(): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'traccion-env-integrity-'));
   dirs.push(dir);
   const p = path.join(dir, 'traccion.sqlite');
-  const db = new Database(p);
-  applyMigrations(db);
-  db.close();
+  createMigratedTestFixture(p);
   return p;
 }
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
