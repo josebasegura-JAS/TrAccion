@@ -49,7 +49,7 @@ export default defineConfig({
       all: true,
       reportOnFailure: true,
       include: ['src/**/*.{ts,tsx}', 'electron/**/*.ts', 'scripts/*.mjs'],
-      exclude: ['**/*.d.ts', '**/*.{test,spec}.{ts,tsx,mjs}', 'src/test/**'],
+      exclude: ['**/*.d.ts', '**/*.{test,spec}.{ts,tsx,mjs}', 'src/test/**', '**/testFixtures.ts'],
       reporter: ['text', 'json', 'json-summary', 'html'],
       // Baseline Windows CI #546: 1852 tests; 50.60/50.60/54.07/74.88.
       // Los umbrales por glob se calculan conjuntamente para los archivos
