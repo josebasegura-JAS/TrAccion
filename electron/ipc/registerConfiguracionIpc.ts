@@ -5,7 +5,7 @@
  */
 import { ipcMain } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
-import { getSqliteStatus, loadConfiguracionSnapshot, saveConfiguracionIfUnchanged } from '../sqlitePersistence.js';
+import { getSqliteStatus, loadConfiguracionSnapshot, saveConfiguracionIfUnchanged } from '../sqlitePersistenceFacade.js';
 
 export function registerConfiguracionIpc(): void {
   ipcMain.handle('configuracion:load', () =>
