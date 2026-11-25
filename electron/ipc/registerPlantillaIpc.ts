@@ -13,7 +13,7 @@ import {
   saveEmployeeRecordIfUnchanged,
   saveEmployeeRecordsIfUnchanged,
   saveJobPositionTranslationRecordIfUnchanged,
-} from '../sqlitePersistence.js';
+} from '../sqlitePersistenceFacade.js';
 
 export function registerPlantillaIpc(): void {
   ipcMain.handle('plantilla:load-records', () =>
