@@ -174,6 +174,14 @@ class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErr
 export function App() {
   const { confirm, dialogNode } = useAppDialog();
   const [activeView, setActiveView] = useState<AppView>('dashboard');
+  const [isTestEnvironment, setIsTestEnvironment] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    window.traccion?.getAppEnvironment?.()
+      .then((environment) => { if (mounted) setIsTestEnvironment(environment === 'test'); })
+      .catch(() => undefined);
+    return () => { mounted = false; };
+  }, []);
   useEffect(() => { setActiveSyncView(activeView); }, [activeView]);
   const navigationStartedAtRef = useRef<{ view: AppView; startedAt: number } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
@@ -263,6 +271,9 @@ export function App() {
 
   return (
     <ToastProvider>
+    {isTestEnvironment && (
+      <div aria-hidden="true" data-testid="test-environment-frame" style={{ position: 'fixed', inset: 0, boxShadow: 'inset 0 0 0 3px #2563eb', pointerEvents: 'none', zIndex: 2147483647 }} />
+    )}
     <ExcelBackupRetryBanner />
     <AppShellErrorBoundary>
       <TooltipLayer /><AppUpdateChecker />
