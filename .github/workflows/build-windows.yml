@@ -53,8 +53,65 @@ jobs:
           echo "Resultado de las cuatro comprobaciones: $CHECKS_RESULT"
           test "$CHECKS_RESULT" = "success"
 
+  experimental:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/refactor/sqlite-engine-isolation' }}
+    name: Generar EXE experimental (sin publicar)
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      NODE_ENV: development
+      ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependencias
+        shell: pwsh
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Compilar aplicación
+        shell: pwsh
+        run: npm run build
+      - name: Cache de herramientas de empaquetado
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
+      - name: Empaquetar portable experimental
+        shell: pwsh
+        run: npm run portable:build
+      - name: Comprobar y distinguir el EXE experimental
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem -LiteralPath release -File -Filter 'Traccion *.exe')
+          if ($files.Count -ne 1 -or $files[0].Length -lt 20MB) { throw 'Portable experimental ausente o inválido.' }
+          Rename-Item -LiteralPath $files[0].FullName -NewName 'TrAccion-EXPERIMENTAL-SQLite.exe'
+          git rev-parse HEAD | Set-Content release/experimental-commit.txt
+      - name: Descargar únicamente el EXE de pruebas
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrAccion-EXPERIMENTAL-SQLite
+          path: |
+            release/TrAccion-EXPERIMENTAL-SQLite.exe
+            release/experimental-commit.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
   distribution:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && github.ref == 'refs/heads/main' }}
     permissions:
       contents: write
     name: Generar EXE sin repetir tests
