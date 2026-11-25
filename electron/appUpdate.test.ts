@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -209,14 +209,17 @@ describe('seguridad del indicador de actualización', () => {
   });
 });
 
-// Ejecutar el batch mediante CALL desde stdin: evita el doble análisis de
-// comillas de /s /c y la resolución del script desde el cwd del runner.
-// El marcador prueba que CMD realmente entró en el batch.
+// Usar un directorio real del workspace en lugar del alias TEMP 8.3.
+function createPublicationFixture(): string {
+  return realpathSync.native(mkdtempSync(path.join(process.cwd(), 'traccion-update-fixture-')));
+}
+
 function runPublicationScript(staging: string): string {
-  const scriptPath = path.join(staging, 'apply.cmd');
-  const result = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/q'], {
-    input: 'call "' + scriptPath + '"\r\nexit /b %errorlevel%\r\n',
-    timeout: 15000, windowsHide: true, encoding: 'utf8',
+  const cwd = realpathSync.native(staging);
+  const scriptPath = path.join(cwd, 'apply.cmd');
+  expect(readFileSync(scriptPath, 'utf8')).toContain('TRACCION_TEST_BATCH_ENTERED');
+  const result = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'call', '.\\apply.cmd'], {
+    cwd, timeout: 15000, windowsHide: true, encoding: 'utf8',
   });
   const output = [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n');
   expect(output, 'Script: ' + scriptPath + '\n' + output).toContain('TRACCION_TEST_BATCH_ENTERED');
@@ -227,7 +230,7 @@ function runPublicationScript(staging: string): string {
 describe('publicación reversible del ejecutable en Windows', () => {
   const windowsIt = process.platform === 'win32' ? it : it.skip;
   windowsIt.each([true, false])('conserva versión anterior y publica bytes exactos (misma rama: %s)', sameBranch => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-update-script-'));
+    const dir = createPublicationFixture();
     try {
       const staging = path.join(dir, 'attempt-test');
       mkdirSync(staging);
@@ -257,7 +260,7 @@ describe('publicación reversible del ejecutable en Windows', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
   windowsIt('no sobrescribe un destino de otra rama que ya existe', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'traccion-update-collision-'));
+    const dir = createPublicationFixture();
     try {
       const staging = path.join(dir, 'attempt-test');
       mkdirSync(staging);
