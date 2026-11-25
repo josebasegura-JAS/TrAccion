@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { getPersistenceUserDataPath } from './persistenceRuntime.js';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -22,11 +22,11 @@ export interface DatabasePreferences {
 }
 
 export function getDefaultDatabaseDirectory(): string {
-  return path.join(app.getPath('userData'), 'data');
+  return path.join(getPersistenceUserDataPath(), 'data');
 }
 
 export function getPreferencesPath(): string {
-  return path.join(app.getPath('userData'), DATABASE_PREFERENCES_FILE_NAME);
+  return path.join(getPersistenceUserDataPath(), DATABASE_PREFERENCES_FILE_NAME);
 }
 
 export function getDatabasePathForDirectory(directoryPath: string): string {

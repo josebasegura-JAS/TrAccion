@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { getPersistenceUserDataPath } from './persistenceRuntime.js';
 import { copyFile, mkdir, readdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -19,7 +19,7 @@ export const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 export const DAILY_LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-daily-backup';
 
 export function getLocalBackupDirectory(): string {
-  return path.join(app.getPath('userData'), LOCAL_BACKUP_DIRECTORY_NAME);
+  return path.join(getPersistenceUserDataPath(), LOCAL_BACKUP_DIRECTORY_NAME);
 }
 
 export function getLocalBackupDatabasePath(): string {
@@ -57,7 +57,7 @@ export function getShutdownLocalBackupJsonPath(timestamp: string): string {
 export async function getDailyLocalBackupDirectory(preferences: DatabasePreferences): Promise<string> {
   return preferences.dailyLocalBackupDirectoryPath
     ? preferences.dailyLocalBackupDirectoryPath
-    : path.join(app.getPath('userData'), DAILY_LOCAL_BACKUP_DIRECTORY_NAME);
+    : path.join(getPersistenceUserDataPath(), DAILY_LOCAL_BACKUP_DIRECTORY_NAME);
 }
 
 export function getDailyLocalBackupDatabasePath(directory: string, weekdayName: string): string {

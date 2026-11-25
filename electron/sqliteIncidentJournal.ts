@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { getPersistenceUserDataPath } from './persistence/persistenceRuntime.js';
 import { appendFileSync, existsSync, readFileSync, renameSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -15,7 +15,7 @@ const MAX_READ_EVENTS = 200;
 let journalPath: string | null = null;
 
 function filePath(): string {
-  if (!journalPath) journalPath = path.join(app.getPath('userData'), 'sqlite-incidents.jsonl');
+  if (!journalPath) journalPath = path.join(getPersistenceUserDataPath(), 'sqlite-incidents.jsonl');
   return journalPath;
 }
 

@@ -3,7 +3,7 @@
  * No escribe sobre SMB, no registra SQL, rutas, nombres ni datos de registros.
  * Este archivo es solo diagnóstico: nunca interviene en la lógica de recuperación.
  */
-import { app } from 'electron';
+import { getPersistenceUserDataPath } from './persistenceRuntime.js';
 import { appendFileSync, existsSync, renameSync, statSync } from 'node:fs';
 import path from 'node:path';
 
@@ -70,7 +70,7 @@ export function shouldWriteSqliteHealthDiagnostic(outcome: 'ok' | 'failed' | 'sk
 
 export function writeSqliteRecoveryDiagnostic(event: Omit<SqliteRecoveryDiagnosticEvent, 'at'>): void {
   try {
-    const file = path.join(app.getPath('userData'), FILE_NAME);
+    const file = path.join(getPersistenceUserDataPath(), FILE_NAME);
     if (existsSync(file) && statSync(file).size > MAX_FILE_BYTES) {
       // Dos generaciones, acotadas en disco; no afecta a incident journal.
       renameSync(file, file + '.previous');
