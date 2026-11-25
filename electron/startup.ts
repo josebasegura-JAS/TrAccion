@@ -44,6 +44,8 @@ try {
     const testProfile = path.join(path.dirname(current), path.basename(current) + '-entorno-pruebas');
     mkdirSync(testProfile, { recursive: true });
     app.setPath('userData', testProfile);
+    // Este EXE experimental activa el propietario aislado solo en pruebas.
+    process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT = '1';
   }
 } catch (error) {
   environmentProfileReady = false;
