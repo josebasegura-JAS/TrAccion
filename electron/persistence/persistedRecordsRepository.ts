@@ -110,6 +110,25 @@ function latestUpdatedAtFromRecords(records: PersistedStorageRecordSnapshot[]): 
 }
 
 export function createPersistedRecordsRepository(deps: PersistedRecordsRepositoryDependencies) {
+  // Mantener ISO-8601 y el contrato OCC existente. Calcular dentro de la
+  // transacción con las versiones persistidas, no con un contador de proceso.
+  function nextVersion(db: Database, previous: Iterable<string | null>): string {
+    let time = Date.now();
+    const refresh = db.prepare("SELECT updated_at FROM app_metadata WHERE key = 'persisted_records_refresh_token'").get();
+    const versions = [...previous, isUpdatedAtRow(refresh) ? refresh.updated_at : null];
+    for (const version of versions) {
+      if (version === null) continue;
+      const parsed = Date.parse(version);
+      if (Number.isFinite(parsed)) time = Math.max(time, parsed + 1);
+    }
+    return new Date(time).toISOString();
+  }
+
+  function readVersion(db: Database, key: string): string | null {
+    const row = db.prepare('SELECT updated_at FROM persisted_records WHERE key = ?').get(key);
+    return isUpdatedAtRow(row) ? row.updated_at : null;
+  }
+
   function updateRefreshMetadata(db: Database, updatedAt: string): void {
     const token = `${updatedAt}:${deps.ownerId()}`;
     db.prepare(
@@ -141,9 +160,9 @@ export function createPersistedRecordsRepository(deps: PersistedRecordsRepositor
         }
 
         deps.assertDatabaseWritesAllowed();
-        const now = new Date().toISOString();
         const db = deps.requireDatabase();
         db.transaction(() => {
+          const now = nextVersion(db, [readVersion(db, record.key)]);
           db.prepare(
             `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
              VALUES (?, ?, 'sqlite-primary', ?, ?)
@@ -198,7 +217,7 @@ export function createPersistedRecordsRepository(deps: PersistedRecordsRepositor
             };
           }
 
-          const now = new Date().toISOString();
+          const now = nextVersion(db, [currentUpdatedAt]);
           if (currentUpdatedAt === null) {
             const insertResult = db
               .prepare(
@@ -320,7 +339,7 @@ export function createPersistedRecordsRepository(deps: PersistedRecordsRepositor
               }
             }
 
-            const updatedAt = new Date().toISOString();
+            const updatedAt = nextVersion(db, currentUpdatedAtByKey.values());
             for (const record of records) {
               const currentUpdatedAt = currentUpdatedAtByKey.get(record.key) ?? null;
               if (currentUpdatedAt === null) {
@@ -395,13 +414,13 @@ export function createPersistedRecordsRepository(deps: PersistedRecordsRepositor
     deps.assertDatabaseWritesAllowed();
     return deps.withDatabaseOperationLock(currentStatus.path, async () => {
       const db = deps.requireDatabase();
-      const now = new Date().toISOString();
       const records = payload.records.filter(
         (record): record is PersistedStorageRecord =>
           typeof record.key === 'string' && typeof record.value === 'string',
       );
 
       const migrateSnapshotTransaction = db.transaction(() => {
+        const now = nextVersion(db, records.map(record => readVersion(db, record.key)));
         db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)').run(
           now,
           JSON.stringify({ records }),
