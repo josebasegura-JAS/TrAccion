@@ -37,7 +37,7 @@ function startupMark(label: string): void {
   startupTimeline.push({ label, elapsedMs: Date.now() - startupBeganAt });
 }
 function startupReport() {
-  return { kind: startupKind, measuredFrom: 'inicio del proceso principal Electron', recordedAt: new Date(startupBeganAt).toISOString(), steps: [...startupTimeline] };
+  return { kind: startupKind, ...(isIsolatedTestEnvironment ? { environment: 'test', engine: 'isolated', pid: process.pid } : {}), measuredFrom: 'inicio del proceso principal Electron', recordedAt: new Date(startupBeganAt).toISOString(), steps: [...startupTimeline] };
 }
 function saveStartupReport(): void {
   void writeFile(path.join(app.getPath('userData'), 'last-startup-performance.json'), JSON.stringify(startupReport()), 'utf8')
@@ -460,6 +460,8 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   mainWindow.webContents.once('did-finish-load', () => {
     startupMark(`HTML del renderer cargado (${Date.now() - rendererLoadStartedAt} ms)`);
     updateSplashStep(splashWindow, 'interface', 'active', 'Interfaz cargada. Esperando a que termine su inicialización…');
+    // El HTML estático se puede mostrar aunque el bundle JS no llegue a ejecutarse.
+    if (isIsolatedTestEnvironment) requestMainWindowShow(false);
   });
   ipcMain.on('app:boot-visible', onBootVisible);
   ipcMain.on('app:renderer-ready', onRendererReady);
@@ -658,7 +660,7 @@ if (!app.requestSingleInstanceLock()) {
       } else {
         await Promise.all([databaseOutcome, ipcRegistration]);
       }
-      logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
+      logStartupPhase(startupStartedAt, isIsolatedTestEnvironment ? 'IPC ready; SQLite initialization pending or complete' : 'SQLite and IPC ready');
 
       if (startupCloseRequested) return;
       updateSplashStep(splashWindow, 'interface', 'active');
