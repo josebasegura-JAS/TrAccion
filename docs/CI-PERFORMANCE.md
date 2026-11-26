@@ -34,3 +34,12 @@ Baseline PR-D #551, ejecución 45565485781 (Windows, 25/11/2026):
 ## E3: generación de portable
 
 Baseline manual #45419296948: ~291 s (dependencias 68 s, compilación 27 s, empaquetado 165 s, resto 31 s); artefacto 112517621 bytes. Restaurar cachés antes de npm ci y versionado, usando lockfile original; npm ci sigue siendo obligatorio y electron-builder sigue reconstruyendo los módulos nativos. Medir cada fase y tamaño final en el resumen Actions. Opción manual `compression: store` para ensayos rápidos; `normal` sigue siendo el valor predeterminado para distribución. Comparar dos builds de igual código y caché caliente; no afirmar ahorro hasta medir. Comprobar arranque del portable, identidad de entorno, ABI y manifiesto SHA-256. No reutilizar dist de otros commits ni omitir compilación. Rama estable intacta.
+
+## E4: caché instalada experimental v2 (26/11/2026)
+
+Comparación de builds experimentales normales, duración del job:
+- 45794759522 (antes de caché instalada): 259 s; npm ci 63 s; compilación 18 s; empaquetado 132 s.
+- 45795519843 (primera caché instalada): 247 s; restauración 1 s, instalación 50 s, guardado 5 s; compilación 18 s; empaquetado 122 s.
+- 45808697243 (caché recuperada pero descartada): 341 s; restauración 9 s, instalación 64 s; compilación 31 s; empaquetado 175 s. Artefacto 112536626 bytes, frente a 112533221. El log acredita cache-hit y npm ci posterior, sin ejecución de npm ls; no identifica qué ruta rígida faltaba.
+
+V2 elimina las rutas internas rígidas como criterio de reutilización: npm ls, resolución efectiva del ejecutable Electron y consulta nativa en memoria con Node. Si falla, instalación limpia y nueva comprobación obligatoria; la caché se guarda únicamente antes de reconstrucción para Electron y con coincidencia exacta de Node/lockfile/manifest/runner. No se reutiliza dist; se mantienen ambos typechecks, rebuild nativo, compresión normal y smoke empaquetado. Se anotan tiempos de dependencias, compilación, empaquetado y tamaño en el resumen. El primer build v2 calentará la caché; comparar al menos dos builds posteriores del mismo commit. No se atribuye la variación de compresión a una causa comprobada ni se garantiza ahorro hasta medir. Distribución main sin cambios.
