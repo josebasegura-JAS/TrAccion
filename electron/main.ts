@@ -320,7 +320,7 @@ function createSplashWindow(): BrowserWindow {
   startupSplashWindow = splashWindow;
   splashWindow.once('closed', () => { if (startupSplashWindow === splashWindow) startupSplashWindow = null; });
   splashWindow.on('close', (event) => {
-    if (!startupInProgress) return;
+    if (!startupInProgress || startupSplashWindow !== splashWindow) return;
     event.preventDefault();
     requestStartupClose();
   });
@@ -382,14 +382,19 @@ function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: 
   startupMark(rendererReady ? 'Dashboard visible' : 'Dashboard visible en modo diagnóstico');
   saveStartupReport();
   if (rendererReady) markUpdatedAppReady();
-  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    // La transición interna no es una solicitud de cierre del usuario.
+    // SQLite puede seguir inicializándose en paralelo en el entorno test.
+    if (startupSplashWindow === splashWindow) startupSplashWindow = null;
+    splashWindow.close();
+  }
 }
 function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, splashStartedAt: number, rendererReady = false): void {
   const remainingMs = Math.max(0, splashMinimumVisibleMs - (Date.now() - splashStartedAt));
   setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow, rendererReady), remainingMs);
 }
 function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt = Date.now(), setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void): BrowserWindow {
-  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${isIsolatedTestEnvironment ? ' · PRUEBAS · BASE AISLADA' : ''}${isMultiuserTestClientB ? ' · CLIENTE B' : ''}${isIsolatedTestEnvironment && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1' ? ' · SQLite: MOTOR AISLADO · EXPERIMENTAL R2' : ''}`;
+  const mainWindowTitle = `Cuadro de Mando RRLL - TrAcción V.${app.getVersion()}${isIsolatedTestEnvironment ? ' · PRUEBAS · BASE AISLADA' : ''}${isMultiuserTestClientB ? ' · CLIENTE B' : ''}${isIsolatedTestEnvironment && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1' ? ' · SQLite: MOTOR AISLADO · EXPERIMENTAL R3' : ''}`;
   const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: mainWindowTitle, backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   // El <title> del renderer no debe sustituir el título corporativo/versionado de la ventana.
   mainWindow.webContents.on('page-title-updated', (event) => {
