@@ -256,4 +256,38 @@ describe('PR526: propietario y renovación no sobrescribibles', () => {
     expect(existsSync(lockPath)).toBe(false);
   }, 15_000);
 
+  it('espera el heartbeat de arranque en curso antes de liberar físicamente el propietario', async () => {
+    const manager = createDatabaseLockManager({ getOwnerId: () => 'arranque' });
+    const lockPath = manager.getLockPath(databasePath);
+    const ownerPath = manager.getLockInfoPath(lockPath);
+    const lease = await manager.acquireLock(databasePath, 200);
+    let entered!: () => void;
+    let resume!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { resume = resolve; });
+    hooks.afterOpen = async target => {
+      if (target === ownerPath) { entered(); await gate; }
+    };
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const timer = manager.startDatabaseLockHeartbeat(lockPath, lease);
+    let released = false;
+    let releasePromise: Promise<void> | undefined;
+    try {
+      await vi.advanceTimersByTimeAsync(10_100);
+      await started;
+      clearInterval(timer);
+      releasePromise = manager.releaseLock(lockPath, lease).then(() => { released = true; });
+      await Promise.resolve();
+      expect(released).toBe(false);
+      expect(existsSync(ownerPath)).toBe(true);
+      resume();
+      await releasePromise;
+      expect(existsSync(lockPath)).toBe(false);
+    } finally {
+      resume();
+      if (releasePromise) await releasePromise;
+      else { clearInterval(timer); await manager.releaseLock(lockPath, lease); }
+    }
+  }, 15_000);
+
 });
