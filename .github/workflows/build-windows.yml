@@ -93,13 +93,14 @@ jobs:
             .cache/electron-builder
           key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
       # Cache exacta, nunca reutilizar dependencias de otro lockfile/Node/runner.
+      # v2 invalida el archivo anterior (se recuperaba, pero nunca se reutilizaba).
       # Guardar ANTES de electron-builder: la reconstrucción cambia el ABI nativo.
       - name: Restaurar dependencias instaladas
         id: installed-deps
         uses: actions/cache/restore@v4
         with:
           path: node_modules
-          key: traccion-experimental-deps-v1-windows-2022-${{ runner.arch }}-${{ hashFiles('.nvmrc', 'package.json', 'package-lock.json') }}
+          key: traccion-experimental-deps-v2-windows-2022-${{ runner.arch }}-${{ hashFiles('.nvmrc', 'package.json', 'package-lock.json') }}
       - name: Instalar o verificar dependencias
         id: prepare-deps
         shell: pwsh
@@ -107,24 +108,54 @@ jobs:
           EXACT_CACHE_HIT: ${{ steps.installed-deps.outputs.cache-hit }}
         run: |
           $timer = [System.Diagnostics.Stopwatch]::StartNew()
-          $valid = $false
-          if ($env:EXACT_CACHE_HIT -eq 'true') {
-            if ((Test-Path node_modules/electron/dist/electron.exe) -and
-                (Test-Path node_modules/better-sqlite3/build/Release/better_sqlite3.node)) {
-              npm ls --depth=0 --include=dev
-              $valid = $LASTEXITCODE -eq 0
-              if ($valid) {
-                node -e "const DB=require('better-sqlite3'); const db=new DB(':memory:'); db.prepare('SELECT 1').get(); db.close()"
-                $valid = $LASTEXITCODE -eq 0
-              }
+          function Test-InstalledDependencies {
+            # Un fallo de ejecutable nativo debe activar npm ci, no abortar la prueba.
+            $PSNativeCommandUseErrorActionPreference = $false
+            # npm ls verifica el árbol directo del lockfile. No exigir una
+            # ubicación interna de better-sqlite3: bindings resuelve el binario.
+            npm ls --depth=0 --include=dev | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning 'El árbol npm recuperado no es válido.'
+              return $false
             }
+            $probe = @'
+          const fs = require('node:fs');
+          const electron = require('electron');
+          if (typeof electron !== 'string' || !fs.statSync(electron).isFile()) {
+            throw new Error('Electron no apunta a un ejecutable instalado');
           }
-          if (-not $valid) {
+          const Database = require('better-sqlite3');
+          const db = new Database(':memory:');
+          try {
+            if (db.prepare('SELECT 1 AS ok').get().ok !== 1) throw new Error('SQLite ABI no válido');
+          } finally { db.close(); }
+          console.log('Electron instalado y SQLite nativa operativa con Node ' + process.version);
+          '@
+            node -e $probe | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning 'El ejecutable Electron o el binding SQLite no son utilizables.'
+              return $false
+            }
+            return $true
+          }
+
+          $reused = $false
+          if ($env:EXACT_CACHE_HIT -eq 'true') {
+            $reused = Test-InstalledDependencies
+          } else {
+            Write-Host 'Sin coincidencia exacta de caché instalada.'
+          }
+          if (-not $reused) {
+            Write-Host 'Instalación limpia desde package-lock.json.'
             npm ci --include=dev --no-audit --no-fund --prefer-offline
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if (-not (Test-InstalledDependencies)) {
+              throw 'La instalación limpia no superó la comprobación de dependencias.'
+            }
           }
           $timer.Stop()
-          "Dependencias: $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s; cache reutilizada: $valid" >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "Dependencias reutilizadas: $reused"
+          "Dependencias: $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s; cache reutilizada: $reused" >> $env:GITHUB_STEP_SUMMARY
           exit 0
       - name: Guardar dependencias antes de reconstrucción nativa
         if: steps.installed-deps.outputs.cache-hit != 'true'
@@ -138,19 +169,30 @@ jobs:
         run: |
           # Vite no necesita el resultado de tsc: frontend usa noEmit.
           # Mantener ambos typechecks y detener el empaquetado ante cualquier fallo.
+          $timer = [System.Diagnostics.Stopwatch]::StartNew()
           npx --no-install concurrently --kill-others-on-fail --names types,vite "tsc && tsc -p electron/tsconfig.json" "vite build"
-          exit $LASTEXITCODE
+          $code = $LASTEXITCODE
+          $timer.Stop()
+          "Compilación: $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s" >> $env:GITHUB_STEP_SUMMARY
+          exit $code
       - name: Empaquetar portable experimental
         shell: pwsh
         run: |
           New-Item -ItemType File -Path dist-electron/experimental-portable.marker -Force | Out-Null
+          $timer = [System.Diagnostics.Stopwatch]::StartNew()
+          # El experimento de rendimiento mantiene exactamente la compresión normal.
+          $env:TRACCION_PORTABLE_COMPRESSION = 'normal'
           npm run portable:build
-          exit $LASTEXITCODE
+          $code = $LASTEXITCODE
+          $timer.Stop()
+          "Empaquetado (normal): $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s" >> $env:GITHUB_STEP_SUMMARY
+          exit $code
       - name: Comprobar y distinguir el EXE experimental
         shell: pwsh
         run: |
           $files = @(Get-ChildItem -LiteralPath release -File -Filter 'Traccion *.exe')
           if ($files.Count -ne 1 -or $files[0].Length -lt 20MB) { throw 'Portable experimental ausente o inválido.' }
+          "Tamaño EXE: $([math]::Round($files[0].Length / 1MB, 2)) MiB" >> $env:GITHUB_STEP_SUMMARY
           Rename-Item -LiteralPath $files[0].FullName -NewName 'TrAccion-EXPERIMENTAL-SQLite.exe'
           git rev-parse HEAD | Set-Content release/experimental-commit.txt
       - name: Verificar arranque del ejecutable empaquetado
