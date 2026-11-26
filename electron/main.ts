@@ -375,7 +375,7 @@ function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promi
   });
 }
 function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow, rendererReady: boolean): void {
-  if (mainWindow.isDestroyed()) return;
+  if (mainWindow.isDestroyed() || startupCloseRequested) return;
   // La ventana principal sigue oculta mientras Chromium y React construyen su primera imagen.
   mainWindow.show();
   mainWindow.focus();
