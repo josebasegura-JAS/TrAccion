@@ -2015,6 +2015,8 @@ function errorMessage(error: unknown): string {
 }
 
 export interface ShutdownPerformanceMetrics {
+  engineExitedUncleanly?: boolean;
+  engineExitSafeForRestart?: boolean;
   totalMs: number;
   vacuumMs: number;
   shutdownBackupMs: number;

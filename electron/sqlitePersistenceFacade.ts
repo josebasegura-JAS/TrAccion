@@ -1,3 +1,5 @@
+import { backupsAreSettled, isBackupSnapshot, UNKNOWN_BACKUP_STATE } from './sqliteEngineSafety.js';
+import type { SafeRestartBackupSnapshot } from './safeRestartPolicy.js';
 import * as legacy from './sqlitePersistence.js';
 import type { DatabaseStatus, DatabaseConnectivityIssuePayload } from './sqlitePersistence.js';
 import type { SqliteEngineOperationName } from './sqliteEngineOperations.js';
@@ -27,12 +29,19 @@ let unavailable = false;
 let recovering = false;
 let recoveryAttempted = false;
 let uncertainOperation = false;
+let latestBackups: SafeRestartBackupSnapshot | undefined;
+let pendingRemoteOperations = 0;
+let currentInstance: ReturnType<typeof startIsolatedTestEngine> | undefined;
 
 function getEngine() {
   engine ??= import('./sqliteEngineWorkerClient.js').then(({ startIsolatedTestEngine }) => {
-    const instance = startIsolatedTestEngine(getPersistenceUserDataPath(), (status) => { latestStatus = status; }, (payload) => notifier?.(payload), getTraccionEnvironment());
+    const instance = startIsolatedTestEngine(getPersistenceUserDataPath(), (status) => { latestStatus = status; }, (payload) => notifier?.(payload), getTraccionEnvironment(), (snapshot) => {
+      latestBackups = isBackupSnapshot(snapshot) ? snapshot : undefined;
+    });
+    currentInstance = instance;
     void instance.exited.then(() => {
       unavailable = true;
+      if (!instance.exitedWhileIdle() || !backupsAreSettled(latestBackups)) uncertainOperation = true;
       notifier?.({ blocked: true, message: 'El proceso SQLite ha terminado; edición suspendida.', failedHeartbeatCount: 0, updatedAt: new Date().toISOString() });
     });
     return instance;
@@ -42,6 +51,7 @@ function getEngine() {
 
 function remote<T>(operation: (instance: ReturnType<typeof startIsolatedTestEngine>) => Promise<T>): Promise<T> {
   if (closing || unavailable || recovering) return Promise.reject(new Error('Motor SQLite aislado no disponible.'));
+  pendingRemoteOperations += 1;
   const result = serial.then(async () => {
     if (unavailable) throw new Error('Motor SQLite aislado no disponible.');
     try {
@@ -56,8 +66,9 @@ function remote<T>(operation: (instance: ReturnType<typeof startIsolatedTestEngi
       throw error;
     }
   });
-  serial = result.catch(() => undefined);
-  return result;
+  const settled = result.finally(() => { pendingRemoteOperations -= 1; });
+  serial = settled.catch(() => undefined);
+  return settled;
 }
 
 function route<K extends SqliteEngineOperationName>(name: K) {
@@ -88,16 +99,45 @@ export function setDatabaseConnectivityIssueNotifier(next: typeof notifier): voi
 
 export function getSqliteRestartBackupSnapshot(): ReturnType<typeof legacy.getSqliteRestartBackupSnapshot> {
   if (!isIsolatedEngineEnabled()) return legacy.getSqliteRestartBackupSnapshot();
-  // No autorizar reinicio automático hasta integrar la reconciliación remota.
-  return { activeBackupOperations: 1, queuedBackupOperations: 0, pendingBackupRevisions: 0 };
+  // Un snapshot solo autoriza si no hay peticiones nuevas/encoladas. Una
+  // revisión pendiente impide autorización hasta recibir un estado posterior.
+  if (closing || recovering || uncertainOperation || pendingRemoteOperations !== 0 ||
+      !currentInstance || (currentInstance.getState() !== 'idle' && !currentInstance.exitedWhileIdle()) ||
+      !latestBackups) return { ...UNKNOWN_BACKUP_STATE };
+  return { ...latestBackups };
 }
 
 export async function closeSqlitePersistence(): Promise<legacy.ShutdownPerformanceMetrics> {
   if (!isIsolatedEngineEnabled()) return legacy.closeSqlitePersistence();
+  if (closing || recovering) throw new Error('Cierre SQLite ya en curso o recuperación pendiente.');
   closing = true;
-  await serial;
-  if (recovering || unavailable) throw new Error('Cierre SQLite no confirmado: recuperación en curso, motor no disponible o resultado anterior incierto.');
-  return (await getEngine()).close();
+  try {
+    await serial;
+    const instance = await engine?.catch(() => undefined);
+    // Salir de la aplicación es distinto de afirmar que hubo cierre limpio.
+    // Si el propietario ya terminó no podemos interrumpir ninguna E/S suya.
+    // No abrir otro motor solo para cerrar; conservar el diario de incidencias.
+    if (instance?.hasExited()) {
+      return { totalMs: 0, vacuumMs: 0, shutdownBackupMs: 0, closeDatabaseMs: 0,
+        shutdownBackupPrepareMs: 0, shutdownBackupJsonMs: 0, shutdownBackupLocalSqliteMs: 0,
+        shutdownBackupSharedSqliteMs: 0, shutdownBackupDailySqliteMs: 0,
+        engineExitedUncleanly: true,
+        engineExitSafeForRestart: !uncertainOperation && instance.exitedWhileIdle() && backupsAreSettled(latestBackups) };
+    }
+    if (!engine) {
+      return { totalMs: 0, vacuumMs: 0, shutdownBackupMs: 0, closeDatabaseMs: 0,
+        shutdownBackupPrepareMs: 0, shutdownBackupJsonMs: 0, shutdownBackupLocalSqliteMs: 0,
+        shutdownBackupSharedSqliteMs: 0, shutdownBackupDailySqliteMs: 0 };
+    }
+    if (!instance || uncertainOperation) throw new Error('Cierre SQLite no confirmado: propietario activo con resultado incierto.');
+    return await instance.close();
+  } catch (error) {
+    // Permitir volver a solicitar cierre si posteriormente se confirma exit.
+    // No reactivar edición después de un cierre fallido.
+    unavailable = true;
+    closing = false;
+    throw error;
+  }
 }
 
 export function saveTaskRecordsAtomically(...args: Parameters<typeof legacyBatch.saveTaskRecordsAtomically>): ReturnType<typeof legacyBatch.saveTaskRecordsAtomically> {
@@ -199,17 +239,18 @@ export async function checkSqliteHealth(): Promise<legacy.DatabaseHealthCheckRes
     ok: false, status: getSqliteStatus(), checkedAt: new Date().toISOString(),
     message: 'Motor SQLite suspendido. No repitas guardados inciertos; comprueba la incidencia.',
   });
-  if (closing || recovering || recoveryAttempted || uncertainOperation || !latestStatus?.ready) return failure();
+  if (closing || recovering || recoveryAttempted || uncertainOperation || !latestStatus?.ready || !backupsAreSettled(latestBackups)) return failure();
   recovering = true;
   try {
     await serial;
     const previous = latestStatus;
     const old = await engine?.catch(() => undefined);
-    if (closing || uncertainOperation || !old?.exitedWhileIdle() || !previous?.ready) return failure();
+    if (closing || uncertainOperation || !old?.exitedWhileIdle() || !previous?.ready || !backupsAreSettled(latestBackups)) return failure();
     recoveryAttempted = true;
     // Exclusivamente tras exit confirmado y sin operación incierta.
     // No reenviar ninguna petición del propietario anterior.
     engine = undefined;
+    latestBackups = undefined;
     const next = await getEngine();
     const recovered = await next.callExtra('recoverAfterIdleExit', [previous]) as DatabaseStatus;
     if (!recovered.ready || recovered.phase !== 'active' || recovered.databaseUuid !== previous.databaseUuid ||
