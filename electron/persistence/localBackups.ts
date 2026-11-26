@@ -171,9 +171,10 @@ export async function publishVerifiedSqliteSnapshot(
   if (!identity.databaseUuid || !identity.applicationId || !identity.environment || !identity.schemaVersion) {
     throw new Error('No se ha confirmado la identidad SQLite para el respaldo.');
   }
-  if (typeof database.backup !== 'function') throw new Error('Backup nativo SQLite no disponible.');
+  const backup = (database as DatabaseWithBackup).backup;
+  if (typeof backup !== 'function') throw new Error('Backup nativo SQLite no disponible.');
   await publishBackupFile(destination, async temporary => {
-    await database.backup(temporary);
+    await backup.call(database, temporary);
     verifySqliteIntegrityReadOnly(temporary, identity);
   });
 }

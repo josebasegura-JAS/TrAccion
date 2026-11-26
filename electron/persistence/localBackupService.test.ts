@@ -1,6 +1,6 @@
 import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { copyFile } from 'node:fs/promises';
-import Database from 'better-sqlite3';
+import Database, { type Database as SqliteDatabase } from 'better-sqlite3';
 import { applyMigrations, CURRENT_SCHEMA_VERSION } from './schemaMigrations.js';
 import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 import { getLocalBackupDatabasePath, isSharedSqliteBackupFileName } from './localBackups.js';
@@ -79,7 +79,7 @@ function buildDependencies(
   };
 
   return {
-    getDatabase: () => ({ backup: (destination: string) => copyFile(databasePath, destination) }) as unknown as Database,
+    getDatabase: () => ({ backup: (destination: string) => copyFile(databasePath, destination) }) as unknown as SqliteDatabase,
     getStatus: () => activeStatus(databasePath),
     acquireLock: acquireLock ?? (async () => lock),
     releaseLock: async () => undefined,
@@ -347,7 +347,7 @@ describe('localBackupService - cierre sin backup redundante', () => {
     const shared = readdirSync(rootDir).filter(isSharedSqliteBackupFileName);
     const dependencies = buildDependencies(databasePath);
     const backup = vi.fn(async (destination: string) => { writeFileSync(destination, 'incompleta'); });
-    const failed = createLocalBackupService({ ...dependencies, getDatabase: () => ({ backup }) as unknown as Database });
+    const failed = createLocalBackupService({ ...dependencies, getDatabase: () => ({ backup }) as unknown as SqliteDatabase });
     await expect(failed.createManualLocalBackup()).rejects.toThrow('confirmar la copia SQLite manual');
     expect(readFileSync(live)).toEqual(previous);
     expect(readdirSync(rootDir).filter(isSharedSqliteBackupFileName)).toEqual(shared);

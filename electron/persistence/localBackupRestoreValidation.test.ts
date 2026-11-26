@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Database from 'better-sqlite3';
+import Database, { type Database as SqliteDatabase } from 'better-sqlite3';
 import { applyMigrations } from './schemaMigrations.js';
 import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 
@@ -95,7 +95,7 @@ describe('localBackupService - validación previa de restauración SQLite', () =
     const activateDatabase = vi.fn(async () => activeStatus(targetDatabasePath));
 
     const dependencies: LocalBackupServiceDependencies = {
-      getDatabase: () => ({}) as Database,
+      getDatabase: () => ({}) as SqliteDatabase,
       getStatus: () => activeStatus(targetDatabasePath),
       acquireLock: async () => lock,
       releaseLock: async () => undefined,
