@@ -4,13 +4,14 @@ const mocks = vi.hoisted(() => {
   const listeners = new Map<string, (...args: unknown[]) => unknown>();
   const events = new Map<string, (...args: unknown[]) => unknown>();
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
-  const windows: Array<{ options: { title: string; show: boolean }; show: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; webContents: { executeJavaScript: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; once: ReturnType<typeof vi.fn> } }> = [];
+  const windows: Array<{ options: { title: string; show: boolean }; show: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; webContents: { executeJavaScript: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; once: ReturnType<typeof vi.fn> } }> = [];
   return {
     listeners, events, handlers, windows,
     initialize: vi.fn(async () => ({ ready: true, message: '' })),
     registerCore: vi.fn(), notifier: vi.fn(), quit: vi.fn(),
     write: vi.fn(async () => undefined),
     showErrorBox: vi.fn(),
+    preventSplashClose: vi.fn(),
     loadFile: vi.fn(async () => undefined),
   };
 });
@@ -23,7 +24,10 @@ vi.mock('electron', () => ({
   },
   BrowserWindow: class {
     show = vi.fn();
-    close = vi.fn();
+    close = vi.fn(() => {
+      const handler = this.on.mock.calls.find(call => call[0] === 'close')?.[1];
+      handler?.({ preventDefault: mocks.preventSplashClose });
+    });
     focus = vi.fn();
     webContents = {
       on: vi.fn(), once: vi.fn(), executeJavaScript: vi.fn(async () => true),
@@ -32,7 +36,7 @@ vi.mock('electron', () => ({
     constructor(public options: { title: string; show: boolean }) { mocks.windows.push(this); }
     center() { /* ventana simulada */ }
     once() { /* evento simulado */ }
-    on() { /* evento simulado */ }
+    on = vi.fn();
     isDestroyed() { return false; }
     loadFile = mocks.loadFile;
   },
@@ -207,12 +211,29 @@ describe('arranque del proceso principal', () => {
     handler();
     await vi.advanceTimersByTimeAsync(2000);
     expect(window.show).toHaveBeenCalledTimes(1);
+    expect(mocks.windows[0].close).toHaveBeenCalledTimes(1);
+    expect(mocks.preventSplashClose).not.toHaveBeenCalled();
+    expect(mocks.windows[0].webContents.executeJavaScript).not.toHaveBeenCalledWith('window.__traccionSplashShowClosing?.()', true);
     expect(mocks.initialize).toHaveBeenCalledTimes(1);
     finish({ ready: true, message: '' });
     await vi.advanceTimersByTimeAsync(0);
     signal('app:renderer-ready', window.webContents);
     expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('React preparado'), 'utf8');
     expect(window.show).toHaveBeenCalledTimes(1);
+  });
+
+  it('conserva la protección cuando el usuario intenta cerrar el splash durante la activación', async () => {
+    let finish!: (value: { ready: boolean; message: string }) => void;
+    mocks.initialize.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await boot();
+    mocks.windows[0].close();
+    expect(mocks.preventSplashClose).toHaveBeenCalledTimes(1);
+    expect(mocks.windows[0].webContents.executeJavaScript).toHaveBeenCalledWith('window.__traccionSplashShowClosing?.()', true);
+    expect(mocks.quit).not.toHaveBeenCalled();
+    finish({ ready: true, message: '' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.quit).toHaveBeenCalledTimes(1);
+    expect(mocks.windows).toHaveLength(1);
   });
 
   it('registra errores de consola y salida del renderer en pruebas', async () => {
