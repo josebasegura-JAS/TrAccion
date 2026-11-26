@@ -1,8 +1,12 @@
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFile } from 'node:fs/promises';
+import Database, { type Database as SqliteDatabase } from 'better-sqlite3';
+import { applyMigrations, CURRENT_SCHEMA_VERSION } from './schemaMigrations.js';
+import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
+import { getLocalBackupDatabasePath, isSharedSqliteBackupFileName } from './localBackups.js';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Database } from 'better-sqlite3';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabaseLockManager } from './databaseLockManager.js';
 
 const testPaths = vi.hoisted(() => ({ userData: '' }));
@@ -36,13 +40,26 @@ import {
   type LocalBackupServiceDependencies,
 } from './localBackupService.js';
 
+let templateDir: string;
+let templatePath: string;
+let identity: ReturnType<typeof inspectAndEnsureDatabaseIdentity>['identity'];
+beforeAll(() => {
+  templateDir = mkdtempSync(path.join(tmpdir(), 'traccion-backup-schema-'));
+  templatePath = path.join(templateDir, 'schema.sqlite');
+  const db = new Database(templatePath);
+  try { applyMigrations(db); } finally { db.close(); }
+  identity = inspectAndEnsureDatabaseIdentity(templatePath, { allowLegacyBootstrap: true }).identity;
+});
+afterAll(() => rmSync(templateDir, { recursive: true, force: true }));
+
 function activeStatus(databasePath: string): DatabaseStatus {
   return {
     ready: true,
     engine: 'better-sqlite3',
     phase: 'active',
     path: databasePath,
-    schemaVersion: 1,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    databaseUuid: identity.databaseUuid, applicationId: identity.applicationId, environment: identity.environment,
     isDefaultPath: false,
     lockPath: `${databasePath}.lock`,
   };
@@ -62,7 +79,7 @@ function buildDependencies(
   };
 
   return {
-    getDatabase: () => ({}) as Database,
+    getDatabase: () => ({ backup: (destination: string) => copyFile(databasePath, destination) }) as unknown as SqliteDatabase,
     getStatus: () => activeStatus(databasePath),
     acquireLock: acquireLock ?? (async () => lock),
     releaseLock: async () => undefined,
@@ -86,7 +103,7 @@ describe('localBackupService - cierre sin backup redundante', () => {
     rootDir = mkdtempSync(path.join(tmpdir(), 'traccion-local-backup-test-'));
     testPaths.userData = path.join(rootDir, 'user-data');
     databasePath = path.join(rootDir, 'traccion.sqlite');
-    writeFileSync(databasePath, 'sqlite-test-data', { encoding: 'utf8', flag: 'w' });
+    copyFileSync(templatePath, databasePath);
   });
 
   afterEach(() => {
@@ -259,7 +276,8 @@ describe('localBackupService - cierre sin backup redundante', () => {
     expect(secondAcquire).toHaveBeenCalledTimes(1);
     expect(readdirSync(backupDirectory)).toEqual(previousBackup);
 
-    writeFileSync(databasePath, 'sqlite-test-data-updated');
+    const changed = new Database(databasePath);
+    try { changed.exec('CREATE TABLE backup_test_revision (id INTEGER)'); } finally { changed.close(); }
     second.enqueueLocalBackup('save:task_records');
     await second.flushPendingLocalBackup();
     expect(secondAcquire).toHaveBeenCalledTimes(2);
@@ -315,5 +333,30 @@ describe('localBackupService - cierre sin backup redundante', () => {
       expect(events).toEqual(['backup-inicia', 'backup-libera', 'escritura-entra']);
     },
   );
+
+  it('no confirma un backup manual que no consigue el bloqueo', async () => {
+    const service = createLocalBackupService(buildDependencies(databasePath, async () => { throw new Error('LOCKED'); }));
+    await expect(service.createManualLocalBackup()).rejects.toThrow('confirmar la copia SQLite manual');
+  });
+
+  it('conserva la copia válida y no propaga una instantánea fallida o inválida', async () => {
+    const initial = createLocalBackupService(buildDependencies(databasePath));
+    await initial.createManualLocalBackup();
+    const live = getLocalBackupDatabasePath();
+    const previous = readFileSync(live);
+    const shared = readdirSync(rootDir).filter(isSharedSqliteBackupFileName);
+    const dependencies = buildDependencies(databasePath);
+    const backup = vi.fn(async (destination: string) => { writeFileSync(destination, 'incompleta'); });
+    const failed = createLocalBackupService({ ...dependencies, getDatabase: () => ({ backup }) as unknown as SqliteDatabase });
+    await expect(failed.createManualLocalBackup()).rejects.toThrow('confirmar la copia SQLite manual');
+    expect(readFileSync(live)).toEqual(previous);
+    expect(readdirSync(rootDir).filter(isSharedSqliteBackupFileName)).toEqual(shared);
+    expect(readdirSync(path.dirname(live)).some(name => name.endsWith('.pending'))).toBe(false);
+    failed.enqueueLocalBackup('save:test');
+    await expect(failed.createShutdownLocalBackup()).rejects.toThrow();
+    expect(failed.getRestartSafetySnapshot().pendingBackupRevisions).toBe(1);
+    expect(readdirSync(rootDir).filter(isSharedSqliteBackupFileName)).toEqual(shared);
+    await failed.flushPendingLocalBackup();
+  });
 
 });

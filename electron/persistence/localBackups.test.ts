@@ -1,3 +1,5 @@
+import { applyMigrations, CURRENT_SCHEMA_VERSION } from './schemaMigrations.js';
+import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 import Database from 'better-sqlite3';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,6 +26,8 @@ vi.mock('electron', () => ({
 
 const {
   backupSqliteDatabase,
+  copyBackupAtomically,
+  publishVerifiedSqliteSnapshot,
   backupTimestampForFileName,
   getDailyLocalBackupDatabasePath,
   getDailyLocalBackupDirectory,
@@ -281,6 +285,74 @@ describe('localBackups', () => {
     await expect(writeSharedSqliteBackup(source, '2026-11-04', path.join(userDataDir, 'missing.sqlite'))).rejects.toThrow();
     expect(readdirSync(userDataDir).sort()).toEqual(previous);
     previous.forEach(name => expect(readFileSync(path.join(userDataDir, name), 'utf8')).toBe('previous'));
+  });
+
+  it('no trunca la copia vigente si falla el origen de una publicación', async () => {
+    const destination = path.join(userDataDir, 'vigente.sqlite');
+    writeFileSync(destination, 'previous');
+    await expect(copyBackupAtomically(path.join(userDataDir, 'missing.sqlite'), destination)).rejects.toThrow();
+    expect(readFileSync(destination, 'utf8')).toBe('previous');
+    expect(readdirSync(userDataDir)).toEqual(['vigente.sqlite']);
+  });
+
+  it('rechaza cada campo de identidad ausente y la falta de API nativa antes de publicar', async () => {
+    const destination = path.join(userDataDir, 'vigente.sqlite');
+    writeFileSync(destination, 'previous');
+    const identity = { databaseUuid: 'uuid', applicationId: 'traccion', environment: 'production', schemaVersion: 1 };
+    const backup = vi.fn();
+    for (const missing of [
+      { databaseUuid: '' }, { applicationId: '' }, { environment: '' }, { schemaVersion: 0 },
+    ]) {
+      await expect(publishVerifiedSqliteSnapshot({ backup } as never, destination, { ...identity, ...missing })).rejects.toThrow(/identidad SQLite/);
+    }
+    await expect(publishVerifiedSqliteSnapshot({} as never, destination, identity)).rejects.toThrow(/Backup nativo/);
+    expect(backup).not.toHaveBeenCalled();
+    expect(readFileSync(destination, 'utf8')).toBe('previous');
+  });
+
+  it('publica una instantánea nativa verificada y conserva la anterior si falla la identidad o la API', async () => {
+    const source = path.join(userDataDir, 'real.sqlite');
+    const destination = path.join(userDataDir, 'verified.sqlite');
+    const setup = new Database(source);
+    try { applyMigrations(setup); } finally { setup.close(); }
+    const identity = { ...inspectAndEnsureDatabaseIdentity(source, { allowLegacyBootstrap: true }).identity, schemaVersion: CURRENT_SCHEMA_VERSION };
+    const db = new Database(source);
+    try {
+      await publishVerifiedSqliteSnapshot(db, destination, identity);
+      const previous = readFileSync(destination);
+      await expect(publishVerifiedSqliteSnapshot(db, destination, { ...identity, databaseUuid: 'other' })).rejects.toThrow();
+      const backup = vi.fn(async (temporary: string) => {
+        writeFileSync(temporary, 'partial');
+        throw new Error('native failure');
+      });
+      await expect(publishVerifiedSqliteSnapshot({ backup } as never, destination, identity)).rejects.toThrow('native failure');
+      expect(readFileSync(destination)).toEqual(previous);
+      expect(readdirSync(userDataDir).some(name => name.endsWith('.pending'))).toBe(false);
+    } finally { db.close(); }
+  }, 20000);
+
+  it('la copia diaria estricta propaga el fallo y el modo histórico no lo hace', async () => {
+    const source = path.join(userDataDir, 'missing.sqlite');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await expect(writeDailyLocalBackup(source, DEFAULT_PREFERENCES, weekdayNameForTest, source, true)).rejects.toThrow();
+      await expect(writeDailyLocalBackup(source, DEFAULT_PREFERENCES, weekdayNameForTest)).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally { warn.mockRestore(); }
+  });
+
+  it('la copia diaria en PRUEBAS utiliza la carpeta de la base y no userData', async () => {
+    const original = process.argv;
+    const shared = path.join(userDataDir, 'shared');
+    mkdirSync(shared);
+    const source = path.join(shared, 'traccion.sqlite');
+    writeFileSync(source, 'snapshot');
+    process.argv = [...original.filter(arg => !arg.startsWith('--traccion-env')), '--traccion-env=test'];
+    try {
+      await writeDailyLocalBackup(source, DEFAULT_PREFERENCES, weekdayNameForTest, source, true);
+      const destination = path.join(shared, 'backups-pruebas', 'sqlite-daily-backup', 'traccion-daily-' + weekdayNameForTest(new Date()) + '.sqlite');
+      expect(readFileSync(destination, 'utf8')).toBe('snapshot');
+    } finally { process.argv = original; }
   });
 
 });
