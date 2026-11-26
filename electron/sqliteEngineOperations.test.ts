@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPersistenceOperations, SQLITE_ENGINE_OPERATIONS } from './sqliteEngineOperations.js';
+import { createPersistenceOperations, isEngineReadOnlyOperation, SQLITE_ENGINE_OPERATIONS } from './sqliteEngineOperations.js';
 import type * as Persistence from './sqlitePersistence.js';
 
 describe('contrato de operaciones SQLite aisladas', () => {
@@ -14,4 +14,14 @@ describe('contrato de operaciones SQLite aisladas', () => {
     await expect(operations.get('saveTaskRecordIfUnchanged')?.({ id: '1' })).resolves.toEqual([{ id: '1' }]);
     expect(handler).toHaveBeenCalledWith({ id: '1' });
   });
+});
+
+it('solo clasifica como lecturas las operaciones revisadas', () => {
+  expect(isEngineReadOnlyOperation('getPersistedRecordSnapshot')).toBe(true);
+  expect(isEngineReadOnlyOperation('getPersistedRecordsTokenSnapshot')).toBe(true);
+  expect(isEngineReadOnlyOperation('loadPersistedRecordsHydrationSnapshot')).toBe(true);
+  for (const name of ['loadTaskRecordsSnapshot', 'loadTeletrabajoRecordsSnapshot',
+    'restoreLocalBackup', 'listLocalBackups', 'checkSqliteHealth', 'unknown']) {
+    expect(isEngineReadOnlyOperation(name)).toBe(false);
+  }
 });

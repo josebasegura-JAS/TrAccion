@@ -1,3 +1,4 @@
+import { assertSqliteProcessAccess } from './sqliteProcessGuard.js';
 import { createRequire } from 'node:module';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import { pruneLocalStorageBackups } from './maintenanceQueries.js';
@@ -17,6 +18,7 @@ export function openSqliteDatabase(
   databasePath: string,
   options: OpenSqliteDatabaseOptions,
 ): Database {
+  assertSqliteProcessAccess();
   const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
   const db = new BetterSqlite3(databasePath);
   try {

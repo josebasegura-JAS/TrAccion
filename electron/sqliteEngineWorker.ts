@@ -1,8 +1,8 @@
 import { configurePersistenceUserDataPath } from './persistence/persistenceRuntime.js';
 import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { createEngineDispatcher } from './sqliteEngineTransport.js';
-import { createPersistenceOperations } from './sqliteEngineOperations.js';
-import { runCurrentSqliteIpcAsWrite } from './sqliteIpcQueue.js';
+import { createPersistenceOperations, isEngineReadOnlyOperation } from './sqliteEngineOperations.js';
+import { runSqliteEngineOperation } from './sqliteIpcQueue.js';
 import { isEngineRequest } from './sqliteEngineTransport.js';
 
 const port = process.parentPort;
@@ -54,9 +54,9 @@ port.on('message', (event: { data: unknown }) => {
   if (request === 'engine:shutdown' && closed) { process.exit(0); }
   if (!isEngineRequest(request) || closing) return;
   if (request.operation === 'closeSqlitePersistence') closing = true;
-  // Conservar el contexto de escritura incluso para lecturas que migren datos.
-  // El cliente admite una sola petición simultánea; no se reintentan peticiones.
-  void runCurrentSqliteIpcAsWrite(() => dispatch(request)).then((response) => {
+  // Solo las consultas explícitamente verificadas evitan el lock externo.
+  // Las lecturas con migraciones conservan el contexto de escritura.
+  void runSqliteEngineOperation(request.operation, isEngineReadOnlyOperation(request.operation), () => dispatch(request)).then((response) => {
     if (request.operation === 'closeSqlitePersistence' && response?.kind === 'engine:result') closed = true;
     port.postMessage({ kind: 'engine:status', status: persistence.getSqliteStatus() });
     if (response) port.postMessage(response);

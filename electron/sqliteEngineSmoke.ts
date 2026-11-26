@@ -37,7 +37,33 @@ async function run(): Promise<void> {
   if (conflict.ok) throw new Error('Se ha aceptado una escritura con versión obsoleta.');
   const unchanged = await engine.call('getPersistedRecordSnapshot', key);
   if (unchanged.record?.value !== value) throw new Error('El conflicto alteró el registro original.');
+  const parallel = await Promise.all([
+    engine.call('savePersistedRecordIfUnchanged', { key: 'parallel-a', value: 'A', expectedUpdatedAt: null }),
+    peer.call('savePersistedRecordIfUnchanged', { key: 'parallel-b', value: 'B', expectedUpdatedAt: null }),
+  ]);
+  if (parallel.some(result => !result.ok)) throw new Error('Falló escritura concurrente en registros distintos.');
+  const [seenA, seenB] = await Promise.all([
+    peer.call('getPersistedRecordSnapshot', 'parallel-a'),
+    engine.call('getPersistedRecordSnapshot', 'parallel-b'),
+  ]);
+  if (seenA.record?.value !== 'A' || seenB.record?.value !== 'B') throw new Error('Escritura concurrente no persistida.');
   await peer.close();
+
+  // Restauración destructiva únicamente con un propietario y base temporal.
+  await engine.call('createManualLocalBackup');
+  const backups = await engine.call('listLocalBackups');
+  const backup = backups.find(item => item.kind === 'sqlite' && item.isLiveCopy);
+  if (!backup || backup.sizeBytes <= 0) throw new Error('No se generó respaldo SQLite real.');
+  const mutation = await engine.call('savePersistedRecordIfUnchanged', {
+    key, value: 'changed-after-backup', expectedUpdatedAt: unchanged.record?.updatedAt ?? null,
+  });
+  if (!mutation.ok) throw new Error('No se modificó el registro temporal.');
+  const restored = await engine.call('restoreLocalBackup', backup.id);
+  if (!restored.ok || restored.status.databaseUuid !== status.databaseUuid) {
+    throw new Error('Restauración SQLite no confirmada: ' + restored.message);
+  }
+  const restoredRecord = await engine.call('getPersistedRecordSnapshot', key);
+  if (restoredRecord.record?.value !== value) throw new Error('La restauración no recuperó el valor original.');
   await engine.close();
 
   // Reabrir únicamente después de confirmar la salida del propietario anterior.
