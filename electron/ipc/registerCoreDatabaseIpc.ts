@@ -175,6 +175,7 @@ export function registerCoreDatabaseIpc(): void {
   });
   let updateRequestPending = false;
   ipcMain.handle('app-update:apply', async (event) => {
+    if (getTraccionEnvironment() === 'test') return { ok: false, message: 'Actualización automática desactivada en PRUEBAS. Utiliza el EXE experimental.' };
     if (updateRequestPending) return { ok: false, message: 'Ya hay una actualización en preparación.' };
     updateRequestPending = true;
     let prepared = false;

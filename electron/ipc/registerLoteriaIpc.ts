@@ -1,3 +1,4 @@
+import { resolveTestOutputDirectory } from '../persistence/testOutputPaths.js';
 import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { copyFile, mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
@@ -55,6 +56,7 @@ export function registerLoteriaIpc(): void {
   });
 
   ipcMain.handle('loteria:select-export-directory', async (event) => {
+    if (getTraccionEnvironment() === 'test') return resolveTestOutputDirectory(getSqliteStatus(), 'excel', 'loteria');
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options = { properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> };
     const result = browserWindow

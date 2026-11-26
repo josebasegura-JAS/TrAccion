@@ -1,3 +1,4 @@
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 /**
  * Módulo Especiales: destinatarios, creación de borrador de Outlook y parseo de .msg.
  * Extraído de main.ts como parte de la división de registerIpcHandlers()
@@ -29,7 +30,7 @@ export function registerEspecialesIpc(): void {
     );
   });
   ipcMain.handle('especiales:create-outlook-draft', async (_event, payload: unknown) =>
-    createOutlookDraftCompat(payload),
+    getTraccionEnvironment() === 'test' ? { ok: false, message: 'Outlook real desactivado en PRUEBAS.' } : createOutlookDraftCompat(payload),
   );
   ipcMain.handle('msg:parseOutlookMsg', async (_event, payload: unknown) => {
     try {

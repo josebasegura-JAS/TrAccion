@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
-import { mkdir, realpath, stat } from 'node:fs/promises';
+import { lstat, mkdir, realpath, stat } from 'node:fs/promises';
 
 interface OutputStatus { ready: boolean; phase: string; path: string; isDefaultPath: boolean; environment?: string }
 
@@ -29,6 +29,7 @@ export async function resolveTestOutputDirectory(status: OutputStatus, ...segmen
     try { await mkdir(next); } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
+    if ((await lstat(next)).isSymbolicLink()) throw new Error('No se admiten enlaces en las carpetas de salida de PRUEBAS.');
     const resolved = await realpath(next);
     const relative = path.relative(root, resolved);
     if (!relative || relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative) ||
@@ -36,4 +37,19 @@ export async function resolveTestOutputDirectory(status: OutputStatus, ...segmen
     directory = resolved;
   }
   return directory;
+}
+
+/** Segunda barrera en el publicador, no depende de rutas del renderer. */
+export async function assertTestOutputDirectory(status: OutputStatus, directory: string, ...segments: string[]): Promise<void> {
+  const expected = await realpath(testOutputRoot(status));
+  const target = path.join(expected, ...segments);
+  const actual = await realpath(directory);
+  if (path.relative(target, actual) !== '') throw new Error('Destino de publicación fuera de la carpeta autorizada de PRUEBAS.');
+  let current = expected;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    if ((await lstat(current)).isSymbolicLink() || path.relative(current, await realpath(current)) !== '') {
+      throw new Error('Destino de PRUEBAS redirigido por un enlace.');
+    }
+  }
 }

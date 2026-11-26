@@ -1,3 +1,6 @@
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
+import { resolveTestOutputDirectory } from '../persistence/testOutputPaths.js';
+import { getSqliteStatus } from '../sqlitePersistenceFacade.js';
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron';
 import { spawn } from 'node:child_process';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -203,7 +206,9 @@ async function archiveSchoolHelpMessage(payload: SchoolHelpArchivePayload): Prom
   if (!payload || typeof payload.fileName !== 'string' || !isArrayBufferLike(payload.buffer) || typeof payload.basePath !== 'string' || typeof payload.employeeName !== 'string') {
     return { ok: false, message: 'Datos de archivado no válidos.' };
   }
-  const basePath = payload.basePath.trim();
+  const basePath = getTraccionEnvironment() === 'test'
+    ? await resolveTestOutputDirectory(getSqliteStatus(), 'documentos', 'ayuda-escolar').catch(() => '')
+    : payload.basePath.trim();
   if (!basePath) return { ok: false, message: 'Configura primero la carpeta de Ayuda escolar.' };
   const employeeName = sanitizeFileStem(payload.employeeName);
   try {
@@ -222,6 +227,7 @@ async function archiveSchoolHelpMessage(payload: SchoolHelpArchivePayload): Prom
 
 export function registerAyudaEscolarIpc(): void {
   ipcMain.handle('ayuda-escolar:select-folder', async (event) => {
+    if (getTraccionEnvironment() === 'test') return resolveTestOutputDirectory(getSqliteStatus(), 'documentos', 'ayuda-escolar');
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = { title: 'Seleccionar carpeta de Ayuda escolar', properties: ['openDirectory', 'createDirectory'] };
     const result = browserWindow ? await dialog.showOpenDialog(browserWindow, options) : await dialog.showOpenDialog(options);

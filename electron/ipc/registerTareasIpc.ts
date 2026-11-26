@@ -77,6 +77,7 @@ async function openTaskDocumentPath(filePath: unknown): Promise<{ ok: boolean; m
     return { ok: false, message: 'Ruta de documento no válida.' };
   }
 
+  if (getTraccionEnvironment() === 'test') return { ok: false, message: 'La apertura de documentos vinculados está desactivada en PRUEBAS para proteger los originales.' };
   const normalizedPath = filePath.trim();
 
   try {
