@@ -1,3 +1,4 @@
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { copyFile, mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -63,6 +64,7 @@ export function registerLoteriaIpc(): void {
   });
 
   ipcMain.handle('loteria:save-campaign-excel', async (_event, payload: unknown) => {
+    if (getTraccionEnvironment() === 'test') return { ok: true, path: null, message: 'Excel automático desactivado en PRUEBAS.' };
     if (!payload || typeof payload !== 'object') {
       return { ok: false, message: 'Datos inválidos para guardar el Excel de Lotería.', path: null };
     }

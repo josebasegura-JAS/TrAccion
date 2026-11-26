@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { loadConfiguracionSnapshot, saveConfiguracionIfUnchanged } from './sqlitePersistence.js';
+import { loadConfiguracionSnapshot, saveConfiguracionIfUnchanged } from './sqlitePersistenceFacade.js';
 
 const PREFERENCES_FILE_NAME = 'task-word-preferences.json';
 const SHARED_ROUTE_KEY = 'rutaExportacionTareas';

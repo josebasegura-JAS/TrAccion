@@ -492,7 +492,10 @@ export function createDatabaseLockManager(
     waitMs = DEFAULT_OPERATION_LOCK_WAIT_MS,
   ): Promise<DatabaseLockInfo> {
     const lockPath = getLockPath(databasePath);
-    await mkdir(path.dirname(lockPath), { recursive: true });
+    // La activación ya ha comprobado el directorio. No recrear ancestros UNC
+    // ni recursos compartidos durante una adquisición de lock.
+    const parent = await stat(path.dirname(lockPath));
+    if (!parent.isDirectory()) throw new Error('La carpeta de SQLite no es un directorio.');
     const startedAt = monotonicNowMs();
     let lastLock: DatabaseLockInfo | null = null;
     let lastReadError: unknown = null;

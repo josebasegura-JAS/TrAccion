@@ -1,3 +1,4 @@
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -14,6 +15,7 @@ export function registerOperationalExcelBackupIpc(): void {
   });
 
   ipcMain.handle('operational-backup:save-excel', async (_event, payload: unknown) => {
+    if (getTraccionEnvironment() === 'test') return { ok: true, path: null, message: 'Excel automático desactivado en PRUEBAS.' };
     if (!payload || typeof payload !== 'object') {
       return { ok: false, message: 'Datos inválidos para guardar el Excel automático.', path: null };
     }

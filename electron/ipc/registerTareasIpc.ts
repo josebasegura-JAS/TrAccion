@@ -1,3 +1,5 @@
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
+import { resolveTestOutputDirectory } from '../persistence/testOutputPaths.js';
 /**
  * Módulo Tareas, incluyendo selección/apertura de documentos vinculados y
  * mantenimiento automático del Excel compartido de tareas abiertas.
@@ -106,7 +108,12 @@ function taskExcelDatedFileName(date = new Date()): string {
 function refreshOpenTasksWord(automatic = false): Promise<TaskWordExportResult> {
   return excelExportQueue.enqueue(async () => {
     const startedAt = Date.now();
-    const directoryPath = await getOpenTasksWordDirectory();
+    if (automatic && getTraccionEnvironment() === 'test') {
+      return { ok: true, skipped: true, path: null, count: 0, message: 'Excel automático desactivado en PRUEBAS.' };
+    }
+    const directoryPath = getTraccionEnvironment() === 'test'
+      ? await resolveTestOutputDirectory(getSqliteStatus(), 'excel', 'tareas')
+      : await getOpenTasksWordDirectory();
     if (!directoryPath) {
       return { ok: true, skipped: true, path: null, count: 0,
         message: 'No hay carpeta configurada para el Excel de tareas abiertas.' };
@@ -213,7 +220,7 @@ const automaticExcelRefresh = createDebouncedSerialRefresh(
 );
 
 function scheduleOpenTasksWordRefresh(): void {
-  automaticExcelRefresh.schedule();
+  if (getTraccionEnvironment() !== 'test') automaticExcelRefresh.schedule();
 }
 
 function isAtomicTaskBatchPayload(
@@ -303,9 +310,13 @@ export function registerTareasIpc(): void {
     return result;
   });
 
-  ipcMain.handle('tasks:get-open-word-directory', () => getOpenTasksWordDirectory());
+  ipcMain.handle('tasks:get-open-word-directory', () => getTraccionEnvironment() === 'test' ? null : getOpenTasksWordDirectory());
 
   ipcMain.handle('tasks:select-open-word-directory', async (event) => {
+    if (getTraccionEnvironment() === 'test') {
+      const result = await refreshOpenTasksWord();
+      return { ok: result.ok, path: result.path ? path.dirname(result.path) : null, message: result.message };
+    }
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
       title: 'Seleccionar carpeta para el Excel automático de tareas abiertas',
@@ -329,7 +340,7 @@ export function registerTareasIpc(): void {
   });
 
   ipcMain.handle('tasks:clear-open-word-directory', async () => {
-    await clearOpenTasksWordDirectory();
+    if (getTraccionEnvironment() !== 'test') await clearOpenTasksWordDirectory();
     return { ok: true, path: null, message: 'Carpeta del Excel de tareas eliminada.' };
   });
 

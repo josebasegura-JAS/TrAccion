@@ -56,6 +56,9 @@ async function run(): Promise<void> {
   const backups = await engine.call('listLocalBackups');
   const backup = backups.find(item => item.kind === 'sqlite' && item.isLiveCopy);
   if (!backup || backup.sizeBytes <= 0) throw new Error('No se generó respaldo SQLite real.');
+  if (path.relative(directory, backup.path).startsWith('..') || path.isAbsolute(path.relative(directory, backup.path))) {
+    throw new Error('El backup de pruebas salió de la carpeta SQLite.');
+  }
   const mutation = await engine.call('savePersistedRecordIfUnchanged', {
     key, value: 'changed-after-backup', expectedUpdatedAt: unchanged.record?.updatedAt ?? null,
   });
