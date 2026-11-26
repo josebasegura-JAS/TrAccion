@@ -590,6 +590,7 @@ async function activateDatabase(
   directoryPath: string,
   isDefaultPath: boolean,
   sourceDatabasePath: string | null,
+  bindSelectedTestDirectory = false,
 ): Promise<DatabaseStatus> {
   const activated = await activateSqliteDatabase(
     directoryPath,
@@ -603,6 +604,7 @@ async function activateDatabase(
       startDatabaseLockHeartbeat,
       releaseLock,
     },
+    bindSelectedTestDirectory,
   );
   database = activated.database;
   status = activated.status;
@@ -1906,11 +1908,12 @@ export async function listOtherTaskLocks() {
   return getRecordLockService().listOtherLocks('tareas');
 }
 
-export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
+export async function changeSqliteDirectory(directoryPath: string, confirmedTestSelection = false): Promise<DatabaseStatus> {
   const previousStatus = getSqliteStatus();
   const previousDatabasePath = database ? previousStatus.path : null;
   const normalizedDirectoryPath = path.resolve(directoryPath);
   const nextDatabasePath = getDatabasePathForDirectory(normalizedDirectoryPath);
+  const bindSelectedTestDirectory = confirmedTestSelection === true && getTraccionEnvironment() === 'test';
 
   if (previousStatus.ready && previousStatus.path === nextDatabasePath) {
     return previousStatus;
@@ -1930,8 +1933,9 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
         normalizedDirectoryPath,
         false,
         getTraccionEnvironment() === 'test' ? null : previousDatabasePath,
+        bindSelectedTestDirectory,
       );
-      await writeDatabasePreferences({
+      if (!bindSelectedTestDirectory) await writeDatabasePreferences({
         ...(await readDatabasePreferences()),
         customDirectoryPath: normalizedDirectoryPath,
         expectedDatabaseUuid: nextStatus.databaseUuid ?? null,

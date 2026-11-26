@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   maintenance: vi.fn(() => ({ ok: true })),
   changeDirectory: vi.fn(() => ({ ready: true })),
   dialog: vi.fn(async () => ({ canceled: true, filePaths: [] as string[] })),
+  confirmDirectory: vi.fn(async () => ({ response: 0 })),
   restore: vi.fn(() => ({ ok: false, message: 'respaldo no válido' })),
   migrate: vi.fn(() => ({ ready: true })),
   backup: vi.fn(() => ({ ready: true })),
@@ -28,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: { getVersion: () => 'test', quit: mocks.quit },
   BrowserWindow: { fromWebContents: mocks.initiatingWindow },
-  dialog: { showOpenDialog: mocks.dialog },
+  dialog: { showOpenDialog: mocks.dialog, showMessageBox: mocks.confirmDirectory },
   ipcMain: { handle: (channel: string, handler: (event: unknown, payload?: unknown) => unknown) => mocks.handlers.set(channel, handler) },
 }));
 vi.mock('../sqliteIpcQueue.js', () => ({ enqueueSqliteIpc: mocks.enqueue }));
@@ -56,6 +57,7 @@ vi.mock('../sqlitePersistence.js', () => ({
 }));
 
 import { registerCoreDatabaseIpc } from './registerCoreDatabaseIpc.js';
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 
 function invoke(channel: string, payload?: unknown) {
   const handler = mocks.handlers.get(channel);
@@ -65,6 +67,7 @@ function invoke(channel: string, payload?: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
+  vi.mocked(getTraccionEnvironment).mockReturnValue('production');
   mocks.initiatingWindow.mockReturnValue(null);
   mocks.confirmUpdate.mockResolvedValue(true);
   mocks.applyUpdate.mockResolvedValue({ ok: false, message: 'Actualización cancelada' });
@@ -155,6 +158,20 @@ describe('IPC central de SQLite', () => {
     await invoke('database:select-directory', { path: 'ignored-renderer-path' });
     expect(mocks.changeDirectory).toHaveBeenCalledWith('test-directory');
     expect(mocks.enqueue).toHaveBeenCalledWith('database:select-directory', expect.any(Function));
+  });
+  it('PRUEBAS no cambia la base si se cancela la confirmación nativa', async () => {
+    vi.mocked(getTraccionEnvironment).mockReturnValue('test');
+    mocks.dialog.mockResolvedValueOnce({ canceled: false, filePaths: ['nueva-test'] });
+    mocks.confirmDirectory.mockResolvedValueOnce({ response: 0 });
+    expect(await invoke('database:select-directory')).toEqual(mocks.status);
+    expect(mocks.changeDirectory).not.toHaveBeenCalled();
+  });
+  it('PRUEBAS permite la revinculación únicamente tras confirmación nativa', async () => {
+    vi.mocked(getTraccionEnvironment).mockReturnValue('test');
+    mocks.dialog.mockResolvedValueOnce({ canceled: false, filePaths: ['nueva-test'] });
+    mocks.confirmDirectory.mockResolvedValueOnce({ response: 1 });
+    await invoke('database:select-directory');
+    expect(mocks.changeDirectory).toHaveBeenCalledWith('nueva-test', true);
   });
   it.each(['database:backup-local-storage', 'database:migrate-local-storage'])('%s rechaza entradas sin un array de registros', (channel) => {
     for (const payload of [null, {}, { records: null }, { records: 'bad' }]) {

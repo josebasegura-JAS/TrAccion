@@ -4,7 +4,7 @@
  * en un fichero por área funcional.
  */
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import type { OpenDialogOptions } from 'electron';
+import type { MessageBoxOptions, OpenDialogOptions } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 import { applyAppUpdate, checkForAppUpdate } from '../appUpdate.js';
@@ -104,6 +104,19 @@ export function registerCoreDatabaseIpc(): void {
       return getSqliteStatus();
     }
 
+    if (getTraccionEnvironment() === 'test') {
+      const confirmation: MessageBoxOptions = {
+        type: 'question', title: 'Vincular base de PRUEBAS',
+        message: '¿Vincular la carpeta seleccionada al entorno de PRUEBAS?',
+        detail: selectedDirectory + '\n\nSe validará la identidad de la base y se guardará la nueva vinculación solo si la conexión es correcta. No se copiará ni modificará la base de producción.',
+        buttons: ['Cancelar', 'Vincular PRUEBAS'], defaultId: 0, cancelId: 0, noLink: true,
+      };
+      const decision = browserWindow
+        ? await dialog.showMessageBox(browserWindow, confirmation)
+        : await dialog.showMessageBox(confirmation);
+      if (decision.response !== 1) return getSqliteStatus();
+      return enqueueSqliteIpc('database:select-directory', () => changeSqliteDirectory(selectedDirectory, true));
+    }
     return enqueueSqliteIpc('database:select-directory', () =>
       changeSqliteDirectory(selectedDirectory),
     );

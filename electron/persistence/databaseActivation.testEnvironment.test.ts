@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { readDatabasePreferences, writeDatabasePreferences } from './databasePreferences.js';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -75,7 +76,6 @@ describe('arranque aislado con SQLite test', () => {
 
   it('rechaza la base real antes de crear lock o escribir en su carpeta', async () => {
     const productionDir = path.join(directory, 'produccion');
-    const { mkdirSync } = await import('node:fs');
     mkdirSync(productionDir);
     const dbPath = path.join(productionDir, 'traccion.sqlite');
     createMigratedTestFixture(dbPath);
@@ -91,4 +91,47 @@ describe('arranque aislado con SQLite test', () => {
     finally { verified.close(); }
     expect(existsSync(dbPath + '.lockdir')).toBe(false);
   }, 30_000);
+  it('vincula otra base test solo mediante selección explícita y conserva el UUID al reabrir', async () => {
+    const old = path.join(directory, 'old');
+    const next = path.join(directory, 'next');
+    mkdirSync(old);
+    mkdirSync(next);
+    for (const folder of [old, next]) {
+      const file = path.join(folder, 'traccion.sqlite');
+      createMigratedTestFixture(file);
+      inspectAndEnsureDatabaseIdentity(file, { allowLegacyBootstrap: true, expectedEnvironment: 'test' });
+    }
+    const first = await activateSqliteDatabase(old, false, null, deps(), true);
+    first.database.close();
+    const original = await readDatabasePreferences();
+    expect(original.customDirectoryPath).toBe(old);
+    await expect(activateSqliteDatabase(next, false, null, deps())).rejects.toThrow('no coincide');
+    expect(await readDatabasePreferences()).toEqual(original);
+    const second = await activateSqliteDatabase(next, false, null, deps(), true);
+    second.database.close();
+    expect(second.status.databaseUuid).not.toBe(first.status.databaseUuid);
+    expect(await readDatabasePreferences()).toMatchObject({
+      customDirectoryPath: next, expectedDatabaseUuid: second.status.databaseUuid,
+    });
+    const reopened = await activateSqliteDatabase(next, false, null, deps());
+    reopened.database.close();
+    expect(reopened.status.databaseUuid).toBe(second.status.databaseUuid);
+    // Ni siquiera la selección explícita autoriza aceptar un UUID distinto
+    // en la MISMA carpeta vinculada.
+    await writeDatabasePreferences({ ...(await readDatabasePreferences()), expectedDatabaseUuid: first.status.databaseUuid });
+    await expect(activateSqliteDatabase(next, false, null, deps(), true)).rejects.toThrow('no coincide');
+  }, 30_000);
+
+  it('rechaza producción incluso tras confirmar el cambio de base test y conserva preferencias', async () => {
+    const target = path.join(directory, 'production');
+    mkdirSync(target);
+    const file = path.join(target, 'traccion.sqlite');
+    createMigratedTestFixture(file);
+    inspectAndEnsureDatabaseIdentity(file, { allowLegacyBootstrap: true, expectedEnvironment: 'production' });
+    const original = await readDatabasePreferences();
+    await expect(activateSqliteDatabase(target, false, null, deps(), true)).rejects.toThrow('Entorno incompatible');
+    expect(await readDatabasePreferences()).toEqual(original);
+    expect(requestedLocks).toBe(0);
+  }, 30_000);
+
 });

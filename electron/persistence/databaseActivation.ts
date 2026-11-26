@@ -1,4 +1,5 @@
 import { open, stat } from 'node:fs/promises';
+import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 import {
   ensureDirectoryIsUsable,
@@ -70,6 +71,7 @@ export async function activateSqliteDatabase(
   isDefaultPath: boolean,
   sourceDatabasePath: string | null,
   dependencies: DatabaseActivationDependencies,
+  bindSelectedTestDirectory = false,
 ): Promise<ActivatedDatabase> {
   const databasePath = getDatabasePathForDirectory(directoryPath);
   const lockPath = dependencies.getLockPath(databasePath);
@@ -82,6 +84,9 @@ export async function activateSqliteDatabase(
   }
 
   const environment = getTraccionEnvironment();
+  if (bindSelectedTestDirectory && environment !== 'test') {
+    throw new Error('La revinculación explícita solo está disponible en PRUEBAS.');
+  }
   // Rechazar primero la base incompatible: sin escribir probes ni lockdir.
   if (await databaseExistsReliably(databasePath)) {
     assertDatabaseEnvironmentBeforeWrite(databasePath, environment);
@@ -122,9 +127,14 @@ export async function activateSqliteDatabase(
 
     const preferences = await readDatabasePreferences();
     // Una base ya vinculada no puede adoptar el UUID esperado si carece de identidad.
-    const allowLegacyBootstrap = !preferences.expectedDatabaseUuid;
+    // Solo la selección explícita de OTRA carpeta test permite adoptar un
+    // UUID nuevo. Un reemplazo inesperado en la ruta vinculada sigue bloqueado.
+    const rebind = bindSelectedTestDirectory && (!preferences.customDirectoryPath ||
+      path.relative(path.resolve(preferences.customDirectoryPath), path.resolve(directoryPath)) !== '');
+    const expectedUuid = rebind ? null : preferences.expectedDatabaseUuid ?? null;
+    const allowLegacyBootstrap = !expectedUuid && (!bindSelectedTestDirectory || !existsAfterLock);
     const identityInspection = inspectAndEnsureDatabaseIdentity(databasePath, {
-      expectedDatabaseUuid: preferences.expectedDatabaseUuid ?? null,
+      expectedDatabaseUuid: expectedUuid,
       allowLegacyBootstrap,
       expectedEnvironment: environment,
     });
@@ -159,7 +169,7 @@ export async function activateSqliteDatabase(
       environment: identity.environment,
     };
 
-    if (!preferences.expectedDatabaseUuid) {
+    if (!bindSelectedTestDirectory && !preferences.expectedDatabaseUuid) {
       await writeDatabasePreferences({
         ...preferences,
         expectedDatabaseUuid: identity.databaseUuid,
@@ -168,6 +178,12 @@ export async function activateSqliteDatabase(
 
     clearInterval(startupLockHeartbeat);
     await dependencies.releaseLock(lockPath, startupLock);
+    // Publicar ruta + UUID juntos, solo después de activar y validar SQLite.
+    // Si falla la escritura de preferencias, el catch cierra el nuevo handle.
+    if (bindSelectedTestDirectory) {
+      await writeDatabasePreferences({ ...preferences,
+        customDirectoryPath: path.resolve(directoryPath), expectedDatabaseUuid: identity.databaseUuid });
+    }
     return { database, status };
   } catch (error) {
     clearInterval(startupLockHeartbeat);
