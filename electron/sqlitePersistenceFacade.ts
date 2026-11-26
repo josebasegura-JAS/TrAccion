@@ -24,18 +24,24 @@ let notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null = nul
 let serial: Promise<unknown> = Promise.resolve();
 let closing = false;
 let unavailable = false;
+let recovering = false;
+let recoveryAttempted = false;
+let uncertainOperation = false;
 
 function getEngine() {
   engine ??= import('./sqliteEngineWorkerClient.js').then(({ startIsolatedTestEngine }) => {
     const instance = startIsolatedTestEngine(getPersistenceUserDataPath(), (status) => { latestStatus = status; }, (payload) => notifier?.(payload));
-    void instance.exited.then(() => { unavailable = true; });
+    void instance.exited.then(() => {
+      unavailable = true;
+      notifier?.({ blocked: true, message: 'El proceso SQLite ha terminado; edición suspendida.', failedHeartbeatCount: 0, updatedAt: new Date().toISOString() });
+    });
     return instance;
   });
   return engine;
 }
 
 function remote<T>(operation: (instance: ReturnType<typeof startIsolatedTestEngine>) => Promise<T>): Promise<T> {
-  if (closing || unavailable) return Promise.reject(new Error('Motor SQLite aislado no disponible.'));
+  if (closing || unavailable || recovering) return Promise.reject(new Error('Motor SQLite aislado no disponible.'));
   const result = serial.then(async () => {
     if (unavailable) throw new Error('Motor SQLite aislado no disponible.');
     try {
@@ -43,7 +49,10 @@ function remote<T>(operation: (instance: ReturnType<typeof startIsolatedTestEngi
       return await operation(instance);
     } catch (error) {
       const instance = await engine?.catch(() => undefined);
-      if (!instance || instance.getState() !== 'idle') unavailable = true;
+      if (!instance || instance.getState() !== 'idle') {
+        unavailable = true;
+        uncertainOperation = true;
+      }
       throw error;
     }
   });
@@ -62,7 +71,7 @@ function route<K extends SqliteEngineOperationName>(name: K) {
 
 export function getSqliteStatus(): DatabaseStatus {
   if (!isIsolatedEngineEnabled()) return legacy.getSqliteStatus();
-  if (latestStatus && !unavailable && !closing) return latestStatus;
+  if (latestStatus && !unavailable && !closing && !recovering) return latestStatus;
   const fallbackPath = path.join(getPersistenceUserDataPath(), 'data', 'traccion.sqlite');
   return {
     ready: false, engine: 'better-sqlite3', phase: 'locked',
@@ -87,7 +96,7 @@ export async function closeSqlitePersistence(): Promise<legacy.ShutdownPerforman
   if (!isIsolatedEngineEnabled()) return legacy.closeSqlitePersistence();
   closing = true;
   await serial;
-  if (unavailable) throw new Error('Cierre SQLite no confirmado: operación anterior incierta.');
+  if (unavailable) throw new Error('Cierre SQLite no confirmado: motor no disponible o resultado anterior incierto.');
   return (await getEngine()).close();
 }
 
@@ -183,7 +192,41 @@ export const runDataIntegrityAuditNow = route('runDataIntegrityAuditNow');
 export const getCurrentDatabaseLockInfo = route('getCurrentDatabaseLockInfo');
 export const forceReleaseDatabaseLock = route('forceReleaseDatabaseLock');
 export const initializeSqlitePersistence = route('initializeSqlitePersistence');
-export const checkSqliteHealth = route('checkSqliteHealth');
+export async function checkSqliteHealth(): Promise<legacy.DatabaseHealthCheckResult> {
+  if (!isIsolatedEngineEnabled()) return legacy.checkSqliteHealth();
+  if (!unavailable && !recovering) return remote(instance => instance.call('checkSqliteHealth'));
+  const failure = (): legacy.DatabaseHealthCheckResult => ({
+    ok: false, status: getSqliteStatus(), checkedAt: new Date().toISOString(),
+    message: 'Motor SQLite suspendido. No repitas guardados inciertos; comprueba la incidencia.',
+  });
+  if (closing || recovering || recoveryAttempted || uncertainOperation || !latestStatus?.ready) return failure();
+  recovering = true;
+  try {
+    await serial;
+    const previous = latestStatus;
+    const old = await engine?.catch(() => undefined);
+    if (closing || uncertainOperation || !old?.exitedWhileIdle() || !previous?.ready) return failure();
+    recoveryAttempted = true;
+    // Exclusivamente tras exit confirmado y sin operación incierta.
+    // No reenviar ninguna petición del propietario anterior.
+    engine = undefined;
+    const next = await getEngine();
+    const recovered = await next.callExtra('recoverAfterIdleExit', [previous]) as DatabaseStatus;
+    if (!recovered.ready || recovered.phase !== 'active' || recovered.databaseUuid !== previous.databaseUuid ||
+        recovered.applicationId !== previous.applicationId || recovered.environment !== previous.environment ||
+        recovered.schemaVersion !== previous.schemaVersion || recovered.path !== previous.path ||
+        next.getState() !== 'idle' || closing) return failure();
+    latestStatus = recovered;
+    unavailable = false;
+    notifier?.({ blocked: false, message: 'Motor SQLite recuperado y base verificada.', failedHeartbeatCount: 0, updatedAt: new Date().toISOString() });
+    return { ok: true, status: recovered, checkedAt: new Date().toISOString(), message: 'Motor SQLite recuperado y base verificada.' };
+  } catch (error) {
+    console.warn('[sqlite-engine] Recuperación supervisada no confirmada.', error);
+    return failure();
+  } finally {
+    recovering = false;
+  }
+}
 export const createShutdownLocalBackup = route('createShutdownLocalBackup');
 export const createManualLocalBackup = route('createManualLocalBackup');
 export const createLocalStorageBackup = route('createLocalStorageBackup');

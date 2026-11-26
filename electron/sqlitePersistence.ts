@@ -552,7 +552,7 @@ async function recoverDatabaseAfterIoError(): Promise<void> {
         environment: previous.environment,
         schemaVersion: previous.schemaVersion,
       };
-      if (getTraccionEnvironment() === 'test' && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1') {
+      if (!process.parentPort && getTraccionEnvironment() === 'test' && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1') {
         const { verifyIntegrityInWorker } = await import('./sqliteIntegrityWorkerClient.js');
         await verifyIntegrityInWorker(previous.path, expectedIdentity);
       } else {

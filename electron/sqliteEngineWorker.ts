@@ -15,6 +15,28 @@ configurePersistenceUserDataPath(paths[0].slice('--sqlite-user-data='.length));
 
 const persistence = await import('./sqlitePersistence.js');
 const operations = createPersistenceOperations(persistence);
+const { verifySqliteIntegrityReadOnly } = await import('./persistence/sqliteIntegrityVerification.js');
+const { readDatabasePreferences, getDatabasePathForDirectory } = await import('./persistence/databasePreferences.js');
+operations.set('recoverAfterIdleExit', async (previousValue) => {
+  const previous = previousValue as import('./sqlitePersistence.js').DatabaseStatus;
+  const preferences = await readDatabasePreferences();
+  if (!previous.databaseUuid || !previous.applicationId || previous.environment !== 'test' ||
+      !preferences.customDirectoryPath || preferences.expectedDatabaseUuid !== previous.databaseUuid ||
+      getDatabasePathForDirectory(preferences.customDirectoryPath) !== previous.path) {
+    throw new Error('La identidad o ruta de recuperación SQLite no coincide.');
+  }
+  verifySqliteIntegrityReadOnly(previous.path, {
+    databaseUuid: previous.databaseUuid, applicationId: previous.applicationId,
+    environment: previous.environment, schemaVersion: previous.schemaVersion,
+  });
+  const recovered = await persistence.initializeSqlitePersistence();
+  if (!recovered.ready || recovered.phase !== 'active' || recovered.databaseUuid !== previous.databaseUuid ||
+      recovered.applicationId !== previous.applicationId || recovered.environment !== previous.environment ||
+      recovered.schemaVersion !== previous.schemaVersion) {
+    throw new Error('No se ha confirmado la identidad de la base recuperada.');
+  }
+  return recovered;
+});
 const { saveTaskRecordsAtomically } = await import('./persistence/taskBatchPersistence.js');
 operations.set('saveTaskRecordsAtomically', (...args) => saveTaskRecordsAtomically(args[0] as Parameters<typeof saveTaskRecordsAtomically>[0]));
 const { removeTicketRestauranteCalendarWithPeopleAtomically } = await import('./persistence/ticketRestauranteAtomicCalendarRemoval.js');

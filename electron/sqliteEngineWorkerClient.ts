@@ -9,7 +9,13 @@ export function startIsolatedTestEngine(userData: string, onStatus?: (status: Da
   const child = utilityProcess.fork(fileURLToPath(new URL('./sqliteEngineWorker.js', import.meta.url)), [
     '--traccion-env=test', '--sqlite-user-data=' + userData,
   ], { serviceName: 'TrAcción SQLite test engine' });
-  const exited = new Promise<number>((resolve) => child.once('exit', resolve));
+  let exitConfirmed = false;
+  let exitWasIdle = false;
+  const exited = new Promise<number>((resolve) => child.once('exit', (code) => {
+    exitWasIdle = client.getState() === 'idle';
+    exitConfirmed = true;
+    resolve(code);
+  }));
   const client = createEngineClient({
     postMessage: (message) => child.postMessage(message),
     onMessage: (listener) => { child.on('message', listener); },
@@ -46,6 +52,8 @@ export function startIsolatedTestEngine(userData: string, onStatus?: (status: Da
   }
   return {
     ready, call, exited,
+    hasExited: () => exitConfirmed,
+    exitedWhileIdle: () => exitConfirmed && exitWasIdle,
     async callExtra(name: string, args: unknown[]) {
       if (closing) throw new Error('Motor en cierre.');
       await ready;
@@ -60,7 +68,10 @@ export function startIsolatedTestEngine(userData: string, onStatus?: (status: Da
       await ready;
       const metrics = await client.call('closeSqlitePersistence', [], 120_000) as Persistence.ShutdownPerformanceMetrics;
       child.postMessage('engine:shutdown');
-      const code = await exited;
+      const code = await new Promise<number>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('El motor no confirmó su salida tras el cierre.')), 15_000);
+        void exited.then((value) => { clearTimeout(timer); resolve(value); });
+      });
       if (code !== 0) throw new Error('Salida SQLite no limpia: ' + code);
       return metrics;
     },
