@@ -132,6 +132,7 @@ async function requestRendererAppClose(mainWindow: BrowserWindow): Promise<void>
 // Los reinicios manuales y automáticos comparten exactamente las mismas
 // comprobaciones de seguridad y el procedimiento normal de cierre.
 let restartRequestInProgress = false;
+let restartAfterConfirmedClose = false;
 const autoRestartGuardPath = () => path.join(app.getPath('userData'), 'sqlite-auto-restart-guard.json');
 
 async function getLastAutomaticRestartAt(): Promise<number | null> {
@@ -183,7 +184,7 @@ ipcMain.handle('app:main-watchdog-report', () => {
 });
 
 ipcMain.handle('app:request-safe-restart', async (event, payload?: { automatic?: unknown }) => {
-  if (restartRequestInProgress || isShutdownInProgress) {
+  if (restartRequestInProgress || restartAfterConfirmedClose || isShutdownInProgress) {
     return { ok: false, message: 'Ya se está preparando el cierre de TrAcción.' };
   }
   const window = BrowserWindow.fromWebContents(event.sender);
@@ -254,7 +255,7 @@ ipcMain.handle('app:request-safe-restart', async (event, payload?: { automatic?:
 
     // Conservar explícitamente --traccion-env=test tras un reinicio supervisado.
     // Perderlo arrancaría el ejecutable como producción por defecto.
-    app.relaunch({ args: process.argv.slice(1) });
+    restartAfterConfirmedClose = true;
     restarting = true;
     isRendererCloseApproved = true;
     setImmediate(() => app.quit()); // ejecutar cierre ordenado y backup existente
@@ -726,17 +727,31 @@ if (!app.requestSingleInstanceLock()) {
       isQuitAfterSqlitePersistenceClosed = true;
       if (shutdownWindow && !shutdownWindow.isDestroyed()) shutdownWindow.destroy();
       shutdownWindow = null;
+      if (restartAfterConfirmedClose) {
+        restartAfterConfirmedClose = false;
+        app.relaunch({ args: process.argv.slice(1) });
+      }
       app.quit();
     };
     void loadSqlitePersistenceModule()
       .then(({ closeSqlitePersistence }) => closeSqlitePersistence())
       .then(async (metrics) => {
+        if (metrics.engineExitedUncleanly) {
+          if (!metrics.engineExitSafeForRestart) {
+            restartAfterConfirmedClose = false;
+            cancelSqliteRestartDrain();
+          }
+          dialog.showErrorBox('TrAcción · Motor SQLite finalizado',
+            'El proceso SQLite ya ha terminado. Se permite salir, pero no se confirma un cierre limpio ni una copia de cierre. Revisa el diario de incidencias antes de repetir operaciones.');
+        }
         await writeShutdownPerformance({ ...metrics, totalMs: Math.max(metrics.totalMs, Date.now() - shutdownStartedAt) })
           .catch((error: unknown) => console.warn('No se pudo guardar la métrica de cierre.', error));
         finishQuit();
       })
       .catch((error: unknown) => {
         console.warn('No se ha podido completar el cierre SQLite antes de salir.', error);
+        restartAfterConfirmedClose = false;
+        cancelSqliteRestartDrain();
         if (process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT !== '1') {
           finishQuit();
           return;

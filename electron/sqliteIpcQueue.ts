@@ -1,3 +1,4 @@
+import { SQLITE_ENGINE_IPC_TIMEOUT_MS } from './sqliteEngineSafety.js';
 import { beginSqliteWrite, finishSqliteWrite } from './sqliteIncidentJournal.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { recordMultiuserMetric } from './multiuserPerformanceDiagnostics.js';
@@ -203,7 +204,8 @@ export function enqueueSqliteIpc<T>(
   }
   const startedAt = Date.now();
   queuedOperations += 1;
-  const timeoutMs = resolveSqliteIpcTimeoutMs(operationName);
+  const timeoutMs = process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1'
+    ? SQLITE_ENGINE_IPC_TIMEOUT_MS : resolveSqliteIpcTimeoutMs(operationName);
   const readOnly = isSqliteIpcReadOnlyOperation(operationName);
 
   let resolveObservedOperation!: (value: Awaited<T> | PromiseLike<Awaited<T>>) => void;

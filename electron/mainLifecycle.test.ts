@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
     read: vi.fn(async () => { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); }),
     write: vi.fn(async () => undefined),
     close: vi.fn(async () => ({ totalMs: 1, vacuumMs: 0, shutdownBackupMs: 0, closeDatabaseMs: 1 })),
-    destroy: vi.fn(),
+    destroy: vi.fn(), showErrorBox: vi.fn(),
   };
 });
 vi.mock('electron', () => ({
@@ -34,10 +34,12 @@ vi.mock('electron', () => ({
     destroy() { mocks.destroy(); }
   }, { fromWebContents: mocks.fromWindow, getAllWindows: mocks.windows }),
   ipcMain: { handle: (name: string, handler: (event: unknown, payload?: unknown) => unknown) => mocks.handlers.set(name, handler) },
-  Menu: {}, utilityProcess: {},
+  Menu: {}, utilityProcess: {}, dialog: { showErrorBox: mocks.showErrorBox },
 }));
 vi.mock('node:fs/promises', () => ({ readFile: mocks.read, writeFile: mocks.write }));
-vi.mock('./sqlitePersistence.js', () => ({
+// main consume la fachada, no el backend histórico. Las pruebas del
+// transporte y la selección real del motor viven en sqlitePersistenceFacade.test.ts.
+vi.mock('./sqlitePersistenceFacade.js', () => ({
   getSqliteRestartBackupSnapshot: () => mocks.backups, getSqliteStatus: mocks.status, closeSqlitePersistence: mocks.close,
 }));
 vi.mock('./sqliteIpcQueue.js', () => ({
@@ -88,6 +90,7 @@ afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('reinicio supervisado del proceso principal', () => {
@@ -149,16 +152,51 @@ describe('reinicio supervisado del proceso principal', () => {
     expect(mocks.cancelDrain).toHaveBeenCalledTimes(1);
     expect(mocks.relaunch).not.toHaveBeenCalled();
   });
-  it('conserva los argumentos de entorno y solicita el cierre ordenado', async () => {
+  it('conserva los argumentos de entorno y solo relanza tras confirmar el cierre SQLite', async () => {
     const original = process.argv;
     process.argv = [...original, '--traccion-env=test', '--traccion-test-user-b'];
+    let finish!: (metrics: { totalMs: number; vacuumMs: number; shutdownBackupMs: number; closeDatabaseMs: number }) => void;
+    mocks.close.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
     try {
       expect(await restart()).toEqual({ ok: true });
-      expect(mocks.relaunch).toHaveBeenCalledWith({ args: process.argv.slice(1) });
+      expect(mocks.relaunch).not.toHaveBeenCalled();
       expect(mocks.cancelDrain).not.toHaveBeenCalled();
       await vi.runAllTimersAsync();
       expect(mocks.quit).toHaveBeenCalledTimes(1);
+      // app.quit simulado no emite eventos: entregar before-quit explícitamente.
+      expect(beforeQuit()).toHaveBeenCalledTimes(1);
+      await vi.dynamicImportSettled();
+      await vi.runAllTimersAsync();
+      expect(mocks.close).toHaveBeenCalledTimes(1);
+      expect(mocks.relaunch).not.toHaveBeenCalled();
+      finish({ totalMs: 1, vacuumMs: 0, shutdownBackupMs: 0, closeDatabaseMs: 1 });
+      await vi.runAllTimersAsync();
+      expect(mocks.relaunch).toHaveBeenCalledTimes(1);
+      expect(mocks.relaunch).toHaveBeenCalledWith({ args: process.argv.slice(1) });
+      expect(mocks.quit).toHaveBeenCalledTimes(2);
+      expect(mocks.cancelDrain).not.toHaveBeenCalled();
     } finally { process.argv = original; }
+  });
+  it('cancela el relanzamiento y libera el drain si falla el cierre aislado', async () => {
+    vi.stubEnv('TRACCION_SQLITE_ENGINE_EXPERIMENT', '1');
+    mocks.close.mockRejectedValueOnce(new Error('cierre no confirmado'));
+    expect(await restart()).toEqual({ ok: true });
+    await vi.runAllTimersAsync();
+    expect(beforeQuit()).toHaveBeenCalledTimes(1);
+    await vi.dynamicImportSettled();
+    await vi.runAllTimersAsync();
+    expect(mocks.close).toHaveBeenCalledTimes(1);
+    expect(mocks.relaunch).not.toHaveBeenCalled();
+    expect(mocks.cancelDrain).toHaveBeenCalledTimes(1);
+    expect(mocks.showErrorBox).toHaveBeenCalledWith(expect.stringContaining('Cierre SQLite no confirmado'), expect.any(String));
+    expect(mocks.quit).toHaveBeenCalledTimes(1);
+    // El fallo no debe dejar un relanzamiento latente al volver a cerrar.
+    mocks.windows.mockReturnValue([]);
+    expect(beforeQuit()).toHaveBeenCalledTimes(1);
+    await vi.runAllTimersAsync();
+    expect(mocks.close).toHaveBeenCalledTimes(2);
+    expect(mocks.relaunch).not.toHaveBeenCalled();
+    expect(mocks.quit).toHaveBeenCalledTimes(2);
   });
 });
 

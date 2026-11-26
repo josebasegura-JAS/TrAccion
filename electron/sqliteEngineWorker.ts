@@ -58,8 +58,14 @@ port.on('message', (event: { data: unknown }) => {
   // Solo las consultas explícitamente verificadas evitan el lock externo.
   // Las lecturas con migraciones conservan el contexto de escritura.
   void runSqliteEngineOperation(request.operation, isEngineReadOnlyOperation(request.operation), () => dispatch(request)).then((response) => {
-    if (request.operation === 'closeSqlitePersistence' && response?.kind === 'engine:result') closed = true;
-    port.postMessage({ kind: 'engine:status', status: persistence.getSqliteStatus() });
+    if (request.operation === 'closeSqlitePersistence') {
+      if (response?.kind === 'engine:result') closed = true;
+      else closing = false; // fallo confirmado: solo el supervisor decide si reintenta cierre
+    }
+    // Enviar antes de la respuesta correlacionada: toda revisión pendiente
+    // creada por la operación se observa antes de que el canal vuelva a idle.
+    port.postMessage({ kind: 'engine:status', status: persistence.getSqliteStatus(),
+      backups: persistence.getSqliteRestartBackupSnapshot() });
     if (response) port.postMessage(response);
   }).catch((error: unknown) => {
     // No se ha podido confirmar el resultado. El cliente mantiene el canal
