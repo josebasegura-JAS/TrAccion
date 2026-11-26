@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startIsolatedTestEngine } from './sqliteEngineWorkerClient.js';
@@ -37,7 +37,48 @@ async function run(): Promise<void> {
   if (conflict.ok) throw new Error('Se ha aceptado una escritura con versión obsoleta.');
   const unchanged = await engine.call('getPersistedRecordSnapshot', key);
   if (unchanged.record?.value !== value) throw new Error('El conflicto alteró el registro original.');
+  const parallel = await Promise.all([
+    engine.call('savePersistedRecordIfUnchanged', { key: 'parallel-a', value: 'A', expectedUpdatedAt: null }),
+    peer.call('savePersistedRecordIfUnchanged', { key: 'parallel-b', value: 'B', expectedUpdatedAt: null }),
+  ]);
+  if (parallel.some(result => !result.ok)) throw new Error('Falló escritura concurrente en registros distintos.');
+  const [seenA, seenB] = await Promise.all([
+    peer.call('getPersistedRecordSnapshot', 'parallel-a'),
+    engine.call('getPersistedRecordSnapshot', 'parallel-b'),
+  ]);
+  if (seenA.record?.value !== 'A' || seenB.record?.value !== 'B') throw new Error('Escritura concurrente no persistida.');
   await peer.close();
+
+  // Verificar una copia real sin levantar la prohibición de restaurar en PRUEBAS.
+  await engine.call('createManualLocalBackup');
+  const backups = await engine.call('listLocalBackups');
+  const backup = backups.find(item => item.kind === 'sqlite' && item.isLiveCopy);
+  if (!backup || backup.sizeBytes <= 0) throw new Error('No se generó respaldo SQLite real.');
+  const mutation = await engine.call('savePersistedRecordIfUnchanged', {
+    key, value: 'changed-after-backup', expectedUpdatedAt: unchanged.record?.updatedAt ?? null,
+  });
+  if (!mutation.ok) throw new Error('No se modificó el registro temporal.');
+  const restored = await engine.call('restoreLocalBackup', backup.id);
+  if (restored.ok || !restored.message.includes('desactivada en el entorno PRUEBAS')) {
+    throw new Error('La protección de restauración en PRUEBAS no se ha respetado.');
+  }
+  const currentRecord = await engine.call('getPersistedRecordSnapshot', key);
+  if (currentRecord.record?.value !== 'changed-after-backup') throw new Error('Una restauración rechazada alteró la base.');
+  // Abrir el snapshot en otra carpeta temporal, nunca sustituir la base activa.
+  const backupProfile = path.join(root, 'backup-profile');
+  const backupDirectory = path.join(root, 'backup-database');
+  await mkdir(backupProfile);
+  await mkdir(backupDirectory);
+  await copyFile(backup.path, path.join(backupDirectory, 'traccion.sqlite'));
+  const backupEngine = startIsolatedTestEngine(backupProfile);
+  await backupEngine.ready;
+  await backupEngine.call('initializeSqlitePersistence');
+  const backupStatus = await backupEngine.call('changeSqliteDirectory', backupDirectory);
+  if (!backupStatus.ready || backupStatus.databaseUuid !== status.databaseUuid ||
+      backupStatus.environment !== 'test') throw new Error('La copia no conserva la identidad SQLite.');
+  const backupRecord = await backupEngine.call('getPersistedRecordSnapshot', key);
+  if (backupRecord.record?.value !== value) throw new Error('La copia no conserva el valor original.');
+  await backupEngine.close();
   await engine.close();
 
   // Reabrir únicamente después de confirmar la salida del propietario anterior.
@@ -48,7 +89,7 @@ async function run(): Promise<void> {
     throw new Error('No se recuperó la identidad tras el cierre ordenado.');
   }
   const persisted = await reopened.call('getPersistedRecordSnapshot', key);
-  if (persisted.record?.value !== value) throw new Error('El registro no sobrevivió al cierre.');
+  if (persisted.record?.value !== 'changed-after-backup') throw new Error('El registro no sobrevivió al cierre.');
   await reopened.close();
   await rm(root, { recursive: true, force: true });
   console.info('SQLite isolated smoke: OK');

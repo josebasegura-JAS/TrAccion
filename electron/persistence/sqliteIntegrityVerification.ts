@@ -1,3 +1,4 @@
+import { assertSqliteProcessAccess } from './sqliteProcessGuard.js';
 import { createRequire } from 'node:module';
 import type { DatabaseConstructor } from 'better-sqlite3';
 import { readDatabaseIdentity } from './databaseIdentity.js';
@@ -24,6 +25,7 @@ export function verifySqliteIntegrityReadOnly(
   databasePath: string,
   expected: ExpectedSqliteIdentity,
 ): void {
+  assertSqliteProcessAccess();
   const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
   const db = new BetterSqlite3(databasePath, { readonly: true, fileMustExist: true });
   try {

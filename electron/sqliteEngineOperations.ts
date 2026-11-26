@@ -115,3 +115,15 @@ export function createPersistenceOperations(persistence: typeof Persistence): Ma
   }
   return operations;
 }
+
+// Solo consultas verificadas sin migraciones ni mantenimiento.
+// Una operación nueva es exclusiva por defecto, aunque se llame get/load.
+const VERIFIED_READ_ONLY = new Set<string>([
+  'getPersistedRecordSnapshot',
+  'getPersistedRecordsTokenSnapshot',
+  'loadPersistedRecordsHydrationSnapshot',
+]);
+
+export function isEngineReadOnlyOperation(name: string): boolean {
+  return VERIFIED_READ_ONLY.has(name);
+}

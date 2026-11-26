@@ -267,3 +267,13 @@ export function enqueueSqliteIpc<T>(
   sqliteIpcQueue = queueExecution.catch(() => undefined);
   return observedOperation;
 }
+
+// Contexto del motor aislado, sin una segunda cola ni timeout duplicado.
+export function runSqliteEngineOperation<T>(
+  operationName: string, readOnly: boolean, operation: QueuedIpcOperation<T>,
+): Promise<Awaited<T>> {
+  return sqliteIpcContext.run(
+    { operationName, readOnly },
+    () => Promise.resolve().then(operation),
+  ) as Promise<Awaited<T>>;
+}

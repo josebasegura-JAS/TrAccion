@@ -1,3 +1,4 @@
+import { assertSqliteProcessAccess } from './sqliteProcessGuard.js';
 import { createRequire } from 'node:module';
 import type { Database } from 'better-sqlite3';
 import {
@@ -55,6 +56,7 @@ export function validateSqliteBackupForRestore(
   databasePath: string,
   options: SqliteBackupValidationOptions = {},
 ): SqliteBackupValidationResult {
+  assertSqliteProcessAccess();
   const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
   const expectedEnvironment = getTraccionEnvironment();
   let db: Database | null = null;
