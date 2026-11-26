@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startIsolatedTestEngine } from './sqliteEngineWorkerClient.js';
@@ -49,7 +49,7 @@ async function run(): Promise<void> {
   if (seenA.record?.value !== 'A' || seenB.record?.value !== 'B') throw new Error('Escritura concurrente no persistida.');
   await peer.close();
 
-  // Restauración destructiva únicamente con un propietario y base temporal.
+  // Verificar una copia real sin levantar la prohibición de restaurar en PRUEBAS.
   await engine.call('createManualLocalBackup');
   const backups = await engine.call('listLocalBackups');
   const backup = backups.find(item => item.kind === 'sqlite' && item.isLiveCopy);
@@ -59,11 +59,26 @@ async function run(): Promise<void> {
   });
   if (!mutation.ok) throw new Error('No se modificó el registro temporal.');
   const restored = await engine.call('restoreLocalBackup', backup.id);
-  if (!restored.ok || restored.status.databaseUuid !== status.databaseUuid) {
-    throw new Error('Restauración SQLite no confirmada: ' + restored.message);
+  if (restored.ok || !restored.message.includes('desactivada en el entorno PRUEBAS')) {
+    throw new Error('La protección de restauración en PRUEBAS no se ha respetado.');
   }
-  const restoredRecord = await engine.call('getPersistedRecordSnapshot', key);
-  if (restoredRecord.record?.value !== value) throw new Error('La restauración no recuperó el valor original.');
+  const currentRecord = await engine.call('getPersistedRecordSnapshot', key);
+  if (currentRecord.record?.value !== 'changed-after-backup') throw new Error('Una restauración rechazada alteró la base.');
+  // Abrir el snapshot en otra carpeta temporal, nunca sustituir la base activa.
+  const backupProfile = path.join(root, 'backup-profile');
+  const backupDirectory = path.join(root, 'backup-database');
+  await mkdir(backupProfile);
+  await mkdir(backupDirectory);
+  await copyFile(backup.path, path.join(backupDirectory, 'traccion.sqlite'));
+  const backupEngine = startIsolatedTestEngine(backupProfile);
+  await backupEngine.ready;
+  await backupEngine.call('initializeSqlitePersistence');
+  const backupStatus = await backupEngine.call('changeSqliteDirectory', backupDirectory);
+  if (!backupStatus.ready || backupStatus.databaseUuid !== status.databaseUuid ||
+      backupStatus.environment !== 'test') throw new Error('La copia no conserva la identidad SQLite.');
+  const backupRecord = await backupEngine.call('getPersistedRecordSnapshot', key);
+  if (backupRecord.record?.value !== value) throw new Error('La copia no conserva el valor original.');
+  await backupEngine.close();
   await engine.close();
 
   // Reabrir únicamente después de confirmar la salida del propietario anterior.
@@ -74,7 +89,7 @@ async function run(): Promise<void> {
     throw new Error('No se recuperó la identidad tras el cierre ordenado.');
   }
   const persisted = await reopened.call('getPersistedRecordSnapshot', key);
-  if (persisted.record?.value !== value) throw new Error('El registro no sobrevivió al cierre.');
+  if (persisted.record?.value !== 'changed-after-backup') throw new Error('El registro no sobrevivió al cierre.');
   await reopened.close();
   await rm(root, { recursive: true, force: true });
   console.info('SQLite isolated smoke: OK');
