@@ -1,0 +1,6 @@
+# PR C · Aislamiento y observabilidad
+- Los resúmenes Word compartidos de Comité/Paritaria se bloquean en PRUEBAS; no se copian ni actualizan documentos de producción. Las exportaciones normales de Word/Excel gestionadas por Electron conservan las rutas de PR569.
+- Lotería y CSV de Ticket Restaurante guardan por IPC exclusivo de pruebas en exportaciones/manual-* bajo la base activa. Las descargas Chromium residuales quedan bloqueadas en pruebas, nunca se permite elegir un destino externo. No se afirma que todas las exportaciones residuales estén migradas; comprobar manualmente cada módulo antes de desplegar. No se interceptan los archivos de diagnóstico o temporales técnicos, ni la acción de guardar como en aplicaciones externas.
+- Las muestras originales del worker se trasladan al informe local principal en lotes acotados antes de la respuesta y cada 5 segundos. No se mezclan percentiles agregados ni se crean peticiones SQLite. Si muere el worker pueden perderse sus últimas muestras.
+- El motor aislado oficial muestra la interfaz de preparación una vez registrados los IPC, sin esperar SMB. La activación sigue siendo única y el cierre espera a que termine. La edición sigue dependiente de estado SQLite válido. Modo histórico intacto.
+- Pendiente validar el EXE, los destinos reales y SMB con dos equipos. No fusionar main automáticamente.

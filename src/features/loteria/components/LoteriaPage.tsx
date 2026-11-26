@@ -615,7 +615,7 @@ export function LoteriaPage() {
             <span className="inline-flex h-10 items-center rounded-xl border border-metro-red/40 bg-metro-red/10 px-3 text-xs font-extrabold text-red-200">Lotería {draft.year}</span>
             <ActionButton icon={Save} iconOnly={false} onClick={() => void persist()} disabled={remoteConflict} variant="save">Guardar todo</ActionButton>
             {cierreDone && <ActionButton icon={Plus} iconOnly={false} onClick={() => void openNextCampaign()} disabled={dirty || remoteConflict || openingCampaign || workflowSaving} variant="add">{openingCampaign ? 'Abriendo campaña…' : `Nueva campaña ${draft.year + 1}`}</ActionButton>}
-            <ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} variant="excel">Exportar Excel</ActionButton>
+            <ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft).catch(error => setMessage(error instanceof Error ? error.message : String(error)))} variant="excel">Exportar Excel</ActionButton>
             {excelPending && <ActionButton icon={Download} iconOnly={false} onClick={() => void syncExcel(campaign)} disabled={dirty || excelSyncing} variant="secondary">{excelSyncing ? 'Actualizando Excel…' : 'Reintentar Excel pendiente'}</ActionButton>}
           </>
         }
@@ -889,7 +889,7 @@ export function LoteriaPage() {
         <SectionShell
           title="Cierre · Cuadre final"
           subtitle="Revisa sobrantes, pendientes de pago, caja y exporta el resultado de la campaña."
-          actions={<><ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} size="sm" variant="excel">Exportar Excel</ActionButton><ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Cierre guardado.')} size="sm" variant="save">Guardar cierre</ActionButton></>}
+          actions={<><ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft).catch(error => setMessage(error instanceof Error ? error.message : String(error)))} size="sm" variant="excel">Exportar Excel</ActionButton><ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Cierre guardado.')} size="sm" variant="save">Guardar cierre</ActionButton></>}
         >
           <div className="space-y-4">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">

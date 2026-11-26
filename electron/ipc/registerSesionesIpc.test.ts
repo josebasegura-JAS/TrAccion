@@ -88,6 +88,14 @@ describe('IPC sesiones y actas', () => {
     expect(invoke(module + ':update-summary-word', { ...summary, extra: true })).toEqual({ ok: true });
     expect(mocks.word).toHaveBeenCalledWith(summary);
   });
+  it.each(['comite', 'paritaria'])('%s no publica el Word compartido en PRUEBAS', (module) => {
+    const original = process.argv;
+    process.argv = [...original.filter(arg => !arg.startsWith('--traccion-env')), '--traccion-env=test'];
+    try {
+      expect(invoke(module + ':update-summary-word', { ...summary, folderPath: 'production-folder' })).toMatchObject({ ok: false, message: expect.stringContaining('PRUEBAS') });
+      expect(mocks.word).not.toHaveBeenCalled();
+    } finally { process.argv = original; }
+  });
   it.each(atomicChannels)('%s rechaza entradas no estructuradas', (channel) => {
     for (const payload of [null, undefined, 1, 'bad']) {
       expect(invoke(channel, payload)).toMatchObject({ ok: false });

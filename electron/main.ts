@@ -21,6 +21,7 @@ const isDev = !app.isPackaged;
 
 const isIsolatedTestEnvironment = process.argv.includes('--traccion-env=test');
 const isMultiuserTestClientB = process.argv.includes('--traccion-test-user-b');
+const showInterfaceDuringSqliteStartup = isIsolatedTestEnvironment || process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1';
 
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
@@ -37,7 +38,7 @@ function startupMark(label: string): void {
   startupTimeline.push({ label, elapsedMs: Date.now() - startupBeganAt });
 }
 function startupReport() {
-  return { kind: startupKind, ...(isIsolatedTestEnvironment ? { environment: 'test', engine: 'isolated', pid: process.pid } : {}), measuredFrom: 'inicio del proceso principal Electron', recordedAt: new Date(startupBeganAt).toISOString(), steps: [...startupTimeline] };
+  return { kind: startupKind, ...(showInterfaceDuringSqliteStartup ? { environment: isIsolatedTestEnvironment ? 'test' : 'production', engine: 'isolated', pid: process.pid } : {}), measuredFrom: 'inicio del proceso principal Electron', recordedAt: new Date(startupBeganAt).toISOString(), steps: [...startupTimeline] };
 }
 function saveStartupReport(): void {
   void writeFile(path.join(app.getPath('userData'), 'last-startup-performance.json'), JSON.stringify(startupReport()), 'utf8')
@@ -404,6 +405,15 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   });
   // Mantener cerradas las ventanas emergentes y la navegación a otros documentos.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // Las descargas de Chromium no pueden elegir una ruta de producción en PRUEBAS.
+  // Los exportadores compatibles usan el IPC asíncrono de archivos de pruebas.
+  const blockTestDownload = (event: Electron.Event, _item: Electron.DownloadItem, contents: Electron.WebContents) => {
+    if (contents !== mainWindow.webContents) return;
+    event.preventDefault();
+    dialog.showErrorBox('TrAcción · PRUEBAS', 'Esta descarga directa no está habilitada en PRUEBAS. Usa una exportación gestionada por TrAcción. No se ha guardado ningún archivo.');
+  };
+  const downloadSession = isIsolatedTestEnvironment ? mainWindow.webContents.session : undefined;
+  downloadSession?.on('will-download', blockTestDownload);
   const trustedMainDocument = isDev
     ? devServerUrl
     : pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
@@ -432,7 +442,7 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     updateSplashStep(splashWindow, 'interface', 'error', 'La interfaz no confirmó el arranque en 60 segundos. Se abrirá para permitir el diagnóstico.');
     requestMainWindowShow(false);
   }, splashMaximumVisibleMs);
-  const onBootVisible = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(!isIsolatedTestEnvironment); };
+  const onBootVisible = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(!showInterfaceDuringSqliteStartup); };
   // Solo la primera señal pertenece al arranque. Una recarga tardía del
   // renderer no debe añadir un segundo «React preparado» con minutos u horas.
   let hasRecordedRendererReady = false;
@@ -467,11 +477,11 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
     startupMark(`HTML del renderer cargado (${Date.now() - rendererLoadStartedAt} ms)`);
     updateSplashStep(splashWindow, 'interface', 'active', 'Interfaz cargada. Esperando a que termine su inicialización…');
     // El HTML estático se puede mostrar aunque el bundle JS no llegue a ejecutarse.
-    if (isIsolatedTestEnvironment) requestMainWindowShow(false);
+    if (showInterfaceDuringSqliteStartup) requestMainWindowShow(false);
   });
   ipcMain.on('app:boot-visible', onBootVisible);
   ipcMain.on('app:renderer-ready', onRendererReady);
-  mainWindow.once('closed', () => { clearTimeout(forceShowTimer); ipcMain.removeListener('app:boot-visible', onBootVisible); ipcMain.removeListener('app:renderer-ready', onRendererReady); setConnectivityIssueNotifier?.(null); });
+  mainWindow.once('closed', () => { downloadSession?.removeListener('will-download', blockTestDownload); clearTimeout(forceShowTimer); ipcMain.removeListener('app:boot-visible', onBootVisible); ipcMain.removeListener('app:renderer-ready', onRendererReady); setConnectivityIssueNotifier?.(null); });
   if (isDev) mainWindow.loadURL(devServerUrl).catch(handleMainLoadFailure);
   else mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(handleMainLoadFailure);
   return mainWindow;
@@ -661,21 +671,22 @@ if (!app.requestSingleInstanceLock()) {
         startupMark('Fallo de inicialización SQLite');
         saveStartupReport();
       });
-      if (isIsolatedTestEnvironment) {
+      if (showInterfaceDuringSqliteStartup) {
         await ipcRegistration;
       } else {
         await Promise.all([databaseOutcome, ipcRegistration]);
       }
-      logStartupPhase(startupStartedAt, isIsolatedTestEnvironment ? 'IPC ready; SQLite initialization pending or complete' : 'SQLite and IPC ready');
+      logStartupPhase(startupStartedAt, showInterfaceDuringSqliteStartup ? 'IPC ready; SQLite initialization pending or complete' : 'SQLite and IPC ready');
 
       if (startupCloseRequested) return;
       updateSplashStep(splashWindow, 'interface', 'active');
       startupMark('Creación de ventana principal');
       createWindow(splashWindow, splashStartedAt, persistence.setDatabaseConnectivityIssueNotifier);
       logStartupPhase(startupStartedAt, 'main window loading');
-      // En pruebas el HTML ya puede estar visible; no finalizar la fase de
-      // arranque hasta que la inicialización real haya terminado.
-      if (isIsolatedTestEnvironment) await databaseOutcome;
+      // El motor aislado permite mostrar el HTML sin esperar al SMB. No
+      // finalizar el arranque ni admitir cierre hasta terminar la activación.
+      if (showInterfaceDuringSqliteStartup) await databaseOutcome;
+      saveStartupReport();
       app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(null, Date.now(), persistence.setDatabaseConnectivityIssueNotifier); });
     } catch (error: unknown) {
       console.error('[startup] Error durante el arranque de TrAcción.', error);

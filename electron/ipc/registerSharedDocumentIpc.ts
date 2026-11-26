@@ -1,3 +1,6 @@
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
+import { getSqliteStatus } from '../sqlitePersistenceFacade.js';
+import { saveTestExportFile } from '../persistence/testExportFile.js';
 /**
  * Utilidades genéricas de documentos usadas por varios módulos: abrir un Excel generado y extraer texto de un Word.
  * Extraído de main.ts como parte de la división de registerIpcHandlers()
@@ -8,6 +11,13 @@ import { openExcelWorkbook } from '../documentOpener.js';
 import { extractTextFromDocxBuffer, normalizeDocxTextPayload } from '../docxZip.js';
 
 export function registerSharedDocumentIpc(): void {
+  ipcMain.handle('export:save-test-file', async (_event, payload: unknown) => {
+    if (getTraccionEnvironment() !== 'test') return { ok: false, message: 'Canal exclusivo de PRUEBAS.' };
+    try {
+      const filePath = await saveTestExportFile(getSqliteStatus(), payload);
+      return { ok: true, path: filePath };
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'No se pudo guardar la exportación de pruebas.' }; }
+  });
   ipcMain.handle('excel:open-workbook', async (_event, payload: unknown) =>
     openExcelWorkbook(payload),
   );

@@ -1,3 +1,4 @@
+import { saveTestDownloadIfNeeded } from '../../../shared/export/testDownload.js';
 import type { ExportColumn } from '../../../shared/export/types';
 import { normalizeTicketEmployeeNumber, splitTicketPersonFullName, getEffectiveTicketPrice, type TicketCalendar, type TicketPerson, type TicketPersonCalculation, type TicketRestaurantAbsence, type TicketRestaurantConfig } from '../domain/ticketRestaurante';
 import type { TicketAbsenceDisplayRow } from './TicketRestauranteAbsencesTable';
@@ -34,14 +35,17 @@ export function exportCsv(
 ): void {
   const csv = [headers, ...rows].map((row) => row.map(formatCsvValue).join(';')).join('\n');
   const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  void saveTestDownloadIfNeeded(blob, filename).then(saved => {
+    if (saved) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }).catch(error => window.alert(error instanceof Error ? error.message : String(error)));
 }
 
 function formatCsvValue(value: string | number): string {
