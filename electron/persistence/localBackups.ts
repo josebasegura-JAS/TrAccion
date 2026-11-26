@@ -1,6 +1,8 @@
 import { getTraccionEnvironment } from './traccionEnvironment.js';
 import { getPersistenceUserDataPath } from './persistenceRuntime.js';
-import { copyFile, mkdir, readdir, stat, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { verifySqliteIntegrityReadOnly, type ExpectedSqliteIdentity } from './sqliteIntegrityVerification.js';
 import path from 'node:path';
 import {
   LOCAL_BACKUP_DATABASE_FILE_NAME,
@@ -139,6 +141,43 @@ export async function backupSqliteDatabase(
   return 'copy';
 }
 
+/** La publicación conserva el archivo anterior si falla la escritura o rename.
+ * El temporal es hermano del destino: no hay copyFile sobre la copia vigente.
+ */
+async function publishBackupFile(destination: string, produce: (temporary: string) => Promise<unknown>): Promise<void> {
+  const temporary = destination + '.' + randomUUID() + '.pending';
+  try {
+    await produce(temporary);
+    await rename(temporary, destination);
+  } finally {
+    await unlink(temporary).catch(() => undefined);
+  }
+}
+
+export async function copyBackupAtomically(source: string, destination: string): Promise<void> {
+  await publishBackupFile(destination, temporary => copyFile(source, temporary));
+}
+
+export async function writeBackupJsonAtomically(destination: string, content: string): Promise<void> {
+  await publishBackupFile(destination, temporary => writeFile(temporary, content, { encoding: 'utf8', flag: 'wx' }));
+}
+
+/** Para una base viva no hay fallback a copiar el fichero físico. La única
+ * fuente admitida es una instantánea nativa nueva e íntegra con su identidad.
+ */
+export async function publishVerifiedSqliteSnapshot(
+  database: Database, destination: string, identity: ExpectedSqliteIdentity,
+): Promise<void> {
+  if (!identity.databaseUuid || !identity.applicationId || !identity.environment || !identity.schemaVersion) {
+    throw new Error('No se ha confirmado la identidad SQLite para el respaldo.');
+  }
+  if (typeof database.backup !== 'function') throw new Error('Backup nativo SQLite no disponible.');
+  await publishBackupFile(destination, async temporary => {
+    await database.backup(temporary);
+    verifySqliteIntegrityReadOnly(temporary, identity);
+  });
+}
+
 export async function pruneSharedSqliteBackups(databasePath: string): Promise<void> {
   const backupDirectory = path.dirname(databasePath);
   const entries = await readdir(backupDirectory).catch(() => []);
@@ -156,7 +195,7 @@ export async function writeSharedSqliteBackup(
   timestamp: string,
   sourceSnapshotPath: string = databasePath,
 ): Promise<void> {
-  await copyFile(sourceSnapshotPath, getSharedSqliteBackupPath(databasePath, timestamp));
+  await copyBackupAtomically(sourceSnapshotPath, getSharedSqliteBackupPath(databasePath, timestamp));
   await pruneSharedSqliteBackups(databasePath);
 }
 
@@ -204,6 +243,7 @@ export async function writeDailyLocalBackup(
   preferences: DatabasePreferences,
   getDailyLocalBackupWeekdayName: (date: Date) => string,
   sourceSnapshotPath: string = databasePath,
+  strict = false,
 ): Promise<void> {
   if (!preferences.dailyLocalBackupEnabled) {
     return;
@@ -218,11 +258,12 @@ export async function writeDailyLocalBackup(
 
     const today = new Date();
     const todayWeekdayName = getDailyLocalBackupWeekdayName(today);
-    await copyFile(sourceSnapshotPath, getDailyLocalBackupDatabasePath(directory, todayWeekdayName));
+    await copyBackupAtomically(sourceSnapshotPath, getDailyLocalBackupDatabasePath(directory, todayWeekdayName));
 
     await pruneDailyLocalBackups(directory, preferences.dailyLocalBackupRetentionDays, today, getDailyLocalBackupWeekdayName);
   } catch (error) {
     console.warn('No se ha podido crear la copia diaria local SQLite.', error);
+    if (strict) throw error;
   }
 }
 

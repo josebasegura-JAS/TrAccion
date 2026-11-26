@@ -53,6 +53,7 @@ async function run(): Promise<void> {
 
   // Verificar una copia real sin levantar la prohibición de restaurar en PRUEBAS.
   await engine.call('createManualLocalBackup');
+  if ((await engine.call('getSqliteRestartBackupSnapshot')).pendingBackupRevisions !== 0) throw new Error('Backup manual no confirmó la revisión actual.');
   const backups = await engine.call('listLocalBackups');
   const backup = backups.find(item => item.kind === 'sqlite' && item.isLiveCopy);
   if (!backup || backup.sizeBytes <= 0) throw new Error('No se generó respaldo SQLite real.');

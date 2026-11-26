@@ -24,6 +24,7 @@ vi.mock('electron', () => ({
 
 const {
   backupSqliteDatabase,
+  copyBackupAtomically,
   backupTimestampForFileName,
   getDailyLocalBackupDatabasePath,
   getDailyLocalBackupDirectory,
@@ -281,6 +282,14 @@ describe('localBackups', () => {
     await expect(writeSharedSqliteBackup(source, '2026-11-04', path.join(userDataDir, 'missing.sqlite'))).rejects.toThrow();
     expect(readdirSync(userDataDir).sort()).toEqual(previous);
     previous.forEach(name => expect(readFileSync(path.join(userDataDir, name), 'utf8')).toBe('previous'));
+  });
+
+  it('no trunca la copia vigente si falla el origen de una publicación', async () => {
+    const destination = path.join(userDataDir, 'vigente.sqlite');
+    writeFileSync(destination, 'previous');
+    await expect(copyBackupAtomically(path.join(userDataDir, 'missing.sqlite'), destination)).rejects.toThrow();
+    expect(readFileSync(destination, 'utf8')).toBe('previous');
+    expect(readdirSync(userDataDir)).toEqual(['vigente.sqlite']);
   });
 
 });

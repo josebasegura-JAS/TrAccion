@@ -2,7 +2,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Database } from 'better-sqlite3';
+import Database from 'better-sqlite3';
+import { applyMigrations } from './schemaMigrations.js';
+import { inspectAndEnsureDatabaseIdentity } from './databaseIdentity.js';
 
 const testPaths = vi.hoisted(() => ({ userData: '', sharedDirectory: '' }));
 
@@ -119,4 +121,26 @@ describe('localBackupService - validación previa de restauración SQLite', () =
     expect(activateDatabase).not.toHaveBeenCalled();
     expect(readFileSync(targetDatabasePath, 'utf8')).toBe('BASE-ACTIVA-INTOCADA');
   });
+  it('rechaza una copia SQLite válida si no existe mantenimiento exclusivo acreditado', async () => {
+    const backupDirectory = getLocalBackupDirectory();
+    mkdirSync(backupDirectory, { recursive: true });
+    const backupPath = path.join(backupDirectory, LOCAL_BACKUP_DATABASE_FILE_NAME);
+    const db = new Database(backupPath);
+    try { applyMigrations(db); } finally { db.close(); }
+    inspectAndEnsureDatabaseIdentity(backupPath, { allowLegacyBootstrap: true });
+    const operation = vi.fn(async () => { throw new Error('No debe tocarse la base activa'); });
+    const dependencies = {
+      getStatus: () => activeStatus(targetDatabasePath),
+      getDatabase: () => null,
+      withDatabaseOperationLock: operation,
+      closeDatabaseAndReleaseLock: operation,
+      activateDatabase: operation,
+    } as unknown as LocalBackupServiceDependencies;
+    const result = await createLocalBackupService(dependencies).restoreLocalBackup(LOCAL_BACKUP_DATABASE_FILE_NAME);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('mantenimiento exclusivo');
+    expect(operation).not.toHaveBeenCalled();
+    expect(readFileSync(targetDatabasePath, 'utf8')).toBe('BASE-ACTIVA-INTOCADA');
+  });
+
 });
