@@ -1,0 +1,56 @@
+name: Herramienta clonar BBDD a PRUEBAS
+on:
+  pull_request:
+    paths:
+      - 'tools/clone-test-db/**'
+      - '.github/workflows/clone-test-db.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Tests con bases exclusivamente ficticias
+        working-directory: tools/clone-test-db
+        run: python -m unittest -v
+      - name: Generar herramienta autónoma
+        working-directory: tools/clone-test-db
+        run: |
+          python -m pip install pyinstaller==6.11.1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name TrAccion-Clonar-BBDD-Pruebas clone_test_db.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Probar EXE con backup ficticio
+        working-directory: tools/clone-test-db
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP ('traccion-clone-' + [guid]::NewGuid())
+          New-Item -ItemType Directory -Path $root | Out-Null
+          $env:CLONE_SMOKE_ROOT = $root
+          python -c "from test_clone_test_db import fixture; from pathlib import Path; import os; p=Path(os.environ['CLONE_SMOKE_ROOT']); fixture(p/'traccion-backup-smoke.sqlite'); (p/'dest').mkdir()"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $source = Join-Path $root 'traccion-backup-smoke.sqlite'
+          $destination = Join-Path $root 'dest'
+          $before = (Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash
+          $process = Start-Process -FilePath (Resolve-Path 'dist/TrAccion-Clonar-BBDD-Pruebas.exe') -ArgumentList @('--source', ('"' + $source + '"'), '--destination-parent', ('"' + $destination + '"'), '--confirm-authorized') -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw 'El EXE de clonación ha fallado.' }
+          if ((Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash -ne $before) { throw 'El origen cambió.' }
+          python -c "import os,sqlite3; from pathlib import Path; p=Path(os.environ['CLONE_SMOKE_ROOT']); files=list((p/'dest').glob('*/traccion.sqlite')); assert len(files)==1; db=sqlite3.connect(files[0]); assert db.execute('PRAGMA integrity_check').fetchall()==[('ok',)]; assert db.execute('SELECT value FROM app_metadata WHERE key=?', ('environment',)).fetchone()==('test',); assert db.execute('SELECT COUNT(*) FROM editing_locks').fetchone()==(0,); db.close()"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TrAccion-Clonar-BBDD-Pruebas
+          path: |
+            tools/clone-test-db/dist/TrAccion-Clonar-BBDD-Pruebas.exe
+            tools/clone-test-db/LEEME.md
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
