@@ -79,12 +79,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Instalar dependencias
-        shell: pwsh
-        run: npm ci --include=dev --no-audit --no-fund --prefer-offline
-      - name: Compilar aplicación
-        shell: pwsh
-        run: npm run build
       - name: Cache de herramientas de empaquetado
         uses: actions/cache@v4
         with:
@@ -92,6 +86,16 @@ jobs:
             .cache/electron
             .cache/electron-builder
           key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
+      - name: Instalar dependencias
+        shell: pwsh
+        run: npm ci --include=dev --no-audit --no-fund --prefer-offline
+      - name: Compilar aplicación (validación TypeScript y Vite en paralelo)
+        shell: pwsh
+        run: |
+          # Vite no necesita el resultado de tsc: frontend usa noEmit.
+          # Mantener ambos typechecks y detener el empaquetado ante cualquier fallo.
+          npx --no-install concurrently --kill-others-on-fail --names types,vite "tsc && tsc -p electron/tsconfig.json" "vite build"
+          exit $LASTEXITCODE
       - name: Empaquetar portable experimental
         shell: pwsh
         run: npm run portable:build
