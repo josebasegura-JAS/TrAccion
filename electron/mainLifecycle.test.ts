@@ -37,7 +37,9 @@ vi.mock('electron', () => ({
   Menu: {}, utilityProcess: {}, dialog: { showErrorBox: mocks.showErrorBox },
 }));
 vi.mock('node:fs/promises', () => ({ readFile: mocks.read, writeFile: mocks.write }));
-vi.mock('./sqlitePersistence.js', () => ({
+// main consume la fachada, no el backend histórico. Las pruebas del
+// transporte y la selección real del motor viven en sqlitePersistenceFacade.test.ts.
+vi.mock('./sqlitePersistenceFacade.js', () => ({
   getSqliteRestartBackupSnapshot: () => mocks.backups, getSqliteStatus: mocks.status, closeSqlitePersistence: mocks.close,
 }));
 vi.mock('./sqliteIpcQueue.js', () => ({
