@@ -92,78 +92,19 @@ jobs:
             .cache/electron
             .cache/electron-builder
           key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
-      # Cache exacta, nunca reutilizar dependencias de otro lockfile/Node/runner.
-      # v2 invalida el archivo anterior (se recuperaba, pero nunca se reutilizaba).
-      # Guardar ANTES de electron-builder: la reconstrucción cambia el ABI nativo.
-      - name: Restaurar dependencias instaladas
-        id: installed-deps
-        uses: actions/cache/restore@v4
-        with:
-          path: node_modules
-          key: traccion-experimental-deps-v2-windows-2022-${{ runner.arch }}-${{ hashFiles('.nvmrc', 'package.json', 'package-lock.json') }}
-      - name: Instalar o verificar dependencias
-        id: prepare-deps
+      - name: Instalar dependencias
         shell: pwsh
-        env:
-          EXACT_CACHE_HIT: ${{ steps.installed-deps.outputs.cache-hit }}
         run: |
+          # Electron puede descargar su binario de forma diferida. No exigir
+          # require('electron') antes del empaquetado ni restaurar node_modules.
+          # npm ci conserva el lockfile; electron-builder reconstruye SQLite
+          # y el smoke posterior valida el ejecutable real.
           $timer = [System.Diagnostics.Stopwatch]::StartNew()
-          function Test-InstalledDependencies {
-            # Un fallo de ejecutable nativo debe activar npm ci, no abortar la prueba.
-            $PSNativeCommandUseErrorActionPreference = $false
-            # npm ls verifica el árbol directo del lockfile. No exigir una
-            # ubicación interna de better-sqlite3: bindings resuelve el binario.
-            npm ls --depth=0 --include=dev | Out-Host
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning 'El árbol npm recuperado no es válido.'
-              return $false
-            }
-            $probe = @'
-          const fs = require('node:fs');
-          const electron = require('electron');
-          if (typeof electron !== 'string' || !fs.statSync(electron).isFile()) {
-            throw new Error('Electron no apunta a un ejecutable instalado');
-          }
-          const Database = require('better-sqlite3');
-          const db = new Database(':memory:');
-          try {
-            if (db.prepare('SELECT 1 AS ok').get().ok !== 1) throw new Error('SQLite ABI no válido');
-          } finally { db.close(); }
-          console.log('Electron instalado y SQLite nativa operativa con Node ' + process.version);
-          '@
-            node -e $probe | Out-Host
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning 'El ejecutable Electron o el binding SQLite no son utilizables.'
-              return $false
-            }
-            return $true
-          }
-
-          $reused = $false
-          if ($env:EXACT_CACHE_HIT -eq 'true') {
-            $reused = Test-InstalledDependencies
-          } else {
-            Write-Host 'Sin coincidencia exacta de caché instalada.'
-          }
-          if (-not $reused) {
-            Write-Host 'Instalación limpia desde package-lock.json.'
-            npm ci --include=dev --no-audit --no-fund --prefer-offline
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            if (-not (Test-InstalledDependencies)) {
-              throw 'La instalación limpia no superó la comprobación de dependencias.'
-            }
-          }
+          npm ci --include=dev --no-audit --no-fund --prefer-offline
+          $code = $LASTEXITCODE
           $timer.Stop()
-          Write-Host "Dependencias reutilizadas: $reused"
-          "Dependencias: $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s; cache reutilizada: $reused" >> $env:GITHUB_STEP_SUMMARY
-          exit 0
-      - name: Guardar dependencias antes de reconstrucción nativa
-        if: steps.installed-deps.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        with:
-          path: node_modules
-          key: ${{ steps.installed-deps.outputs.cache-primary-key }}
+          "Dependencias: $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s" >> $env:GITHUB_STEP_SUMMARY
+          exit $code
       - name: Compilar aplicación (validación TypeScript y Vite en paralelo)
         shell: pwsh
         run: |
