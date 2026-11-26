@@ -30,3 +30,7 @@ Baseline PR-D #551, ejecución 45565485781 (Windows, 25/11/2026):
 - Semilla de base ficticia de producción en prueba de aislamiento preparada en una transacción; primer arranque desde cero permanece intacto.
 - No cambiar workers de Electron, arranque, fsync ni stress multiproceso sin evidencia. No eliminar compilación duplicada entre jobs independientes si compromete la validación autónoma.
 - Comparar contra E1 y baseline D; revertir cuatro workers si la ejecución completa empeora o aparecen fallos de recursos/concurrencia.
+
+## E3: generación de portable
+
+Baseline manual #45419296948: ~291 s (dependencias 68 s, compilación 27 s, empaquetado 165 s, resto 31 s); artefacto 112517621 bytes. Restaurar cachés antes de npm ci y versionado, usando lockfile original; npm ci sigue siendo obligatorio y electron-builder sigue reconstruyendo los módulos nativos. Medir cada fase y tamaño final en el resumen Actions. Opción manual `compression: store` para ensayos rápidos; `normal` sigue siendo el valor predeterminado para distribución. Comparar dos builds de igual código y caché caliente; no afirmar ahorro hasta medir. Comprobar arranque del portable, identidad de entorno, ABI y manifiesto SHA-256. No reutilizar dist de otros commits ni omitir compilación. Rama estable intacta.

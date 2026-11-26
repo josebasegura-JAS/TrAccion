@@ -1,14 +1,15 @@
 import { utilityProcess } from 'electron';
+import type { TraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { fileURLToPath } from 'node:url';
 import { createEngineClient } from './sqliteEngineTransport.js';
 import type { DatabaseStatus, DatabaseConnectivityIssuePayload } from './sqlitePersistence.js';
 import type * as Persistence from './sqlitePersistence.js';
 import type { SqliteEngineOperationName } from './sqliteEngineOperations.js';
 
-export function startIsolatedTestEngine(userData: string, onStatus?: (status: DatabaseStatus) => void, onConnectivity?: (payload: DatabaseConnectivityIssuePayload) => void) {
+export function startIsolatedTestEngine(userData: string, onStatus?: (status: DatabaseStatus) => void, onConnectivity?: (payload: DatabaseConnectivityIssuePayload) => void, environment: TraccionEnvironment = 'test') {
   const child = utilityProcess.fork(fileURLToPath(new URL('./sqliteEngineWorker.js', import.meta.url)), [
-    '--traccion-env=test', '--sqlite-user-data=' + userData,
-  ], { serviceName: 'TrAcción SQLite test engine' });
+    '--traccion-env=' + environment, '--sqlite-user-data=' + userData,
+  ], { serviceName: 'TrAcción SQLite engine' });
   let exitConfirmed = false;
   let exitWasIdle = false;
   const exited = new Promise<number>((resolve) => child.once('exit', (code) => {

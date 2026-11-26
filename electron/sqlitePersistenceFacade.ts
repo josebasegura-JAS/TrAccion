@@ -14,7 +14,7 @@ export type * from './sqlitePersistence.js';
 // Una vez seleccionado el motor remoto no existe fallback a SQLite local.
 let isolatedSelection: boolean | undefined;
 export function isIsolatedEngineEnabled(): boolean {
-  isolatedSelection ??= getTraccionEnvironment() === 'test' && process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1';
+  isolatedSelection ??= process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT === '1';
   return isolatedSelection;
 }
 
@@ -30,7 +30,7 @@ let uncertainOperation = false;
 
 function getEngine() {
   engine ??= import('./sqliteEngineWorkerClient.js').then(({ startIsolatedTestEngine }) => {
-    const instance = startIsolatedTestEngine(getPersistenceUserDataPath(), (status) => { latestStatus = status; }, (payload) => notifier?.(payload));
+    const instance = startIsolatedTestEngine(getPersistenceUserDataPath(), (status) => { latestStatus = status; }, (payload) => notifier?.(payload), getTraccionEnvironment());
     void instance.exited.then(() => {
       unavailable = true;
       notifier?.({ blocked: true, message: 'El proceso SQLite ha terminado; edición suspendida.', failedHeartbeatCount: 0, updatedAt: new Date().toISOString() });
@@ -96,7 +96,7 @@ export async function closeSqlitePersistence(): Promise<legacy.ShutdownPerforman
   if (!isIsolatedEngineEnabled()) return legacy.closeSqlitePersistence();
   closing = true;
   await serial;
-  if (unavailable) throw new Error('Cierre SQLite no confirmado: motor no disponible o resultado anterior incierto.');
+  if (recovering || unavailable) throw new Error('Cierre SQLite no confirmado: recuperación en curso, motor no disponible o resultado anterior incierto.');
   return (await getEngine()).close();
 }
 

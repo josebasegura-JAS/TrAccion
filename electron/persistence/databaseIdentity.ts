@@ -1,3 +1,4 @@
+import { assertSqliteProcessAccess } from './sqliteProcessGuard.js';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
@@ -85,6 +86,7 @@ export function inspectAndEnsureDatabaseIdentity(
   databasePath: string,
   options: InspectDatabaseIdentityOptions = {},
 ): DatabaseIdentityInspection {
+  assertSqliteProcessAccess();
   const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
   const db = new BetterSqlite3(databasePath, { readonly: false, fileMustExist: true });
   const expectedEnvironment = options.expectedEnvironment ?? getTraccionEnvironment();
@@ -171,6 +173,7 @@ export function assertDatabaseEnvironmentBeforeWrite(
   databasePath: string,
   expectedEnvironment: TraccionEnvironment = getTraccionEnvironment(),
 ): void {
+  assertSqliteProcessAccess();
   const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
   const db = new BetterSqlite3(databasePath, { readonly: true, fileMustExist: true });
   try {

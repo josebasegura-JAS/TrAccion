@@ -7,8 +7,9 @@ import { isEngineRequest } from './sqliteEngineTransport.js';
 
 const port = process.parentPort;
 if (!port) throw new Error('Se requiere utilityProcess.');
-// No admitir producción hasta integrar de forma exclusiva el propietario.
-if (getTraccionEnvironment() !== 'test') throw new Error('Motor aislado reservado a pruebas.');
+// El entorno se recibe explícitamente del propietario principal; no inferirlo.
+const environment = getTraccionEnvironment();
+if (process.argv.filter(arg => arg.startsWith('--traccion-env')).length !== 1) throw new Error('Entorno SQLite obligatorio.');
 const paths = process.argv.filter((arg) => arg.startsWith('--sqlite-user-data='));
 if (paths.length !== 1) throw new Error('Contexto local SQLite obligatorio.');
 configurePersistenceUserDataPath(paths[0].slice('--sqlite-user-data='.length));
@@ -20,7 +21,7 @@ const { readDatabasePreferences, getDatabasePathForDirectory } = await import('.
 operations.set('recoverAfterIdleExit', async (previousValue) => {
   const previous = previousValue as import('./sqlitePersistence.js').DatabaseStatus;
   const preferences = await readDatabasePreferences();
-  if (!previous.databaseUuid || !previous.applicationId || previous.environment !== 'test' ||
+  if (!previous.databaseUuid || !previous.applicationId || previous.environment !== environment ||
       !preferences.customDirectoryPath || preferences.expectedDatabaseUuid !== previous.databaseUuid ||
       getDatabasePathForDirectory(preferences.customDirectoryPath) !== previous.path) {
     throw new Error('La identidad o ruta de recuperación SQLite no coincide.');
