@@ -1,3 +1,4 @@
+import { getTraccionEnvironment } from './traccionEnvironment.js';
 import path from 'node:path';
 import {
   DAILY_LOCAL_BACKUP_MAX_RETENTION_DAYS,
@@ -8,10 +9,11 @@ import {
 
 export async function getSecondaryBackupDirectory(): Promise<string | null> {
   const preferences = await readDatabasePreferences();
-  return preferences.secondaryBackupDirectoryPath;
+  return getTraccionEnvironment() === 'test' ? null : preferences.secondaryBackupDirectoryPath;
 }
 
 export async function setSecondaryBackupDirectory(directoryPath: string): Promise<void> {
+  if (getTraccionEnvironment() === 'test') throw new Error('Respaldo secundario externo desactivado en PRUEBAS.');
   const preferences = await readDatabasePreferences();
   await writeDatabasePreferences({
     ...preferences,
@@ -59,7 +61,7 @@ export async function getDailyLocalBackupSettings(): Promise<DailyLocalBackupSet
   return {
     enabled: preferences.dailyLocalBackupEnabled,
     retentionDays: preferences.dailyLocalBackupRetentionDays,
-    directoryPath: preferences.dailyLocalBackupDirectoryPath,
+    directoryPath: getTraccionEnvironment() === 'test' ? (preferences.customDirectoryPath ? path.join(preferences.customDirectoryPath, 'backups-pruebas', 'sqlite-daily-backup') : null) : preferences.dailyLocalBackupDirectoryPath,
   };
 }
 
@@ -78,6 +80,7 @@ export async function setDailyLocalBackupRetentionDays(retentionDays: number): P
 }
 
 export async function setDailyLocalBackupDirectory(directoryPath: string): Promise<void> {
+  if (getTraccionEnvironment() === 'test') throw new Error('La copia diaria de PRUEBAS se guarda junto a su SQLite.');
   const preferences = await readDatabasePreferences();
   await writeDatabasePreferences({
     ...preferences,

@@ -1,3 +1,4 @@
+import { getTraccionEnvironment } from './traccionEnvironment.js';
 import { getPersistenceUserDataPath } from './persistenceRuntime.js';
 import { copyFile, mkdir, readdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
@@ -18,40 +19,40 @@ export const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 export const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 export const DAILY_LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-daily-backup';
 
-export function getLocalBackupDirectory(): string {
-  return path.join(getPersistenceUserDataPath(), LOCAL_BACKUP_DIRECTORY_NAME);
+export function getLocalBackupDirectory(root = getPersistenceUserDataPath()): string {
+  return path.join(root, LOCAL_BACKUP_DIRECTORY_NAME);
 }
 
-export function getLocalBackupDatabasePath(): string {
-  return path.join(getLocalBackupDirectory(), LOCAL_BACKUP_DATABASE_FILE_NAME);
+export function getLocalBackupDatabasePath(root?: string): string {
+  return path.join(getLocalBackupDirectory(root), LOCAL_BACKUP_DATABASE_FILE_NAME);
 }
 
-export function getLocalBackupJsonPath(): string {
-  return path.join(getLocalBackupDirectory(), LOCAL_BACKUP_JSON_FILE_NAME);
+export function getLocalBackupJsonPath(root?: string): string {
+  return path.join(getLocalBackupDirectory(root), LOCAL_BACKUP_JSON_FILE_NAME);
 }
 
-export function getLocalShutdownBackupDirectory(): string {
-  return path.join(getLocalBackupDirectory(), LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME);
+export function getLocalShutdownBackupDirectory(root?: string): string {
+  return path.join(getLocalBackupDirectory(root), LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME);
 }
 
 export function backupTimestampForFileName(): string {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
 
-export function getRotatedLocalBackupDatabasePath(timestamp: string): string {
-  return path.join(getLocalBackupDirectory(), `traccion-local-backup-${timestamp}.sqlite`);
+export function getRotatedLocalBackupDatabasePath(timestamp: string, root?: string): string {
+  return path.join(getLocalBackupDirectory(root), `traccion-local-backup-${timestamp}.sqlite`);
 }
 
-export function getRotatedLocalBackupJsonPath(timestamp: string): string {
-  return path.join(getLocalBackupDirectory(), `traccion-local-backup-${timestamp}.json`);
+export function getRotatedLocalBackupJsonPath(timestamp: string, root?: string): string {
+  return path.join(getLocalBackupDirectory(root), `traccion-local-backup-${timestamp}.json`);
 }
 
-export function getShutdownLocalBackupDatabasePath(timestamp: string): string {
-  return path.join(getLocalShutdownBackupDirectory(), `traccion-shutdown-backup-${timestamp}.sqlite`);
+export function getShutdownLocalBackupDatabasePath(timestamp: string, root?: string): string {
+  return path.join(getLocalShutdownBackupDirectory(root), `traccion-shutdown-backup-${timestamp}.sqlite`);
 }
 
-export function getShutdownLocalBackupJsonPath(timestamp: string): string {
-  return path.join(getLocalShutdownBackupDirectory(), `traccion-shutdown-backup-${timestamp}.json`);
+export function getShutdownLocalBackupJsonPath(timestamp: string, root?: string): string {
+  return path.join(getLocalShutdownBackupDirectory(root), `traccion-shutdown-backup-${timestamp}.json`);
 }
 
 export async function getDailyLocalBackupDirectory(preferences: DatabasePreferences): Promise<string> {
@@ -92,18 +93,18 @@ async function pruneBackupsInDirectory(
   );
 }
 
-export async function pruneRotatedLocalBackups(extension: 'sqlite' | 'json'): Promise<void> {
+export async function pruneRotatedLocalBackups(extension: 'sqlite' | 'json', root?: string): Promise<void> {
   await pruneBackupsInDirectory(
-    getLocalBackupDirectory(),
+    getLocalBackupDirectory(root),
     'traccion-local-backup-',
     extension,
     LOCAL_ROTATED_BACKUP_RETENTION_COUNT,
   );
 }
 
-export async function pruneShutdownLocalBackups(extension: 'sqlite' | 'json'): Promise<void> {
+export async function pruneShutdownLocalBackups(extension: 'sqlite' | 'json', root?: string): Promise<void> {
   await pruneBackupsInDirectory(
-    getLocalShutdownBackupDirectory(),
+    getLocalShutdownBackupDirectory(root),
     'traccion-shutdown-backup-',
     extension,
     LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT,
@@ -208,7 +209,9 @@ export async function writeDailyLocalBackup(
     return;
   }
 
-  const directory = await getDailyLocalBackupDirectory(preferences);
+  const directory = getTraccionEnvironment() === 'test'
+    ? path.join(path.dirname(databasePath), 'backups-pruebas', DAILY_LOCAL_BACKUP_DIRECTORY_NAME)
+    : await getDailyLocalBackupDirectory(preferences);
 
   try {
     await mkdir(directory, { recursive: true });
@@ -223,8 +226,8 @@ export async function writeDailyLocalBackup(
   }
 }
 
-export async function getLatestRotatedLocalBackupTime(): Promise<number | null> {
-  const backupDirectory = getLocalBackupDirectory();
+export async function getLatestRotatedLocalBackupTime(root?: string): Promise<number | null> {
+  const backupDirectory = getLocalBackupDirectory(root);
   const entries = await readdir(backupDirectory).catch(() => []);
   const rotatedSqliteBackups = entries.filter(
     (entry) => entry.startsWith('traccion-local-backup-') && entry.endsWith('.sqlite'),
@@ -245,7 +248,7 @@ export async function getLatestRotatedLocalBackupTime(): Promise<number | null> 
   return Math.max(...timestamps);
 }
 
-export async function shouldCreateRotatedLocalBackup(reason: string): Promise<boolean> {
+export async function shouldCreateRotatedLocalBackup(reason: string, root?: string): Promise<boolean> {
   const reasons = reason
     .split(',')
     .map((item) => item.trim())
@@ -255,6 +258,6 @@ export async function shouldCreateRotatedLocalBackup(reason: string): Promise<bo
     return true;
   }
 
-  const latestBackupTime = await getLatestRotatedLocalBackupTime();
+  const latestBackupTime = await getLatestRotatedLocalBackupTime(root);
   return latestBackupTime === null || Date.now() - latestBackupTime >= LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS;
 }

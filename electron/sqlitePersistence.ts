@@ -685,6 +685,11 @@ async function safeDatabaseOperation<T>(
     throw new Error(SQLITE_HEALTH_BUSY_STATUS_MESSAGE);
   }
   const currentStatus = getSqliteStatus();
+  // Los repositorios ya devuelven su fallback cuando la base no está activa.
+  // No intentar crear/adquirir locks en una ruta no validada durante arranque.
+  if (!currentStatus.ready || currentStatus.phase !== 'active' || currentStatus.isDefaultPath) {
+    return fallback(currentStatus, currentStatus.message ?? 'SQLite no disponible.');
+  }
 
   for (let attempt = 0; attempt <= SQLITE_BUSY_RETRY_DELAYS_MS.length; attempt += 1) {
     try {

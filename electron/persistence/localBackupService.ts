@@ -1,3 +1,6 @@
+import { getTraccionEnvironment } from './traccionEnvironment.js';
+import { getPersistenceUserDataPath } from './persistenceRuntime.js';
+import { testBackupRoot } from './testOutputPaths.js';
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
@@ -79,6 +82,7 @@ export interface DatabaseStatus {
   lockPath: string;
   lock?: DatabaseLockInfo;
   message?: string;
+  environment?: string;
 }
 
 export interface RestoreLocalBackupResult {
@@ -169,6 +173,9 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     pendingBackupRevisions: Math.max(0, backupRevision - backedUpRevision),
   });
 
+  const backupRoot = (status: DatabaseStatus): string | undefined => getTraccionEnvironment() === 'test'
+    ? testBackupRoot(status, getPersistenceUserDataPath()) : undefined;
+
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
     activeBackupOperations += 1;
     try {
@@ -179,7 +186,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
 
     const startedAt = Date.now();
-    const backupDirectory = getLocalBackupDirectory();
+    const root = backupRoot(currentStatus);
+    const backupDirectory = getLocalBackupDirectory(root);
     await mkdir(backupDirectory, { recursive: true });
 
     // PR8B: compartir la misma cola exclusiva por ruta que las escrituras
@@ -223,22 +231,22 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           };
           const serializedPayload = JSON.stringify(payload, null, 2);
 
-          const shouldRotateBackup = await shouldCreateRotatedLocalBackup(reason);
+          const shouldRotateBackup = await shouldCreateRotatedLocalBackup(reason, root);
 
-          await writeFile(getLocalBackupJsonPath(), serializedPayload, 'utf8');
+          await writeFile(getLocalBackupJsonPath(root), serializedPayload, 'utf8');
           if (shouldRotateBackup) {
-            await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+            await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp, root), serializedPayload, 'utf8');
           }
-          await pruneRotatedLocalBackups('json');
+          await pruneRotatedLocalBackups('json', root);
 
           let coreSqliteBackupOk = true;
-          const liveSnapshotPath = getLocalBackupDatabasePath();
+          const liveSnapshotPath = getLocalBackupDatabasePath(root);
           try {
             await backupSqliteDatabase(currentDatabase, currentStatus.path, liveSnapshotPath);
             if (shouldRotateBackup) {
-              await copyFile(liveSnapshotPath, getRotatedLocalBackupDatabasePath(backupTimestamp));
+              await copyFile(liveSnapshotPath, getRotatedLocalBackupDatabasePath(backupTimestamp, root));
             }
-            await pruneRotatedLocalBackups('sqlite');
+            await pruneRotatedLocalBackups('sqlite', root);
           } catch (error) {
             coreSqliteBackupOk = false;
             console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
@@ -264,7 +272,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           }
 
           try {
-            const secondaryDir = (await readDatabasePreferences()).secondaryBackupDirectoryPath;
+            const secondaryDir = getTraccionEnvironment() === 'test' ? null : (await readDatabasePreferences()).secondaryBackupDirectoryPath;
             if (secondaryDir) {
               await mkdir(secondaryDir, { recursive: true });
               await writeFile(path.join(secondaryDir, LOCAL_BACKUP_JSON_FILE_NAME), serializedPayload, 'utf8');
@@ -396,7 +404,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       return emptyMetrics();
     }
 
-    const backupDirectory = getLocalShutdownBackupDirectory();
+    const root = backupRoot(currentStatus);
+    const backupDirectory = getLocalShutdownBackupDirectory(root);
     await mkdir(backupDirectory, { recursive: true });
 
     // PR8B: compartir la misma cola exclusiva por ruta que las escrituras
@@ -437,17 +446,17 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           // sobre la misma conexión. El JSON puede escribirse en paralelo.
           const jsonTask = (async () => {
             const startedAt = Date.now();
-            await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
-            await pruneShutdownLocalBackups('json');
+            await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp, root), serializedPayload, 'utf8');
+            await pruneShutdownLocalBackups('json', root);
             return Date.now() - startedAt;
           })();
 
-          const shutdownSnapshotPath = getShutdownLocalBackupDatabasePath(backupTimestamp);
+          const shutdownSnapshotPath = getShutdownLocalBackupDatabasePath(backupTimestamp, root);
           const localSqliteTask = (async () => {
             const startedAt = Date.now();
             try {
               await backupSqliteDatabase(currentDatabase, currentStatus.path, shutdownSnapshotPath);
-              await pruneShutdownLocalBackups('sqlite');
+              await pruneShutdownLocalBackups('sqlite', root);
               return { durationMs: Date.now() - startedAt, ok: true };
             } catch (error) {
               console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
@@ -560,10 +569,13 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   const listLocalBackups = async (): Promise<LocalBackupEntry[]> => {
-    await pruneRotatedLocalBackups('json');
-    await pruneRotatedLocalBackups('sqlite');
-    await pruneShutdownLocalBackups('json');
-    await pruneShutdownLocalBackups('sqlite');
+    const status = dependencies.getStatus();
+    if (getTraccionEnvironment() === 'test' && !status.ready) return [];
+    const root = backupRoot(status);
+    await pruneRotatedLocalBackups('json', root);
+    await pruneRotatedLocalBackups('sqlite', root);
+    await pruneShutdownLocalBackups('json', root);
+    await pruneShutdownLocalBackups('sqlite', root);
 
     const readBackupEntries = async (
       backupDirectory: string,
@@ -604,8 +616,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     };
 
     const [localBackups, shutdownBackups] = await Promise.all([
-      readBackupEntries(getLocalBackupDirectory(), isLocalBackupFileName),
-      readBackupEntries(getLocalShutdownBackupDirectory(), isShutdownBackupFileName, `${LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME}/`),
+      readBackupEntries(getLocalBackupDirectory(root), isLocalBackupFileName),
+      readBackupEntries(getLocalShutdownBackupDirectory(root), isShutdownBackupFileName, `${LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME}/`),
     ]);
 
     return [...localBackups, ...shutdownBackups]
@@ -635,8 +647,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     const currentStatus = dependencies.getStatus();
     const backupReference = resolveLocalBackupReference(
       fileName,
-      getLocalBackupDirectory(),
-      getLocalShutdownBackupDirectory(),
+      getLocalBackupDirectory(backupRoot(currentStatus)),
+      getLocalShutdownBackupDirectory(backupRoot(currentStatus)),
     );
 
     if (!backupReference) {
