@@ -226,7 +226,7 @@ interface TraccionApi {
   selectLoteriaExportDirectory?: () => Promise<string | null>;
   saveLoteriaCampaignExcel?: (payload: { year: number; directoryTemplate: string; fileName: string; buffer: ArrayBuffer; }) => Promise<{ ok: boolean; message: string; path: string | null }>;
   selectOperationalExcelBackupDirectory?: () => Promise<string | null>;
-  saveOperationalExcelBackup?: (payload: { directory: string; fileName: string; cleanupPrefix: string; buffer: ArrayBuffer; }) => Promise<{ ok: boolean; message: string; path: string | null }>;
+  saveOperationalExcelBackup?: (payload: { directory: string; fileName: string; cleanupPrefix: string; buffer: ArrayBuffer; manual?: boolean }) => Promise<{ ok: boolean; message: string; path: string | null }>;
   acquireRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;

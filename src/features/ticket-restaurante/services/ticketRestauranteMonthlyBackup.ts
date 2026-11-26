@@ -1,3 +1,4 @@
+import { isAutomaticExcelEnabled } from '../../../shared/export/excelGenerationPolicy';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildTableExcelBuffer } from '../../../shared/export/tableExport';
 import { saveExcelBackupWithRetry } from '../../../shared/export/saveExcelBackupWithRetry';
@@ -15,6 +16,7 @@ export async function syncTicketRestauranteMonthlyBackup({
   rows: readonly TicketPersonCalculation[];
   absences: readonly TicketRestaurantAbsence[];
 }): Promise<string | null> {
+  if (!await isAutomaticExcelEnabled()) return null;
   const directory = useConfiguracionStore.getState().rutaExportacionTicketRestaurante?.trim();
   if (!directory) return null;
   const monthLabel = new Date(year, month - 1, 1).toLocaleDateString('es-ES', { month: 'long' });

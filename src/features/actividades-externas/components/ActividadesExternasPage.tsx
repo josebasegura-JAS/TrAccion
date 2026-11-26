@@ -192,7 +192,7 @@ export function ActividadesExternasPage() {
         </div>
       </form>}
       <div className="mb-1 flex items-center justify-end gap-2 pt-1">
-        <button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><FileSpreadsheet size={14}/> Actualizar Excel</button>
+        <button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records, true); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text disabled:opacity-50"><FileSpreadsheet size={14}/> Actualizar Excel</button>
       </div>
       {message && <p role="status" className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2 text-xs text-metro-text">{message}</p>}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -258,7 +258,7 @@ export function ActividadesExternasPage() {
               <span className="text-xs text-metro-muted">{groupRecords.length} registros visibles</span>
               <div className="flex gap-2">
                 {group.icon === 'history' && <button type="button" onClick={() => setShowHistory(false)} className="rounded-md border border-metro-border px-2 py-1 text-xs">Ocultar histórico</button>}
-                <button type="button" onClick={() => setSelectedRecordId(groupRecords[0]?.id ?? null)} className="rounded-md border border-metro-border px-2 py-1 text-xs">Vista</button><button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-md border border-metro-border px-2 py-1 text-xs"><FileSpreadsheet size={13}/> Exportar Excel</button><button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border border-metro-border px-2 py-1 text-xs text-metro-text"><Printer size={13}/> Imprimir</button>
+                <button type="button" onClick={() => setSelectedRecordId(groupRecords[0]?.id ?? null)} className="rounded-md border border-metro-border px-2 py-1 text-xs">Vista</button><button type="button" disabled={busy} onClick={() => void act(async () => { const warning = await syncActividadesExternasExcelBackup(useActividadesExternasStore.getState().records, true); return { ok: !warning, message: warning || 'Excel espejo actualizado.' }; })} className="inline-flex items-center gap-1 rounded-md border border-metro-border px-2 py-1 text-xs"><FileSpreadsheet size={13}/> Exportar Excel</button><button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border border-metro-border px-2 py-1 text-xs text-metro-text"><Printer size={13}/> Imprimir</button>
               </div>
             </div>
           </section>;

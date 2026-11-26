@@ -1,3 +1,4 @@
+import { isAutomaticExcelEnabled } from '../../../shared/export/excelGenerationPolicy';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -112,7 +113,13 @@ export function LoteriaPage() {
     // Se examina el borrador al llegar una nueva revisión compartida.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaign]);
-  useEffect(() => { setExcelPending(isLotteryExcelPending(window.localStorage, campaign.year)); }, [campaign.year]);
+  useEffect(() => {
+    let active = true;
+    void isAutomaticExcelEnabled().then(enabled => {
+      if (active) setExcelPending(enabled && isLotteryExcelPending(window.localStorage, campaign.year));
+    });
+    return () => { active = false; };
+  }, [campaign.year]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(campaign), [campaign, draft]);
   useEffect(() => { if (!dirty) setRemoteConflict(false); }, [dirty]);
@@ -245,6 +252,10 @@ export function LoteriaPage() {
   }, [draft.requests, paymentFilter, savedPayments, search]);
 
   const syncExcel = async (saved: LotteryCampaign): Promise<boolean> => {
+    if (!await isAutomaticExcelEnabled()) {
+      setExcelPending(false);
+      return false;
+    }
     setExcelSyncing(true);
     try {
       const result = await exportSavedLotteryCampaign(saved.year, window.localStorage, async () => {
@@ -275,6 +286,7 @@ export function LoteriaPage() {
     }
 
     clearRecoveryDraft();
+    setMessage(success);
     const ok = await syncExcel(next);
     if (ok) setMessage(`${success} Excel de campaña actualizado.`);
   };

@@ -1,8 +1,10 @@
+import { isAutomaticExcelEnabled } from '../../../shared/export/excelGenerationPolicy';
 import { saveExcelBackupWithRetry } from '../../../shared/export/saveExcelBackupWithRetry';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import type { CriterioRrll } from '../domain/criterioRrll';
 
 export async function syncCriteriosRrllExcelBackup(records: CriterioRrll[]): Promise<string | null> {
+  if (!await isAutomaticExcelEnabled()) return null;
   const directory = useConfiguracionStore.getState().rutaExportacionCriteriosRrll.trim();
   if (!directory) return 'Configura en Ajustes la carpeta del Excel espejo de Criterios RRLL.';
   if (!window.traccion?.saveOperationalExcelBackup) return 'El Excel espejo solo está disponible en la aplicación de escritorio.';
