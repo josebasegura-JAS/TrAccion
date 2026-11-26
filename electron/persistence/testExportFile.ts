@@ -8,7 +8,7 @@ export async function saveTestExportFile(status: OutputStatus, payload: unknown)
   if (!payload || typeof payload !== 'object') throw new Error('Exportación inválida.');
   const { fileName, buffer } = payload as { fileName?: unknown; buffer?: unknown };
   if (typeof fileName !== 'string' || fileName.length > 180 || fileName !== path.win32.basename(fileName) ||
-      fileName !== path.posix.basename(fileName) || /[<>:"/\\|?*\x00-\x1f]/.test(fileName) || fileName.startsWith('.') ||
+      fileName !== path.posix.basename(fileName) || /[<>:"/\\|?*]/.test(fileName) || Array.from(fileName).some(character => character.charCodeAt(0) < 32) || fileName.startsWith('.') ||
       !/\.(xlsx|csv|docx|pdf|json|txt)$/i.test(fileName) ||
       /^(con|prn|aux|nul|com[1-9]|lpt[1-9])\./i.test(fileName) ||
       !(buffer instanceof ArrayBuffer) || buffer.byteLength === 0) throw new Error('Nombre o contenido de exportación inválido.');

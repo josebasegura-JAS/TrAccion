@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -12,10 +12,16 @@ describe('exportaciones manuales de pruebas', () => {
     try {
       const first = await saveTestExportFile(status, { fileName: 'datos.xlsx', buffer });
       const second = await saveTestExportFile(status, { fileName: 'datos.xlsx', buffer });
-      expect(path.relative(root, first).split(path.sep)[0]).toBe('exportaciones');
+      // Windows puede resolver el directorio TEMP a un nombre largo distinto
+      // del alias 8.3 devuelto por tmpdir(). Comparar ambos extremos reales.
+      const canonicalRoot = await realpath(root);
+      for (const destination of [first, second]) {
+        const relative = path.relative(canonicalRoot, await realpath(destination));
+        expect(relative.split(path.sep)).toEqual(['exportaciones', expect.stringMatching(/^manual-/), 'datos.xlsx']);
+      }
       expect(first).not.toBe(second);
       expect([...await readFile(first)]).toEqual([1, 2, 3]);
-      for (const fileName of ['../datos.xlsx', '..\\datos.xlsx', 'C:\\datos.xlsx', 'datos.exe', 'CON.csv']) {
+      for (const fileName of ['../datos.xlsx', '..\\datos.xlsx', 'C:\\datos.xlsx', 'datos.exe', 'CON.csv', 'datos\u0000.xlsx', 'datos\u001f.xlsx']) {
         await expect(saveTestExportFile(status, { fileName, buffer })).rejects.toThrow();
       }
       await expect(saveTestExportFile({ ...status, environment: 'production' }, { fileName: 'datos.xlsx', buffer })).rejects.toThrow();
