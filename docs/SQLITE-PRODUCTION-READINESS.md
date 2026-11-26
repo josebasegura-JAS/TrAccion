@@ -1,0 +1,3 @@
+# Integración 3
+
+El portable experimental lleva un marcador dentro de dist-electron empaquetado; abre exclusivamente test. El portable oficial conserva los argumentos de entorno históricos y activa el propietario aislado antes de importar main. Producción sintética se ensaya solo con una SQLite creada en una carpeta temporal. No se autoriza ningún despliegue real con esta PR. Mantener main sin merge hasta verificar EXE experimental, desconexiones, backups y dos clientes SMB. No habilitar reinicio automático de la aplicación con escrituras o backups inciertos. Restauración test sigue prohibida. La selección del entorno del launcher externo no cambia.

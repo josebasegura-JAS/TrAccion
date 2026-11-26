@@ -24,11 +24,11 @@ afterEach(() => {
 });
 
 describe('Selección exclusiva del motor SQLite', () => {
-  it('no permite activar el motor experimental en producción', async () => {
+  it('permite seleccionar el motor aislado en producción sin abrir el antiguo', async () => {
     mocks.environment.mockReturnValue('production');
     vi.stubEnv('TRACCION_SQLITE_ENGINE_EXPERIMENT', '1');
     const facade = await import('./sqlitePersistenceFacade.js');
-    expect(facade.isIsolatedEngineEnabled()).toBe(false);
+    expect(facade.isIsolatedEngineEnabled()).toBe(true);
     expect(mocks.start).not.toHaveBeenCalled();
   });
 

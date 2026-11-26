@@ -8,6 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectDir = path.join(__dirname, '..');
 const pkg = JSON.parse(readFileSync(path.join(projectDir, 'package.json'), 'utf8'));
 const artifactName = getPortableArtifactName(pkg.version);
+const compression = process.env.TRACCION_PORTABLE_COMPRESSION ?? 'normal';
+if (!['normal', 'store'].includes(compression)) throw new Error(`Compresión portable no soportada: ${compression}`);
+console.log(`Compresión portable: ${compression}`);
 const electronBuilderCli = path.join(projectDir, 'node_modules', 'electron-builder', 'cli.js');
 
 // Ejecutamos el CLI local con el mismo Node que está ejecutando este script.
@@ -19,6 +22,7 @@ const result = spawnSync(
     '--win',
     'portable',
     `--config.portable.artifactName=${artifactName}`,
+    `--config.compression=${compression}`,
   ],
   { cwd: projectDir, stdio: 'inherit' },
 );

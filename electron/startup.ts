@@ -1,6 +1,7 @@
 import { app, screen } from 'electron';
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { resolvePackagedEnvironment, isExperimentalPortable } from './packagedEnvironment.js';
 import { parseTraccionEnvironment } from './persistence/traccionEnvironment.js';
 
 const isMultiuserTestClientB = process.argv.includes('--traccion-test-user-b');
@@ -38,17 +39,17 @@ function prepareSecondClientProfile(): boolean {
 // producción al perfil de pruebas.
 let environmentProfileReady = true;
 try {
-  // El portable de esta rama experimental debe abrir pruebas con doble clic.
-  // Los lanzamientos de desarrollo conservan su comportamiento anterior.
-  if (app.isPackaged && !process.argv.some((arg) => arg.startsWith('--traccion-env'))) {
-    process.argv.push('--traccion-env=test');
+  const experimental = app.isPackaged && isExperimentalPortable(app.getAppPath());
+  const environment = app.isPackaged
+    ? resolvePackagedEnvironment(process.argv, experimental)
+    : parseTraccionEnvironment(process.argv);
+  if (app.isPackaged && !process.argv.some(arg => arg.startsWith('--traccion-env'))) {
+    process.argv.push('--traccion-env=' + environment);
   }
-  const environment = parseTraccionEnvironment(process.argv);
-  if (app.isPackaged && environment !== 'test') {
-    throw new Error('El portable experimental solo permite el entorno de pruebas.');
-  }
+  // Solo el binario oficial podrá activar producción; no hay fallback por fallo.
+  if (app.isPackaged) process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT = '1';
   if (environment === 'test') {
-    const smokeProfile = process.env.TRACCION_PACKAGED_SMOKE_PROFILE;
+    const smokeProfile = experimental ? process.env.TRACCION_PACKAGED_SMOKE_PROFILE : undefined;
     if (smokeProfile && !path.isAbsolute(smokeProfile)) throw new Error('Perfil temporal de pruebas no absoluto.');
     const current = smokeProfile ?? app.getPath('userData');
     const testProfile = path.join(path.dirname(current), path.basename(current) + '-entorno-pruebas');

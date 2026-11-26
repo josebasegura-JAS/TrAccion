@@ -3,6 +3,8 @@ import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startIsolatedTestEngine } from './sqliteEngineWorkerClient.js';
+import { openSqliteDatabase } from './persistence/sqliteConnection.js';
+import { inspectAndEnsureDatabaseIdentity } from './persistence/databaseIdentity.js';
 
 async function run(): Promise<void> {
   await app.whenReady();
@@ -91,6 +93,28 @@ async function run(): Promise<void> {
   const persisted = await reopened.call('getPersistedRecordSnapshot', key);
   if (persisted.record?.value !== 'changed-after-backup') throw new Error('El registro no sobrevivió al cierre.');
   await reopened.close();
+
+  // Producción simulada exclusivamente con archivo sintético local.
+  const productionDirectory = path.join(root, 'synthetic-production');
+  const productionProfile = path.join(root, 'synthetic-production-profile');
+  await mkdir(productionDirectory);
+  await mkdir(productionProfile);
+  const productionFile = path.join(productionDirectory, 'traccion.sqlite');
+  openSqliteDatabase(productionFile, { busyTimeoutMs: 1000 }).close();
+  const identity = inspectAndEnsureDatabaseIdentity(productionFile, {
+    expectedEnvironment: 'production', allowLegacyBootstrap: true,
+  }).identity;
+  const productionEngine = startIsolatedTestEngine(productionProfile, undefined, undefined, 'production');
+  await productionEngine.ready;
+  await productionEngine.call('initializeSqlitePersistence');
+  const productionStatus = await productionEngine.call('changeSqliteDirectory', productionDirectory);
+  if (!productionStatus.ready || productionStatus.environment !== 'production' ||
+      productionStatus.databaseUuid !== identity.databaseUuid) throw new Error('No se activó producción sintética.');
+  const productionSaved = await productionEngine.call('savePersistedRecordIfUnchanged', {
+    key: 'production-smoke', value: '{}', expectedUpdatedAt: null,
+  });
+  if (!productionSaved.ok) throw new Error('No se guardó producción sintética.');
+  await productionEngine.close();
   await rm(root, { recursive: true, force: true });
   console.info('SQLite isolated smoke: OK');
 }
