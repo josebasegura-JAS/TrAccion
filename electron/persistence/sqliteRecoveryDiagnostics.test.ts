@@ -72,4 +72,12 @@ describe('PR9A · diagnósticos SQLite sin información personal', () => {
     expect(JSON.stringify(diagnostic)).not.toContain('personas');
   });
 
+  it.each([
+    ['La base SQLite no coincide con la base compartida vinculada a este equipo. Identificador esperado abc, recibido def.', 'UUID vinculado no coincidente'],
+    ['La base pertenece al entorno "production" y esta instalación solo admite "test".', 'Entorno SQLite incompatible'],
+    ['Base ocupada temporalmente por usuario@equipo (PID 123).', 'Bloqueo SQLite ocupado'],
+  ])('clasifica la activación sin divulgar detalles: %s', (message, expected) => {
+    expect(describeSqliteRecoveryError(new Error(message)).errorMessage).toBe(expected);
+  });
+
 });

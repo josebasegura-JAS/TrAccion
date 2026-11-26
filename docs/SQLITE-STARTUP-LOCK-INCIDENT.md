@@ -1,0 +1,5 @@
+# Incidencia de activación SQLite (26/11/2026)
+
+En PRUEBAS se mostró contención por PID 26836; arranque posterior PID principal 9316, estado inicial a 16.7 s. Diagnóstico 11:40:12Z fallo 12.635 s; siguientes fallos 0.56–0.65 s cada ~30 s. Sin código normalizado ni etapa de activación. No demuestra que el mismo lock continuase ocupado: la fase de activación puede fallar posteriormente por identidad, esquema o permisos. No hay evidencia de corrupción en estos eventos.
+
+Corrección acotada: esperar heartbeat de arranque en curso antes de release físico (misma barrera local); código de contención; distinguir errores de identidad y entorno sin registrar usuarios/rutas; registrar fallo inicial y de reactivación en etapa activacion; actualizar propietario observado en cada fallo. No reducir TTL ni eliminar cuarentenas o locks ajenos. No modificar UUID ni permitir fallback. Test de intercalado determinista sobre fs local; falta verificar SMB y reproducir causa exacta. Si persiste, recoger diagnóstico y owner.json del entorno test; no borrar lock a ciegas.

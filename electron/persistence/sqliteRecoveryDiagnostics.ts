@@ -8,7 +8,7 @@ import { appendFileSync, existsSync, renameSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 export type SqliteRecoveryStage = 'archivo' | 'consulta' | 'esquema' | 'identidad' | 'bloqueo-heartbeat'
-  | 'cierre' | 'verificacion' | 'reapertura' | 'validacion-identidad' | 'sin-etapa';
+  | 'cierre' | 'verificacion' | 'reapertura' | 'validacion-identidad' | 'activacion' | 'sin-etapa';
 
 export interface SqliteRecoveryDiagnosticEvent {
   at: string;
@@ -57,6 +57,13 @@ export function describeSqliteRecoveryError(error: unknown): Pick<SqliteRecovery
     : raw.startsWith('Los metadatos de la base SQLite') ? 'Metadatos SQLite no coincidentes'
     : raw.startsWith('La ruta configurada') ? 'Fichero SQLite no válido'
     : raw.startsWith('SQLite no está inicializado') ? 'Conexión SQLite no inicializada'
+    : raw.startsWith('La base SQLite no coincide con la base compartida vinculada') ? 'UUID vinculado no coincidente'
+    : raw.startsWith('La base pertenece al entorno') || raw.startsWith('Entorno incompatible:') ? 'Entorno SQLite incompatible'
+    : raw.startsWith('La base SQLite contiene metadatos de identidad incompletos') ? 'Identidad SQLite incompleta'
+    : raw.startsWith('La base vinculada ha perdido su identidad SQLite') ? 'Identidad vinculada ausente'
+    : raw.startsWith('Base ocupada temporalmente') ? 'Bloqueo SQLite ocupado'
+    : raw.startsWith('No se ha podido comprobar de forma fiable el bloqueo SQLite') ? 'Bloqueo SQLite no verificable'
+    : raw.startsWith('No se ha podido confirmar la identidad exacta del bloqueo SQLite') ? 'Propiedad del bloqueo no confirmada'
     : raw ? 'Error sin código normalizado' : 'Sin mensaje';
   return { errorCode, errorName, errorMessage: errorMessage.slice(0, MAX_MESSAGE_LENGTH), ...(errorErrno === undefined ? {} : { errorErrno }), ...(errorSyscall === undefined ? {} : { errorSyscall }) };
 }

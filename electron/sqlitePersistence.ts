@@ -624,9 +624,13 @@ export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
   const databasePath = getDatabasePathForDirectory(configured.directoryPath);
   const lockPath = getLockPath(databasePath);
 
+  const activationStartedAt = Date.now();
   try {
     return await activateDatabase(configured.directoryPath, configured.isDefaultPath, null);
   } catch (error) {
+    writeSqliteRecoveryDiagnostic({ event: 'health', outcome: 'failed', stage: 'activacion',
+      durationMs: Date.now() - activationStartedAt, recoveryRequired: false,
+      ...describeSqliteRecoveryError(error) });
     // La consulta de metadatos también puede fallar cuando SMB oculta
     // temporalmente owner.json. No permitir que este segundo error se escape
     // del catch: antes dejaba el splash colgado sin crear la ventana principal.
@@ -792,9 +796,13 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       await activateDatabase(path.dirname(initialUnavailable.path), false, null);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      status = { ...initialUnavailable, ready: false, message:
+      // No arrastrar un propietario de un intento anterior: el nuevo fallo
+      // puede ser de identidad o permisos, no de contención.
+      let currentLock: DatabaseLockInfo | null = null;
+      try { currentLock = await readLock(initialUnavailable.lockPath); } catch { /* no asumir lock libre */ }
+      status = { ...initialUnavailable, ready: false, lock: currentLock ?? undefined, message:
         `SQLite compartida todavía no disponible: ${message}. Se reintentará la conexión sin habilitar escrituras.` };
-      writeHealthDiagnostic('failed', 'sin-etapa', error);
+      writeHealthDiagnostic('failed', 'activacion', error);
     }
   }
 

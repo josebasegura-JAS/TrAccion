@@ -134,6 +134,9 @@ const activeLocalLeases = new Map<string, {
 }>();
 const leasePaths = new WeakMap<DatabaseLockInfo, string>();
 const completedLeases = new WeakSet<DatabaseLockInfo>();
+// Arranque conserva la API histórica de timer; asociar su scope al lease
+// permite esperar la renovación pendiente incluso tras clearInterval.
+const startupHeartbeatStops = new WeakMap<DatabaseLockInfo, () => Promise<void>>();
 // Un release físico en curso no puede solaparse con una nueva reentrada local.
 const localReleasesInFlight = new Map<string, Promise<void>>();
 /**
@@ -582,9 +585,9 @@ export function createDatabaseLockManager(
     }
 
     if (lastLock) {
-      throw new Error(
+      throw Object.assign(new Error(
         `Base ocupada temporalmente por ${lastLock.username}@${lastLock.hostname} (PID ${lastLock.pid}). Inténtalo de nuevo en unos segundos.`,
-      );
+      ), { code: 'TRACCION_LOCK_BUSY' });
     }
 
     if (lastReadError) {
@@ -633,6 +636,11 @@ export function createDatabaseLockManager(
     activeLocalLeases.delete(lockPath);
 
     const physicalRelease = (async (): Promise<void> => {
+      // El arranque cancela el timer, pero una renovación iniciada puede
+      // seguir usando owner.json. Mantener la barrera local hasta su fin.
+      const stopStartupHeartbeat = startupHeartbeatStops.get(lock);
+      startupHeartbeatStops.delete(lock);
+      if (stopStartupHeartbeat) await stopStartupHeartbeat();
       const ownerPath = getLockInfoPath(lockPath);
       let current: DatabaseLockInfo | null;
       try {
@@ -868,7 +876,9 @@ export function createDatabaseLockManager(
     lockPath: string,
     lock: DatabaseLockInfo,
   ): ReturnType<typeof setInterval> {
-    return createHeartbeatScope(lockPath, lock).timer;
+    const scope = createHeartbeatScope(lockPath, lock);
+    startupHeartbeatStops.set(lock, () => scope.stop());
+    return scope.timer;
   }
 
   function setConnectivityIssueNotifier(
