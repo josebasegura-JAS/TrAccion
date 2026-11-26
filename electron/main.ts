@@ -722,16 +722,32 @@ if (!app.requestSingleInstanceLock()) {
     // diagnosticar también un cierre que no llegue a completar la escritura final.
     void writeShutdownPerformance({ totalMs: 0, vacuumMs: 0, shutdownBackupMs: 0, closeDatabaseMs: 0 })
       .catch((error: unknown) => console.warn('No se ha podido iniciar la métrica de cierre.', error));
-    loadSqlitePersistenceModule()
-      .then(({ closeSqlitePersistence }) => closeSqlitePersistence())
-      .then((metrics) => writeShutdownPerformance({ ...metrics, totalMs: Math.max(metrics.totalMs, Date.now() - shutdownStartedAt) }))
-      .catch((error: unknown) => console.warn('No se ha podido completar el cierre SQLite antes de salir.', error))
-      .finally(() => {
+    const finishQuit = (): void => {
       isQuitAfterSqlitePersistenceClosed = true;
       if (shutdownWindow && !shutdownWindow.isDestroyed()) shutdownWindow.destroy();
       shutdownWindow = null;
       app.quit();
-    });
+    };
+    void loadSqlitePersistenceModule()
+      .then(({ closeSqlitePersistence }) => closeSqlitePersistence())
+      .then(async (metrics) => {
+        await writeShutdownPerformance({ ...metrics, totalMs: Math.max(metrics.totalMs, Date.now() - shutdownStartedAt) })
+          .catch((error: unknown) => console.warn('No se pudo guardar la métrica de cierre.', error));
+        finishQuit();
+      })
+      .catch((error: unknown) => {
+        console.warn('No se ha podido completar el cierre SQLite antes de salir.', error);
+        if (!isIsolatedTestEnvironment || process.env.TRACCION_SQLITE_ENGINE_EXPERIMENT !== '1') {
+          finishQuit();
+          return;
+        }
+        if (shutdownWindow && !shutdownWindow.isDestroyed()) shutdownWindow.destroy();
+        shutdownWindow = null;
+        isShutdownInProgress = false;
+        isRendererCloseApproved = false;
+        dialog.showErrorBox('TrAcción · Cierre SQLite no confirmado',
+          'No se ha confirmado el cierre del motor. Se conserva la sesión bloqueada para evitar interrumpir una operación incierta. No repitas guardados ni fuerces el cierre sin revisar el diagnóstico.');
+      });
   });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }
