@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => {
     registerCore: vi.fn(), notifier: vi.fn(), quit: vi.fn(),
     write: vi.fn(async () => undefined),
     showErrorBox: vi.fn(),
-    loadFile: vi.fn(async (_file: string) => undefined),
+    loadFile: vi.fn(async () => undefined),
   };
 });
 vi.mock('electron', () => ({
