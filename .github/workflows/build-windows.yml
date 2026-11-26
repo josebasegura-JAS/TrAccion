@@ -70,15 +70,18 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Instalar dependencias
         shell: pwsh
-        run: npm ci --include=dev --no-audit --no-fund
+        run: npm ci --include=dev --no-audit --no-fund --prefer-offline
       - name: Compilar aplicación
         shell: pwsh
         run: npm run build
