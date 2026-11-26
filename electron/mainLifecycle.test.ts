@@ -201,6 +201,18 @@ describe('reinicio supervisado del proceso principal', () => {
 });
 
 describe('cierre ordenado del proceso principal', () => {
+  it('cierra con aviso y diagnóstico si solo faltan destinos adicionales', async () => {
+    const metrics = { totalMs: 1, vacuumMs: 0, shutdownBackupMs: 1, closeDatabaseMs: 1, shutdownBackupWarnings: ['daily', 'secondary'] };
+    mocks.close.mockResolvedValueOnce(metrics);
+    mocks.windows.mockReturnValue([]);
+    expect(beforeQuit()).toHaveBeenCalledTimes(1);
+    await vi.dynamicImportSettled();
+    await vi.runAllTimersAsync();
+    expect(mocks.quit).toHaveBeenCalledTimes(1);
+    expect(mocks.relaunch).not.toHaveBeenCalled();
+    expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-incomplete-shutdown-backup.json'), expect.stringContaining('"incompleteDestinations":["daily","secondary"]'), 'utf8');
+    expect(mocks.showErrorBox).toHaveBeenCalledWith(expect.stringContaining('Copias adicionales pendientes'), expect.stringContaining('diaria, secundaria'));
+  });
   it('no autoriza el cierre cuando el renderer rechaza la comprobación', async () => {
     mocks.execute.mockRejectedValueOnce(new Error('renderer no disponible'));
     expect(beforeQuit()).toHaveBeenCalledTimes(1);

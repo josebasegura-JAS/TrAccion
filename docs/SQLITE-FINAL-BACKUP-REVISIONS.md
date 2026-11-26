@@ -1,0 +1,5 @@
+# Remate de backups del motor aislado
+
+Los tres caminos atómicos con conexión propia notifican al servicio de backups inmediatamente después de COMMIT, antes de cerrar su handle; no notifican conflictos ni lotes vacíos. Tanto la fachada histórica como el worker proporcionan el callback interno, nunca el renderer. El smoke real comprueba incremento de revisiones.
+
+Durante el cierre, siguen siendo obligatorios la instantánea SQLite validada, JSON y publicación compartida. Si falla solamente la copia diaria o secundaria, se esperan todos los intentos, se devuelve aviso y se permite cerrar SQLite normalmente. La revisión completa no se confirma; se cancela el relanzamiento automático y se registra last-incomplete-shutdown-backup.json en userData, además de la métrica de cierre. El usuario debe comprobar los destinos y pedir backup manual al reabrir; no hay reintento persistente automático. Los backups manuales conservan su criterio estricto. No se cambia TTL, restauración ni política de retención. Pendiente CI y aceptación SMB.

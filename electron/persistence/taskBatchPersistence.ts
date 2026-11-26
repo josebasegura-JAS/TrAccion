@@ -150,6 +150,7 @@ export function saveTaskRecordsInTransaction(
 
 export async function saveTaskRecordsAtomically(
   records: AtomicTaskRecord[],
+  onCommitted?: () => void,
 ): Promise<AtomicTaskBatchSaveResult> {
   let currentStatus = getSqliteStatus();
   if (
@@ -189,7 +190,9 @@ export async function saveTaskRecordsAtomically(
     return await batchLockLifecycle.withDatabaseOperationLock(currentStatus.path, async () => {
       const db = openSqliteDatabase(currentStatus.path, { busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS });
       try {
-        return saveTaskRecordsInTransaction(db, records, currentStatus);
+        const result = saveTaskRecordsInTransaction(db, records, currentStatus);
+        if (result.ok && result.saved > 0) onCommitted?.();
+        return result;
       } finally {
         db.close();
       }

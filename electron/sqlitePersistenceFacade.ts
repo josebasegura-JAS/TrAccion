@@ -141,15 +141,15 @@ export async function closeSqlitePersistence(): Promise<legacy.ShutdownPerforman
 }
 
 export function saveTaskRecordsAtomically(...args: Parameters<typeof legacyBatch.saveTaskRecordsAtomically>): ReturnType<typeof legacyBatch.saveTaskRecordsAtomically> {
-  if (!isIsolatedEngineEnabled()) return legacyBatch.saveTaskRecordsAtomically(...args);
-  return remote((instance) => instance.callExtra('saveTaskRecordsAtomically', args)) as ReturnType<typeof legacyBatch.saveTaskRecordsAtomically>;
+  if (!isIsolatedEngineEnabled()) return legacyBatch.saveTaskRecordsAtomically(args[0], () => legacy.enqueueLocalBackup('save:tasks-atomic-batch'));
+  return remote((instance) => instance.callExtra('saveTaskRecordsAtomically', [args[0]])) as ReturnType<typeof legacyBatch.saveTaskRecordsAtomically>;
 }
 export function removeTicketRestauranteCalendarWithPeopleAtomically(...args: Parameters<typeof legacyCalendar.removeTicketRestauranteCalendarWithPeopleAtomically>): ReturnType<typeof legacyCalendar.removeTicketRestauranteCalendarWithPeopleAtomically> {
-  if (!isIsolatedEngineEnabled()) return legacyCalendar.removeTicketRestauranteCalendarWithPeopleAtomically(...args);
+  if (!isIsolatedEngineEnabled()) return legacyCalendar.removeTicketRestauranteCalendarWithPeopleAtomically(args[0], args[1], () => legacy.enqueueLocalBackup('save:ticket-calendar-atomic'));
   return remote((instance) => instance.callExtra('removeTicketRestauranteCalendarWithPeopleAtomically', [args[1]])) as ReturnType<typeof legacyCalendar.removeTicketRestauranteCalendarWithPeopleAtomically>;
 }
 export function importTicketRestaurantePeopleAtomically(...args: Parameters<typeof legacyPeople.importTicketRestaurantePeopleAtomically>): ReturnType<typeof legacyPeople.importTicketRestaurantePeopleAtomically> {
-  if (!isIsolatedEngineEnabled()) return legacyPeople.importTicketRestaurantePeopleAtomically(...args);
+  if (!isIsolatedEngineEnabled()) return legacyPeople.importTicketRestaurantePeopleAtomically(args[0], args[1], () => legacy.enqueueLocalBackup('save:ticket-people-atomic'));
   return remote((instance) => instance.callExtra('importTicketRestaurantePeopleAtomically', [args[1]])) as ReturnType<typeof legacyPeople.importTicketRestaurantePeopleAtomically>;
 }
 

@@ -54,6 +54,27 @@ async function run(): Promise<void> {
   // Verificar una copia real sin levantar la prohibición de restaurar en PRUEBAS.
   await engine.call('createManualLocalBackup');
   if ((await engine.call('getSqliteRestartBackupSnapshot')).pendingBackupRevisions !== 0) throw new Error('Backup manual no confirmó la revisión actual.');
+  // Las tres operaciones con conexión propia deben registrar una revisión
+  // después de COMMIT, y no hacerlo ante conflicto o lote vacío.
+  const pending = async () => (await engine.call('getSqliteRestartBackupSnapshot')).pendingBackupRevisions;
+  const stamp = new Date().toISOString();
+  const task = { id: 'smoke-atomic-task', value: JSON.stringify({ createdAt: stamp, updatedAt: stamp }), expectedUpdatedAt: null };
+  const initialRevision = await pending();
+  const batch = await engine.callExtra('saveTaskRecordsAtomically', [[task]]) as { ok: boolean };
+  if (!batch.ok || await pending() !== initialRevision + 1) throw new Error('El lote de tareas no registró su revisión de backup.');
+  const rejectedBatch = await engine.callExtra('saveTaskRecordsAtomically', [[task]]) as { ok: boolean };
+  if (rejectedBatch.ok || await pending() !== initialRevision + 1) throw new Error('El conflicto de tareas alteró la revisión.');
+  const calendar = { id: 'smoke-calendar', value: JSON.stringify({ createdAt: stamp, updatedAt: stamp }), expectedUpdatedAt: null };
+  const imported = await engine.callExtra('importTicketRestaurantePeopleAtomically', [{ calendars: [calendar], people: [] }]) as { ok: boolean };
+  if (!imported.ok || await pending() !== initialRevision + 2) throw new Error('La importación de Ticket no registró su revisión.');
+  const empty = await engine.callExtra('importTicketRestaurantePeopleAtomically', [{ calendars: [], people: [] }]) as { ok: boolean };
+  if (!empty.ok || await pending() !== initialRevision + 2) throw new Error('La importación vacía alteró la revisión.');
+  const deletedAt = new Date(Date.now() + 1000).toISOString();
+  const removed = await engine.callExtra('removeTicketRestauranteCalendarWithPeopleAtomically', [{
+    calendar: { ...calendar, expectedUpdatedAt: stamp, value: JSON.stringify({ createdAt: stamp, updatedAt: deletedAt, deletedAt }) },
+    people: [],
+  }]) as { ok: boolean };
+  if (!removed.ok || await pending() !== initialRevision + 3) throw new Error('La baja de calendario no registró su revisión.');
   const backups = await engine.call('listLocalBackups');
   const backup = backups.find(item => item.kind === 'sqlite' && item.isLiveCopy);
   if (!backup || backup.sizeBytes <= 0) throw new Error('No se generó respaldo SQLite real.');

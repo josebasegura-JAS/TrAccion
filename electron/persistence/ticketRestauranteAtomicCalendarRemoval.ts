@@ -99,6 +99,7 @@ function updateRefreshMetadata(db: Database): void {
 export async function removeTicketRestauranteCalendarWithPeopleAtomically(
   status: AtomicTicketDatabaseStatus,
   payload: AtomicTicketCalendarRemovalPayload,
+  onCommitted?: () => void,
 ): Promise<AtomicTicketCalendarRemovalResult> {
   if (
     !status.ready ||
@@ -187,7 +188,9 @@ export async function removeTicketRestauranteCalendarWithPeopleAtomically(
           };
         });
 
-        return transaction();
+        const result = transaction();
+        if (result.ok) onCommitted?.();
+        return result;
       } finally {
         db.close();
       }

@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabaseLockManager } from './databaseLockManager.js';
+import { readDatabasePreferences } from './databasePreferences.js';
 
 const testPaths = vi.hoisted(() => ({ userData: '' }));
 
@@ -357,6 +358,30 @@ describe('localBackupService - cierre sin backup redundante', () => {
     expect(failed.getRestartSafetySnapshot().pendingBackupRevisions).toBe(1);
     expect(readdirSync(rootDir).filter(isSharedSqliteBackupFileName)).toEqual(shared);
     await failed.flushPendingLocalBackup();
+  });
+
+  it('permite cierre con SQLite verificada si fallan destinos adicionales, sin confirmar la revisión completa', async () => {
+    const blocked = path.join(rootDir, 'blocked-destination');
+    writeFileSync(blocked, 'not-a-directory');
+    const prefs = await readDatabasePreferences();
+    vi.mocked(readDatabasePreferences).mockResolvedValueOnce({
+      ...prefs, dailyLocalBackupEnabled: true, dailyLocalBackupDirectoryPath: blocked,
+      secondaryBackupDirectoryPath: blocked,
+    });
+    const service = createLocalBackupService(buildDependencies(databasePath));
+    service.enqueueLocalBackup('save:atomic');
+    const result = await service.createShutdownLocalBackup();
+    expect(result.incompleteDestinations).toEqual(['daily', 'secondary']);
+    expect(service.getRestartSafetySnapshot()).toEqual({
+      activeBackupOperations: 0, queuedBackupOperations: 0, pendingBackupRevisions: 1,
+    });
+    const folder = path.join(testPaths.userData, 'sqlite-local-backup', 'shutdown');
+    const sqlite = readdirSync(folder).find(name => name.endsWith('.sqlite'));
+    expect(sqlite).toBeDefined();
+    const copy = new Database(path.join(folder, sqlite!), { readonly: true, fileMustExist: true });
+    try { expect(copy.pragma('quick_check')).toEqual([{ quick_check: 'ok' }]); }
+    finally { copy.close(); }
+    expect(readdirSync(rootDir).filter(isSharedSqliteBackupFileName)).toHaveLength(1);
   });
 
 });

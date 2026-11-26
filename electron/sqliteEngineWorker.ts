@@ -40,13 +40,13 @@ operations.set('recoverAfterIdleExit', async (previousValue) => {
   return recovered;
 });
 const { saveTaskRecordsAtomically } = await import('./persistence/taskBatchPersistence.js');
-operations.set('saveTaskRecordsAtomically', (...args) => saveTaskRecordsAtomically(args[0] as Parameters<typeof saveTaskRecordsAtomically>[0]));
+operations.set('saveTaskRecordsAtomically', (...args) => saveTaskRecordsAtomically(args[0] as Parameters<typeof saveTaskRecordsAtomically>[0], () => persistence.enqueueLocalBackup('save:tasks-atomic-batch')));
 const { removeTicketRestauranteCalendarWithPeopleAtomically } = await import('./persistence/ticketRestauranteAtomicCalendarRemoval.js');
 const { importTicketRestaurantePeopleAtomically } = await import('./persistence/ticketRestauranteAtomicPeopleImport.js');
 operations.set('removeTicketRestauranteCalendarWithPeopleAtomically', (...args) =>
-  removeTicketRestauranteCalendarWithPeopleAtomically(persistence.getSqliteStatus(), args[0] as Parameters<typeof removeTicketRestauranteCalendarWithPeopleAtomically>[1]));
+  removeTicketRestauranteCalendarWithPeopleAtomically(persistence.getSqliteStatus(), args[0] as Parameters<typeof removeTicketRestauranteCalendarWithPeopleAtomically>[1], () => persistence.enqueueLocalBackup('save:ticket-calendar-atomic')));
 operations.set('importTicketRestaurantePeopleAtomically', (...args) =>
-  importTicketRestaurantePeopleAtomically(persistence.getSqliteStatus(), args[0] as Parameters<typeof importTicketRestaurantePeopleAtomically>[1]));
+  importTicketRestaurantePeopleAtomically(persistence.getSqliteStatus(), args[0] as Parameters<typeof importTicketRestaurantePeopleAtomically>[1], () => persistence.enqueueLocalBackup('save:ticket-people-atomic')));
 persistence.setDatabaseConnectivityIssueNotifier((payload) => port.postMessage({ kind: 'engine:connectivity', payload }));
 let closing = false;
 let closed = false;
