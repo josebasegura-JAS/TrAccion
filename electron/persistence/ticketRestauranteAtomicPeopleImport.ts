@@ -93,6 +93,7 @@ function updateRefreshMetadata(db: Database): void {
 export async function importTicketRestaurantePeopleAtomically(
   status: AtomicTicketImportDatabaseStatus,
   payload: AtomicTicketPeopleImportPayload,
+  onCommitted?: () => void,
 ): Promise<AtomicTicketPeopleImportResult> {
   if (
     !status.ready ||
@@ -159,7 +160,9 @@ export async function importTicketRestaurantePeopleAtomically(
           };
         });
 
-        return transaction();
+        const result = transaction();
+        if (result.ok) onCommitted?.();
+        return result;
       } finally {
         db.close();
       }

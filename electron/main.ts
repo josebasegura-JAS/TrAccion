@@ -65,6 +65,7 @@ interface PersistedShutdownPerformance {
   shutdownBackupLocalSqliteMs?: number;
   shutdownBackupSharedSqliteMs?: number;
   shutdownBackupDailySqliteMs?: number;
+  shutdownBackupWarnings?: ('daily' | 'secondary')[];
 }
 
 function shutdownPerformancePath(): string {
@@ -754,6 +755,20 @@ if (!app.requestSingleInstanceLock()) {
           }
           dialog.showErrorBox('TrAcción · Motor SQLite finalizado',
             'El proceso SQLite ya ha terminado. Se permite salir, pero no se confirma un cierre limpio ni una copia de cierre. Revisa el diario de incidencias antes de repetir operaciones.');
+        }
+        if (metrics.shutdownBackupWarnings?.length) {
+          // El motor confirmó cierre. No relanzar automáticamente mientras
+          // falten destinos de backup. Conservar un informe independiente
+          // que no desaparece al sobrescribir la métrica del siguiente cierre.
+          restartAfterConfirmedClose = false;
+          cancelSqliteRestartDrain();
+          const destinations = metrics.shutdownBackupWarnings.map(item => item === 'daily' ? 'diaria' : 'secundaria').join(', ');
+          await writeFile(path.join(app.getPath('userData'), 'last-incomplete-shutdown-backup.json'),
+            JSON.stringify({ recordedAt: new Date().toISOString(), incompleteDestinations: metrics.shutdownBackupWarnings }), 'utf8')
+            .catch((error: unknown) => console.warn('No se pudo registrar el backup incompleto.', error));
+          dialog.showErrorBox('TrAcción · Copias adicionales pendientes',
+            'SQLite se ha cerrado correctamente y las copias principales están verificadas. No se pudo completar la copia ' + destinations +
+            '. Comprueba los destinos y realiza un backup manual al volver a abrir TrAcción.');
         }
         await writeShutdownPerformance({ ...metrics, totalMs: Math.max(metrics.totalMs, Date.now() - shutdownStartedAt) })
           .catch((error: unknown) => console.warn('No se pudo guardar la métrica de cierre.', error));

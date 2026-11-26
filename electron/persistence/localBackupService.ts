@@ -118,6 +118,7 @@ export interface ShutdownBackupMetrics {
   localSqliteMs: number;
   sharedSqliteMs: number;
   dailySqliteMs: number;
+  incompleteDestinations?: ('daily' | 'secondary')[];
 }
 
 export interface LocalBackupService {
@@ -439,16 +440,30 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           const sharedSqliteMs = Date.now() - sharedStartedAt;
           const dailyStartedAt = Date.now();
           const preferences = await readDatabasePreferences();
-          await writeDailyLocalBackup(currentStatus.path, preferences, getDailyLocalBackupWeekdayName, shutdownSnapshotPath, true);
+          const incompleteDestinations: ('daily' | 'secondary')[] = [];
+          // La instantánea SQLite verificada, el JSON y la copia compartida
+          // ya existen. Los destinos adicionales no pueden impedir cerrar el
+          // handle, pero tampoco deben quedar registrados como completados.
+          try {
+            await writeDailyLocalBackup(currentStatus.path, preferences, getDailyLocalBackupWeekdayName, shutdownSnapshotPath, true);
+          } catch (error) {
+            incompleteDestinations.push('daily');
+            console.warn('Copia diaria de cierre pendiente.', error);
+          }
           const dailySqliteMs = Date.now() - dailyStartedAt;
-          // Una copia secundaria configurada también debe contener la revisión de cierre.
           const secondaryDir = getTraccionEnvironment() === 'test' ? null : preferences.secondaryBackupDirectoryPath;
           if (secondaryDir) {
-            await mkdir(secondaryDir, { recursive: true });
-            await writeBackupJsonAtomically(path.join(secondaryDir, LOCAL_BACKUP_JSON_FILE_NAME), serializedPayload);
-            await copyBackupAtomically(shutdownSnapshotPath, path.join(secondaryDir, LOCAL_BACKUP_DATABASE_FILE_NAME));
+            try {
+              await mkdir(secondaryDir, { recursive: true });
+              await writeBackupJsonAtomically(path.join(secondaryDir, LOCAL_BACKUP_JSON_FILE_NAME), serializedPayload);
+              await copyBackupAtomically(shutdownSnapshotPath, path.join(secondaryDir, LOCAL_BACKUP_DATABASE_FILE_NAME));
+            } catch (error) {
+              incompleteDestinations.push('secondary');
+              console.warn('Copia secundaria de cierre pendiente.', error);
+            }
           }
-          return { totalMs: Date.now() - totalStartedAt, prepareMs, jsonMs, localSqliteMs, sharedSqliteMs, dailySqliteMs };
+          return { totalMs: Date.now() - totalStartedAt, prepareMs, jsonMs, localSqliteMs, sharedSqliteMs, dailySqliteMs,
+            ...(incompleteDestinations.length ? { incompleteDestinations } : {}) };
         } finally {
           await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
             console.warn('No se ha podido liberar el bloqueo SQLite de respaldo de cierre.', error);
@@ -479,6 +494,11 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     const hadPendingChanges = pendingLocalBackupReason !== null;
     pendingLocalBackupReason = null;
     await localBackupQueue;
+    // El finally de una copia periódica puede haber rearmado el timer.
+    if (localBackupTimer) {
+      clearTimeout(localBackupTimer);
+      localBackupTimer = null;
+    }
 
     // Si esta sesión no ha modificado la base, o la última copia viva ya incluye
     // todas sus escrituras, el backup de cierre sería una repetición byte a byte.
@@ -491,7 +511,11 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     const revision = backupRevision;
     try {
       const metrics = await writeShutdownLocalBackupArtifacts();
-      backedUpRevision = Math.max(backedUpRevision, revision);
+      if (metrics.incompleteDestinations?.length) {
+        pendingLocalBackupReason = pendingLocalBackupReason ?? 'shutdown:incomplete-destinations';
+      } else {
+        backedUpRevision = Math.max(backedUpRevision, revision);
+      }
       return metrics;
     } catch (error) {
       pendingLocalBackupReason = pendingLocalBackupReason ?? 'shutdown:pending';

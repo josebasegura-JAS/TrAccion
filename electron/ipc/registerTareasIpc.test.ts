@@ -92,7 +92,7 @@ describe('IPC Tareas', () => {
     mocks.batch.mockReturnValueOnce({ ok: true, saved: 2 });
     expect(await invoke('tasks:save-record-if-unchanged', { records })).toMatchObject({ ok: true, saved: 2 });
     expect(mocks.enqueue).toHaveBeenCalledWith('tasks:save-records-atomically', expect.any(Function));
-    expect(mocks.batch).toHaveBeenCalledWith(records);
+    expect(mocks.batch).toHaveBeenCalledWith(records, expect.any(Function));
     expect(mocks.save).not.toHaveBeenCalled();
     expect(mocks.schedule).toHaveBeenCalledTimes(1);
   });

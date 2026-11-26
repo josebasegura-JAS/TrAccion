@@ -945,7 +945,7 @@ export function getSqliteStatus(): DatabaseStatus {
   );
 }
 
-function enqueueLocalBackup(reason: string): void {
+export function enqueueLocalBackup(reason: string): void {
   getLocalBackupService().enqueueLocalBackup(reason);
 }
 
@@ -2017,6 +2017,7 @@ function errorMessage(error: unknown): string {
 export interface ShutdownPerformanceMetrics {
   engineExitedUncleanly?: boolean;
   engineExitSafeForRestart?: boolean;
+  shutdownBackupWarnings?: ('daily' | 'secondary')[];
   totalMs: number;
   vacuumMs: number;
   shutdownBackupMs: number;
@@ -2053,5 +2054,6 @@ export async function closeSqlitePersistence(): Promise<ShutdownPerformanceMetri
     shutdownBackupLocalSqliteMs: shutdownBackup.localSqliteMs,
     shutdownBackupSharedSqliteMs: shutdownBackup.sharedSqliteMs,
     shutdownBackupDailySqliteMs: shutdownBackup.dailySqliteMs,
+    ...(shutdownBackup.incompleteDestinations?.length ? { shutdownBackupWarnings: shutdownBackup.incompleteDestinations } : {}),
   };
 }

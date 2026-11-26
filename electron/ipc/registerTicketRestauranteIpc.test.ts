@@ -112,7 +112,7 @@ describe('IPC Ticket Restaurante', () => {
     const channel = prefix + 'calendars:remove-with-people-atomically';
     invoke(channel, { calendar: { ...record, extra: true }, people: [person] });
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
-    expect(mocks.remove).toHaveBeenCalledWith(mocks.status, { calendar: record, people: [person] });
+    expect(mocks.remove).toHaveBeenCalledWith(mocks.status, { calendar: record, people: [person] }, expect.any(Function));
   });
 
   it('rechaza una importación si falla cualquiera de sus dos lotes', () => {
@@ -127,7 +127,7 @@ describe('IPC Ticket Restaurante', () => {
   it('admite ambos lotes en una única importación atómica', () => {
     invoke(prefix + 'people:import-atomically', { calendars: [record], people: [person] });
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
-    expect(mocks.importPeople).toHaveBeenCalledWith(mocks.status, { calendars: [record], people: [person] });
+    expect(mocks.importPeople).toHaveBeenCalledWith(mocks.status, { calendars: [record], people: [person] }, expect.any(Function));
   });
 
   it('rechaza filas de carga incompletas o importes que no sean numéricos', async () => {
