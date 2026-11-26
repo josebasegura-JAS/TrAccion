@@ -92,9 +92,47 @@ jobs:
             .cache/electron
             .cache/electron-builder
           key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
-      - name: Instalar dependencias
+      # Cache exacta, nunca reutilizar dependencias de otro lockfile/Node/runner.
+      # Guardar ANTES de electron-builder: la reconstrucción cambia el ABI nativo.
+      - name: Restaurar dependencias instaladas
+        id: installed-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: traccion-experimental-deps-v1-windows-2022-${{ runner.arch }}-${{ hashFiles('.nvmrc', 'package.json', 'package-lock.json') }}
+      - name: Instalar o verificar dependencias
+        id: prepare-deps
         shell: pwsh
-        run: npm ci --include=dev --no-audit --no-fund --prefer-offline
+        env:
+          EXACT_CACHE_HIT: ${{ steps.installed-deps.outputs.cache-hit }}
+        run: |
+          $timer = [System.Diagnostics.Stopwatch]::StartNew()
+          $valid = $false
+          if ($env:EXACT_CACHE_HIT -eq 'true') {
+            if ((Test-Path node_modules/electron/dist/electron.exe) -and
+                (Test-Path node_modules/better-sqlite3/build/Release/better_sqlite3.node)) {
+              npm ls --depth=0 --include=dev
+              $valid = $LASTEXITCODE -eq 0
+              if ($valid) {
+                node -e "const DB=require('better-sqlite3'); const db=new DB(':memory:'); db.prepare('SELECT 1').get(); db.close()"
+                $valid = $LASTEXITCODE -eq 0
+              }
+            }
+          }
+          if (-not $valid) {
+            npm ci --include=dev --no-audit --no-fund --prefer-offline
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $timer.Stop()
+          "Dependencias: $([math]::Round($timer.Elapsed.TotalSeconds, 2)) s; cache reutilizada: $valid" >> $env:GITHUB_STEP_SUMMARY
+          exit 0
+      - name: Guardar dependencias antes de reconstrucción nativa
+        if: steps.installed-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: node_modules
+          key: ${{ steps.installed-deps.outputs.cache-primary-key }}
       - name: Compilar aplicación (validación TypeScript y Vite en paralelo)
         shell: pwsh
         run: |
