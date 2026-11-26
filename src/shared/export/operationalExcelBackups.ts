@@ -1,3 +1,4 @@
+import { isAutomaticExcelEnabled } from './excelGenerationPolicy';
 import { saveExcelBackupWithRetry } from './saveExcelBackupWithRetry';
 import type ExcelJS from 'exceljs';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
@@ -199,6 +200,7 @@ export function appendBackupMessage(baseMessage: string, backupMessage: string |
 }
 
 export async function syncLicenciasExcelBackup(records: LicenciaSinSueldoRecord[]): Promise<string | null> {
+  if (!await isAutomaticExcelEnabled()) return null;
   const directory = useConfiguracionStore.getState().rutaExportacionLicencias;
   if (!directory.trim() || !window.traccion?.saveOperationalExcelBackup) return null;
 
@@ -296,6 +298,7 @@ export async function syncLicenciasExcelBackup(records: LicenciaSinSueldoRecord[
 }
 
 export async function syncVinculogramaExcelBackup(records: Vinculograma[]): Promise<string | null> {
+  if (!await isAutomaticExcelEnabled()) return null;
   const directory = useConfiguracionStore.getState().rutaExportacionVinculograma;
   if (!directory.trim() || !window.traccion?.saveOperationalExcelBackup) return null;
 

@@ -1,3 +1,4 @@
+import { isAutomaticExcelEnabled } from '../../../shared/export/excelGenerationPolicy';
 import { saveExcelBackupWithRetry } from '../../../shared/export/saveExcelBackupWithRetry';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import type { ActividadExterna } from '../domain/actividadExterna';
@@ -33,9 +34,10 @@ function rowHeight(record: ActividadExterna, observations: string): number {
   return Math.min(210, Math.max(32, lines * 17 + 9));
 }
 
-export async function syncActividadesExternasExcelBackup(records: ActividadExterna[]): Promise<string | null> {
+export async function syncActividadesExternasExcelBackup(records: ActividadExterna[], manual = false): Promise<string | null> {
+  if (!manual && !await isAutomaticExcelEnabled()) return null;
   const directory = useConfiguracionStore.getState().rutaExportacionActividadesExternas.trim();
-  if (!directory) return 'Configura en Ajustes la carpeta del Excel espejo de Actividades Externas.';
+  if (!directory && !manual) return 'Configura en Ajustes la carpeta del Excel espejo de Actividades Externas.';
   if (!window.traccion?.saveOperationalExcelBackup) return 'El Excel espejo solo está disponible en la aplicación de escritorio.';
   try {
     const { default: ExcelJS } = await import('exceljs');
@@ -140,7 +142,7 @@ export async function syncActividadesExternasExcelBackup(records: ActividadExter
       ? raw
       : new Uint8Array(raw).slice().buffer as ArrayBuffer;
     const result = await saveExcelBackupWithRetry({
-      directory, fileName: 'Actividades_Externas.xlsx',
+      directory, manual, fileName: 'Actividades_Externas.xlsx',
       cleanupPrefix: 'Actividades_Externas', buffer,
     });
     return result;

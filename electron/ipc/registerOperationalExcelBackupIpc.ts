@@ -1,3 +1,5 @@
+import { getSqliteStatus } from '../sqlitePersistenceFacade.js';
+import { resolveTestOutputDirectory } from '../persistence/testOutputPaths.js';
 import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { mkdir } from 'node:fs/promises';
@@ -15,7 +17,7 @@ export function registerOperationalExcelBackupIpc(): void {
   });
 
   ipcMain.handle('operational-backup:save-excel', async (_event, payload: unknown) => {
-    if (getTraccionEnvironment() === 'test') return { ok: true, path: null, message: 'Excel automático desactivado en PRUEBAS.' };
+    const testing = getTraccionEnvironment() === 'test';
     if (!payload || typeof payload !== 'object') {
       return { ok: false, message: 'Datos inválidos para guardar el Excel automático.', path: null };
     }
@@ -24,6 +26,7 @@ export function registerOperationalExcelBackupIpc(): void {
       fileName?: unknown;
       cleanupPrefix?: unknown;
       buffer?: unknown;
+      manual?: unknown;
     };
     if (
       typeof candidate.directory !== 'string' ||
@@ -33,10 +36,11 @@ export function registerOperationalExcelBackupIpc(): void {
     ) {
       return { ok: false, message: 'Datos inválidos para guardar el Excel automático.', path: null };
     }
+    if (testing && candidate.manual !== true) return { ok: false, path: null, message: 'Excel automático desactivado en PRUEBAS.' };
     try {
-      const directory = candidate.directory.trim();
+      const directory = testing ? await resolveTestOutputDirectory(getSqliteStatus(), 'excel', 'operativos') : candidate.directory.trim();
       if (!directory) return { ok: false, message: 'No hay carpeta configurada para el Excel automático.', path: null };
-      await mkdir(directory, { recursive: true });
+      if (!testing) await mkdir(directory, { recursive: true });
       const safeFileName = path.basename(candidate.fileName);
       const safePrefix = path.basename(candidate.cleanupPrefix);
       if (

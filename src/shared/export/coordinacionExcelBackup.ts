@@ -1,3 +1,4 @@
+import { isAutomaticExcelEnabled } from './excelGenerationPolicy';
 import { saveExcelBackupWithRetry } from './saveExcelBackupWithRetry';
 import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import type {
@@ -507,9 +508,10 @@ function createWorkbook(
   return workbook;
 }
 
-export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[]): Promise<string | null> {
+export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[], manual = false): Promise<string | null> {
+  if (!manual && !await isAutomaticExcelEnabled()) return null;
   const template = useConfiguracionStore.getState().rutaExportacionCoordinacion;
-  if (!template.trim()) return 'Datos guardados en TrAcción. Configura en Ajustes la ruta del backup Excel de Coordinación.';
+  if (!template.trim() && !manual) return 'Datos guardados en TrAcción. Configura en Ajustes la ruta del backup Excel de Coordinación.';
   if (!window.traccion?.saveOperationalExcelBackup) return 'Datos guardados en TrAcción, pero el backup Excel solo está disponible en la aplicación de escritorio.';
 
   try {
@@ -527,7 +529,7 @@ export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[
         directory,
         fileName: definition.fileName,
         cleanupPrefix: definition.cleanupPrefix,
-        buffer: toArrayBuffer(raw as ArrayBuffer | Uint8Array),
+        buffer: toArrayBuffer(raw as ArrayBuffer | Uint8Array), manual,
       });
       if (result) failures.push(`${definition.fileName}: ${result}`);
     }

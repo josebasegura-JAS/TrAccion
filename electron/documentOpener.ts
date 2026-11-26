@@ -1,3 +1,6 @@
+import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
+import { resolveTestOutputDirectory } from './persistence/testOutputPaths.js';
+import { getSqliteStatus } from './sqlitePersistenceFacade.js';
 import { shell } from 'electron';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -42,7 +45,9 @@ function normalizeDocxOutputPayload(payload: unknown): { buffer: Buffer; fileNam
 export async function openTeletrabajoWord(payload: unknown): Promise<{ ok: boolean; message: string }> {
   try {
     const { buffer, fileName } = normalizeDocxOutputPayload(payload);
-    const directory = await mkdtemp(path.join(tmpdir(), 'traccion-teletrabajo-'));
+    const root = getTraccionEnvironment() === 'test'
+      ? await resolveTestOutputDirectory(getSqliteStatus(), 'word', 'manuales') : tmpdir();
+    const directory = await mkdtemp(path.join(root, 'traccion-teletrabajo-'));
     const filePath = path.join(
       directory,
       fileName.toLowerCase().endsWith('.docx') ? fileName : `${fileName}.docx`,
@@ -97,7 +102,9 @@ function normalizeExcelWorkbookPayload(payload: unknown): { buffer: Buffer; file
 export async function openExcelWorkbook(payload: unknown): Promise<{ ok: boolean; message: string }> {
   try {
     const { buffer, fileName } = normalizeExcelWorkbookPayload(payload);
-    const directory = await mkdtemp(path.join(tmpdir(), 'traccion-excel-'));
+    const root = getTraccionEnvironment() === 'test'
+      ? await resolveTestOutputDirectory(getSqliteStatus(), 'excel', 'manuales') : tmpdir();
+    const directory = await mkdtemp(path.join(root, 'traccion-excel-'));
     const filePath = path.join(
       directory,
       fileName.toLowerCase().endsWith('.xlsx') ? fileName : `${fileName}.xlsx`,

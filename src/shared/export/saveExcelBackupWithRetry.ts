@@ -3,6 +3,7 @@ type BackupPayload = {
   fileName: string;
   cleanupPrefix: string;
   buffer: ArrayBuffer;
+  manual?: boolean;
 };
 
 export type ExcelBackupFailure = {
