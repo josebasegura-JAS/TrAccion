@@ -48,7 +48,9 @@ try {
     throw new Error('El portable experimental solo permite el entorno de pruebas.');
   }
   if (environment === 'test') {
-    const current = app.getPath('userData');
+    const smokeProfile = process.env.TRACCION_PACKAGED_SMOKE_PROFILE;
+    if (smokeProfile && !path.isAbsolute(smokeProfile)) throw new Error('Perfil temporal de pruebas no absoluto.');
+    const current = smokeProfile ?? app.getPath('userData');
     const testProfile = path.join(path.dirname(current), path.basename(current) + '-entorno-pruebas');
     mkdirSync(testProfile, { recursive: true });
     app.setPath('userData', testProfile);

@@ -41,7 +41,7 @@ function renderFatalError(error: unknown): void {
       </div>
     </React.StrictMode>,
   );
-  window.traccion?.notifyRendererReady?.();
+  window.traccion?.notifyBootVisible?.();
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
@@ -75,11 +75,17 @@ async function startApp(): Promise<void> {
   // La ventana principal permanece oculta mientras se hidrata SQLite y React
   // prepara el primer render útil. El único indicador visual durante esta fase
   // es el splash de Electron; evitamos así una segunda pantalla de carga.
+  // Mostrar primero el HTML estático: no montar stores antes de hidratar.
+  // En pruebas esto permite ver el estado aunque el motor tarde en contestar.
+  const environment = await window.traccion?.getAppEnvironment?.().catch(() => undefined);
+  if (environment === 'test') {
+    window.traccion?.notifyBootVisible?.();
+  }
   const appImportStartedAt = performance.now();
   const appModulePromise = import('./App');
   void appModulePromise.then(() => {
     recordPerformanceMetric('arranque', 'Preparación de módulos', performance.now() - appImportStartedAt);
-  });
+  }).catch(() => undefined);
 
   const hydrationStartedAt = performance.now();
   const hydrationResult = await hydrateLocalStorageFromSqlite();

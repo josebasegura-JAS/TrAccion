@@ -99,6 +99,46 @@ jobs:
           if ($files.Count -ne 1 -or $files[0].Length -lt 20MB) { throw 'Portable experimental ausente o inválido.' }
           Rename-Item -LiteralPath $files[0].FullName -NewName 'TrAccion-EXPERIMENTAL-SQLite.exe'
           git rev-parse HEAD | Set-Content release/experimental-commit.txt
+      - name: Verificar arranque del ejecutable empaquetado
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP ("traccion-smoke-" + [guid]::NewGuid())
+          $env:TRACCION_PACKAGED_SMOKE_PROFILE = Join-Path $root 'profile'
+          $report = Join-Path $root 'profile-entorno-pruebas\last-startup-performance.json'
+          $exe = (Resolve-Path 'release/TrAccion-EXPERIMENTAL-SQLite.exe').Path
+          $process = Start-Process -FilePath $exe -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 90; $i++) {
+              Start-Sleep -Seconds 2
+              if (Test-Path -LiteralPath $report) {
+                try {
+                  $data = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+                  if ($data.environment -eq 'test' -and $data.engine -eq 'isolated' -and @($data.steps | Where-Object { $_.label -eq 'React preparado' }).Count -gt 0 -and @($data.steps | Where-Object { $_.label -like 'Fallo renderer:*' }).Count -eq 0) {
+                    $ready = $true
+                    break
+                  }
+                } catch { }
+              }
+            }
+            if (-not $ready) {
+              if (Test-Path -LiteralPath $report) { Get-Content -LiteralPath $report }
+              throw 'El EXE empaquetado no confirmó el arranque del renderer.'
+            }
+            Get-Content -LiteralPath $report
+          } finally {
+            # Solo el árbol de procesos del ejecutable lanzado sobre perfil temporal.
+            & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
+          }
+          exit 0
+      - name: Conservar diagnóstico del arranque experimental
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrAccion-diagnostico-arranque
+          path: ${{ runner.temp }}/traccion-smoke-*/profile-entorno-pruebas/last-startup-performance.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Descargar únicamente el EXE de pruebas
         uses: actions/upload-artifact@v4
         with:

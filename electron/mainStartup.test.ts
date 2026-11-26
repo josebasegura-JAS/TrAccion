@@ -4,12 +4,14 @@ const mocks = vi.hoisted(() => {
   const listeners = new Map<string, (...args: unknown[]) => unknown>();
   const events = new Map<string, (...args: unknown[]) => unknown>();
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
-  const windows: Array<{ options: { title: string; show: boolean }; show: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; webContents: { executeJavaScript: ReturnType<typeof vi.fn> } }> = [];
+  const windows: Array<{ options: { title: string; show: boolean }; show: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; webContents: { executeJavaScript: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; once: ReturnType<typeof vi.fn> } }> = [];
   return {
     listeners, events, handlers, windows,
     initialize: vi.fn(async () => ({ ready: true, message: '' })),
     registerCore: vi.fn(), notifier: vi.fn(), quit: vi.fn(),
     write: vi.fn(async () => undefined),
+    showErrorBox: vi.fn(),
+    loadFile: vi.fn(async () => undefined),
   };
 });
 vi.mock('electron', () => ({
@@ -32,7 +34,7 @@ vi.mock('electron', () => ({
     once() { /* evento simulado */ }
     on() { /* evento simulado */ }
     isDestroyed() { return false; }
-    async loadFile() { return undefined; }
+    loadFile = mocks.loadFile;
   },
   ipcMain: {
     handle: (name: string, handler: (...args: unknown[]) => unknown) => mocks.handlers.set(name, handler),
@@ -40,6 +42,7 @@ vi.mock('electron', () => ({
     removeListener: (name: string) => mocks.listeners.delete(name),
   },
   Menu: { setApplicationMenu: vi.fn() },
+  dialog: { showErrorBox: mocks.showErrorBox },
   utilityProcess: { fork: () => { throw new Error('watchdog simulado'); } },
 }));
 vi.mock('node:fs/promises', () => ({ writeFile: mocks.write, readFile: vi.fn() }));
@@ -80,12 +83,14 @@ beforeEach(() => {
   mocks.handlers.clear();
   mocks.initialize.mockReset().mockResolvedValue({ ready: true, message: '' });
   mocks.registerCore.mockReset();
+  mocks.loadFile.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => {
   process.argv = originalArgv;
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 async function boot(...flags: string[]) {
   process.argv = ['electron', 'main.js', ...flags];
@@ -192,6 +197,49 @@ describe('arranque del proceso principal', () => {
     expect(mocks.windows[0].webContents.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining('60 segundos'), true);
     expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('Dashboard visible en modo diagnóstico'), 'utf8');
   });
+  it('muestra la preparación en pruebas mientras SQLite sigue pendiente, sin repetir la activación', async () => {
+    let finish!: (value: { ready: boolean; message: string }) => void;
+    mocks.initialize.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await boot('--traccion-env=test');
+    const window = mainWindow();
+    const handler = window.webContents.once.mock.calls.find(call => call[0] === 'did-finish-load')?.[1];
+    expect(handler).toBeTypeOf('function');
+    handler();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(window.show).toHaveBeenCalledTimes(1);
+    expect(mocks.initialize).toHaveBeenCalledTimes(1);
+    finish({ ready: true, message: '' });
+    await vi.advanceTimersByTimeAsync(0);
+    signal('app:renderer-ready', window.webContents);
+    expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('React preparado'), 'utf8');
+    expect(window.show).toHaveBeenCalledTimes(1);
+  });
+
+  it('registra errores de consola y salida del renderer en pruebas', async () => {
+    await boot('--traccion-env=test');
+    const window = mainWindow();
+    const consoleHandler = window.webContents.on.mock.calls.find(call => call[0] === 'console-message')?.[1];
+    const goneHandler = window.webContents.on.mock.calls.find(call => call[0] === 'render-process-gone')?.[1];
+    expect(consoleHandler).toBeTypeOf('function');
+    expect(goneHandler).toBeTypeOf('function');
+    consoleHandler({}, 1, 'mensaje informativo');
+    expect(mocks.write).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining('Fallo renderer: mensaje informativo'), 'utf8');
+    consoleHandler({}, 3, 'bundle no disponible');
+    expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('Fallo renderer: bundle no disponible'), 'utf8');
+    goneHandler({}, { reason: 'crashed' });
+    expect(mocks.showErrorBox).toHaveBeenCalledWith(expect.stringContaining('Error de interfaz'), expect.stringContaining('crashed'));
+    expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('Proceso renderer finalizado: crashed'), 'utf8');
+  });
+
+  it('registra fallo de carga del HTML y muestra diagnóstico en pruebas', async () => {
+    mocks.loadFile.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('ERR_FILE_NOT_FOUND'));
+    await boot('--traccion-env=test');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(mocks.showErrorBox).toHaveBeenCalledWith(expect.stringContaining('Error de carga'), expect.stringContaining('last-startup-performance.json'));
+    expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('ERR_FILE_NOT_FOUND'), 'utf8');
+    expect(mainWindow().show).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     { flags: [], expected: 'Cuadro de Mando RRLL - TrAcción V.test' },
     { flags: ['--traccion-env=production'], expected: 'Cuadro de Mando RRLL - TrAcción V.test' },
