@@ -243,6 +243,6 @@ export function registerSesionesIpc(): void {
     );
   });
   ipcMain.handle('actas:create-outlook-calendar', async (_event, payload: unknown) =>
-    createOutlookCalendar(payload),
+    getTraccionEnvironment() === 'test' ? { ok: false, message: 'Calendario Outlook real desactivado en PRUEBAS.' } : createOutlookCalendar(payload),
   );
 }

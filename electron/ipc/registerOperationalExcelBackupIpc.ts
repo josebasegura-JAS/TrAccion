@@ -8,6 +8,7 @@ import { publishOperationalExcelBackup } from '../operationalExcelPublication.js
 
 export function registerOperationalExcelBackupIpc(): void {
   ipcMain.handle('operational-backup:select-directory', async (event) => {
+    if (getTraccionEnvironment() === 'test') return resolveTestOutputDirectory(getSqliteStatus(), 'excel', 'operativos');
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options = { properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> };
     const result = browserWindow

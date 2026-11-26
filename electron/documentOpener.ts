@@ -59,7 +59,7 @@ export async function openTeletrabajoWord(payload: unknown): Promise<{ ok: boole
       return { ok: false, message: openError };
     }
 
-    return { ok: true, message: 'Word abierto para revisión.' };
+    return { ok: true, message: 'Word abierto para revisión en ' + filePath };
   } catch (error) {
     return {
       ok: false,
@@ -116,7 +116,7 @@ export async function openExcelWorkbook(payload: unknown): Promise<{ ok: boolean
       return { ok: false, message: openError };
     }
 
-    return { ok: true, message: 'Excel abierto para revisión.' };
+    return { ok: true, message: 'Excel abierto para revisión en ' + filePath };
   } catch (error) {
     return {
       ok: false,

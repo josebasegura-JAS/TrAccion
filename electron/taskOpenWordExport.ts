@@ -1,3 +1,5 @@
+import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
+import { resolveTestOutputDirectory, assertTestOutputDirectory } from './persistence/testOutputPaths.js';
 import ExcelJS from 'exceljs';
 import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -603,9 +605,10 @@ export async function exportOpenTasksWord(
   directoryOverride?: string | null,
   isSnapshotCurrent?: () => Promise<boolean>,
 ): Promise<TaskWordExportResult> {
-  const directoryPath = directoryOverride === undefined
-    ? await getOpenTasksWordDirectory()
-    : directoryOverride;
+  const testing = getTraccionEnvironment() === 'test';
+  const directoryPath = testing
+    ? await resolveTestOutputDirectory((await import('./sqlitePersistenceFacade.js')).getSqliteStatus(), 'excel', 'tareas')
+    : directoryOverride === undefined ? await getOpenTasksWordDirectory() : directoryOverride;
   if (!directoryPath) {
     return {
       ok: true,
@@ -632,7 +635,8 @@ export async function exportOpenTasksWord(
   const legacyExcelPath = path.join(directoryPath, 'Tareas abiertas.xlsx');
 
   try {
-    await mkdir(directoryPath, { recursive: true });
+    if (testing) await assertTestOutputDirectory((await import('./sqlitePersistenceFacade.js')).getSqliteStatus(), directoryPath, 'excel', 'tareas');
+    else await mkdir(directoryPath, { recursive: true });
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'TrAccion';

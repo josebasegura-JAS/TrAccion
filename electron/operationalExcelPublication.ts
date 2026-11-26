@@ -1,3 +1,5 @@
+import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
+import { assertTestOutputDirectory } from './persistence/testOutputPaths.js';
 import { randomUUID } from 'node:crypto';
 import { readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -51,6 +53,10 @@ export async function publishOperationalExcelBackup(
   cleanupPrefix: string,
   data: Uint8Array,
 ): Promise<string> {
+  if (getTraccionEnvironment() === 'test') {
+    const { getSqliteStatus } = await import('./sqlitePersistenceFacade.js');
+    await assertTestOutputDirectory(getSqliteStatus(), directory, 'excel', 'operativos');
+  }
   const destination = path.join(directory, fileName);
   const temp = path.join(directory, `.${fileName}.${randomUUID()}.tmp`);
   try {
