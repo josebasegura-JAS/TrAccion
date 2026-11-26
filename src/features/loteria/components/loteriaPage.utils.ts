@@ -1,3 +1,4 @@
+import { saveTestDownloadIfNeeded } from '../../../shared/export/testDownload.js';
 import { escapeHtml } from '../../../shared/security/escapeHtml';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import type { Employee } from '../../plantilla/domain/employee';
@@ -127,7 +128,8 @@ export function createRequestId(): string {
     : `loteria-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function downloadBlob(blob: Blob, filename: string) {
+export async function downloadBlob(blob: Blob, filename: string) {
+  if (await saveTestDownloadIfNeeded(blob, filename)) return;
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -429,7 +431,7 @@ export async function buildCampaignWorkbook(campaign: LotteryCampaign): Promise<
 
 export async function exportCampaign(campaign: LotteryCampaign) {
   const { fileName, buffer } = await buildCampaignWorkbook(campaign);
-  downloadBlob(
+  await downloadBlob(
     new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     fileName,
   );

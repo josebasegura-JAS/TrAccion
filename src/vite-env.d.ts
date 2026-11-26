@@ -179,6 +179,7 @@ interface TraccionApi {
   notifyRendererReady?: () => void;
   getWindowsUser?: () => Promise<string>;
   getAppEnvironment?: () => Promise<'production' | 'test'>;
+  saveTestExport?: (buffer: ArrayBuffer, fileName: string) => Promise<{ ok: boolean; path?: string; message?: string }>;
   getAppVersion?: () => Promise<string>;
   requestSafeRestart?: (options?: { automatic?: boolean }) => Promise<{ ok: boolean; message?: string }>;
   getSqliteQueueDiagnostics?: () => Promise<{ queuedOperations: number; runningOperation: string | null; runningMs: number | null; timedOut: boolean }>;

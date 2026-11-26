@@ -1,3 +1,4 @@
+import { drainMultiuserMetricSamples } from './multiuserPerformanceDiagnostics.js';
 import { configurePersistenceUserDataPath } from './persistence/persistenceRuntime.js';
 import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { createEngineDispatcher } from './sqliteEngineTransport.js';
@@ -49,6 +50,15 @@ operations.set('importTicketRestaurantePeopleAtomically', (...args) =>
 persistence.setDatabaseConnectivityIssueNotifier((payload) => port.postMessage({ kind: 'engine:connectivity', payload }));
 let closing = false;
 let closed = false;
+function publishMetrics(): void {
+  const samples = drainMultiuserMetricSamples();
+  if (!samples.length) return;
+  try { port?.postMessage({ kind: 'engine:metrics', samples }); }
+  catch (error) { console.warn('[sqlite-engine] No se pudieron enviar métricas.', error); }
+}
+// También incluir backups y heartbeats fuera de las llamadas del renderer.
+const metricsTimer = setInterval(publishMetrics, 5_000);
+metricsTimer.unref();
 const dispatch = createEngineDispatcher(operations);
 port.on('message', (event: { data: unknown }) => {
   const request = event.data;
@@ -66,6 +76,7 @@ port.on('message', (event: { data: unknown }) => {
     // creada por la operación se observa antes de que el canal vuelva a idle.
     port.postMessage({ kind: 'engine:status', status: persistence.getSqliteStatus(),
       backups: persistence.getSqliteRestartBackupSnapshot() });
+    publishMetrics();
     if (response) port.postMessage(response);
   }).catch((error: unknown) => {
     // No se ha podido confirmar el resultado. El cliente mantiene el canal

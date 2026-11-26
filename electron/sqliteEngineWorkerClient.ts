@@ -1,3 +1,4 @@
+import { ingestMultiuserMetricSamples } from './multiuserPerformanceDiagnostics.js';
 import { SQLITE_ENGINE_REQUEST_TIMEOUT_MS, isBackupSnapshot } from './sqliteEngineSafety.js';
 import type { SafeRestartBackupSnapshot } from './safeRestartPolicy.js';
 import { utilityProcess } from 'electron';
@@ -31,6 +32,7 @@ export function startIsolatedTestEngine(userData: string, onStatus?: (status: Da
       const backups = 'backups' in message ? message.backups : undefined;
       onBackups?.(isBackupSnapshot(backups) ? backups : undefined);
     }
+    if (message.kind === 'engine:metrics' && 'samples' in message) ingestMultiuserMetricSamples(message.samples);
     if (message.kind === 'engine:connectivity' && 'payload' in message) onConnectivity?.(message.payload as DatabaseConnectivityIssuePayload);
   });
   const ready = new Promise<void>((resolve, reject) => {

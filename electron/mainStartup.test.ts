@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
     initialize: vi.fn(async () => ({ ready: true, message: '' })),
     registerCore: vi.fn(), notifier: vi.fn(), quit: vi.fn(),
     write: vi.fn(async () => undefined),
-    showErrorBox: vi.fn(),
+    showErrorBox: vi.fn(), sessionOn: vi.fn(), sessionRemove: vi.fn(),
     preventSplashClose: vi.fn(),
     loadFile: vi.fn(async () => undefined),
   };
@@ -32,6 +32,7 @@ vi.mock('electron', () => ({
     webContents = {
       on: vi.fn(), once: vi.fn(), executeJavaScript: vi.fn(async () => true),
       setWindowOpenHandler: vi.fn(), send: vi.fn(), isDestroyed: () => false,
+      session: { on: mocks.sessionOn, removeListener: mocks.sessionRemove },
     };
     constructor(public options: { title: string; show: boolean }) { mocks.windows.push(this); }
     center() { /* ventana simulada */ }
@@ -50,7 +51,7 @@ vi.mock('electron', () => ({
   utilityProcess: { fork: () => { throw new Error('watchdog simulado'); } },
 }));
 vi.mock('node:fs/promises', () => ({ writeFile: mocks.write, readFile: vi.fn() }));
-vi.mock('./sqlitePersistence.js', () => ({ initializeSqlitePersistence: mocks.initialize, setDatabaseConnectivityIssueNotifier: mocks.notifier }));
+vi.mock('./sqlitePersistenceFacade.js', () => ({ initializeSqlitePersistence: mocks.initialize, setDatabaseConnectivityIssueNotifier: mocks.notifier }));
 vi.mock('./sqliteIpcQueue.js', () => ({ beginSqliteRestartDrain: vi.fn(), cancelSqliteRestartDrain: vi.fn(), getSqliteIpcQueueDiagnostics: vi.fn() }));
 vi.mock('./sqliteIncidentJournal.js', () => ({ getSqliteIncidentReport: vi.fn() }));
 vi.mock('./mainWatchdogBridge.js', () => ({ registerMainWatchdogOperationSender: vi.fn(), notifyMainWatchdogOperation: vi.fn() }));
@@ -220,6 +221,35 @@ describe('arranque del proceso principal', () => {
     signal('app:renderer-ready', window.webContents);
     expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('React preparado'), 'utf8');
     expect(window.show).toHaveBeenCalledTimes(1);
+  });
+
+  it('muestra producción aislada antes de que termine SQLite sin duplicar activación', async () => {
+    vi.stubEnv('TRACCION_SQLITE_ENGINE_EXPERIMENT', '1');
+    let finish!: (value: { ready: boolean; message: string }) => void;
+    mocks.initialize.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await boot('--traccion-env=production');
+    const window = mainWindow();
+    const handler = window.webContents.once.mock.calls.find(call => call[0] === 'did-finish-load')?.[1];
+    handler();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(window.show).toHaveBeenCalledTimes(1);
+    expect(mocks.initialize).toHaveBeenCalledTimes(1);
+    expect(mocks.sessionOn).not.toHaveBeenCalled();
+    finish({ ready: true, message: '' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.write).toHaveBeenCalledWith(expect.stringContaining('last-startup-performance.json'), expect.stringContaining('"environment":"production"'), 'utf8');
+  });
+
+  it('cancela descargas Chromium de la ventana de pruebas, no las de otras ventanas', async () => {
+    await boot('--traccion-env=test');
+    const handler = mocks.sessionOn.mock.calls.find(call => call[0] === 'will-download')?.[1];
+    expect(handler).toBeTypeOf('function');
+    const preventDefault = vi.fn();
+    handler({ preventDefault }, {}, {});
+    expect(preventDefault).not.toHaveBeenCalled();
+    handler({ preventDefault }, {}, mainWindow().webContents);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(mocks.showErrorBox).toHaveBeenCalledWith(expect.stringContaining('PRUEBAS'), expect.stringContaining('No se ha guardado'));
   });
 
   it('conserva la protección cuando el usuario intenta cerrar el splash durante la activación', async () => {

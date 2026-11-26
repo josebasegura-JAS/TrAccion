@@ -32,6 +32,28 @@ export function recordMultiuserMetric(category: MultiuserMetricCategory, operati
   if (samples.length > MAX_SAMPLES) samples.splice(0, samples.length - MAX_SAMPLES);
 }
 
+/** Solo el worker vacía su buffer; main conserva el agregado de toda la sesión. */
+export function drainMultiuserMetricSamples(): Sample[] {
+  return samples.splice(0, samples.length);
+}
+
+const METRIC_CATEGORIES = new Set<MultiuserMetricCategory>([
+  'ipc-wait', 'ipc-run', 'sqlite-stage', 'smb-lock-wait', 'smb-lock-held', 'record-lock', 'backup', 'excel',
+]);
+
+/** No aceptar etiquetas/valores arbitrarios ni lotes ilimitados desde otro proceso. */
+export function ingestMultiuserMetricSamples(batch: unknown): void {
+  if (!Array.isArray(batch)) return;
+  for (const value of batch.slice(-MAX_SAMPLES)) {
+    if (!value || typeof value !== 'object') continue;
+    const sample = value as Partial<Sample>;
+    if (!sample.category || !METRIC_CATEGORIES.has(sample.category) || typeof sample.operation !== 'string' ||
+        sample.operation.length > 80 || typeof sample.ms !== 'number' || !Number.isFinite(sample.ms) ||
+        sample.ms < 0 || typeof sample.failed !== 'boolean') continue;
+    recordMultiuserMetric(sample.category, sample.operation, sample.ms, sample.failed);
+  }
+}
+
 function percentile(sorted: number[], percentileRank: number): number {
   if (sorted.length === 0) return 0;
   return sorted[Math.ceil((percentileRank / 100) * sorted.length) - 1] ?? 0;

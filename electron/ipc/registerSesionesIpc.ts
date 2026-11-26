@@ -1,3 +1,4 @@
+import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 /**
  * Comité, Paritaria y Actas (comparten el mismo patrón de sesión/registro), más la creación de citas de Outlook para Actas.
  * Extraído de main.ts como parte de la división de registerIpcHandlers()
@@ -25,6 +26,7 @@ import {
 export function registerSesionesIpc(): void {
 
   ipcMain.handle('comite:update-summary-word', (_event, payload: unknown) => {
+    if (getTraccionEnvironment() === 'test') return { ok: false, message: 'La publicación del resumen Word compartido está desactivada en PRUEBAS. No se ha modificado el documento.' };
     if (!payload || typeof payload !== 'object') {
       return { ok: false, message: 'Datos inválidos para actualizar el resumen histórico de Comité.' };
     }
@@ -47,6 +49,7 @@ export function registerSesionesIpc(): void {
   });
 
   ipcMain.handle('paritaria:update-summary-word', (_event, payload: unknown) => {
+    if (getTraccionEnvironment() === 'test') return { ok: false, message: 'La publicación del resumen Word compartido está desactivada en PRUEBAS. No se ha modificado el documento.' };
     if (!payload || typeof payload !== 'object') {
       return { ok: false, message: 'Datos inválidos para actualizar el resumen histórico de Paritaria.' };
     }
