@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import path from 'node:path';
 import { mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { assertTestOutputDirectory, resolveTestOutputDirectory, testBackupRoot, testOutputRoot } from './testOutputPaths.js';
+import { assertTestOutputDirectory, resolveTestBackupRoot, resolveTestOutputDirectory, testBackupRoot, testOutputRoot } from './testOutputPaths.js';
 
 describe('rutas de salida de PRUEBAS', () => {
   const root = path.resolve('test-db');
@@ -34,6 +34,21 @@ describe('rutas de salida de PRUEBAS', () => {
       const external = await realpath(production);
       await symlink(external, path.join(test, 'desvio'), process.platform === 'win32' ? 'junction' : 'dir');
       await expect(resolveTestOutputDirectory(active, 'desvio')).rejects.toThrow();
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('no atraviesa una redirección de backups de cierre hacia producción', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'traccion-backup-boundary-'));
+    try {
+      const test = path.join(root, 'test');
+      const production = path.join(root, 'production');
+      await mkdir(test);
+      await mkdir(production);
+      const active = { ...status, path: path.join(test, 'traccion.sqlite') };
+      const backup = testBackupRoot(active, 'profile');
+      await mkdir(path.join(backup, 'sqlite-local-backup'), { recursive: true });
+      await symlink(await realpath(production), path.join(backup, 'sqlite-local-backup', 'shutdown'), process.platform === 'win32' ? 'junction' : 'dir');
+      await expect(resolveTestBackupRoot(active, 'profile')).rejects.toThrow();
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

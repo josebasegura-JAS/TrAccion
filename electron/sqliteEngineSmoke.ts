@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startIsolatedTestEngine } from './sqliteEngineWorkerClient.js';
@@ -78,15 +78,23 @@ async function run(): Promise<void> {
   const backups = await engine.call('listLocalBackups');
   const backup = backups.find(item => item.kind === 'sqlite' && item.isLiveCopy);
   if (!backup || backup.sizeBytes <= 0) throw new Error('No se generó respaldo SQLite real.');
-  if (path.relative(directory, backup.path).startsWith('..') || path.isAbsolute(path.relative(directory, backup.path))) {
-    throw new Error('El backup de pruebas salió de la carpeta SQLite.');
+  // Windows can expose the temp directory through a short name or junction.
+  // Compare physical paths, and require the dedicated test backup subtree.
+  const physicalDirectory = await realpath(directory);
+  const physicalBackup = await realpath(backup.path);
+  const relativeBackup = path.relative(physicalDirectory, physicalBackup);
+  const parts = relativeBackup.split(path.sep);
+  if (path.isAbsolute(relativeBackup) || parts.length !== 4 ||
+      parts[0] !== 'backups-pruebas' || !/^[a-f0-9]{16}$/.test(parts[1]) ||
+      parts[2] !== 'sqlite-local-backup' || parts[3] !== backup.fileName) {
+    throw new Error(`El backup de pruebas salió de la carpeta SQLite: ${relativeBackup}`);
   }
   const mutation = await engine.call('savePersistedRecordIfUnchanged', {
     key, value: 'changed-after-backup', expectedUpdatedAt: unchanged.record?.updatedAt ?? null,
   });
   if (!mutation.ok) throw new Error('No se modificó el registro temporal.');
   const restored = await engine.call('restoreLocalBackup', backup.id);
-  if (restored.ok || !restored.message.includes('desactivada en el entorno PRUEBAS')) {
+  if (restored.ok || !(/desactivada en (?:el entorno )?PRUEBAS/.test(restored.message))) {
     throw new Error('La protección de restauración en PRUEBAS no se ha respetado.');
   }
   const currentRecord = await engine.call('getPersistedRecordSnapshot', key);

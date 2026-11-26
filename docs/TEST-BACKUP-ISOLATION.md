@@ -1,0 +1,5 @@
+# Fase B: preferencias y respaldos PRUEBAS
+
+La configuración local test conserva ruta SQLite, UUID, retención y habilitación diaria. Ignora destinos secundarios, diarios externos y actualizaciones tanto al leer como al publicar preferencias. Producción conserva comportamiento anterior. La configuración funcional clonada (incluidas rutas de plantillas de lectura) se conserva: los publicadores de fase A no confían en sus destinos. No se modifica la herramienta de clonación ni se requiere reclonar.
+
+Backups periódicos, manuales, cierre y listado/poda validan el árbol físico backups-pruebas/<perfil>/sqlite-local-backup/shutdown mediante mkdir no recursivo, lstat y realpath. Copia diaria valida su árbol físico independiente. Copia compartida y emergencia siguen junto al fichero SQLite activo, no en rutas de configuración. Restauración test continúa bloqueada. Tests de preferencias y junction/symlink. No prueba SMB real ni impide cambios de enlaces concurrentes por agentes externos. Fase C deberá probar publicadores completos con centinelas y configuración heredada, así como revisar rutas mostradas al usuario y fallback de renderer.

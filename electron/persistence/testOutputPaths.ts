@@ -53,3 +53,11 @@ export async function assertTestOutputDirectory(status: OutputStatus, directory:
     }
   }
 }
+
+/** Valida el árbol antes de crear, publicar o podar respaldos de PRUEBAS. */
+export async function resolveTestBackupRoot(status: OutputStatus, profile: string): Promise<string> {
+  const id = path.basename(testBackupRoot(status, profile));
+  const root = await resolveTestOutputDirectory(status, 'backups-pruebas', id);
+  await resolveTestOutputDirectory(status, 'backups-pruebas', id, 'sqlite-local-backup', 'shutdown');
+  return root;
+}
