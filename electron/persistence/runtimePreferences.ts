@@ -35,6 +35,7 @@ export async function getUpdatesDirectory(): Promise<string | null> {
 }
 
 export async function setUpdatesDirectory(directoryPath: string): Promise<void> {
+  if (getTraccionEnvironment() === 'test') throw new Error('Actualizaciones externas desactivadas en PRUEBAS.');
   const preferences = await readDatabasePreferences();
   await writeDatabasePreferences({
     ...preferences,

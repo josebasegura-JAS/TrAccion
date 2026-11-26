@@ -166,4 +166,19 @@ describe('databasePreferences', () => {
     const result = await getConfiguredDatabaseDirectory();
     expect(result).toEqual({ directoryPath: path.join(userDataDir, 'data'), isDefaultPath: true });
   });
+  it('ignora y no vuelve a guardar destinos externos heredados en PRUEBAS', async () => {
+    const original = process.argv;
+    process.argv = [...original.filter(arg => !arg.startsWith('--traccion-env')), '--traccion-env=test'];
+    try {
+      const legacy = { customDirectoryPath: '/red/pruebas', expectedDatabaseUuid: 'test-uuid',
+        secondaryBackupDirectoryPath: '/red/produccion', dailyLocalBackupDirectoryPath: '/red/diario',
+        updatesDirectoryPath: '/red/updates', dailyLocalBackupEnabled: true, dailyLocalBackupRetentionDays: 5 };
+      writeFileSync(getPreferencesPath(), JSON.stringify(legacy));
+      const sanitized = await readDatabasePreferences();
+      expect(sanitized).toEqual({ ...legacy, secondaryBackupDirectoryPath: null, dailyLocalBackupDirectoryPath: null, updatesDirectoryPath: null });
+      await writeDatabasePreferences(legacy);
+      expect(JSON.parse(readFileSync(getPreferencesPath(), 'utf8'))).toEqual(sanitized);
+    } finally { process.argv = original; }
+  });
+
 });

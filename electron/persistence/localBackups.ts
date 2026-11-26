@@ -1,3 +1,4 @@
+import { resolveTestOutputDirectory } from './testOutputPaths.js';
 import { getTraccionEnvironment } from './traccionEnvironment.js';
 import { getPersistenceUserDataPath } from './persistenceRuntime.js';
 import { copyFile, mkdir, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
@@ -250,11 +251,10 @@ export async function writeDailyLocalBackup(
     return;
   }
 
-  const directory = getTraccionEnvironment() === 'test'
-    ? path.join(path.dirname(databasePath), 'backups-pruebas', DAILY_LOCAL_BACKUP_DIRECTORY_NAME)
-    : await getDailyLocalBackupDirectory(preferences);
-
   try {
+    const directory = getTraccionEnvironment() === 'test'
+      ? await resolveTestOutputDirectory({ ready: true, phase: 'active', isDefaultPath: false, environment: 'test', path: databasePath }, 'backups-pruebas', DAILY_LOCAL_BACKUP_DIRECTORY_NAME)
+      : await getDailyLocalBackupDirectory(preferences);
     await mkdir(directory, { recursive: true });
 
     const today = new Date();

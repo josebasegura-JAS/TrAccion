@@ -1,6 +1,6 @@
 import { getTraccionEnvironment } from './traccionEnvironment.js';
 import { getPersistenceUserDataPath } from './persistenceRuntime.js';
-import { testBackupRoot } from './testOutputPaths.js';
+import { resolveTestBackupRoot } from './testOutputPaths.js';
 import { mkdir, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
@@ -182,8 +182,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     environment: status.environment ?? '', schemaVersion: status.schemaVersion,
   });
 
-  const backupRoot = (status: DatabaseStatus): string | undefined => getTraccionEnvironment() === 'test'
-    ? testBackupRoot(status, getPersistenceUserDataPath()) : undefined;
+  const backupRoot = async (status: DatabaseStatus): Promise<string | undefined> => getTraccionEnvironment() === 'test'
+    ? resolveTestBackupRoot(status, getPersistenceUserDataPath()) : undefined;
 
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
     activeBackupOperations += 1;
@@ -195,7 +195,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
 
     const startedAt = Date.now();
-    const root = backupRoot(currentStatus);
+    const root = await backupRoot(currentStatus);
     const backupDirectory = getLocalBackupDirectory(root);
     await mkdir(backupDirectory, { recursive: true });
 
@@ -386,7 +386,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       throw new Error('No se puede confirmar el backup de cierre: SQLite no está activo.');
     }
 
-    const root = backupRoot(currentStatus);
+    const root = await backupRoot(currentStatus);
     const backupDirectory = getLocalShutdownBackupDirectory(root);
     await mkdir(backupDirectory, { recursive: true });
 
@@ -546,7 +546,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   const listLocalBackups = async (): Promise<LocalBackupEntry[]> => {
     const status = dependencies.getStatus();
     if (getTraccionEnvironment() === 'test' && !status.ready) return [];
-    const root = backupRoot(status);
+    const root = await backupRoot(status);
     await pruneRotatedLocalBackups('json', root);
     await pruneRotatedLocalBackups('sqlite', root);
     await pruneShutdownLocalBackups('json', root);
@@ -620,10 +620,12 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
 
   const restoreLocalBackup = async (fileName: string): Promise<RestoreLocalBackupResult> => {
     const currentStatus = dependencies.getStatus();
+    if (getTraccionEnvironment() === 'test') return { ok: false, status: currentStatus, message: 'Restauración desactivada en PRUEBAS.' };
+    const root = await backupRoot(currentStatus);
     const backupReference = resolveLocalBackupReference(
       fileName,
-      getLocalBackupDirectory(backupRoot(currentStatus)),
-      getLocalShutdownBackupDirectory(backupRoot(currentStatus)),
+      getLocalBackupDirectory(root),
+      getLocalShutdownBackupDirectory(root),
     );
 
     if (!backupReference) {

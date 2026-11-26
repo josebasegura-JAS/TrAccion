@@ -1,3 +1,4 @@
+import { getTraccionEnvironment } from './traccionEnvironment.js';
 import { getPersistenceUserDataPath } from './persistenceRuntime.js';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -33,6 +34,11 @@ export function getDatabasePathForDirectory(directoryPath: string): string {
   return path.join(directoryPath, DATABASE_FILE_NAME);
 }
 
+function isolatePreferences(preferences: DatabasePreferences): DatabasePreferences {
+  if (getTraccionEnvironment() !== 'test') return preferences;
+  return { ...preferences, secondaryBackupDirectoryPath: null, dailyLocalBackupDirectoryPath: null, updatesDirectoryPath: null };
+}
+
 export async function readDatabasePreferences(): Promise<DatabasePreferences> {
   const defaults: DatabasePreferences = {
     customDirectoryPath: null,
@@ -61,7 +67,7 @@ export async function readDatabasePreferences(): Promise<DatabasePreferences> {
           )
         : defaults.dailyLocalBackupRetentionDays;
 
-    return {
+    return isolatePreferences({
       customDirectoryPath:
         typeof candidate.customDirectoryPath === 'string' && candidate.customDirectoryPath.trim()
           ? candidate.customDirectoryPath
@@ -89,7 +95,7 @@ export async function readDatabasePreferences(): Promise<DatabasePreferences> {
         typeof candidate.expectedDatabaseUuid === 'string' && candidate.expectedDatabaseUuid.trim()
           ? candidate.expectedDatabaseUuid
           : null,
-    };
+    });
   } catch {
     return defaults;
   }
@@ -102,7 +108,7 @@ export async function writeDatabasePreferences(preferences: DatabasePreferences)
   // Un nombre temporal exclusivo evita interferencias entre dos guardados locales.
   const temporaryPath = `${preferencesPath}.${randomUUID()}.tmp`;
   try {
-    await writeFile(temporaryPath, JSON.stringify(preferences, null, 2), { encoding: 'utf8', flag: 'wx' });
+    await writeFile(temporaryPath, JSON.stringify(isolatePreferences(preferences), null, 2), { encoding: 'utf8', flag: 'wx' });
     await rename(temporaryPath, preferencesPath);
   } finally {
     // Si falla escribir o publicar, el fichero anterior queda intacto.
