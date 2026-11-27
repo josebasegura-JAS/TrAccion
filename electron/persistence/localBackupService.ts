@@ -342,7 +342,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
           const ok = await writeLocalBackupArtifacts(reason);
           if (ok) {
             backedUpRevision = Math.max(backedUpRevision, revision);
-      notifyBackupState();
+            notifyBackupState();
           } else {
             pendingLocalBackupReason = pendingLocalBackupReason ?? reason;
           }
@@ -533,7 +533,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         pendingLocalBackupReason = pendingLocalBackupReason ?? 'shutdown:incomplete-destinations';
       } else {
         backedUpRevision = Math.max(backedUpRevision, revision);
-            notifyBackupState();
+        notifyBackupState();
       }
       return metrics;
     } catch (error) {
@@ -555,7 +555,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     const ok = await writeLocalBackupArtifacts('manual-backup', true);
     if (ok) {
       backedUpRevision = Math.max(backedUpRevision, revision);
-            notifyBackupState();
+      notifyBackupState();
       pendingLocalBackupReason = null;
     } else {
       schedulePendingBackup();
