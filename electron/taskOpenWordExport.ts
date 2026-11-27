@@ -1,5 +1,5 @@
 import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
-import { resolveTestOutputDirectory, assertTestOutputDirectory } from './persistence/testOutputPaths.js';
+import { resolveTestOutputDirectory, captureTestPublication } from './persistence/testOutputPaths.js';
 import ExcelJS from 'exceljs';
 import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -634,8 +634,9 @@ export async function exportOpenTasksWord(
   const legacyWordPath = path.join(directoryPath, 'Tareas abiertas.doc');
   const legacyExcelPath = path.join(directoryPath, 'Tareas abiertas.xlsx');
 
+  let check: (() => Promise<void>) | undefined;
   try {
-    if (testing) await assertTestOutputDirectory((await import('./sqlitePersistenceFacade.js')).getSqliteStatus(), directoryPath, 'excel', 'tareas');
+    if (testing) check = await captureTestPublication((await import('./sqlitePersistenceFacade.js')).getSqliteStatus, directoryPath, 'excel', 'tareas');
     else await mkdir(directoryPath, { recursive: true });
 
     const workbook = new ExcelJS.Workbook();
@@ -651,6 +652,7 @@ export async function exportOpenTasksWord(
     addTasksWorksheet(workbook, tasks, generatedAt);
     addTrackingWorksheet(workbook, tasks, generatedAt);
 
+    await check?.();
     await workbook.xlsx.writeFile(tempPath);
     // La publicación se coordina entre equipos sobre SMB. La verificación
     // ocurre después de obtener el bloqueo, justo antes del rename atómico.
@@ -658,9 +660,14 @@ export async function exportOpenTasksWord(
       directoryPath,
       tempPath,
       finalPath,
-      isSnapshotCurrent ?? (async () => true),
+      async () => {
+        const current = await (isSnapshotCurrent ?? (async () => true))();
+        await check?.();
+        return current;
+      },
       async () => {
         // Eliminar espejos anteriores bajo el mismo bloqueo compartido.
+        await check?.();
         const existingFiles = await readdir(directoryPath);
         const obsoleteExcelFiles = existingFiles.filter((name) =>
           name !== datedFileName &&
@@ -668,13 +675,16 @@ export async function exportOpenTasksWord(
           name.toLowerCase().endsWith('.xlsx'),
         );
         for (const obsoleteFile of obsoleteExcelFiles) {
+          await check?.();
           await unlink(path.join(directoryPath, obsoleteFile)).catch(() => undefined);
         }
+        await check?.();
         await unlink(legacyExcelPath).catch(() => undefined);
+        await check?.();
         await unlink(legacyWordPath).catch(() => undefined);
       },
     );
-    await unlink(tempPath).catch(() => undefined);
+    try { await check?.(); await unlink(tempPath); } catch { /* No limpiar un destino que ya no está autorizado. */ }
     if (publication.stale) {
       return {
         ok: true,
@@ -697,7 +707,7 @@ export async function exportOpenTasksWord(
         `${trackingCount} registros de seguimiento.`,
     };
   } catch (error) {
-    await unlink(tempPath).catch(() => undefined);
+    try { await check?.(); await unlink(tempPath); } catch { /* No limpiar un destino que ya no está autorizado. */ }
     return {
       ok: false,
       path: finalPath,
