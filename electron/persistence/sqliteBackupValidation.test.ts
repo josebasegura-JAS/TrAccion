@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -114,4 +114,44 @@ describe('validateSqliteBackupForRestore', () => {
     expect(result.databaseUuid).toBeNull();
     expect(result.legacyIdentity).toBe(true);
   });
+  it('rechaza una copia SQLite real truncada sin modificarla durante la comprobación', () => {
+    const { databasePath } = createValidTraccionDatabase();
+    truncateSync(databasePath, 512);
+    const before = readFileSync(databasePath);
+    expect(() => validateSqliteBackupForRestore(databasePath)).toThrow(/respaldo SQLite/i);
+    expect(readFileSync(databasePath)).toEqual(before);
+  });
+
+  it.each(['application_id', 'database_uuid', 'database_created_at', 'environment'])(
+    'rechaza identidad incompleta por ausencia de %s sin reparar automáticamente el respaldo', key => {
+      const { databasePath } = createValidTraccionDatabase();
+      const db = new Database(databasePath);
+      try { db.prepare('DELETE FROM app_metadata WHERE key = ?').run(key); }
+      finally { db.close(); }
+      const before = readFileSync(databasePath);
+      expect(() => validateSqliteBackupForRestore(databasePath)).toThrow(/identidad incompletos/i);
+      expect(readFileSync(databasePath)).toEqual(before);
+    },
+  );
+
+  it('rechaza una identidad de otra aplicación aunque SQLite sea íntegra', () => {
+    const { databasePath } = createValidTraccionDatabase();
+    const db = new Database(databasePath);
+    try {
+      db.prepare("UPDATE app_metadata SET value = 'foreign' WHERE key = 'application_id'").run();
+      expect(db.pragma('quick_check')).toEqual([{ quick_check: 'ok' }]);
+    } finally { db.close(); }
+    expect(() => validateSqliteBackupForRestore(databasePath)).toThrow(/otra aplicación/i);
+  });
+
+  it('rechaza una copia de otro entorno sin modificar el archivo', () => {
+    const { databasePath } = createValidTraccionDatabase();
+    const db = new Database(databasePath);
+    try { db.prepare("UPDATE app_metadata SET value = 'test' WHERE key = 'environment'").run(); }
+    finally { db.close(); }
+    const before = readFileSync(databasePath);
+    expect(() => validateSqliteBackupForRestore(databasePath)).toThrow(/pertenece al entorno/i);
+    expect(readFileSync(databasePath)).toEqual(before);
+  });
+
 });
