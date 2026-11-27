@@ -11,3 +11,12 @@ La prueba de integración electron/testOutputIsolation.integration.test.ts utili
 - Office Guardar como fuera de TrAcción y cambios concurrentes de enlaces por otros procesos no están controlados; separar permisos SMB si se requiere garantía a nivel del sistema.
 
 Esta PR no cambia código funcional ni afirma que todos los canales estén cubiertos. CI y aceptación manual pendientes.
+
+
+## D5 — documentos de revisión
+
+Word y Excel manuales comparten validación, creación exclusiva y comprobación de identidad/ruta de PRUEBAS antes de entregar el documento a Office. Si la apertura devuelve un error confirmado, se intenta retirar únicamente el archivo de ese intento y su carpeta vacía. Si cambia la identidad o el destino, o el resultado de la entrega es incierto, se conserva el archivo. Nunca se eliminan automáticamente documentos abiertos correctamente: Office puede mantenerlos abiertos o contener cambios no guardados. La limpieza de documentos de revisión antiguos debe hacerse manualmente tras cerrar Office, dentro de las carpetas autorizadas; no borrar de forma recursiva directorios compartidos.
+
+Las pruebas de integración utilizan archivos reales y sustituyen shell.openPath; verifican ambos formatos, fallo de apertura, contenido vacío, base inactiva y enlaces. No validan Word/Excel instalados ni la red SMB.
+
+Antes de cerrar la versión, comprobar manualmente los mensajes de exportación automática omitida en Lotería y restantes canales externos; no cambiar el contrato IPC sin verificar sus consumidores.
