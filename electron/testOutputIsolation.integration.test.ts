@@ -41,7 +41,7 @@ describe('Fase C: aislamiento de publicadores con archivos reales', () => {
       await writeFile(path.join(production, name), 'CENTINELA-' + name);
     }
     mocks.status.mockReset();
-    mocks.status.mockReturnValue({ ready: true, phase: 'active', isDefaultPath: false, environment: 'test', path: path.join(testing, 'traccion.sqlite') });
+    mocks.status.mockReturnValue({ ready: true, phase: 'active', isDefaultPath: false, environment: 'test', databaseUuid: 'test-a', applicationId: 'traccion', schemaVersion: 19, path: path.join(testing, 'traccion.sqlite') });
     mocks.handle.mockClear();
     mocks.dialog.mockClear();
     registerOperationalExcelBackupIpc();
@@ -118,4 +118,14 @@ describe('Fase C: aislamiento de publicadores con archivos reales', () => {
     await expect(exportOpenTasksWord([], production)).rejects.toThrow();
     await assertProductionUntouched();
   });
+  it('no publica Tareas si cambia la identidad mientras se genera el libro', async () => {
+    const result = await exportOpenTasksWord([], production, async () => {
+      mocks.status.mockReturnValue({ ...mocks.status(), databaseUuid: 'test-b' });
+      return true;
+    });
+    expect(result.ok).toBe(false);
+    expect((await readdir(path.join(testing, 'excel', 'tareas'))).filter(name => /^Tareas_abiertas_.*\.xlsx$/.test(name))).toEqual([]);
+    await assertProductionUntouched();
+  });
+
 });

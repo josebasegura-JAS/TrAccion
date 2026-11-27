@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import path from 'node:path';
 import { mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { assertTestOutputDirectory, resolveTestBackupRoot, resolveTestOutputDirectory, testBackupRoot, testOutputRoot } from './testOutputPaths.js';
+import { assertTestOutputDirectory, captureTestPublication, resolveTestBackupRoot, resolveTestOutputDirectory, testBackupRoot, testOutputRoot } from './testOutputPaths.js';
 
 describe('rutas de salida de PRUEBAS', () => {
   const root = path.resolve('test-db');
@@ -49,6 +49,29 @@ describe('rutas de salida de PRUEBAS', () => {
       await mkdir(path.join(backup, 'sqlite-local-backup'), { recursive: true });
       await symlink(await realpath(production), path.join(backup, 'sqlite-local-backup', 'shutdown'), process.platform === 'win32' ? 'junction' : 'dir');
       await expect(resolveTestBackupRoot(active, 'profile')).rejects.toThrow();
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('rechaza cambios de UUID, desconexión y sustitución de la carpeta por un enlace', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'traccion-publication-identity-'));
+    try {
+      const test = path.join(root, 'test');
+      const production = path.join(root, 'production');
+      await mkdir(test);
+      await mkdir(production);
+      const original = { ...status, path: path.join(test, 'traccion.sqlite'), databaseUuid: 'test-a' };
+      let active = original;
+      const directory = await resolveTestOutputDirectory(active, 'excel', 'operativos');
+      const check = await captureTestPublication(() => active, directory, 'excel', 'operativos');
+      await expect(check()).resolves.toBeUndefined();
+      active = { ...original, databaseUuid: 'test-b' };
+      await expect(check()).rejects.toThrow();
+      active = { ...original, ready: false };
+      await expect(check()).rejects.toThrow();
+      active = original;
+      await rm(directory, { recursive: true });
+      await symlink(await realpath(production), directory, process.platform === 'win32' ? 'junction' : 'dir');
+      await expect(check()).rejects.toThrow();
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
