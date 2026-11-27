@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   publishOperationalExcelBackup,
+  publishLotteryExcel,
   selectObsoleteOperationalExcelBackups,
 } from './operationalExcelPublication.js';
 
@@ -89,5 +90,48 @@ describe('publicación de respaldos Excel operativos', () => {
       'Licencias_y_Excedencias_11-11-2026.xlsx',
     ], 'Licencias_y_Excedencias_11-11-2026.xlsx', 'Licencias_y_Excedencias_'))
       .toEqual(['Licencias_y_Excedencias_10-11-2026.xlsx']);
+  });
+});
+
+describe('D1: publicación segura de Excel', () => {
+  it('rechaza rutas, nombres de dispositivo y contenido vacío sin escribir archivos', async () => {
+    const directory = await makeDirectory();
+    const invalid = ['../escape.xlsx', '..\\escape.xlsx', 'sub/file.xlsx', 'C:archivo.xlsx',
+      'CON.xlsx', 'LPT1.xlsx', 'archivo.xlsx:stream', '.oculto.xlsx', 'archivo.xlsx ', 'archivo.docx'];
+    for (const name of invalid) {
+      await expect(publishOperationalExcelBackup(directory, name, 'Criterios_RRLL', bytes('NUEVO'))).rejects.toThrow();
+      await expect(publishLotteryExcel(directory, name, bytes('NUEVO'))).rejects.toThrow();
+    }
+    await expect(publishLotteryExcel(directory, 'Loteria_2026.xlsx', new Uint8Array())).rejects.toThrow();
+    expect(await readdir(directory)).toEqual([]);
+  });
+
+  it('publica Lotería mediante sustitución y no deja temporales', async () => {
+    const directory = await makeDirectory();
+    const name = 'Loteria_2026.xlsx';
+    await writeFile(path.join(directory, name), 'ANTERIOR');
+    expect(await publishLotteryExcel(directory, name, bytes('NUEVO'))).toBe(path.join(directory, name));
+    expect(await readFile(path.join(directory, name), 'utf8')).toBe('NUEVO');
+    expect(await readdir(directory)).toEqual([name]);
+  });
+
+  it('si falla el rename de Lotería conserva el destino y limpia el temporal', async () => {
+    const directory = await makeDirectory();
+    const name = 'Loteria_2026.xlsx';
+    await mkdir(path.join(directory, name));
+    await writeFile(path.join(directory, name, 'centinela'), 'INTACTO');
+    await expect(publishLotteryExcel(directory, name, bytes('NUEVO'))).rejects.toThrow();
+    expect(await readFile(path.join(directory, name, 'centinela'), 'utf8')).toBe('INTACTO');
+    expect(await readdir(directory)).toEqual([name]);
+  });
+
+  it('el publicador automático de Lotería rechaza PRUEBAS incluso si se invoca directamente', async () => {
+    const directory = await makeDirectory();
+    const originalArgv = process.argv;
+    process.argv = [...originalArgv.filter(arg => !arg.startsWith('--traccion-env')), '--traccion-env=test'];
+    try {
+      await expect(publishLotteryExcel(directory, 'Loteria_2026.xlsx', bytes('NUEVO'))).rejects.toThrow('PRUEBAS');
+      expect(await readdir(directory)).toEqual([]);
+    } finally { process.argv = originalArgv; }
   });
 });
