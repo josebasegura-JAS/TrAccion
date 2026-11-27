@@ -2,7 +2,7 @@ import { resolveTestOutputDirectory } from '../persistence/testOutputPaths.js';
 import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { mkdir, readdir, unlink } from 'node:fs/promises';
-import { assertExcelFileName, publishLotteryExcel } from '../operationalExcelPublication.js';
+import { assertExcelFileName, publishLotteryExcel, selectLotteryExcelHistory } from '../operationalExcelPublication.js';
 import path from 'node:path';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { getSqliteStatus, loadLoteriaRecordsSnapshot, saveLoteriaSnapshotIfUnchanged } from '../sqlitePersistenceFacade.js';
@@ -90,16 +90,13 @@ export function registerLoteriaIpc(): void {
 
       // Lotería mantiene un único Excel espejo por campaña. El nombre refleja la
       // fecha de la última actualización; al cambiar de día se elimina el anterior.
-      const campaignPrefix = `Loteria_${candidate.year}_`;
-      const legacyFileName = `Loteria_${candidate.year}.xlsx`;
-      const existingFiles = await readdir(directory);
-      const obsoleteFiles = existingFiles.filter((name) =>
-        name !== safeFileName &&
-        (name === legacyFileName ||
-          (name.startsWith(campaignPrefix) && name.toLowerCase().endsWith('.xlsx'))),
-      );
-      for (const obsoleteFile of obsoleteFiles) {
-        await unlink(path.join(directory, obsoleteFile)).catch(() => undefined);
+      try {
+        const existingFiles = await readdir(directory);
+        for (const obsoleteFile of selectLotteryExcelHistory(existingFiles, safeFileName, candidate.year)) {
+          await unlink(path.join(directory, obsoleteFile)).catch(() => undefined);
+        }
+      } catch (error) {
+        console.warn('No se ha podido limpiar el histórico de Lotería.', error);
       }
 
       return { ok: true, message: `Excel actualizado en ${filePath}.`, path: filePath };

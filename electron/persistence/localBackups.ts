@@ -72,8 +72,20 @@ export function getSharedSqliteBackupPath(databasePath: string, timestamp: strin
   return path.join(path.dirname(databasePath), `traccion-backup-${timestamp}.sqlite`);
 }
 
+/** Only the timestamp emitted by backupTimestampForFileName is eligible for automatic pruning. */
+function isGeneratedBackupName(name: string, prefix: string, extension: 'sqlite' | 'json'): boolean {
+  const suffix = '.' + extension;
+  if (!name.startsWith(prefix) || !name.endsWith(suffix)) return false;
+  const stamp = name.slice(prefix.length, -suffix.length);
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/.exec(stamp);
+  if (!match) return false;
+  const [, day, hour, minute, second, millis] = match;
+  const date = new Date(day + 'T' + hour + ':' + minute + ':' + second + '.' + millis + 'Z');
+  return !Number.isNaN(date.getTime()) && date.toISOString().replace(/[:.]/g, '-') === stamp;
+}
+
 export function isSharedSqliteBackupFileName(fileName: string): boolean {
-  return /^traccion-backup-.*\.sqlite$/.test(fileName);
+  return isGeneratedBackupName(fileName, 'traccion-backup-', 'sqlite');
 }
 
 async function pruneBackupsInDirectory(
@@ -82,10 +94,9 @@ async function pruneBackupsInDirectory(
   extension: 'sqlite' | 'json',
   retentionCount: number,
 ): Promise<void> {
-  const suffix = `.${extension}`;
   const entries = await readdir(backupDirectory).catch(() => []);
   const backups = entries
-    .filter((entry) => entry.startsWith(prefix) && entry.endsWith(suffix))
+    .filter((entry) => isGeneratedBackupName(entry, prefix, extension))
     .sort()
     .reverse();
 
@@ -221,7 +232,7 @@ export async function pruneDailyLocalBackups(
   }
 
   const entries = await readdir(directory).catch(() => []);
-  const dailyBackupFiles = entries.filter((entry) => /^traccion-daily-[a-z]+\.sqlite$/.test(entry));
+  const dailyBackupFiles = entries.filter((entry) => /^traccion-daily-(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\.sqlite$/.test(entry));
 
   await Promise.all(
     dailyBackupFiles
@@ -272,7 +283,7 @@ export async function getLatestRotatedLocalBackupTime(root?: string): Promise<nu
   const backupDirectory = getLocalBackupDirectory(root);
   const entries = await readdir(backupDirectory).catch(() => []);
   const rotatedSqliteBackups = entries.filter(
-    (entry) => entry.startsWith('traccion-local-backup-') && entry.endsWith('.sqlite'),
+    (entry) => isGeneratedBackupName(entry, 'traccion-local-backup-', 'sqlite'),
   );
 
   const backupStats = await Promise.all(

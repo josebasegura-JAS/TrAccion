@@ -56,22 +56,39 @@ export function selectObsoleteOperationalExcelBackups(
     || cleanupPrefix === 'Vinculograma_';
   if (!allowedPrefix) return [];
 
-  const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`^${escapeRegExp(cleanupPrefix)}(\\d{2})-(\\d{2})-(\\d{4})\\.xlsx$`, 'i');
-  if (!pattern.test(currentFileName)) return [];
+  return selectDatedExcelHistory(existingFiles, currentFileName, cleanupPrefix);
+}
 
-  return existingFiles.filter((name) => {
-    if (name === currentFileName) return false;
-    const match = pattern.exec(name);
-    if (!match) return false;
-    const [, dayText, monthText, yearText] = match;
-    const day = Number(dayText);
-    const month = Number(monthText);
-    const year = Number(yearText);
-    const date = new Date(Date.UTC(year, month - 1, day));
-    return year >= 2000 && date.getUTCFullYear() === year
-      && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+/** A valid calendar date in a generated workbook name. */
+function datedExcelValue(name: string, prefix: string): number | null {
+  if (!name.toLowerCase().startsWith(prefix.toLowerCase())) return null;
+  const match = /^(\d{2})-(\d{2})-(\d{4})\.xlsx$/i.exec(name.slice(prefix.length));
+  if (!match) return null;
+  const [, d, m, y] = match;
+  const day = Number(d), month = Number(m), year = Number(y);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return year >= 2000 && date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? date.getTime() : null;
+}
+
+/** Only recognized, strictly older calendar dates; never prune a newer publication. */
+export function selectDatedExcelHistory(
+  existingFiles: readonly string[], currentFileName: string, prefix: string,
+): string[] {
+  const current = datedExcelValue(currentFileName, prefix);
+  if (current === null) return [];
+  return existingFiles.filter(name => {
+    const date = datedExcelValue(name, prefix);
+    return date !== null && date < current;
   });
+}
+
+export function selectLotteryExcelHistory(existingFiles: readonly string[], currentFileName: string, year: number): string[] {
+  if (!Number.isInteger(year) || year < 2000 || year > 9999) return [];
+  const prefix = 'Loteria_' + year + '_';
+  if (datedExcelValue(currentFileName, prefix) === null) return [];
+  return [...selectDatedExcelHistory(existingFiles, currentFileName, prefix),
+    ...existingFiles.filter(name => name === 'Loteria_' + year + '.xlsx')];
 }
 
 /**
