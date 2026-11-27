@@ -7,7 +7,8 @@ import path from 'node:path';
 /** Reject path components, Windows ADS/device names and ambiguous filenames. */
 export function assertExcelFileName(fileName: string): void {
   if (!fileName || fileName.startsWith('.') || fileName !== fileName.trim() ||
-      /[<>:"/\\|?*\x00-\x1f]/.test(fileName) ||
+      /[<>:"/\\|?*]/.test(fileName) ||
+      Array.from(fileName).some(character => character.charCodeAt(0) < 32) ||
       /^(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)/i.test(fileName) ||
       !fileName.toLowerCase().endsWith('.xlsx')) {
     throw new Error('Nombre de archivo Excel no válido.');
