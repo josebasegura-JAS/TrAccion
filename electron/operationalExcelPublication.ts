@@ -4,6 +4,37 @@ import { randomUUID } from 'node:crypto';
 import { readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+/** Reject path components, Windows ADS/device names and ambiguous filenames. */
+export function assertExcelFileName(fileName: string): void {
+  if (!fileName || fileName.startsWith('.') || fileName !== fileName.trim() ||
+      /[<>:"/\\|?*\x00-\x1f]/.test(fileName) ||
+      /^(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)/i.test(fileName) ||
+      !fileName.toLowerCase().endsWith('.xlsx')) {
+    throw new Error('Nombre de archivo Excel no válido.');
+  }
+}
+
+/** Publish without truncating the previous destination on write failure. */
+async function publishExcelAtomically(directory: string, fileName: string, data: Uint8Array): Promise<string> {
+  assertExcelFileName(fileName);
+  if (!data.byteLength) throw new Error('Contenido Excel vacío.');
+  const destination = path.join(directory, fileName);
+  const temp = path.join(directory, '.traccion-excel-' + randomUUID() + '.tmp');
+  try {
+    await writeFile(temp, data, { flag: 'wx' });
+    await rename(temp, destination);
+  } finally {
+    await rm(temp, { force: true }).catch(() => undefined);
+  }
+  return destination;
+}
+
+/** Lotería automatic mirror is deliberately unavailable in PRUEBAS. */
+export async function publishLotteryExcel(directory: string, fileName: string, data: Uint8Array): Promise<string> {
+  if (getTraccionEnvironment() === 'test') throw new Error('Excel automático desactivado en PRUEBAS.');
+  return publishExcelAtomically(directory, fileName, data);
+}
+
 /**
  * Se podan exclusivamente los históricos con fecha generados por TrAcción:
  *   Licencias_y_Excedencias_DD-MM-YYYY.xlsx
@@ -57,14 +88,7 @@ export async function publishOperationalExcelBackup(
     const { getSqliteStatus } = await import('./sqlitePersistenceFacade.js');
     await assertTestOutputDirectory(getSqliteStatus(), directory, 'excel', 'operativos');
   }
-  const destination = path.join(directory, fileName);
-  const temp = path.join(directory, `.${fileName}.${randomUUID()}.tmp`);
-  try {
-    await writeFile(temp, data, { flag: 'wx' });
-    await rename(temp, destination);
-  } finally {
-    await rm(temp, { force: true }).catch(() => undefined);
-  }
+  const destination = await publishExcelAtomically(directory, fileName, data);
 
   // Podar únicamente los ficheros exactamente reconocidos y solo después
   // de publicar correctamente. Ante fallo de enumeración no se toca nada más.
