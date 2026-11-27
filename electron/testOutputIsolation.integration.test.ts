@@ -8,15 +8,18 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   handle: vi.fn(),
   dialog: vi.fn(),
+  openPath: vi.fn(),
 }));
 vi.mock('./sqlitePersistenceFacade.js', () => ({ getSqliteStatus: mocks.status }));
 vi.mock('electron', () => ({
   ipcMain: { handle: mocks.handle },
   BrowserWindow: { fromWebContents: vi.fn() },
   dialog: { showOpenDialog: mocks.dialog },
+  shell: { openPath: mocks.openPath },
 }));
 import { registerOperationalExcelBackupIpc } from './ipc/registerOperationalExcelBackupIpc.js';
 import { publishOperationalExcelBackup } from './operationalExcelPublication.js';
+import { openExcelWorkbook, openTeletrabajoWord } from './documentOpener.js';
 import { exportOpenTasksWord } from './taskOpenWordExport.js';
 
 describe('Fase C: aislamiento de publicadores con archivos reales', () => {
@@ -44,6 +47,8 @@ describe('Fase C: aislamiento de publicadores con archivos reales', () => {
     mocks.status.mockReturnValue({ ready: true, phase: 'active', isDefaultPath: false, environment: 'test', databaseUuid: 'test-a', applicationId: 'traccion', schemaVersion: 19, path: path.join(testing, 'traccion.sqlite') });
     mocks.handle.mockClear();
     mocks.dialog.mockClear();
+    mocks.openPath.mockReset();
+    mocks.openPath.mockResolvedValue('');
     registerOperationalExcelBackupIpc();
   });
 
@@ -125,6 +130,39 @@ describe('Fase C: aislamiento de publicadores con archivos reales', () => {
     });
     expect(result.ok).toBe(false);
     expect((await readdir(path.join(testing, 'excel', 'tareas'))).filter(name => /^Tareas_abiertas_.*\.xlsx$/.test(name))).toEqual([]);
+    await assertProductionUntouched();
+  });
+
+  it('abre Word y Excel manuales exclusivamente dentro de PRUEBAS', async () => {
+    expect((await openTeletrabajoWord({ fileName: 'revision.docx', buffer: bytes })).ok).toBe(true);
+    expect((await openExcelWorkbook({ fileName: 'revision.xlsx', buffer: bytes })).ok).toBe(true);
+    for (const [index, category] of ['word', 'excel'].entries()) {
+      const file = mocks.openPath.mock.calls[index][0] as string;
+      expect(path.dirname(path.dirname(await realpath(file)))).toBe(path.join(await realpath(testing), category, 'manuales'));
+      expect(await readFile(file)).toEqual(Buffer.from(bytes));
+    }
+    await assertProductionUntouched();
+  });
+
+  it('limpia solo el intento fallido de apertura y conserva documentos abiertos antes', async () => {
+    expect((await openExcelWorkbook({ fileName: 'conservar.xlsx', buffer: bytes })).ok).toBe(true);
+    const existing = mocks.openPath.mock.calls[0][0] as string;
+    mocks.openPath.mockResolvedValueOnce('Office no disponible');
+    expect((await openExcelWorkbook({ fileName: 'fallido.xlsx', buffer: bytes })).ok).toBe(false);
+    expect(await readdir(path.dirname(path.dirname(existing)))).toEqual([path.basename(path.dirname(existing))]);
+    expect(await readFile(existing)).toEqual(Buffer.from(bytes));
+    await assertProductionUntouched();
+  });
+
+  it('rechaza documentos vacíos, base inactiva y redirección a producción antes de abrir Office', async () => {
+    expect((await openExcelWorkbook({ fileName: 'vacio.xlsx', buffer: new Uint8Array() })).ok).toBe(false);
+    mocks.status.mockReturnValue({ ...mocks.status(), ready: false });
+    expect((await openTeletrabajoWord({ fileName: 'revision.docx', buffer: bytes })).ok).toBe(false);
+    mocks.status.mockReturnValue({ ...mocks.status(), ready: true });
+    await mkdir(path.join(testing, 'word'));
+    await symlink(await realpath(production), path.join(testing, 'word', 'manuales'), process.platform === 'win32' ? 'junction' : 'dir');
+    expect((await openTeletrabajoWord({ fileName: 'revision.docx', buffer: bytes })).ok).toBe(false);
+    expect(mocks.openPath).not.toHaveBeenCalled();
     await assertProductionUntouched();
   });
 
