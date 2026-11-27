@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import SqliteDatabase from 'better-sqlite3';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -125,5 +125,54 @@ describe('importTicketRestaurantePeopleAtomically', () => {
     expect(verify.prepare('SELECT COUNT(*) AS count FROM ticket_restaurante_calendar_records').get()).toEqual({ count: 0 });
     expect(verify.prepare('SELECT COUNT(*) AS count FROM ticket_restaurante_person_records').get()).toEqual({ count: 0 });
     verify.close();
+  });
+});
+
+describe('T2: importaciones concurrentes de Ticket Restaurante', () => {
+  const v1 = '2026-10-09T08:00:00.000Z';
+  const v2 = '2026-10-09T09:00:00.000Z';
+
+  it('dos importaciones incompatibles no mezclan calendarios ni personas y solo notifican el commit ganador', async () => {
+    const databasePath = await createDatabase();
+    const committedA = vi.fn();
+    const committedB = vi.fn();
+    const [a, b] = await Promise.all([
+      importTicketRestaurantePeopleAtomically(status(databasePath), {
+        calendars: [record('calendar-a', v1, null)], people: [record('100', v1, null)],
+      }, committedA),
+      importTicketRestaurantePeopleAtomically(status(databasePath), {
+        calendars: [record('calendar-b', v2, null)], people: [record('100', v2, null)],
+      }, committedB),
+    ]);
+    expect(Number(a.ok) + Number(b.ok)).toBe(1);
+    expect(committedA).toHaveBeenCalledTimes(a.ok ? 1 : 0);
+    expect(committedB).toHaveBeenCalledTimes(b.ok ? 1 : 0);
+    const db = new SqliteDatabase(databasePath, { readonly: true, fileMustExist: true });
+    try {
+      expect(db.prepare('SELECT id FROM ticket_restaurante_calendar_records').all()).toEqual([{ id: a.ok ? 'calendar-a' : 'calendar-b' }]);
+      expect(db.prepare('SELECT id, updated_at FROM ticket_restaurante_person_records').all()).toEqual([{ id: '100', updated_at: a.ok ? v1 : v2 }]);
+      expect(db.prepare('SELECT COUNT(*) AS count FROM app_metadata').get()).toEqual({ count: 1 });
+      expect(db.pragma('quick_check')).toEqual([{ quick_check: 'ok' }]);
+    } finally { db.close(); }
+  });
+
+  it('dos importaciones independientes conservan ambos lotes y notifican cada commit una vez', async () => {
+    const databasePath = await createDatabase();
+    const committed = vi.fn();
+    const results = await Promise.all([
+      importTicketRestaurantePeopleAtomically(status(databasePath), {
+        calendars: [record('calendar-a', v1, null)], people: [record('100', v1, null)],
+      }, committed),
+      importTicketRestaurantePeopleAtomically(status(databasePath), {
+        calendars: [record('calendar-b', v2, null)], people: [record('200', v2, null)],
+      }, committed),
+    ]);
+    expect(results.map(result => result.ok)).toEqual([true, true]);
+    expect(committed).toHaveBeenCalledTimes(2);
+    const db = new SqliteDatabase(databasePath, { readonly: true, fileMustExist: true });
+    try {
+      expect(db.prepare('SELECT id FROM ticket_restaurante_calendar_records ORDER BY id').all()).toEqual([{ id: 'calendar-a' }, { id: 'calendar-b' }]);
+      expect(db.prepare('SELECT id FROM ticket_restaurante_person_records ORDER BY id').all()).toEqual([{ id: '100' }, { id: '200' }]);
+    } finally { db.close(); }
   });
 });
