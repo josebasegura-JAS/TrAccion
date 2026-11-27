@@ -16,6 +16,7 @@ if (paths.length !== 1) throw new Error('Contexto local SQLite obligatorio.');
 configurePersistenceUserDataPath(paths[0].slice('--sqlite-user-data='.length));
 
 const persistence = await import('./sqlitePersistence.js');
+persistence.setSqliteBackupStateObserver(backups => port.postMessage({ kind: 'engine:backups', backups }));
 const operations = createPersistenceOperations(persistence);
 const { verifySqliteIntegrityReadOnly } = await import('./persistence/sqliteIntegrityVerification.js');
 const { readDatabasePreferences, getDatabasePathForDirectory } = await import('./persistence/databasePreferences.js');
