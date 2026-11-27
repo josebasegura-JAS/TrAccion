@@ -118,4 +118,55 @@ describe('Selección exclusiva del motor SQLite', () => {
     expect(close).toHaveBeenCalledTimes(2);
   });
 
+  it.each(['databaseUuid', 'applicationId', 'environment', 'schemaVersion', 'path'] as const)(
+    'rechaza recuperación con identidad discrepante: %s', async field => {
+      mocks.environment.mockReturnValue('test');
+      vi.stubEnv('TRACCION_SQLITE_ENGINE_EXPERIMENT', '1');
+      const status = { ready: true, phase: 'active', databaseUuid: 'uuid', applicationId: 'traccion',
+        environment: 'test', schemaVersion: 1, path: '/tmp/db/traccion.sqlite' };
+      let exit!: (code: number) => void;
+      const recovered = { ...status, [field]: field === 'schemaVersion' ? 2 : 'different' };
+      const callExtra = vi.fn().mockResolvedValue(recovered);
+      mocks.start.mockImplementationOnce((_profile, onStatus, _connectivity, _environment, onBackups) => {
+        onStatus(status);
+        onBackups({ activeBackupOperations: 0, queuedBackupOperations: 0, pendingBackupRevisions: 0 });
+        return { call: vi.fn().mockResolvedValue(status), exited: new Promise<number>(resolve => { exit = resolve; }),
+          exitedWhileIdle: () => true, hasExited: () => true, getState: () => 'idle' };
+      }).mockImplementationOnce(() => ({
+        callExtra, exited: new Promise<number>(() => undefined), getState: () => 'idle',
+      }));
+      const facade = await import('./sqlitePersistenceFacade.js');
+      await facade.initializeSqlitePersistence();
+      exit(1);
+      await Promise.resolve();
+      expect((await facade.checkSqliteHealth()).ok).toBe(false);
+      expect(facade.getSqliteStatus().ready).toBe(false);
+      expect((await facade.checkSqliteHealth()).ok).toBe(false);
+      expect(callExtra).toHaveBeenCalledTimes(1);
+      expect(mocks.start).toHaveBeenCalledTimes(2);
+      await expect(facade.savePersistedRecordIfUnchanged({ key: 'test', value: '{}', expectedUpdatedAt: null })).rejects.toThrow('no disponible');
+      expect(mocks.legacySave).not.toHaveBeenCalled();
+    },
+  );
+
+  it('bloquea recuperación si el último estado de backup es desconocido', async () => {
+    vi.stubEnv('TRACCION_SQLITE_ENGINE_EXPERIMENT', '1');
+    let exit!: (code: number) => void;
+    const status = { ready: true, phase: 'active', databaseUuid: 'uuid', applicationId: 'traccion',
+      environment: 'test', schemaVersion: 1, path: '/tmp/db/traccion.sqlite' };
+    mocks.start.mockImplementationOnce((_profile, onStatus, _connectivity, _environment, onBackups) => {
+      onStatus(status);
+      onBackups(undefined);
+      return { call: vi.fn().mockResolvedValue(status), exited: new Promise<number>(resolve => { exit = resolve; }),
+        exitedWhileIdle: () => true, hasExited: () => true, getState: () => 'idle' };
+    });
+    const facade = await import('./sqlitePersistenceFacade.js');
+    await facade.initializeSqlitePersistence();
+    exit(1);
+    await Promise.resolve();
+    expect((await facade.checkSqliteHealth()).ok).toBe(false);
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(facade.getSqliteStatus().ready).toBe(false);
+  });
+
 });
