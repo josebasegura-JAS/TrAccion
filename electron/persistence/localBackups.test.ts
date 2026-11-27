@@ -27,6 +27,7 @@ vi.mock('electron', () => ({
 const {
   backupSqliteDatabase,
   copyBackupAtomically,
+  writeBackupJsonAtomically,
   publishVerifiedSqliteSnapshot,
   backupTimestampForFileName,
   getDailyLocalBackupDatabasePath,
@@ -358,6 +359,65 @@ describe('localBackups', () => {
       const destination = path.join(shared, 'backups-pruebas', 'sqlite-daily-backup', 'traccion-daily-' + weekdayNameForTest(new Date()) + '.sqlite');
       expect(readFileSync(destination, 'utf8')).toBe('snapshot');
     } finally { process.argv = original; }
+  });
+
+  it.each(['ENOSPC', 'EACCES', 'EIO'] as const)('conserva la instantánea verificada ante fallo parcial %s y permite reintentar', async code => {
+    const source = path.join(userDataDir, 'source.sqlite');
+    const destination = path.join(userDataDir, 'verified.sqlite');
+    const setup = new Database(source);
+    try { applyMigrations(setup); } finally { setup.close(); }
+    const identity = { ...inspectAndEnsureDatabaseIdentity(source, { allowLegacyBootstrap: true }).identity, schemaVersion: CURRENT_SCHEMA_VERSION };
+    const db = new Database(source);
+    try {
+      await publishVerifiedSqliteSnapshot(db, destination, identity);
+      const previous = readFileSync(destination);
+      db.exec('CREATE TABLE t3_revision (id INTEGER); INSERT INTO t3_revision VALUES (42)');
+      const backup = vi.fn(async (temporary: string) => {
+        writeFileSync(temporary, 'partial');
+        throw Object.assign(new Error(code), { code });
+      });
+      await expect(publishVerifiedSqliteSnapshot({ backup } as never, destination, identity)).rejects.toMatchObject({ code });
+      expect(backup).toHaveBeenCalledTimes(1);
+      expect(readFileSync(destination)).toEqual(previous);
+      expect(readdirSync(userDataDir).some(name => name.endsWith('.pending'))).toBe(false);
+      await publishVerifiedSqliteSnapshot(db, destination, identity);
+      const restored = new Database(destination, { readonly: true, fileMustExist: true });
+      try {
+        expect(restored.pragma('quick_check')).toEqual([{ quick_check: 'ok' }]);
+        expect(restored.prepare('SELECT id FROM t3_revision').all()).toEqual([{ id: 42 }]);
+      } finally { restored.close(); }
+    } finally { db.close(); }
+  }, 20000);
+
+  it('si falla el rename de un respaldo compartido, no poda las tres copias válidas anteriores', async () => {
+    const source = path.join(userDataDir, 'traccion.sqlite');
+    const snapshot = path.join(userDataDir, 'snapshot.sqlite');
+    writeFileSync(source, 'live');
+    writeFileSync(snapshot, 'snapshot');
+    const old = ['01', '02', '03'].map(day => getSharedSqliteBackupPath(source, '2026-11-' + day + 'T12-00-00-000Z'));
+    old.forEach(file => writeFileSync(file, 'previous'));
+    const stamp = '2026-11-04T12-00-00-000Z';
+    const blocked = getSharedSqliteBackupPath(source, stamp);
+    mkdirSync(blocked);
+    writeFileSync(path.join(blocked, 'centinela'), 'keep');
+    await expect(writeSharedSqliteBackup(source, stamp, snapshot)).rejects.toThrow();
+    old.forEach(file => expect(readFileSync(file, 'utf8')).toBe('previous'));
+    expect(readFileSync(path.join(blocked, 'centinela'), 'utf8')).toBe('keep');
+    expect(readFileSync(source, 'utf8')).toBe('live');
+    expect(readdirSync(userDataDir).some(name => name.endsWith('.pending'))).toBe(false);
+  });
+
+  it('un destino JSON bloqueado no elimina archivos ajenos y permite publicar después', async () => {
+    const target = path.join(userDataDir, 'backup.json');
+    mkdirSync(target);
+    writeFileSync(path.join(target, 'centinela'), 'keep');
+    await expect(writeBackupJsonAtomically(target, '{"revision":2}')).rejects.toThrow();
+    expect(readFileSync(path.join(target, 'centinela'), 'utf8')).toBe('keep');
+    expect(readdirSync(userDataDir)).toEqual(['backup.json']);
+    rmSync(target, { recursive: true });
+    await writeBackupJsonAtomically(target, '{"revision":2}');
+    expect(JSON.parse(readFileSync(target, 'utf8'))).toEqual({ revision: 2 });
+    expect(readdirSync(userDataDir)).toEqual(['backup.json']);
   });
 
 });
