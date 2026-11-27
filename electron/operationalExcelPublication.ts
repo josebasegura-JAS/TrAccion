@@ -1,5 +1,5 @@
 import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
-import { assertTestOutputDirectory } from './persistence/testOutputPaths.js';
+import { captureTestPublication } from './persistence/testOutputPaths.js';
 import { randomUUID } from 'node:crypto';
 import { readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -16,16 +16,18 @@ export function assertExcelFileName(fileName: string): void {
 }
 
 /** Publish without truncating the previous destination on write failure. */
-async function publishExcelAtomically(directory: string, fileName: string, data: Uint8Array): Promise<string> {
+async function publishExcelAtomically(directory: string, fileName: string, data: Uint8Array, check?: () => Promise<void>): Promise<string> {
   assertExcelFileName(fileName);
   if (!data.byteLength) throw new Error('Contenido Excel vacío.');
   const destination = path.join(directory, fileName);
   const temp = path.join(directory, '.traccion-excel-' + randomUUID() + '.tmp');
   try {
+    await check?.();
     await writeFile(temp, data, { flag: 'wx' });
+    await check?.();
     await rename(temp, destination);
   } finally {
-    await rm(temp, { force: true }).catch(() => undefined);
+    try { await check?.(); await rm(temp, { force: true }); } catch { /* No limpiar un destino que ya no está autorizado. */ }
   }
   return destination;
 }
@@ -85,18 +87,21 @@ export async function publishOperationalExcelBackup(
   cleanupPrefix: string,
   data: Uint8Array,
 ): Promise<string> {
+  let check: (() => Promise<void>) | undefined;
   if (getTraccionEnvironment() === 'test') {
     const { getSqliteStatus } = await import('./sqlitePersistenceFacade.js');
-    await assertTestOutputDirectory(getSqliteStatus(), directory, 'excel', 'operativos');
+    check = await captureTestPublication(getSqliteStatus, directory, 'excel', 'operativos');
   }
-  const destination = await publishExcelAtomically(directory, fileName, data);
+  const destination = await publishExcelAtomically(directory, fileName, data, check);
 
   // Podar únicamente los ficheros exactamente reconocidos y solo después
   // de publicar correctamente. Ante fallo de enumeración no se toca nada más.
   try {
+    await check?.();
     const entries = await readdir(directory);
     for (const obsoleteName of selectObsoleteOperationalExcelBackups(entries, fileName, cleanupPrefix)) {
       try {
+        await check?.();
         await rm(path.join(directory, obsoleteName));
       } catch (error) {
         console.warn('No se ha podido podar un respaldo Excel antiguo; se conserva.', error);
