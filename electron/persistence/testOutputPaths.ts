@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import { lstat, mkdir, realpath, stat } from 'node:fs/promises';
 
-interface OutputStatus { ready: boolean; phase: string; path: string; isDefaultPath: boolean; environment?: string }
+interface OutputStatus { ready: boolean; phase: string; path: string; isDefaultPath: boolean; environment?: string; databaseUuid?: string; applicationId?: string; schemaVersion?: number }
 
 // Solo rutas derivadas de una base test activa, nunca de campos del renderer.
 export function testOutputRoot(status: OutputStatus): string {
@@ -60,4 +60,33 @@ export async function resolveTestBackupRoot(status: OutputStatus, profile: strin
   const root = await resolveTestOutputDirectory(status, 'backups-pruebas', id);
   await resolveTestOutputDirectory(status, 'backups-pruebas', id, 'sqlite-local-backup', 'shutdown');
   return root;
+}
+
+/** Capture the authorized database and physical output directory for a single export.
+ * Recheck before each irreversible action; this is not an OS-level sandbox.
+ */
+export async function captureTestPublication(
+  getStatus: () => OutputStatus, directory: string, ...segments: string[]
+): Promise<() => Promise<void>> {
+  const initial = { ...getStatus() };
+  await assertTestOutputDirectory(initial, directory, ...segments);
+  const physical = await realpath(directory);
+  const checkIdentity = () => {
+    const current = getStatus();
+    testOutputRoot(current);
+    if (current.path !== initial.path || current.databaseUuid !== initial.databaseUuid ||
+        current.applicationId !== initial.applicationId || current.schemaVersion !== initial.schemaVersion) {
+      throw new Error('La base de PRUEBAS ha cambiado durante la exportación.');
+    }
+    return current;
+  };
+  const check = async () => {
+    await assertTestOutputDirectory(checkIdentity(), directory, ...segments);
+    if (path.relative(physical, await realpath(directory)) !== '') {
+      throw new Error('El destino de PRUEBAS ha cambiado durante la exportación.');
+    }
+    checkIdentity();
+  };
+  await check();
+  return check;
 }
