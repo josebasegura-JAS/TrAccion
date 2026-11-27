@@ -137,8 +137,10 @@ describe('localBackups', () => {
     expect(timestamp).not.toMatch(/[:.]/);
   });
 
-  it('isSharedSqliteBackupFileName reconoce solo el patrón traccion-backup-*.sqlite', () => {
-    expect(isSharedSqliteBackupFileName('traccion-backup-2026-06-01.sqlite')).toBe(true);
+  it('isSharedSqliteBackupFileName reconoce solo timestamps generados y válidos', () => {
+    expect(isSharedSqliteBackupFileName('traccion-backup-2026-06-01T12-00-00-000Z.sqlite')).toBe(true);
+    expect(isSharedSqliteBackupFileName('traccion-backup-2026-06-01.sqlite')).toBe(false);
+    expect(isSharedSqliteBackupFileName('traccion-backup-2026-02-30T12-00-00-000Z.sqlite')).toBe(false);
     expect(isSharedSqliteBackupFileName('traccion-local-backup-2026-06-01.sqlite')).toBe(false);
     expect(isSharedSqliteBackupFileName('otra-cosa.sqlite')).toBe(false);
   });
@@ -151,22 +153,24 @@ describe('localBackups', () => {
   it('pruneRotatedLocalBackups conserva solo los 5 más recientes por orden de nombre', async () => {
     const backupDir = getLocalBackupDirectory();
     mkdirSync(backupDir, { recursive: true });
-    const names = Array.from({ length: 8 }, (_, index) => `traccion-local-backup-2026-06-0${index}.sqlite`);
+    const names = Array.from({ length: 8 }, (_, index) => `traccion-local-backup-2026-06-0${index + 1}T12-00-00-000Z.sqlite`);
     names.forEach((name) => writeFileSync(path.join(backupDir, name), 'x'));
 
+    const unrelated = 'traccion-local-backup-manual.sqlite';
+    writeFileSync(path.join(backupDir, unrelated), 'keep');
     await pruneRotatedLocalBackups('sqlite');
 
     const { readdirSync } = await import('node:fs');
     const remaining = readdirSync(backupDir);
-    expect(remaining).toHaveLength(5);
+    expect(remaining).toHaveLength(6);
     // Se conservan los de nombre más alto (más recientes, por orden alfabético/fecha).
-    expect(remaining.sort()).toEqual(names.slice(3).sort());
+    expect(remaining.sort()).toEqual([...names.slice(3), unrelated].sort());
   });
 
   it('pruneShutdownLocalBackups conserva solo los 3 más recientes', async () => {
     const shutdownDir = getLocalShutdownBackupDirectory();
     mkdirSync(shutdownDir, { recursive: true });
-    const names = Array.from({ length: 5 }, (_, index) => `traccion-shutdown-backup-2026-06-0${index}.json`);
+    const names = Array.from({ length: 5 }, (_, index) => `traccion-shutdown-backup-2026-06-0${index + 1}T12-00-00-000Z.json`);
     names.forEach((name) => writeFileSync(path.join(shutdownDir, name), '{}'));
 
     await pruneShutdownLocalBackups('json');
@@ -185,11 +189,12 @@ describe('localBackups', () => {
     // Hoy es lunes (2026-06-01 es lunes); retención de 3 días debe
     // conservar lunes, domingo y sábado (los 3 días hacia atrás desde hoy).
     const today = new Date('2026-06-01T12:00:00.000Z');
+    writeFileSync(path.join(directory, 'traccion-daily-manual.sqlite'), 'keep');
     await pruneDailyLocalBackups(directory, 3, today, weekdayNameForTest);
 
     const { readdirSync } = await import('node:fs');
     const remaining = readdirSync(directory).sort();
-    expect(remaining).toEqual(['traccion-daily-domingo.sqlite', 'traccion-daily-lunes.sqlite', 'traccion-daily-sabado.sqlite']);
+    expect(remaining).toEqual(['traccion-daily-domingo.sqlite', 'traccion-daily-lunes.sqlite', 'traccion-daily-manual.sqlite', 'traccion-daily-sabado.sqlite']);
   });
 
   it('writeDailyLocalBackup no hace nada si dailyLocalBackupEnabled es false', async () => {
@@ -236,7 +241,7 @@ describe('localBackups', () => {
   it('shouldCreateRotatedLocalBackup evita crear backup de guardado si no ha pasado el intervalo mínimo', async () => {
     const backupDir = getLocalBackupDirectory();
     mkdirSync(backupDir, { recursive: true });
-    writeFileSync(path.join(backupDir, 'traccion-local-backup-recien-creado.sqlite'), 'x');
+    writeFileSync(path.join(backupDir, 'traccion-local-backup-2026-06-01T12-00-00-000Z.sqlite'), 'x');
 
     expect(await shouldCreateRotatedLocalBackup('save:teletrabajo')).toBe(false);
   });
@@ -266,23 +271,23 @@ describe('localBackups', () => {
     writeFileSync(source, 'live');
     writeFileSync(snapshot, 'snapshot');
     for (let day = 1; day <= 5; day++) {
-      await writeSharedSqliteBackup(source, '2026-11-0' + day, snapshot);
+      await writeSharedSqliteBackup(source, '2026-11-0' + day + 'T12-00-00-000Z', snapshot);
     }
     expect(readdirSync(userDataDir).filter(isSharedSqliteBackupFileName).sort()).toEqual([
-      'traccion-backup-2026-11-03.sqlite',
-      'traccion-backup-2026-11-04.sqlite',
-      'traccion-backup-2026-11-05.sqlite',
+      'traccion-backup-2026-11-03T12-00-00-000Z.sqlite',
+      'traccion-backup-2026-11-04T12-00-00-000Z.sqlite',
+      'traccion-backup-2026-11-05T12-00-00-000Z.sqlite',
     ]);
     expect(readFileSync(source, 'utf8')).toBe('live');
     expect(readFileSync(snapshot, 'utf8')).toBe('snapshot');
-    expect(readFileSync(getSharedSqliteBackupPath(source, '2026-11-05'), 'utf8')).toBe('snapshot');
+    expect(readFileSync(getSharedSqliteBackupPath(source, '2026-11-05T12-00-00-000Z'), 'utf8')).toBe('snapshot');
   });
 
   it('no elimina respaldos anteriores cuando falla la publicación de la nueva copia', async () => {
     const source = path.join(userDataDir, 'traccion.sqlite');
-    const previous = ['01', '02', '03'].map(day => 'traccion-backup-2026-11-' + day + '.sqlite');
+    const previous = ['01', '02', '03'].map(day => 'traccion-backup-2026-11-' + day + 'T12-00-00-000Z.sqlite');
     previous.forEach(name => writeFileSync(path.join(userDataDir, name), 'previous'));
-    await expect(writeSharedSqliteBackup(source, '2026-11-04', path.join(userDataDir, 'missing.sqlite'))).rejects.toThrow();
+    await expect(writeSharedSqliteBackup(source, '2026-11-04T12-00-00-000Z', path.join(userDataDir, 'missing.sqlite'))).rejects.toThrow();
     expect(readdirSync(userDataDir).sort()).toEqual(previous);
     previous.forEach(name => expect(readFileSync(path.join(userDataDir, name), 'utf8')).toBe('previous'));
   });
