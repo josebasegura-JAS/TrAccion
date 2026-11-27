@@ -6,6 +6,8 @@ import {
   publishOperationalExcelBackup,
   publishLotteryExcel,
   selectObsoleteOperationalExcelBackups,
+  selectDatedExcelHistory,
+  selectLotteryExcelHistory,
 } from './operationalExcelPublication.js';
 
 const directories: string[] = [];
@@ -133,5 +135,24 @@ describe('D1: publicación segura de Excel', () => {
       await expect(publishLotteryExcel(directory, 'Loteria_2026.xlsx', bytes('NUEVO'))).rejects.toThrow('PRUEBAS');
       expect(await readdir(directory)).toEqual([]);
     } finally { process.argv = originalArgv; }
+  });
+});
+
+describe('D3: selección conservadora de históricos', () => {
+  it('Tareas conserva archivos ajenos, fechas inválidas y publicaciones posteriores', () => {
+    expect(selectDatedExcelHistory([
+      'Tareas_abiertas_10-11-2026.xlsx', 'Tareas_abiertas_12-11-2026.xlsx',
+      'Tareas_abiertas_notas.xlsx', 'Tareas_abiertas_31-02-2026.xlsx',
+      'Tareas_abiertas_11-11-2026.xlsx', 'Tareas_abiertas_09-11-2026_personal.xlsx',
+    ], 'Tareas_abiertas_11-11-2026.xlsx', 'Tareas_abiertas_')).toEqual(['Tareas_abiertas_10-11-2026.xlsx']);
+  });
+
+  it('Lotería conserva otras campañas, documentos manuales y fechas posteriores', () => {
+    const entries = ['Loteria_2026.xlsx', 'Loteria_2026_10-11-2026.xlsx',
+      'Loteria_2026_12-11-2026.xlsx', 'Loteria_2026_notas.xlsx', 'Loteria_2025_10-11-2026.xlsx'];
+    expect(selectLotteryExcelHistory(entries, 'Loteria_2026_11-11-2026.xlsx', 2026))
+      .toEqual(['Loteria_2026_10-11-2026.xlsx', 'Loteria_2026.xlsx']);
+    expect(selectLotteryExcelHistory(entries, 'Loteria_2026_31-02-2026.xlsx', 2026)).toEqual([]);
+    expect(selectLotteryExcelHistory(entries, 'Loteria_2026_notas.xlsx', 2026)).toEqual([]);
   });
 });
