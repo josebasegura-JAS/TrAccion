@@ -109,6 +109,7 @@ export interface LocalBackupServiceDependencies {
   closeDatabaseAndReleaseLock: () => Promise<void>;
   activateDatabase: (directoryPath: string, isDefaultPath: boolean, seedFromDatabasePath: string | null) => Promise<DatabaseStatus>;
   enqueueErrorLogger?: (error: unknown) => void;
+  onBackupStateChanged?: (snapshot: ReturnType<LocalBackupService['getRestartSafetySnapshot']>) => void;
 }
 
 export interface ShutdownBackupMetrics {
@@ -177,6 +178,12 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     pendingBackupRevisions: Math.max(0, backupRevision - backedUpRevision),
   });
 
+  // Observación síncrona, sin E/S de disco. Un fallo del observador no altera la copia.
+  const notifyBackupState = (): void => {
+    try { dependencies.onBackupStateChanged?.(getRestartSafetySnapshot()); }
+    catch (error) { console.warn('No se pudo comunicar el estado de los respaldos.', error); }
+  };
+
   const snapshotIdentity = (status: DatabaseStatus) => ({
     databaseUuid: status.databaseUuid ?? '', applicationId: status.applicationId ?? '',
     environment: status.environment ?? '', schemaVersion: status.schemaVersion,
@@ -187,6 +194,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
 
   const writeLocalBackupArtifacts = async (reason: string, force = false): Promise<boolean> => {
     activeBackupOperations += 1;
+    notifyBackupState();
     try {
     const currentDatabase = dependencies.getDatabase();
     const currentStatus = dependencies.getStatus();
@@ -315,6 +323,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
     } finally {
       activeBackupOperations -= 1;
+      notifyBackupState();
     }
   };
 
@@ -327,11 +336,13 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       pendingLocalBackupReason = null;
 
       queuedBackupOperations += 1;
+      notifyBackupState();
       localBackupQueue = localBackupQueue
         .then(async () => {
           const ok = await writeLocalBackupArtifacts(reason);
           if (ok) {
             backedUpRevision = Math.max(backedUpRevision, revision);
+      notifyBackupState();
           } else {
             pendingLocalBackupReason = pendingLocalBackupReason ?? reason;
           }
@@ -343,6 +354,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         })
         .finally(() => {
           queuedBackupOperations -= 1;
+          notifyBackupState();
           // Reintento siempre acotado a una nueva ventana, nunca un ciclo
           // rápido ante contención SMB. Si hubo nuevas escrituras durante
           // la copia también se incluyen en la siguiente ventana.
@@ -354,6 +366,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
 
   const enqueueLocalBackup = (reason: string): void => {
     backupRevision += 1;
+    notifyBackupState();
     pendingLocalBackupReason = pendingLocalBackupReason
       ? pendingLocalBackupReason.includes(reason) ? pendingLocalBackupReason : `${pendingLocalBackupReason}, ${reason}`
       : reason;
@@ -372,12 +385,16 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     if (backupRevision > backedUpRevision) {
       const revision = backupRevision;
       const ok = await writeLocalBackupArtifacts(reason ?? 'flush:pending');
-      if (ok) backedUpRevision = Math.max(backedUpRevision, revision);
+      if (ok) {
+        backedUpRevision = Math.max(backedUpRevision, revision);
+        notifyBackupState();
+      }
     }
   };
 
   const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
     activeBackupOperations += 1;
+    notifyBackupState();
     try {
     const totalStartedAt = Date.now();
     const currentDatabase = dependencies.getDatabase();
@@ -479,6 +496,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
     } finally {
       activeBackupOperations -= 1;
+      notifyBackupState();
     }
   };
 
@@ -515,6 +533,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         pendingLocalBackupReason = pendingLocalBackupReason ?? 'shutdown:incomplete-destinations';
       } else {
         backedUpRevision = Math.max(backedUpRevision, revision);
+            notifyBackupState();
       }
       return metrics;
     } catch (error) {
@@ -536,6 +555,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     const ok = await writeLocalBackupArtifacts('manual-backup', true);
     if (ok) {
       backedUpRevision = Math.max(backedUpRevision, revision);
+            notifyBackupState();
       pendingLocalBackupReason = null;
     } else {
       schedulePendingBackup();
