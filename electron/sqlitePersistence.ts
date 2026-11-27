@@ -386,6 +386,11 @@ function createDataIntegrityAuditDependencies(): DataIntegrityAuditDependencies 
 // así que se instancia una única vez y se reutiliza en todas las llamadas.
 
 let localBackupServiceInstance: LocalBackupService | null = null;
+let backupStateObserver: LocalBackupServiceDependencies['onBackupStateChanged'];
+
+export function setSqliteBackupStateObserver(observer: LocalBackupServiceDependencies['onBackupStateChanged']): void {
+  backupStateObserver = observer;
+}
 
 function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies {
   return {
@@ -402,6 +407,7 @@ function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies 
     backupExistingDatabase,
     closeDatabaseAndReleaseLock,
     activateDatabase,
+    onBackupStateChanged: snapshot => backupStateObserver?.(snapshot),
   };
 }
 

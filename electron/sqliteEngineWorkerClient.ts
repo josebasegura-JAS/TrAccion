@@ -32,6 +32,10 @@ export function startIsolatedTestEngine(userData: string, onStatus?: (status: Da
       const backups = 'backups' in message ? message.backups : undefined;
       onBackups?.(isBackupSnapshot(backups) ? backups : undefined);
     }
+    if (message.kind === 'engine:backups') {
+      const backups = 'backups' in message ? message.backups : undefined;
+      onBackups?.(isBackupSnapshot(backups) ? backups : undefined);
+    }
     if (message.kind === 'engine:metrics' && 'samples' in message) ingestMultiuserMetricSamples(message.samples);
     if (message.kind === 'engine:connectivity' && 'payload' in message) onConnectivity?.(message.payload as DatabaseConnectivityIssuePayload);
   });

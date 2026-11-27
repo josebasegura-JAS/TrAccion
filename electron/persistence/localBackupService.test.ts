@@ -149,6 +149,46 @@ describe('localBackupService - cierre sin backup redundante', () => {
     expect(service.getRestartSafetySnapshot().pendingBackupRevisions).toBe(0);
   });
 
+  it('comunica al supervisor las transiciones de un backup periódico sin nuevas peticiones IPC', async () => {
+    vi.useFakeTimers();
+    const observed: Array<ReturnType<ReturnType<typeof createLocalBackupService>['getRestartSafetySnapshot']>> = [];
+    let complete!: () => void;
+    const settled = new Promise<void>(resolve => { complete = resolve; });
+    const service = createLocalBackupService({
+      ...buildDependencies(databasePath),
+      onBackupStateChanged: snapshot => {
+        observed.push(snapshot);
+        if (snapshot.activeBackupOperations === 0 && snapshot.queuedBackupOperations === 0 &&
+            snapshot.pendingBackupRevisions === 0) complete();
+      },
+    });
+    service.enqueueLocalBackup('save:test');
+    expect(observed[0].pendingBackupRevisions).toBe(1);
+    vi.advanceTimersByTime(15 * 60 * 1000);
+    await settled;
+    expect(observed.some(snapshot => snapshot.queuedBackupOperations === 1)).toBe(true);
+    expect(observed.some(snapshot => snapshot.activeBackupOperations === 1)).toBe(true);
+    expect(observed[observed.length - 1]).toEqual({
+      activeBackupOperations: 0, queuedBackupOperations: 0, pendingBackupRevisions: 0,
+    });
+  });
+
+  it('mantiene revisiones pendientes tras fallo de red y comunica recuperación al completar el reintento', async () => {
+    const deps = buildDependencies(databasePath);
+    const acquireLock = vi.fn(deps.acquireLock).mockRejectedValueOnce(new Error('LOCKED'));
+    const observer = vi.fn();
+    const service = createLocalBackupService({ ...deps, acquireLock, onBackupStateChanged: observer });
+    service.enqueueLocalBackup('save:test');
+    await service.flushPendingLocalBackup();
+    expect(observer).toHaveBeenLastCalledWith({
+      activeBackupOperations: 0, queuedBackupOperations: 0, pendingBackupRevisions: 1,
+    });
+    await service.flushPendingLocalBackup();
+    expect(observer).toHaveBeenLastCalledWith({
+      activeBackupOperations: 0, queuedBackupOperations: 0, pendingBackupRevisions: 0,
+    });
+  });
+
   it('no crea backup de cierre si la sesión no ha modificado nada', async () => {
     const service = createLocalBackupService(buildDependencies(databasePath));
 
