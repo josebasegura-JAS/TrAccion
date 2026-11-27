@@ -1,3 +1,4 @@
+import { selectDatedExcelHistory } from './operationalExcelPublication.js';
 import { getTraccionEnvironment } from './persistence/traccionEnvironment.js';
 import { resolveTestOutputDirectory, captureTestPublication } from './persistence/testOutputPaths.js';
 import ExcelJS from 'exceljs';
@@ -669,11 +670,7 @@ export async function exportOpenTasksWord(
         // Eliminar espejos anteriores bajo el mismo bloqueo compartido.
         await check?.();
         const existingFiles = await readdir(directoryPath);
-        const obsoleteExcelFiles = existingFiles.filter((name) =>
-          name !== datedFileName &&
-          name.startsWith('Tareas_abiertas_') &&
-          name.toLowerCase().endsWith('.xlsx'),
-        );
+        const obsoleteExcelFiles = selectDatedExcelHistory(existingFiles, datedFileName, 'Tareas_abiertas_');
         for (const obsoleteFile of obsoleteExcelFiles) {
           await check?.();
           await unlink(path.join(directoryPath, obsoleteFile)).catch(() => undefined);
