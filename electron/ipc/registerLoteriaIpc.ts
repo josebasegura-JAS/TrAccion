@@ -1,7 +1,8 @@
 import { resolveTestOutputDirectory } from '../persistence/testOutputPaths.js';
 import { getTraccionEnvironment } from '../persistence/traccionEnvironment.js';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
-import { copyFile, mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, unlink } from 'node:fs/promises';
+import { assertExcelFileName, publishLotteryExcel } from '../operationalExcelPublication.js';
 import path from 'node:path';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { getSqliteStatus, loadLoteriaRecordsSnapshot, saveLoteriaSnapshotIfUnchanged } from '../sqlitePersistenceFacade.js';
@@ -80,20 +81,12 @@ export function registerLoteriaIpc(): void {
       return { ok: false, message: 'Datos inválidos para guardar el Excel de Lotería.', path: null };
     }
     try {
+      assertExcelFileName(candidate.fileName);
+      if (candidate.buffer.byteLength === 0) throw new Error('Contenido Excel vacío.');
       const directory = resolveCampaignDirectory(candidate.directoryTemplate, candidate.year);
       await mkdir(directory, { recursive: true });
-      const safeFileName = path.basename(candidate.fileName);
-      const filePath = path.join(directory, safeFileName);
-      const tempPath = path.join(
-        directory,
-        `.Loteria_${candidate.year}.${process.pid}.${Date.now()}.tmp.xlsx`,
-      );
-      await writeFile(tempPath, Buffer.from(candidate.buffer));
-      try {
-        await copyFile(tempPath, filePath);
-      } finally {
-        await unlink(tempPath).catch(() => undefined);
-      }
+      const safeFileName = candidate.fileName;
+      const filePath = await publishLotteryExcel(directory, safeFileName, Buffer.from(candidate.buffer));
 
       // Lotería mantiene un único Excel espejo por campaña. El nombre refleja la
       // fecha de la última actualización; al cambiar de día se elimina el anterior.
